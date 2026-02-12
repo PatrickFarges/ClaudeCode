@@ -2,6 +2,7 @@ extends CharacterBody3D
 
 # Paramètres de mouvement
 @export var speed: float = 5.0
+@export var sprint_speed: float = 8.5
 @export var jump_velocity: float = 5.5
 @export var mouse_sensitivity: float = 0.002
 @export var reach_distance: float = 5.0
@@ -15,6 +16,10 @@ extends CharacterBody3D
 var gravity = ProjectSettings.get_setting("physics/3d/default_gravity")
 var world_manager: WorldManager
 var jump_boost: float = 1.0
+var is_sprinting: bool = false
+const SPRINT_FOV = 80.0
+const NORMAL_FOV = 70.0
+const FOV_LERP_SPEED = 8.0
 
 # ============================================================
 # INVENTAIRE
@@ -295,16 +300,24 @@ func _physics_process(delta):
 	if Input.is_action_just_pressed("jump") and is_on_floor():
 		velocity.y = jump_velocity * jump_boost
 
-	# Mouvement
+	# Sprint
 	var input_dir = Input.get_vector("move_left", "move_right", "move_forward", "move_backward")
+	is_sprinting = Input.is_key_pressed(KEY_SHIFT) and input_dir.y < 0 and is_on_floor()
+	var current_speed = sprint_speed if is_sprinting else speed
+
+	# Mouvement
 	var direction = (transform.basis * Vector3(input_dir.x, 0, input_dir.y)).normalized()
 
 	if direction:
-		velocity.x = direction.x * speed
-		velocity.z = direction.z * speed
+		velocity.x = direction.x * current_speed
+		velocity.z = direction.z * current_speed
 	else:
-		velocity.x = move_toward(velocity.x, 0, speed)
-		velocity.z = move_toward(velocity.z, 0, speed)
+		velocity.x = move_toward(velocity.x, 0, current_speed)
+		velocity.z = move_toward(velocity.z, 0, current_speed)
+
+	# FOV dynamique
+	var target_fov = SPRINT_FOV if is_sprinting else NORMAL_FOV
+	camera.fov = lerpf(camera.fov, target_fov, FOV_LERP_SPEED * delta)
 
 	_handle_auto_step(direction)
 	move_and_slide()
@@ -333,7 +346,8 @@ func _handle_footsteps(delta: float, direction: Vector3):
 		return
 	
 	footstep_timer += delta
-	if footstep_timer >= FOOTSTEP_INTERVAL:
+	var step_interval = FOOTSTEP_INTERVAL * 0.6 if is_sprinting else FOOTSTEP_INTERVAL
+	if footstep_timer >= step_interval:
 		footstep_timer = 0.0
 		# Détecter le type de surface sous les pieds
 		var foot_pos = global_position - Vector3(0, 0.1, 0)
