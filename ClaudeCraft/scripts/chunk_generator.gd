@@ -136,7 +136,9 @@ func _generate_chunk_data(chunk_pos: Vector3i) -> Dictionary:
 	var biome_map = []  # [x][z] = biome id
 	heightmap.resize(CHUNK_SIZE)
 	biome_map.resize(CHUNK_SIZE)
-	
+	var y_min: int = CHUNK_HEIGHT
+	var y_max: int = 0
+
 	for x in range(CHUNK_SIZE):
 		blocks[x] = []
 		blocks[x].resize(CHUNK_SIZE)
@@ -144,46 +146,69 @@ func _generate_chunk_data(chunk_pos: Vector3i) -> Dictionary:
 		heightmap[x].resize(CHUNK_SIZE)
 		biome_map[x] = []
 		biome_map[x].resize(CHUNK_SIZE)
-		
+
 		for z in range(CHUNK_SIZE):
 			blocks[x][z] = []
 			blocks[x][z].resize(CHUNK_HEIGHT)
-			
+
 			var wx = chunk_pos.x * CHUNK_SIZE + x
 			var wz = chunk_pos.z * CHUNK_SIZE + z
-			
+
 			var n = (terrain_noise.get_noise_2d(wx, wz) + 1.0) / 2.0
 			n = clampf(n, 0.0, 1.0)
-			
+
 			var elev = (elevation_noise.get_noise_2d(wx, wz) + 1.0) / 2.0
 			elev = clampf(elev, 0.0, 1.0)
-			
+
 			var t = (temp_noise.get_noise_2d(wx, wz) + 1.0) / 2.0
 			var h = (humid_noise.get_noise_2d(wx, wz) + 1.0) / 2.0
 			var biome = _get_biome(t, h)
-			
+
 			var height = _get_continuous_height(n, elev)
-			
+
 			heightmap[x][z] = height
 			biome_map[x][z] = biome
-			
+
 			for y in range(CHUNK_HEIGHT):
 				var block = BlockRegistry.BlockType.AIR
-				
+
 				if y < height:
 					block = _get_block(y, height, biome)
-					
+
 					if y > 4 and y < SEA_LEVEL - 5 and _is_cave(wx, y, wz, cave1, cave2):
 						block = BlockRegistry.BlockType.AIR
-				
+
 				blocks[x][z][y] = block
-	
+				if block != BlockRegistry.BlockType.AIR:
+					if y < y_min:
+						y_min = y
+					if y > y_max:
+						y_max = y
+
 	# ============================================================
 	# PASSE 2 : Placer les arbres et végétation (sur le chunk entier)
 	# ============================================================
 	_place_all_vegetation(blocks, heightmap, biome_map, chunk_pos)
-	
-	return {"position": chunk_pos, "blocks": blocks}
+
+	# Ajuster y_max pour les couronnes d'arbres (max +15 blocs au-dessus du terrain)
+	if y_max > 0:
+		y_max = mini(y_max + 15, CHUNK_HEIGHT - 1)
+
+	# ============================================================
+	# Convertir en PackedByteArray pour accès rapide dans le meshing
+	# ============================================================
+	var packed_blocks: PackedByteArray = PackedByteArray()
+	packed_blocks.resize(CHUNK_SIZE * CHUNK_SIZE * CHUNK_HEIGHT)
+	for bx in range(CHUNK_SIZE):
+		var x_off: int = bx * CHUNK_SIZE * CHUNK_HEIGHT
+		for bz in range(CHUNK_SIZE):
+			var xz_off: int = x_off + bz * CHUNK_HEIGHT
+			for by in range(y_min, y_max + 1):
+				var bt: int = blocks[bx][bz][by]
+				if bt != 0:
+					packed_blocks[xz_off + by] = bt
+
+	return {"position": chunk_pos, "blocks": packed_blocks, "y_min": y_min, "y_max": y_max}
 
 func _place_all_vegetation(blocks: Array, heightmap: Array, biome_map: Array, chunk_pos: Vector3i):
 	"""Placer toute la végétation — les arbres ont accès au chunk entier pour leurs couronnes"""

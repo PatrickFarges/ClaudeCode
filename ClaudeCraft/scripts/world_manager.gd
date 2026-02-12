@@ -4,13 +4,11 @@ class_name WorldManager
 @export var render_distance: int = 4
 @export var chunk_load_per_frame: int = 2
 @export var unload_distance_margin: int = 3  # Marge pour éviter le clignotement
-@export var max_mesh_builds_per_frame: int = 2  # Limite de mesh construits par frame
 
 var chunks: Dictionary = {}
 var player: CharacterBody3D
 var last_player_chunk: Vector3i = Vector3i.ZERO  # Position précédente du joueur
 var chunk_generator: ChunkGenerator
-var pending_meshes: Array = []  # Chunks en attente de construction de mesh
 var world_seed: int = 0  # Seed du monde (0 = aléatoire)
 
 func _ready():
@@ -36,14 +34,11 @@ func _ready():
 func _process(_delta):
 	if player:
 		var current_chunk = _world_to_chunk(player.global_position)
-		
+
 		# Ne mettre à jour que si le joueur a changé de chunk
 		if current_chunk != last_player_chunk:
 			last_player_chunk = current_chunk
 			_update_chunks()
-		
-		# Construire les meshes des chunks prêts
-		_build_pending_meshes()
 
 func _update_chunks():
 	if not player:
@@ -79,24 +74,17 @@ func _on_chunk_data_ready(chunk_data: Dictionary):
 	"""Appelé quand un chunk a été généré dans un thread"""
 	var chunk_pos = chunk_data["position"]
 	var blocks = chunk_data["blocks"]
-	
+	var p_y_min: int = chunk_data.get("y_min", 0)
+	var p_y_max: int = chunk_data.get("y_max", Chunk.CHUNK_HEIGHT - 1)
+
 	# Créer le chunk avec les données générées
-	var chunk = Chunk.new(chunk_pos, blocks)
+	var chunk = Chunk.new(chunk_pos, blocks, p_y_min, p_y_max)
 	chunk.position = Vector3(chunk_pos.x * Chunk.CHUNK_SIZE, 0, chunk_pos.z * Chunk.CHUNK_SIZE)
 	add_child(chunk)
 	chunks[chunk_pos] = chunk
-	
-	# Ajouter à la liste des meshes à construire
-	pending_meshes.append(chunk)
 
-func _build_pending_meshes():
-	"""Construire les meshes des chunks en attente (thread principal)"""
-	var built = 0
-	while built < max_mesh_builds_per_frame and pending_meshes.size() > 0:
-		var chunk = pending_meshes.pop_front()
-		if chunk and is_instance_valid(chunk):
-			chunk.build_mesh()
-			built += 1
+	# Lancer la construction du mesh en arrière-plan (thread dédié)
+	chunk.build_mesh_async()
 
 func _unload_distant_chunks(player_chunk_pos: Vector3i):
 	var chunks_to_remove = []

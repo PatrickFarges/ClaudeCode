@@ -29,7 +29,6 @@ script = ExtResource("1_world")
 render_distance = 5
 chunk_load_per_frame = 2
 unload_distance_margin = 4
-max_mesh_builds_per_frame = 3
 
 [node name="Player" parent="." instance=ExtResource("2_player")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 80, 0)
