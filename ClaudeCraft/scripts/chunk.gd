@@ -6,12 +6,15 @@ const CHUNK_HEIGHT = 256
 
 # Shared material (un seul pour tous les chunks)
 static var _shared_material: StandardMaterial3D = null
+static var _shared_water_material: StandardMaterial3D = null
+const WATER_TYPE: int = 15  # BlockRegistry.BlockType.WATER
 
 var chunk_position: Vector3i
 var blocks: PackedByteArray
 var y_min: int = 0
 var y_max: int = 0
 var mesh_instance: MeshInstance3D
+var water_mesh_instance: MeshInstance3D
 var collision_shape: CollisionShape3D
 var static_body: StaticBody3D
 var is_mesh_built: bool = false
@@ -23,6 +26,12 @@ var _normals: PackedVector3Array = PackedVector3Array()
 var _colors: PackedColorArray = PackedColorArray()
 var _indices: PackedInt32Array = PackedInt32Array()
 var _collision_faces: PackedVector3Array = PackedVector3Array()
+
+# Water mesh arrays
+var _water_vertices: PackedVector3Array = PackedVector3Array()
+var _water_normals: PackedVector3Array = PackedVector3Array()
+var _water_colors: PackedColorArray = PackedColorArray()
+var _water_indices: PackedInt32Array = PackedInt32Array()
 
 func _init(pos: Vector3i, block_data: PackedByteArray, p_y_min: int = 0, p_y_max: int = CHUNK_HEIGHT - 1):
 	chunk_position = pos
@@ -39,6 +48,16 @@ static func _get_shared_material() -> StandardMaterial3D:
 		_shared_material.roughness = 0.8
 		_shared_material.metallic = 0.0
 	return _shared_material
+
+static func _get_water_material() -> StandardMaterial3D:
+	if not _shared_water_material:
+		_shared_water_material = StandardMaterial3D.new()
+		_shared_water_material.vertex_color_use_as_albedo = true
+		_shared_water_material.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
+		_shared_water_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_shared_water_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+		_shared_water_material.roughness = 0.2
+	return _shared_water_material
 
 # ============================================================
 # ACCES AUX BLOCS
@@ -80,11 +99,16 @@ func _compute_mesh_arrays():
 	_colors = PackedColorArray()
 	_indices = PackedInt32Array()
 	_collision_faces = PackedVector3Array()
+	_water_vertices = PackedVector3Array()
+	_water_normals = PackedVector3Array()
+	_water_colors = PackedColorArray()
+	_water_indices = PackedInt32Array()
 
 	if y_min <= y_max:
 		_greedy_mesh_y_faces()
 		_greedy_mesh_z_faces()
 		_greedy_mesh_x_faces()
+		_build_water_mesh()
 
 func _apply_mesh_data():
 	if _mesh_thread:
@@ -94,26 +118,27 @@ func _apply_mesh_data():
 	if not is_inside_tree():
 		return
 
-	if _vertices.size() == 0:
+	if _vertices.size() == 0 and _water_vertices.size() == 0:
 		is_mesh_built = true
 		return
 
-	# ArrayMesh depuis les packed arrays
-	var arrays: Array = []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = _vertices
-	arrays[Mesh.ARRAY_NORMAL] = _normals
-	arrays[Mesh.ARRAY_COLOR] = _colors
-	arrays[Mesh.ARRAY_INDEX] = _indices
+	# ArrayMesh depuis les packed arrays (solid blocks)
+	if _vertices.size() > 0:
+		var arrays: Array = []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = _vertices
+		arrays[Mesh.ARRAY_NORMAL] = _normals
+		arrays[Mesh.ARRAY_COLOR] = _colors
+		arrays[Mesh.ARRAY_INDEX] = _indices
 
-	var mesh: ArrayMesh = ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		var mesh: ArrayMesh = ArrayMesh.new()
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 
-	mesh_instance = MeshInstance3D.new()
-	mesh_instance.mesh = mesh
-	mesh_instance.material_override = _get_shared_material()
-	mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-	add_child(mesh_instance)
+		mesh_instance = MeshInstance3D.new()
+		mesh_instance.mesh = mesh
+		mesh_instance.material_override = _get_shared_material()
+		mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		add_child(mesh_instance)
 
 	# Collision
 	if _collision_faces.size() > 0:
@@ -125,6 +150,24 @@ func _apply_mesh_data():
 		static_body.add_child(collision_shape)
 		add_child(static_body)
 
+	# Water mesh (transparent, no collision)
+	if _water_vertices.size() > 0:
+		var water_arrays: Array = []
+		water_arrays.resize(Mesh.ARRAY_MAX)
+		water_arrays[Mesh.ARRAY_VERTEX] = _water_vertices
+		water_arrays[Mesh.ARRAY_NORMAL] = _water_normals
+		water_arrays[Mesh.ARRAY_COLOR] = _water_colors
+		water_arrays[Mesh.ARRAY_INDEX] = _water_indices
+
+		var water_mesh: ArrayMesh = ArrayMesh.new()
+		water_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, water_arrays)
+
+		water_mesh_instance = MeshInstance3D.new()
+		water_mesh_instance.mesh = water_mesh
+		water_mesh_instance.material_override = _get_water_material()
+		water_mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(water_mesh_instance)
+
 	is_mesh_built = true
 
 	# Libérer les tableaux temporaires
@@ -133,6 +176,10 @@ func _apply_mesh_data():
 	_colors = PackedColorArray()
 	_indices = PackedInt32Array()
 	_collision_faces = PackedVector3Array()
+	_water_vertices = PackedVector3Array()
+	_water_normals = PackedVector3Array()
+	_water_colors = PackedColorArray()
+	_water_indices = PackedInt32Array()
 
 # Rebuild synchrone (pour casse/placement de blocs)
 func _rebuild_mesh():
@@ -142,6 +189,9 @@ func _rebuild_mesh():
 	if mesh_instance:
 		mesh_instance.queue_free()
 		mesh_instance = null
+	if water_mesh_instance:
+		water_mesh_instance.queue_free()
+		water_mesh_instance = null
 	if static_body:
 		static_body.queue_free()
 		static_body = null
@@ -213,9 +263,13 @@ func _greedy_mesh_y_faces():
 			for z in range(CHUNK_SIZE):
 				var idx: int = x_off + z * 256 + y
 				var bt: int = blocks[idx]
-				if bt != 0 and (y + 1 >= CHUNK_HEIGHT or blocks[idx + 1] == 0):
-					mask[x][z] = bt
-					has_faces = true
+				if bt != 0 and bt != WATER_TYPE:
+					var nb: int = blocks[idx + 1] if y + 1 < CHUNK_HEIGHT else 0
+					if nb == 0 or nb == WATER_TYPE:
+						mask[x][z] = bt
+						has_faces = true
+					else:
+						mask[x][z] = -1
 				else:
 					mask[x][z] = -1
 
@@ -240,9 +294,13 @@ func _greedy_mesh_y_faces():
 			for z in range(CHUNK_SIZE):
 				var idx: int = x_off + z * 256 + y
 				var bt: int = blocks[idx]
-				if bt != 0 and (y - 1 < 0 or blocks[idx - 1] == 0):
-					mask[x][z] = bt
-					has_faces = true
+				if bt != 0 and bt != WATER_TYPE:
+					var nb: int = blocks[idx - 1] if y - 1 >= 0 else 0
+					if nb == 0 or nb == WATER_TYPE:
+						mask[x][z] = bt
+						has_faces = true
+					else:
+						mask[x][z] = -1
 				else:
 					mask[x][z] = -1
 
@@ -284,9 +342,13 @@ func _greedy_mesh_z_faces():
 			for iy in range(y_range):
 				var y: int = y_min + iy
 				var bt: int = blocks[xz_off + y]
-				if bt != 0 and (z + 1 >= CHUNK_SIZE or blocks[xzp_off + y] == 0):
-					mask[x][iy] = bt
-					has_faces = true
+				if bt != 0 and bt != WATER_TYPE:
+					var nb: int = blocks[xzp_off + y] if z + 1 < CHUNK_SIZE else 0
+					if nb == 0 or nb == WATER_TYPE:
+						mask[x][iy] = bt
+						has_faces = true
+					else:
+						mask[x][iy] = -1
 				else:
 					mask[x][iy] = -1
 
@@ -313,9 +375,13 @@ func _greedy_mesh_z_faces():
 			for iy in range(y_range):
 				var y: int = y_min + iy
 				var bt: int = blocks[xz_off + y]
-				if bt != 0 and (z - 1 < 0 or blocks[xzm_off + y] == 0):
-					mask[x][iy] = bt
-					has_faces = true
+				if bt != 0 and bt != WATER_TYPE:
+					var nb: int = blocks[xzm_off + y] if z - 1 >= 0 else 0
+					if nb == 0 or nb == WATER_TYPE:
+						mask[x][iy] = bt
+						has_faces = true
+					else:
+						mask[x][iy] = -1
 				else:
 					mask[x][iy] = -1
 
@@ -359,9 +425,13 @@ func _greedy_mesh_x_faces():
 			for iy in range(y_range):
 				var y: int = y_min + iy
 				var bt: int = blocks[x_off + z_off + y]
-				if bt != 0 and (x + 1 >= CHUNK_SIZE or blocks[xp_off + z_off + y] == 0):
-					mask[z][iy] = bt
-					has_faces = true
+				if bt != 0 and bt != WATER_TYPE:
+					var nb: int = blocks[xp_off + z_off + y] if x + 1 < CHUNK_SIZE else 0
+					if nb == 0 or nb == WATER_TYPE:
+						mask[z][iy] = bt
+						has_faces = true
+					else:
+						mask[z][iy] = -1
 				else:
 					mask[z][iy] = -1
 
@@ -386,9 +456,13 @@ func _greedy_mesh_x_faces():
 			for iy in range(y_range):
 				var y: int = y_min + iy
 				var bt: int = blocks[x_off + z_off + y]
-				if bt != 0 and (x - 1 < 0 or blocks[xm_off + z_off + y] == 0):
-					mask[z][iy] = bt
-					has_faces = true
+				if bt != 0 and bt != WATER_TYPE:
+					var nb: int = blocks[xm_off + z_off + y] if x - 1 >= 0 else 0
+					if nb == 0 or nb == WATER_TYPE:
+						mask[z][iy] = bt
+						has_faces = true
+					else:
+						mask[z][iy] = -1
 				else:
 					mask[z][iy] = -1
 
@@ -444,13 +518,69 @@ func _emit_quad(v0: Vector3, v1: Vector3, v2: Vector3, v3: Vector3, normal: Vect
 	_collision_faces.append(v0)
 
 # ============================================================
+# WATER MESH — top faces only (greedy)
+# ============================================================
+
+func _build_water_mesh():
+	var mask: Array = []
+	mask.resize(CHUNK_SIZE)
+	for i in range(CHUNK_SIZE):
+		mask[i] = []
+		mask[i].resize(CHUNK_SIZE)
+
+	for y in range(y_min, y_max + 1):
+		var has_faces: bool = false
+		for x in range(CHUNK_SIZE):
+			var x_off: int = x * 4096
+			for z in range(CHUNK_SIZE):
+				var idx: int = x_off + z * 256 + y
+				var bt: int = blocks[idx]
+				if bt == WATER_TYPE and (y + 1 >= CHUNK_HEIGHT or blocks[idx + 1] == 0):
+					mask[x][z] = bt
+					has_faces = true
+				else:
+					mask[x][z] = -1
+
+		if has_faces:
+			var quads = _run_greedy(mask, CHUNK_SIZE, CHUNK_SIZE)
+			for q in quads:
+				var u: int = q[0]; var v: int = q[1]; var w: int = q[2]; var h: int = q[3]; var bt: int = q[4]
+				var color: Color = BlockRegistry.get_block_color(bt)
+				_emit_water_quad(
+					Vector3(u, y + 0.85, v), Vector3(u + w, y + 0.85, v),
+					Vector3(u + w, y + 0.85, v + h), Vector3(u, y + 0.85, v + h),
+					Vector3.UP, color)
+
+func _emit_water_quad(v0: Vector3, v1: Vector3, v2: Vector3, v3: Vector3, normal: Vector3, color: Color):
+	var base: int = _water_vertices.size()
+	_water_vertices.append(v0)
+	_water_vertices.append(v1)
+	_water_vertices.append(v2)
+	_water_vertices.append(v3)
+	_water_normals.append(normal)
+	_water_normals.append(normal)
+	_water_normals.append(normal)
+	_water_normals.append(normal)
+	_water_colors.append(color)
+	_water_colors.append(color)
+	_water_colors.append(color)
+	_water_colors.append(color)
+	_water_indices.append(base)
+	_water_indices.append(base + 1)
+	_water_indices.append(base + 2)
+	_water_indices.append(base + 2)
+	_water_indices.append(base + 3)
+	_water_indices.append(base)
+
+# ============================================================
 # AMBIENT OCCLUSION
 # ============================================================
 
 func _is_block_solid(x: int, y: int, z: int) -> bool:
 	if x < 0 or x >= CHUNK_SIZE or y < 0 or y >= CHUNK_HEIGHT or z < 0 or z >= CHUNK_SIZE:
 		return false
-	return blocks[x * 4096 + z * 256 + y] != 0
+	var bt: int = blocks[x * 4096 + z * 256 + y]
+	return bt != 0 and bt != WATER_TYPE
 
 func _calculate_ao_for_face(direction: Vector3, x: int, y: int, z: int) -> Array:
 	var ao = [1.0, 1.0, 1.0, 1.0]

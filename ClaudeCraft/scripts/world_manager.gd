@@ -11,6 +11,10 @@ var last_player_chunk: Vector3i = Vector3i.ZERO  # Position précédente du joue
 var chunk_generator: ChunkGenerator
 var world_seed: int = 0  # Seed du monde (0 = aléatoire)
 
+# Mobs passifs
+var mobs: Array = []
+const MAX_MOBS = 20
+
 func _ready():
 	# Générer un seed aléatoire si non défini
 	if world_seed == 0:
@@ -86,6 +90,9 @@ func _on_chunk_data_ready(chunk_data: Dictionary):
 	# Lancer la construction du mesh en arrière-plan (thread dédié)
 	chunk.build_mesh_async()
 
+	# Tenter de spawn des mobs passifs
+	_try_spawn_mobs(chunk_pos, chunk_data)
+
 func _unload_distant_chunks(player_chunk_pos: Vector3i):
 	var chunks_to_remove = []
 	
@@ -101,6 +108,16 @@ func _unload_distant_chunks(player_chunk_pos: Vector3i):
 		var chunk = chunks[chunk_pos]
 		chunk.queue_free()
 		chunks.erase(chunk_pos)
+
+	# Supprimer les mobs des chunks déchargés
+	var remaining_mobs = []
+	for mob_data in mobs:
+		if chunks_to_remove.has(mob_data["chunk_pos"]):
+			if is_instance_valid(mob_data["mob"]):
+				mob_data["mob"].queue_free()
+		else:
+			remaining_mobs.append(mob_data)
+	mobs = remaining_mobs
 
 func _world_to_chunk(world_pos: Vector3) -> Vector3i:
 	return Vector3i(
@@ -148,3 +165,69 @@ func break_block_at_position(world_pos: Vector3):
 
 func place_block_at_position(world_pos: Vector3, block_type: BlockRegistry.BlockType):
 	set_block_at_position(world_pos, block_type)
+
+# ============================================================
+# MOBS PASSIFS
+# ============================================================
+
+func _try_spawn_mobs(chunk_pos: Vector3i, chunk_data: Dictionary):
+	if mobs.size() >= MAX_MOBS:
+		return
+
+	# 10% de chance par chunk (déterministe via hash)
+	var hash_val = abs((chunk_pos.x * 374761393 + chunk_pos.z * 668265263) >> 13) % 100
+	if hash_val >= 10:
+		return
+
+	var packed_blocks = chunk_data["blocks"]
+	var num_mobs = 1 + (hash_val % 2)
+
+	for i in range(num_mobs):
+		if mobs.size() >= MAX_MOBS:
+			break
+
+		var lx = ((hash_val + 1) * (i + 3) * 7) % 16
+		var lz = ((hash_val + 1) * (i + 3) * 13) % 16
+
+		# Trouver la surface (premier bloc non-AIR/non-WATER depuis le haut)
+		var surface_y = -1
+		var surface_block = 0
+		for y in range(Chunk.CHUNK_HEIGHT - 1, 0, -1):
+			var bt = packed_blocks[lx * 4096 + lz * 256 + y]
+			if bt != 0 and bt != BlockRegistry.BlockType.WATER:
+				surface_y = y + 1
+				surface_block = bt
+				break
+
+		if surface_y < 0 or surface_y >= Chunk.CHUNK_HEIGHT - 2:
+			continue
+
+		# Seulement sur herbe ou sable
+		var valid_blocks = [
+			BlockRegistry.BlockType.GRASS,
+			BlockRegistry.BlockType.DARK_GRASS,
+			BlockRegistry.BlockType.SAND
+		]
+		if surface_block not in valid_blocks:
+			continue
+
+		# Choisir le type de mob
+		var mob_type: PassiveMob.MobType
+		if surface_block == BlockRegistry.BlockType.SAND:
+			mob_type = PassiveMob.MobType.CHICKEN
+		else:
+			var type_hash = (hash_val + i * 31) % 3
+			if type_hash == 0:
+				mob_type = PassiveMob.MobType.SHEEP
+			elif type_hash == 1:
+				mob_type = PassiveMob.MobType.COW
+			else:
+				mob_type = PassiveMob.MobType.CHICKEN
+
+		var world_x = chunk_pos.x * Chunk.CHUNK_SIZE + lx + 0.5
+		var world_z = chunk_pos.z * Chunk.CHUNK_SIZE + lz + 0.5
+
+		var mob = PassiveMob.new()
+		mob.setup(mob_type, Vector3(world_x, surface_y, world_z), chunk_pos)
+		get_parent().call_deferred("add_child", mob)
+		mobs.append({"mob": mob, "chunk_pos": chunk_pos})

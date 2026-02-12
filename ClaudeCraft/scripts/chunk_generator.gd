@@ -128,6 +128,16 @@ func _generate_chunk_data(chunk_pos: Vector3i) -> Dictionary:
 	cave2.noise_type = FastNoiseLite.TYPE_PERLIN
 	cave2.seed = seed_base + 2345
 	cave2.frequency = 0.06
+
+	var cave3 = FastNoiseLite.new()
+	cave3.noise_type = FastNoiseLite.TYPE_PERLIN
+	cave3.seed = seed_base + 6789
+	cave3.frequency = 0.04
+
+	var ore_noise = FastNoiseLite.new()
+	ore_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	ore_noise.seed = seed_base + 4444
+	ore_noise.frequency = 0.1
 	
 	# ============================================================
 	# PASSE 1 : Générer le terrain + stocker heightmap et biome_map
@@ -175,7 +185,7 @@ func _generate_chunk_data(chunk_pos: Vector3i) -> Dictionary:
 				if y < height:
 					block = _get_block(y, height, biome)
 
-					if y > 4 and y < SEA_LEVEL - 5 and _is_cave(wx, y, wz, cave1, cave2):
+					if y >= 2 and y < SEA_LEVEL - 2 and _is_cave(wx, y, wz, cave1, cave2, cave3):
 						block = BlockRegistry.BlockType.AIR
 
 				blocks[x][z][y] = block
@@ -186,13 +196,56 @@ func _generate_chunk_data(chunk_pos: Vector3i) -> Dictionary:
 						y_max = y
 
 	# ============================================================
+	# PASSE 1.5 : Placement des minerais près des grottes
+	# ============================================================
+	for ox in range(CHUNK_SIZE):
+		for oz in range(CHUNK_SIZE):
+			var owx = chunk_pos.x * CHUNK_SIZE + ox
+			var owz = chunk_pos.z * CHUNK_SIZE + oz
+			for oy in range(2, 60):
+				if blocks[ox][oz][oy] == BlockRegistry.BlockType.STONE:
+					var near_cave = false
+					if oy > 0 and blocks[ox][oz][oy - 1] == BlockRegistry.BlockType.AIR:
+						near_cave = true
+					elif oy < CHUNK_HEIGHT - 1 and blocks[ox][oz][oy + 1] == BlockRegistry.BlockType.AIR:
+						near_cave = true
+					elif ox > 0 and blocks[ox - 1][oz][oy] == BlockRegistry.BlockType.AIR:
+						near_cave = true
+					elif ox < CHUNK_SIZE - 1 and blocks[ox + 1][oz][oy] == BlockRegistry.BlockType.AIR:
+						near_cave = true
+					elif oz > 0 and blocks[ox][oz - 1][oy] == BlockRegistry.BlockType.AIR:
+						near_cave = true
+					elif oz < CHUNK_SIZE - 1 and blocks[ox][oz + 1][oy] == BlockRegistry.BlockType.AIR:
+						near_cave = true
+
+					if near_cave:
+						var ore_val = ore_noise.get_noise_3d(owx, oy, owz)
+						if oy < 40 and ore_val > 0.7:
+							blocks[ox][oz][oy] = BlockRegistry.BlockType.IRON_ORE
+						elif ore_val > 0.6:
+							blocks[ox][oz][oy] = BlockRegistry.BlockType.COAL_ORE
+
+	# ============================================================
 	# PASSE 2 : Placer les arbres et végétation (sur le chunk entier)
 	# ============================================================
 	_place_all_vegetation(blocks, heightmap, biome_map, chunk_pos)
 
-	# Ajuster y_max pour les couronnes d'arbres (max +15 blocs au-dessus du terrain)
+	# ============================================================
+	# PASSE 3 : Remplissage eau sous SEA_LEVEL
+	# ============================================================
+	for wx2 in range(CHUNK_SIZE):
+		for wz2 in range(CHUNK_SIZE):
+			for wy in range(SEA_LEVEL, 0, -1):
+				if blocks[wx2][wz2][wy] == BlockRegistry.BlockType.AIR:
+					blocks[wx2][wz2][wy] = BlockRegistry.BlockType.WATER
+				elif blocks[wx2][wz2][wy] != BlockRegistry.BlockType.WATER:
+					break
+
+	# Ajuster y_max pour les couronnes d'arbres et l'eau
 	if y_max > 0:
 		y_max = mini(y_max + 15, CHUNK_HEIGHT - 1)
+	if y_max < SEA_LEVEL:
+		y_max = SEA_LEVEL
 
 	# ============================================================
 	# Convertir en PackedByteArray pour accès rapide dans le meshing
@@ -435,13 +488,15 @@ func _get_biome(temp: float, humid: float) -> int:
 	else:
 		return 3  # PLAINS
 
-func _is_cave(x: int, y: int, z: int, n1: FastNoiseLite, n2: FastNoiseLite) -> bool:
+func _is_cave(x: int, y: int, z: int, n1: FastNoiseLite, n2: FastNoiseLite, n3: FastNoiseLite) -> bool:
 	var v1 = n1.get_noise_3d(x, y, z)
 	var v2 = n2.get_noise_3d(x, y, z)
+	var v3 = n3.get_noise_3d(x, y, z)
 	var combined = abs(v1) * abs(v2)
+	var large_cave = abs(v3) < 0.12
 	var depth = 1.0 - (float(y) / SEA_LEVEL)
-	var threshold = 0.15 + depth * 0.1
-	return combined < threshold
+	var threshold = 0.02 + depth * 0.04
+	return combined < threshold or large_cave
 
 func _get_block(y: int, surface: int, biome: int) -> int:
 	var depth = surface - y

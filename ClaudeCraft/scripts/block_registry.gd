@@ -17,7 +17,11 @@ enum BlockType {
 	PLANKS,
 	CRAFTING_TABLE,
 	BRICK,
-	SANDSTONE
+	SANDSTONE,
+	# Blocs naturels supplémentaires
+	WATER,
+	COAL_ORE,
+	IRON_ORE
 }
 
 const BLOCK_DATA = {
@@ -111,6 +115,25 @@ const BLOCK_DATA = {
 		"solid": true,
 		"color": Color(0.9, 0.82, 0.6, 1.0),
 		"hardness": 1.2
+	},
+	# === BLOCS NATURELS ===
+	BlockType.WATER: {
+		"name": "Water",
+		"solid": false,
+		"color": Color(0.3, 0.5, 0.9, 0.6),
+		"hardness": 0.0
+	},
+	BlockType.COAL_ORE: {
+		"name": "Coal Ore",
+		"solid": true,
+		"color": Color(0.25, 0.25, 0.3, 1.0),
+		"hardness": 1.8
+	},
+	BlockType.IRON_ORE: {
+		"name": "Iron Ore",
+		"solid": true,
+		"color": Color(0.75, 0.6, 0.55, 1.0),
+		"hardness": 2.0
 	}
 }
 

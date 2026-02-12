@@ -73,6 +73,7 @@ const FALL_DAMAGE_THRESHOLD = 4.0  # Blocs de chute avant dégâts
 const FALL_DAMAGE_MULTIPLIER = 1.0  # Dégâts par bloc au-delà du seuil
 const CACTUS_DAMAGE = 1
 var is_dead: bool = false
+var in_water: bool = false
 var respawn_timer: float = 0.0
 const RESPAWN_DELAY = 2.0
 var spawn_position: Vector3 = Vector3(0, 80, 0)
@@ -118,6 +119,8 @@ func _init_inventory():
 	inventory[BlockRegistry.BlockType.CRAFTING_TABLE] = 0
 	inventory[BlockRegistry.BlockType.BRICK] = 0
 	inventory[BlockRegistry.BlockType.SANDSTONE] = 0
+	inventory[BlockRegistry.BlockType.COAL_ORE] = 0
+	inventory[BlockRegistry.BlockType.IRON_ORE] = 0
 
 func _create_block_highlighter():
 	block_highlighter = BlockHighlighter.new()
@@ -284,9 +287,25 @@ func _physics_process(delta):
 			_respawn()
 		return
 
-	# Gravité toujours active
+	# Détection eau
+	in_water = false
+	if world_manager:
+		var feet_pos = global_position.floor()
+		var head_pos = (global_position + Vector3(0, 1.5, 0)).floor()
+		var feet_block = world_manager.get_block_at_position(feet_pos)
+		var head_block = world_manager.get_block_at_position(head_pos)
+		in_water = feet_block == BlockRegistry.BlockType.WATER or head_block == BlockRegistry.BlockType.WATER
+
+	# Gravité (réduite dans l'eau)
 	if not is_on_floor():
-		velocity.y -= gravity * delta
+		if in_water:
+			velocity.y -= gravity * 0.3 * delta
+		else:
+			velocity.y -= gravity * delta
+
+	# Reset fall tracking dans l'eau
+	if in_water:
+		_fall_start_y = global_position.y
 
 	# Pas de mouvement si UI ouverte
 	if _is_any_ui_open():
@@ -296,14 +315,18 @@ func _physics_process(delta):
 		_update_damage(delta)
 		return
 
-	# Saut
-	if Input.is_action_just_pressed("jump") and is_on_floor():
-		velocity.y = jump_velocity * jump_boost
+	# Saut / Nage
+	if in_water:
+		if Input.is_action_pressed("jump"):
+			velocity.y = 3.0
+	else:
+		if Input.is_action_just_pressed("jump") and is_on_floor():
+			velocity.y = jump_velocity * jump_boost
 
-	# Sprint
+	# Sprint (pas dans l'eau)
 	var input_dir = Input.get_vector("move_left", "move_right", "move_forward", "move_backward")
-	is_sprinting = Input.is_key_pressed(KEY_SHIFT) and input_dir.y < 0 and is_on_floor()
-	var current_speed = sprint_speed if is_sprinting else speed
+	is_sprinting = not in_water and Input.is_key_pressed(KEY_SHIFT) and input_dir.y < 0 and is_on_floor()
+	var current_speed = speed * 0.5 if in_water else (sprint_speed if is_sprinting else speed)
 
 	# Mouvement
 	var direction = (transform.basis * Vector3(input_dir.x, 0, input_dir.y)).normalized()
@@ -379,7 +402,7 @@ func _handle_block_interaction(delta: float):
 	
 	var break_block_type = world_manager.get_block_at_position(break_pos)
 	look_block_type = break_block_type
-	var can_break = break_block_type != BlockRegistry.BlockType.AIR and BlockRegistry.is_solid(break_block_type)
+	var can_break = break_block_type != BlockRegistry.BlockType.AIR and break_block_type != BlockRegistry.BlockType.WATER and BlockRegistry.is_solid(break_block_type)
 	
 	# Highlighter
 	if block_highlighter and can_break:
@@ -423,7 +446,7 @@ func _handle_block_interaction(delta: float):
 		var place_block_type = world_manager.get_block_at_position(place_pos)
 		var player_aabb = AABB(global_position - Vector3(0.4, 0, 0.4), Vector3(0.8, 1.8, 0.8))
 		var block_aabb = AABB(place_pos, Vector3.ONE)
-		var can_place = place_block_type == BlockRegistry.BlockType.AIR and not player_aabb.intersects(block_aabb)
+		var can_place = (place_block_type == BlockRegistry.BlockType.AIR or place_block_type == BlockRegistry.BlockType.WATER) and not player_aabb.intersects(block_aabb)
 		
 		if can_place and get_inventory_count(selected_block_type) > 0:
 			world_manager.place_block_at_position(place_pos, selected_block_type)
@@ -495,7 +518,7 @@ func _check_fall_damage():
 	var on_floor_now = is_on_floor()
 	if _was_on_floor and not on_floor_now:
 		_fall_start_y = global_position.y
-	if not _was_on_floor and on_floor_now:
+	if not _was_on_floor and on_floor_now and not in_water:
 		var fall_distance = _fall_start_y - global_position.y
 		if fall_distance > FALL_DAMAGE_THRESHOLD:
 			var damage = int((fall_distance - FALL_DAMAGE_THRESHOLD) * FALL_DAMAGE_MULTIPLIER)

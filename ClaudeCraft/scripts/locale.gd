@@ -24,6 +24,9 @@ const BLOCK_NAMES = {
 	"Craft Table":{"fr": "Table de Craft","en": "Craft Table"},
 	"Brick":      {"fr": "Briques",       "en": "Bricks"},
 	"Sandstone":  {"fr": "Grès",          "en": "Sandstone"},
+	"Water":      {"fr": "Eau",          "en": "Water"},
+	"Coal Ore":   {"fr": "Charbon",      "en": "Coal Ore"},
+	"Iron Ore":   {"fr": "Fer",          "en": "Iron Ore"},
 }
 
 # ============================================================
