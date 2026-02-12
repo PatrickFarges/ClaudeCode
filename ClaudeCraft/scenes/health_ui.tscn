@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://health_ui_001"]
+
+[ext_resource type="Script" path="res://scripts/health_ui.gd" id="1_health"]
+
+[node name="HealthUI" type="CanvasLayer"]
+script = ExtResource("1_health")

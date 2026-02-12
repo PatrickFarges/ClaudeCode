@@ -70,6 +70,10 @@ const UI = {
 	"biome_forest":         {"fr": "Forêt",                    "en": "Forest"},
 	"biome_mountain":       {"fr": "Montagne",                 "en": "Mountain"},
 	"biome_plains":         {"fr": "Plaines",                  "en": "Plains"},
+
+	# Santé
+	"health":               {"fr": "❤ %d/%d",                  "en": "❤ %d/%d"},
+	"you_died":             {"fr": "Vous êtes mort !",         "en": "You died!"},
 }
 
 # ============================================================

@@ -55,6 +55,23 @@ var look_block_type: BlockRegistry.BlockType = BlockRegistry.BlockType.AIR
 # Détection table de craft
 const TABLE_DETECT_RANGE = 4.0
 
+# ============================================================
+# SYSTÈME DE VIE
+# ============================================================
+var max_health: int = 20
+var current_health: int = 20
+var _fall_start_y: float = 0.0
+var _was_on_floor: bool = true
+var damage_cooldown: float = 0.0
+const DAMAGE_COOLDOWN_TIME = 0.5
+const FALL_DAMAGE_THRESHOLD = 4.0  # Blocs de chute avant dégâts
+const FALL_DAMAGE_MULTIPLIER = 1.0  # Dégâts par bloc au-delà du seuil
+const CACTUS_DAMAGE = 1
+var is_dead: bool = false
+var respawn_timer: float = 0.0
+const RESPAWN_DELAY = 2.0
+var spawn_position: Vector3 = Vector3(0, 80, 0)
+
 # Audio
 var audio_manager: AudioManager = null
 var footstep_timer: float = 0.0
@@ -71,6 +88,7 @@ func _ready():
 		raycast.enabled = true
 	
 	add_to_group("player")
+	spawn_position = global_position
 	_update_selected_block()
 	_init_inventory()
 	_create_block_highlighter()
@@ -254,34 +272,43 @@ func _input(event):
 			_update_selected_block()
 
 func _physics_process(delta):
+	# Gestion de la mort
+	if is_dead:
+		respawn_timer -= delta
+		if respawn_timer <= 0:
+			_respawn()
+		return
+
 	# Gravité toujours active
 	if not is_on_floor():
 		velocity.y -= gravity * delta
-	
+
 	# Pas de mouvement si UI ouverte
 	if _is_any_ui_open():
 		velocity.x = move_toward(velocity.x, 0, speed)
 		velocity.z = move_toward(velocity.z, 0, speed)
 		move_and_slide()
+		_update_damage(delta)
 		return
-	
+
 	# Saut
 	if Input.is_action_just_pressed("jump") and is_on_floor():
 		velocity.y = jump_velocity * jump_boost
-	
+
 	# Mouvement
 	var input_dir = Input.get_vector("move_left", "move_right", "move_forward", "move_backward")
 	var direction = (transform.basis * Vector3(input_dir.x, 0, input_dir.y)).normalized()
-	
+
 	if direction:
 		velocity.x = direction.x * speed
 		velocity.z = direction.z * speed
 	else:
 		velocity.x = move_toward(velocity.x, 0, speed)
 		velocity.z = move_toward(velocity.z, 0, speed)
-	
+
 	_handle_auto_step(direction)
 	move_and_slide()
+	_update_damage(delta)
 	_handle_block_interaction(delta)
 	_handle_footsteps(delta, direction)
 
@@ -440,6 +467,73 @@ func _spawn_break_particles(pos: Vector3, block_type: BlockRegistry.BlockType):
 func _update_selected_block():
 	if selected_slot >= 0 and selected_slot < hotbar_slots.size():
 		selected_block_type = hotbar_slots[selected_slot]
+
+# ============================================================
+# GESTION DE LA VIE
+# ============================================================
+func _update_damage(delta: float):
+	if damage_cooldown > 0:
+		damage_cooldown -= delta
+	_check_fall_damage()
+	_check_cactus_damage()
+
+func _check_fall_damage():
+	var on_floor_now = is_on_floor()
+	if _was_on_floor and not on_floor_now:
+		_fall_start_y = global_position.y
+	if not _was_on_floor and on_floor_now:
+		var fall_distance = _fall_start_y - global_position.y
+		if fall_distance > FALL_DAMAGE_THRESHOLD:
+			var damage = int((fall_distance - FALL_DAMAGE_THRESHOLD) * FALL_DAMAGE_MULTIPLIER)
+			if damage > 0:
+				take_damage(damage)
+	_was_on_floor = on_floor_now
+
+func _check_cactus_damage():
+	if not world_manager or damage_cooldown > 0:
+		return
+	# Vérifier les blocs adjacents au joueur (rayon > collision pour détecter au contact)
+	var bx = int(floor(global_position.x))
+	var bz = int(floor(global_position.z))
+	var by = int(floor(global_position.y))
+	for dx in range(-1, 2):
+		for dz in range(-1, 2):
+			for dy in range(0, 3):
+				var check_pos = Vector3(bx + dx, by + dy, bz + dz)
+				if world_manager.get_block_at_position(check_pos) == BlockRegistry.BlockType.CACTUS:
+					# Vérifier la proximité réelle (distance AABB joueur ↔ bloc)
+					var block_center = check_pos + Vector3(0.5, 0.5, 0.5)
+					var dist_x = absf(global_position.x - block_center.x) - 0.5
+					var dist_z = absf(global_position.z - block_center.z) - 0.5
+					var dist_y = global_position.y + 0.9 - block_center.y  # Centre joueur
+					if dist_x < 0.5 and dist_z < 0.5 and absf(dist_y) < 1.4:
+						take_damage(CACTUS_DAMAGE)
+						return
+
+func take_damage(amount: int):
+	if damage_cooldown > 0 or is_dead:
+		return
+	current_health = maxi(0, current_health - amount)
+	damage_cooldown = DAMAGE_COOLDOWN_TIME
+	if current_health <= 0:
+		_die()
+
+func heal(amount: int):
+	current_health = mini(max_health, current_health + amount)
+
+func _die():
+	is_dead = true
+	respawn_timer = RESPAWN_DELAY
+	velocity = Vector3.ZERO
+	_cancel_mining()
+
+func _respawn():
+	is_dead = false
+	current_health = max_health
+	global_position = spawn_position
+	velocity = Vector3.ZERO
+	_was_on_floor = true
+	damage_cooldown = DAMAGE_COOLDOWN_TIME
 
 func _notification(what):
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
