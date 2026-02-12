@@ -1,0 +1,57 @@
+[gd_scene load_steps=10 format=3 uid="uid://d3k8p4r5m1qhw"]
+
+[ext_resource type="Script" path="res://scripts/world_manager.gd" id="1_world"]
+[ext_resource type="PackedScene" uid="uid://c2yqr8n3m0qhv" path="res://scenes/player.tscn" id="2_player"]
+[ext_resource type="PackedScene" uid="uid://bqx5w7h3j4n8p" path="res://scenes/hotbar_ui.tscn" id="3_hotbar"]
+[ext_resource type="PackedScene" uid="uid://crosshair_ui_001" path="res://scenes/crosshair.tscn" id="4_crosshair"]
+[ext_resource type="PackedScene" uid="uid://version_hud" path="res://scenes/version_hud.tscn" id="5_version"]
+[ext_resource type="PackedScene" uid="uid://inventory_ui_001" path="res://scenes/inventory_ui.tscn" id="6_inventory"]
+[ext_resource type="PackedScene" uid="uid://crafting_ui_001" path="res://scenes/crafting_ui.tscn" id="7_crafting"]
+[ext_resource type="Script" path="res://scripts/audio_manager.gd" id="8_audio"]
+
+[sub_resource type="Environment" id="Environment_1"]
+background_mode = 1
+background_color = Color(0.7, 0.85, 0.95, 1)
+ambient_light_source = 2
+ambient_light_color = Color(1, 1, 1, 1)
+ambient_light_energy = 0.8
+ssao_enabled = true
+ssao_radius = 1.5
+ssao_intensity = 1.0
+ssao_power = 1.5
+ssao_detail = 0.3
+ssao_sharpness = 0.98
+
+[node name="Main" type="Node3D"]
+
+[node name="WorldManager" type="Node3D" parent="." groups=["world_manager"]]
+script = ExtResource("1_world")
+render_distance = 5
+chunk_load_per_frame = 2
+unload_distance_margin = 4
+max_mesh_builds_per_frame = 3
+
+[node name="Player" parent="." instance=ExtResource("2_player")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 80, 0)
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_1")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866025, -0.433013, 0.25, 0, 0.5, 0.866025, -0.5, -0.75, 0.433013, 0, 10, 0)
+light_color = Color(1, 0.95, 0.9, 1)
+light_energy = 0.8
+shadow_enabled = true
+
+[node name="HotbarUI" parent="." instance=ExtResource("3_hotbar")]
+
+[node name="Crosshair" parent="." instance=ExtResource("4_crosshair")]
+
+[node name="VersionHUD" parent="." instance=ExtResource("5_version")]
+
+[node name="InventoryUI" parent="." instance=ExtResource("6_inventory")]
+
+[node name="CraftingUI" parent="." instance=ExtResource("7_crafting")]
+
+[node name="AudioManager" type="Node" parent="." groups=["audio_manager"]]
+script = ExtResource("8_audio")

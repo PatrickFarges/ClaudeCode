@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://inventory_ui_001"]
+
+[ext_resource type="Script" path="res://scripts/inventory_ui.gd" id="1_inventory"]
+
+[node name="InventoryUI" type="CanvasLayer" groups=["inventory_ui"]]
+script = ExtResource("1_inventory")

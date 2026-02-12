@@ -1,0 +1,308 @@
+extends Node
+class_name ChunkGenerator
+
+# Générateur de chunks avec multithreading
+# v5.2 : Terrain organique avec multi-octave noise
+
+signal chunk_generated(chunk_data: Dictionary)
+
+const MAX_THREADS = 4
+const CHUNK_SIZE = 16
+const CHUNK_HEIGHT = 256
+const SEA_LEVEL = 64
+
+var thread_pool: Array[Thread] = []
+var generation_queue: Array = []
+var active_generations: Dictionary = {}
+var queue_mutex: Mutex = Mutex.new()
+var should_exit: bool = false
+
+func _init():
+	for i in range(MAX_THREADS):
+		var thread = Thread.new()
+		thread_pool.append(thread)
+
+func _ready():
+	for i in range(MAX_THREADS):
+		thread_pool[i].start(_thread_worker.bind(i))
+
+func queue_chunk_generation(chunk_pos: Vector3i, priority: int = 0):
+	queue_mutex.lock()
+	if not active_generations.has(chunk_pos):
+		generation_queue.append({
+			"position": chunk_pos,
+			"priority": priority,
+			"timestamp": Time.get_ticks_msec()
+		})
+		generation_queue.sort_custom(_sort_by_priority)
+	queue_mutex.unlock()
+
+func _sort_by_priority(a: Dictionary, b: Dictionary) -> bool:
+	return a["priority"] < b["priority"]
+
+func _thread_worker(thread_id: int):
+	while not should_exit:
+		var chunk_data = null
+		
+		queue_mutex.lock()
+		if generation_queue.size() > 0:
+			chunk_data = generation_queue.pop_front()
+			if chunk_data:
+				active_generations[chunk_data["position"]] = true
+		queue_mutex.unlock()
+		
+		if chunk_data:
+			var generated = _generate_chunk_data(chunk_data["position"])
+			call_deferred("_on_chunk_generated", generated)
+			
+			queue_mutex.lock()
+			active_generations.erase(chunk_data["position"])
+			queue_mutex.unlock()
+		else:
+			OS.delay_msec(10)
+
+func _generate_chunk_data(chunk_pos: Vector3i) -> Dictionary:
+	"""Générer un chunk avec terrain organique et NON-LINÉAIRE"""
+	var blocks = []
+	blocks.resize(CHUNK_SIZE)
+	
+	# === NOISE MULTI-OCTAVES avec variation ===
+	# Continental (échelle TRÈS large)
+	var noise_continent = FastNoiseLite.new()
+	noise_continent.noise_type = FastNoiseLite.TYPE_PERLIN
+	noise_continent.seed = 12345
+	noise_continent.frequency = 0.003  # TRÈS lent = continents
+	
+	# Base (montagnes larges)
+	var noise_base = FastNoiseLite.new()
+	noise_base.noise_type = FastNoiseLite.TYPE_PERLIN
+	noise_base.seed = 23456
+	noise_base.frequency = 0.012
+	
+	# Détails (collines)
+	var noise_detail = FastNoiseLite.new()
+	noise_detail.noise_type = FastNoiseLite.TYPE_PERLIN
+	noise_detail.seed = 34567
+	noise_detail.frequency = 0.04
+	
+	# Fins (texture)
+	var noise_fine = FastNoiseLite.new()
+	noise_fine.noise_type = FastNoiseLite.TYPE_PERLIN
+	noise_fine.seed = 45678
+	noise_fine.frequency = 0.1
+	
+	# Biomes
+	var temp_noise = FastNoiseLite.new()
+	temp_noise.noise_type = FastNoiseLite.TYPE_PERLIN
+	temp_noise.seed = 54321
+	temp_noise.frequency = 0.01
+	
+	var humid_noise = FastNoiseLite.new()
+	humid_noise.noise_type = FastNoiseLite.TYPE_PERLIN
+	humid_noise.seed = 98765
+	humid_noise.frequency = 0.012
+	
+	# Grottes
+	var cave1 = FastNoiseLite.new()
+	cave1.noise_type = FastNoiseLite.TYPE_PERLIN
+	cave1.seed = 11111
+	cave1.frequency = 0.08
+	
+	var cave2 = FastNoiseLite.new()
+	cave2.noise_type = FastNoiseLite.TYPE_PERLIN
+	cave2.seed = 22222
+	cave2.frequency = 0.06
+	
+	for x in range(CHUNK_SIZE):
+		blocks[x] = []
+		blocks[x].resize(CHUNK_SIZE)
+		for z in range(CHUNK_SIZE):
+			blocks[x][z] = []
+			blocks[x][z].resize(CHUNK_HEIGHT)
+			
+			var wx = chunk_pos.x * CHUNK_SIZE + x
+			var wz = chunk_pos.z * CHUNK_SIZE + z
+			
+			# Combiner PLUSIEURS octaves avec pondération
+			var continent = (noise_continent.get_noise_2d(wx, wz) + 1.0) / 2.0
+			var base = (noise_base.get_noise_2d(wx, wz) + 1.0) / 2.0
+			var detail = (noise_detail.get_noise_2d(wx, wz) + 1.0) / 2.0
+			var fine = (noise_fine.get_noise_2d(wx, wz) + 1.0) / 2.0
+			
+			# Pondération : 40% continent + 30% base + 20% detail + 10% fine
+			var combined = continent * 0.4 + base * 0.3 + detail * 0.2 + fine * 0.1
+			
+			# Biome
+			var temp = (temp_noise.get_noise_2d(wx, wz) + 1.0) / 2.0
+			var humid = (humid_noise.get_noise_2d(wx, wz) + 1.0) / 2.0
+			var biome = _determine_biome(temp, humid)
+			
+			# Hauteur finale NON-LINÉAIRE
+			var height = _get_natural_height(combined, biome, temp, continent)
+			
+			# Générer colonne
+			for y in range(CHUNK_HEIGHT):
+				var block = BlockRegistry.BlockType.AIR
+				
+				if y < height:
+					block = _get_underground_block(y, height, biome)
+					
+					# Grottes sous niveau mer
+					if y < SEA_LEVEL and _is_cave(wx, y, wz, cave1, cave2):
+						block = BlockRegistry.BlockType.AIR
+				
+				blocks[x][z][y] = block
+			
+			# Végétation
+			_add_surface_features(blocks[x][z], height, biome, wx, wz)
+	
+	return {"position": chunk_pos, "blocks": blocks}
+
+func _determine_biome(temp: float, humid: float) -> int:
+	if temp > 0.6 and humid < 0.4:
+		return 0  # DESERT
+	elif temp > 0.4 and temp < 0.7 and humid > 0.5:
+		return 1  # FOREST
+	elif temp < 0.4:
+		return 2  # MOUNTAIN
+	else:
+		return 3  # PLAINS
+
+func _get_natural_height(noise: float, biome: int, temp: float, continent: float) -> int:
+	"""Hauteur NATURELLE avec courbes douces (pas de pyramides!)"""
+	
+	# Facteur continental (élévation globale de la zone)
+	var elevation = continent * 30.0  # 0-30 blocs d'élévation de base
+	
+	match biome:
+		0:  # DESERT - Très plat avec dunes douces
+			var desert_base = 58.0 + elevation * 0.3
+			var dune_height = sin(noise * PI) * 8.0  # Courbe sinusoïdale pour dunes douces
+			return int(desert_base + dune_height)
+		
+		1:  # FOREST - Collines arrondies
+			var forest_base = 64.0 + elevation * 0.5
+			var hill_curve = pow(noise, 1.2) * 18.0  # Légère courbe
+			return int(forest_base + hill_curve)
+		
+		2:  # MOUNTAIN - Montagnes avec pentes VRAIMENT progressives
+			var mountain_base = 68.0 + elevation
+			
+			# Courbe en S pour transition douce base → sommet
+			# Utiliser une fonction sigmoïde pour éliminer la linéarité
+			var normalized = (noise - 0.5) * 2.0  # -1 à 1
+			var sigmoid = normalized / (1.0 + abs(normalized))  # Courbe en S
+			var mapped = (sigmoid + 1.0) / 2.0  # Remap à 0-1
+			
+			# Appliquer la courbe
+			var mountain_height = pow(mapped, 0.8) * 80.0
+			
+			# Bonus température (plus froid = plus haut)
+			var temp_bonus = (1.0 - temp) * 15.0
+			
+			return int(mountain_base + mountain_height + temp_bonus)
+		
+		3:  # PLAINS - Plaines avec ondulations douces
+			var plains_base = 63.0 + elevation * 0.4
+			var wave = sin(noise * PI) * 6.0 + cos(noise * PI * 1.5) * 4.0
+			return int(plains_base + wave)
+		
+		_:
+			return SEA_LEVEL
+
+func _is_cave(x: int, y: int, z: int, n1: FastNoiseLite, n2: FastNoiseLite) -> bool:
+	var v1 = n1.get_noise_3d(x, y, z)
+	var v2 = n2.get_noise_3d(x, y, z)
+	var combined = abs(v1) * abs(v2)
+	var depth_factor = 1.0 - (float(y) / SEA_LEVEL)
+	var threshold = 0.15 + (depth_factor * 0.1)
+	return combined < threshold
+
+func _get_underground_block(y: int, surface: int, biome: int) -> int:
+	var depth = surface - y
+	
+	if y < 5:
+		return BlockRegistry.BlockType.STONE
+	
+	if depth > 5 or y < SEA_LEVEL - 10:
+		return BlockRegistry.BlockType.STONE
+	
+	match biome:
+		0:  # DESERT
+			if depth <= 4:
+				return BlockRegistry.BlockType.SAND
+			else:
+				return BlockRegistry.BlockType.STONE
+		1:  # FOREST
+			if depth == 1:
+				return BlockRegistry.BlockType.DARK_GRASS
+			elif depth <= 4:
+				return BlockRegistry.BlockType.DIRT
+			else:
+				return BlockRegistry.BlockType.STONE
+		2:  # MOUNTAIN
+			if depth == 1 and surface > 120:
+				return BlockRegistry.BlockType.SNOW
+			elif depth <= 3:
+				return BlockRegistry.BlockType.STONE
+			elif depth <= 6:
+				return BlockRegistry.BlockType.GRAVEL
+			else:
+				return BlockRegistry.BlockType.STONE
+		3:  # PLAINS
+			if depth == 1:
+				return BlockRegistry.BlockType.GRASS
+			elif depth <= 4:
+				return BlockRegistry.BlockType.DIRT
+			else:
+				return BlockRegistry.BlockType.STONE
+		_:
+			return BlockRegistry.BlockType.STONE
+
+func _add_surface_features(column: Array, height: int, biome: int, wx: int, wz: int):
+	if height >= CHUNK_HEIGHT - 10:
+		return
+	
+	match biome:
+		0:  # DESERT - Cactus
+			if (wx + wz) % 17 == 0 and height < SEA_LEVEL + 15:
+				var cactus_h = 2 + ((wx * wz) % 3)
+				for i in range(cactus_h):
+					if height + i < CHUNK_HEIGHT:
+						column[height + i] = BlockRegistry.BlockType.CACTUS
+		
+		1:  # FOREST - Arbres
+			if (wx + wz * 2) % 11 == 0 and height < SEA_LEVEL + 30:
+				var tree_h = 4 + ((wx * wz) % 4)
+				for i in range(tree_h):
+					if height + i < CHUNK_HEIGHT:
+						column[height + i] = BlockRegistry.BlockType.WOOD
+				for i in range(2):
+					if height + tree_h + i < CHUNK_HEIGHT:
+						column[height + tree_h + i] = BlockRegistry.BlockType.LEAVES
+
+func _on_chunk_generated(chunk_data: Dictionary):
+	emit_signal("chunk_generated", chunk_data)
+
+func get_queue_size() -> int:
+	queue_mutex.lock()
+	var size = generation_queue.size()
+	queue_mutex.unlock()
+	return size
+
+func is_generating(chunk_pos: Vector3i) -> bool:
+	queue_mutex.lock()
+	var gen = active_generations.has(chunk_pos)
+	queue_mutex.unlock()
+	return gen
+
+func clear_queue():
+	queue_mutex.lock()
+	generation_queue.clear()
+	queue_mutex.unlock()
+
+func _exit_tree():
+	should_exit = true
+	for thread in thread_pool:
+		if thread.is_started():
+			thread.wait_to_finish()

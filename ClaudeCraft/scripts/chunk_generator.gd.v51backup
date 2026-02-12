@@ -1,0 +1,306 @@
+extends Node
+class_name ChunkGenerator
+
+# Générateur de chunks avec multithreading
+# Permet de générer les chunks sans bloquer le thread principal
+
+signal chunk_generated(chunk_data: Dictionary)
+
+const MAX_THREADS = 4  # Nombre de threads workers
+const CHUNK_SIZE = 16
+const CHUNK_HEIGHT = 256  # Hauteur du monde (comme Minecraft!)
+const SEA_LEVEL = 64  # Niveau de la mer (référence)
+
+var thread_pool: Array[Thread] = []
+var generation_queue: Array = []
+var active_generations: Dictionary = {}
+var queue_mutex: Mutex = Mutex.new()
+var should_exit: bool = false
+
+func _init():
+	# Créer le pool de threads
+	for i in range(MAX_THREADS):
+		var thread = Thread.new()
+		thread_pool.append(thread)
+
+func _ready():
+	# Démarrer les threads workers
+	for i in range(MAX_THREADS):
+		thread_pool[i].start(_thread_worker.bind(i))
+
+func queue_chunk_generation(chunk_pos: Vector3i, priority: int = 0):
+	"""Ajouter un chunk à la file de génération"""
+	queue_mutex.lock()
+	
+	# Vérifier qu'il n'est pas déjà en cours de génération
+	if not active_generations.has(chunk_pos):
+		generation_queue.append({
+			"position": chunk_pos,
+			"priority": priority,
+			"timestamp": Time.get_ticks_msec()
+		})
+		# Trier par priorité (les plus proches d'abord)
+		generation_queue.sort_custom(_sort_by_priority)
+	
+	queue_mutex.unlock()
+
+func _sort_by_priority(a: Dictionary, b: Dictionary) -> bool:
+	return a["priority"] < b["priority"]
+
+func _thread_worker(thread_id: int):
+	"""Worker thread qui génère les chunks"""
+	while not should_exit:
+		var chunk_data = null
+		
+		# Récupérer un chunk à générer
+		queue_mutex.lock()
+		if generation_queue.size() > 0:
+			chunk_data = generation_queue.pop_front()
+			if chunk_data:
+				active_generations[chunk_data["position"]] = true
+		queue_mutex.unlock()
+		
+		if chunk_data:
+			# Générer le chunk (calculs lourds)
+			var generated = _generate_chunk_data(chunk_data["position"])
+			
+			# Signaler que la génération est terminée
+			call_deferred("_on_chunk_generated", generated)
+			
+			# Retirer des générations actives
+			queue_mutex.lock()
+			active_generations.erase(chunk_data["position"])
+			queue_mutex.unlock()
+		else:
+			# Pas de travail, attendre un peu
+			OS.delay_msec(10)
+
+func _generate_chunk_data(chunk_pos: Vector3i) -> Dictionary:
+	"""Générer les données d'un chunk (appelé dans un thread)"""
+	var blocks = []
+	blocks.resize(CHUNK_SIZE)
+	
+	# Noise pour le terrain de surface
+	var terrain_noise = FastNoiseLite.new()
+	terrain_noise.noise_type = FastNoiseLite.TYPE_PERLIN
+	terrain_noise.seed = 12345
+	terrain_noise.frequency = 0.05
+	
+	# Noise pour la température (détermine les biomes)
+	var temperature_noise = FastNoiseLite.new()
+	temperature_noise.noise_type = FastNoiseLite.TYPE_PERLIN
+	temperature_noise.seed = 54321
+	temperature_noise.frequency = 0.02
+	
+	# Noise pour l'humidité (détermine les biomes)
+	var humidity_noise = FastNoiseLite.new()
+	humidity_noise.noise_type = FastNoiseLite.TYPE_PERLIN
+	humidity_noise.seed = 98765
+	humidity_noise.frequency = 0.025
+	
+	# Noise pour les grottes (3D !)
+	var cave_noise = FastNoiseLite.new()
+	cave_noise.noise_type = FastNoiseLite.TYPE_PERLIN
+	cave_noise.seed = 11111
+	cave_noise.frequency = 0.08  # Plus haute fréquence = grottes plus petites
+	
+	# Noise secondaire pour grottes (pour variation)
+	var cave_noise2 = FastNoiseLite.new()
+	cave_noise2.noise_type = FastNoiseLite.TYPE_PERLIN
+	cave_noise2.seed = 22222
+	cave_noise2.frequency = 0.06
+	
+	for x in range(CHUNK_SIZE):
+		blocks[x] = []
+		blocks[x].resize(CHUNK_SIZE)
+		for z in range(CHUNK_SIZE):
+			blocks[x][z] = []
+			blocks[x][z].resize(CHUNK_HEIGHT)
+			
+			var world_x = chunk_pos.x * CHUNK_SIZE + x
+			var world_z = chunk_pos.z * CHUNK_SIZE + z
+			
+			# Déterminer le biome
+			var temperature = (temperature_noise.get_noise_2d(world_x, world_z) + 1.0) / 2.0
+			var humidity = (humidity_noise.get_noise_2d(world_x, world_z) + 1.0) / 2.0
+			var biome = _determine_biome(temperature, humidity)
+			
+			# Hauteur du terrain basée sur le bruit et le biome
+			var base_height = (terrain_noise.get_noise_2d(world_x, world_z) + 1.0) / 2.0
+			var surface_height = _get_terrain_height(base_height, biome)
+			
+			# Générer la colonne avec grottes
+			for y in range(CHUNK_HEIGHT):
+				var world_y = y
+				
+				# Déterminer le type de bloc de base
+				var block_type = BlockRegistry.BlockType.AIR
+				
+				if y < surface_height:
+					# Sous la surface
+					block_type = _get_underground_block(y, surface_height, biome)
+					
+					# Vérifier si on est dans une grotte (seulement sous le niveau mer)
+					if y < SEA_LEVEL and _is_cave(world_x, world_y, world_z, cave_noise, cave_noise2):
+						block_type = BlockRegistry.BlockType.AIR
+				
+				blocks[x][z][y] = block_type
+			
+			# Ajouter la végétation en surface (arbres, cactus)
+			_add_surface_features(blocks[x][z], surface_height, biome, world_x, world_z)
+	
+	return {
+		"position": chunk_pos,
+		"blocks": blocks
+	}
+
+func _is_cave(x: int, y: int, z: int, noise1: FastNoiseLite, noise2: FastNoiseLite) -> bool:
+	"""Déterminer si une position est dans une grotte (3D noise)"""
+	var cave_value1 = noise1.get_noise_3d(x, y, z)
+	var cave_value2 = noise2.get_noise_3d(x, y, z)
+	
+	# Combiner les deux noises pour des grottes plus intéressantes
+	var combined = abs(cave_value1) * abs(cave_value2)
+	
+	# Seuil pour créer des grottes (plus bas = plus de grottes)
+	# Grottes plus grandes en profondeur
+	var depth_factor = 1.0 - (float(y) / SEA_LEVEL)
+	var threshold = 0.15 + (depth_factor * 0.1)
+	
+	return combined < threshold
+
+func _get_underground_block(y: int, surface_height: int, biome: int) -> int:
+	"""Déterminer le type de bloc souterrain"""
+	var depth = surface_height - y
+	
+	# Bedrock au fond (0-5)
+	if y < 5:
+		return BlockRegistry.BlockType.STONE  # On utilisera STONE comme bedrock pour l'instant
+	
+	# Couches profondes (pierre)
+	if depth > 5 or y < SEA_LEVEL - 10:
+		return BlockRegistry.BlockType.STONE
+	
+	# Couches de surface (selon biome)
+	match biome:
+		0:  # DESERT
+			if depth <= 4:
+				return BlockRegistry.BlockType.SAND
+			else:
+				return BlockRegistry.BlockType.STONE
+		1:  # FOREST
+			if depth == 1:
+				return BlockRegistry.BlockType.DARK_GRASS
+			elif depth <= 4:
+				return BlockRegistry.BlockType.DIRT
+			else:
+				return BlockRegistry.BlockType.STONE
+		2:  # MOUNTAIN
+			if depth == 1 and surface_height > 140:
+				return BlockRegistry.BlockType.SNOW
+			elif depth <= 3:
+				return BlockRegistry.BlockType.STONE
+			elif depth <= 6:
+				return BlockRegistry.BlockType.GRAVEL
+			else:
+				return BlockRegistry.BlockType.STONE
+		3:  # PLAINS
+			if depth == 1:
+				return BlockRegistry.BlockType.GRASS
+			elif depth <= 4:
+				return BlockRegistry.BlockType.DIRT
+			else:
+				return BlockRegistry.BlockType.STONE
+		_:
+			return BlockRegistry.BlockType.STONE
+
+func _add_surface_features(column: Array, surface_height: int, biome: int, world_x: int, world_z: int):
+	"""Ajouter végétation et features en surface"""
+	if surface_height >= CHUNK_HEIGHT - 10:
+		return  # Trop haut, pas de features
+	
+	match biome:
+		0:  # DESERT - Cactus
+			if (world_x + world_z) % 17 == 0 and surface_height < SEA_LEVEL + 20:
+				var cactus_height = 2 + ((world_x * world_z) % 3)
+				for i in range(cactus_height):
+					if surface_height + i < CHUNK_HEIGHT:
+						column[surface_height + i] = BlockRegistry.BlockType.CACTUS
+		
+		1:  # FOREST - Arbres
+			if (world_x + world_z * 2) % 11 == 0 and surface_height < SEA_LEVEL + 40:
+				var tree_height = 4 + ((world_x * world_z) % 4)
+				# Tronc
+				for i in range(tree_height):
+					if surface_height + i < CHUNK_HEIGHT:
+						column[surface_height + i] = BlockRegistry.BlockType.WOOD
+				# Feuilles
+				for i in range(2):
+					if surface_height + tree_height + i < CHUNK_HEIGHT:
+						column[surface_height + tree_height + i] = BlockRegistry.BlockType.LEAVES
+
+func _determine_biome(temperature: float, humidity: float) -> int:
+	"""Déterminer le biome selon température et humidité"""
+	# DÉSERT : Chaud et sec
+	if temperature > 0.6 and humidity < 0.4:
+		return 0  # DESERT
+	
+	# FORÊT : Tempéré et humide
+	elif temperature > 0.4 and temperature < 0.7 and humidity > 0.5:
+		return 1  # FOREST
+	
+	# MONTAGNE : Froid
+	elif temperature < 0.4:
+		return 2  # MOUNTAIN
+	
+	# PLAINE : Le reste (par défaut)
+	else:
+		return 3  # PLAINS
+
+func _get_terrain_height(base_height: float, biome: int) -> int:
+	"""Obtenir la hauteur du terrain selon le biome (avec 256 blocs disponibles!)"""
+	match biome:
+		0:  # DESERT - Plat avec dunes (60-75)
+			return int(base_height * 15) + 60
+		1:  # FOREST - Collines douces (65-95)
+			return int(base_height * 30) + 65
+		2:  # MOUNTAIN - VRAIES MONTAGNES ! (80-200)
+			return int(base_height * 120) + 80
+		3:  # PLAINS - Plaines normales (62-80)
+			return int(base_height * 18) + 62
+		_:
+			return SEA_LEVEL
+
+
+func _on_chunk_generated(chunk_data: Dictionary):
+	"""Appelé quand un chunk est généré (thread principal)"""
+	emit_signal("chunk_generated", chunk_data)
+
+func get_queue_size() -> int:
+	"""Obtenir la taille de la file d'attente"""
+	queue_mutex.lock()
+	var size = generation_queue.size()
+	queue_mutex.unlock()
+	return size
+
+func is_generating(chunk_pos: Vector3i) -> bool:
+	"""Vérifier si un chunk est en cours de génération"""
+	queue_mutex.lock()
+	var generating = active_generations.has(chunk_pos)
+	queue_mutex.unlock()
+	return generating
+
+func clear_queue():
+	"""Vider la file d'attente"""
+	queue_mutex.lock()
+	generation_queue.clear()
+	queue_mutex.unlock()
+
+func _exit_tree():
+	"""Nettoyer les threads à la fermeture"""
+	should_exit = true
+	
+	# Attendre que tous les threads se terminent
+	for thread in thread_pool:
+		if thread.is_started():
+			thread.wait_to_finish()

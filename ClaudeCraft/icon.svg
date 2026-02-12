@@ -1,0 +1,21 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <!-- Fond pastel -->
+  <rect width="128" height="128" fill="#b3d9f2" rx="16"/>
+  
+  <!-- Bloc de terre (bottom) -->
+  <rect x="24" y="72" width="32" height="32" fill="#c4a080"/>
+  <rect x="24" y="72" width="32" height="4" fill="#d4b090"/>
+  
+  <!-- Bloc d'herbe (middle) -->
+  <rect x="48" y="48" width="32" height="32" fill="#99e699"/>
+  <rect x="48" y="48" width="32" height="4" fill="#aaf0aa"/>
+  
+  <!-- Bloc de pierre (top) -->
+  <rect x="72" y="24" width="32" height="32" fill="#b3b3c0"/>
+  <rect x="72" y="24" width="32" height="4" fill="#c3c3d0"/>
+  
+  <!-- Ombres pour effet 3D -->
+  <rect x="24" y="100" width="32" height="4" fill="#a39070" opacity="0.5"/>
+  <rect x="48" y="76" width="32" height="4" fill="#88d688" opacity="0.5"/>
+  <rect x="72" y="52" width="32" height="4" fill="#a3a3b0" opacity="0.5"/>
+</svg>
