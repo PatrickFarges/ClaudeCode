@@ -71,6 +71,7 @@ func _update_sky(sun_height: float):
 	else:
 		sky_color = SKY_NIGHT
 	env.background_color = sky_color
+	env.fog_light_color = sky_color
 
 func _update_ambient(sun_height: float):
 	if sun_height > 0.1:
