@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3 uid="uid://d3k8p4r5m1qhw"]
+[gd_scene load_steps=11 format=3 uid="uid://d3k8p4r5m1qhw"]
 
 [ext_resource type="Script" path="res://scripts/world_manager.gd" id="1_world"]
 [ext_resource type="PackedScene" uid="uid://c2yqr8n3m0qhv" path="res://scenes/player.tscn" id="2_player"]
@@ -8,6 +8,7 @@
 [ext_resource type="PackedScene" uid="uid://inventory_ui_001" path="res://scenes/inventory_ui.tscn" id="6_inventory"]
 [ext_resource type="PackedScene" uid="uid://crafting_ui_001" path="res://scenes/crafting_ui.tscn" id="7_crafting"]
 [ext_resource type="Script" path="res://scripts/audio_manager.gd" id="8_audio"]
+[ext_resource type="Script" path="res://scripts/day_night_cycle.gd" id="9_daynight"]
 
 [sub_resource type="Environment" id="Environment_1"]
 background_mode = 1
@@ -51,6 +52,9 @@ shadow_enabled = true
 [node name="InventoryUI" parent="." instance=ExtResource("6_inventory")]
 
 [node name="CraftingUI" parent="." instance=ExtResource("7_crafting")]
+
+[node name="DayNightCycle" type="Node" parent="."]
+script = ExtResource("9_daynight")
 
 [node name="AudioManager" type="Node" parent="." groups=["audio_manager"]]
 script = ExtResource("8_audio")
