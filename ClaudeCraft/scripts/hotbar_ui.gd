@@ -3,15 +3,35 @@ extends CanvasLayer
 @onready var hotbar: HBoxContainer = $MarginContainer/HBoxContainer
 var slot_panels: Array = []
 var player: CharacterBody3D
+var name_label: Label
 
 const NUM_SLOTS = 9
 
 func _ready():
 	await get_tree().process_frame
 	player = get_tree().get_first_node_in_group("player")
-	
+
+	_create_name_label()
 	_create_hotbar_slots()
 	_update_hotbar()
+
+func _create_name_label():
+	name_label = Label.new()
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	name_label.offset_left = -200
+	name_label.offset_right = 200
+	name_label.offset_top = -100
+	name_label.offset_bottom = -82
+	name_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	name_label.add_theme_font_size_override("font_size", 16)
+	name_label.add_theme_color_override("font_color", Color.WHITE)
+	name_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 1.0))
+	name_label.add_theme_constant_override("shadow_offset_x", 1)
+	name_label.add_theme_constant_override("shadow_offset_y", 1)
+	name_label.add_theme_constant_override("outline_size", 4)
+	name_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 1.0))
+	add_child(name_label)
 
 func _create_hotbar_slots():
 	for i in range(NUM_SLOTS):
@@ -73,7 +93,12 @@ func _process(_delta):
 func _update_hotbar():
 	if not player:
 		return
-	
+
+	# Nom du bloc sélectionné
+	if name_label and player.selected_slot >= 0 and player.selected_slot < player.hotbar_slots.size():
+		var block_type = player.hotbar_slots[player.selected_slot]
+		name_label.text = BlockRegistry.get_block_name(block_type)
+
 	for i in range(min(slot_panels.size(), player.hotbar_slots.size())):
 		var slot = slot_panels[i]
 		var block_type = player.hotbar_slots[i]
