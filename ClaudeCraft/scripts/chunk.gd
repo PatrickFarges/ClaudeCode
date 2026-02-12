@@ -34,7 +34,7 @@ static func _get_shared_material() -> StandardMaterial3D:
 	if not _shared_material:
 		_shared_material = StandardMaterial3D.new()
 		_shared_material.vertex_color_use_as_albedo = true
-		_shared_material.shading_mode = BaseMaterial3D.SHADING_MODE_PER_VERTEX
+		_shared_material.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
 		_shared_material.albedo_color = Color(1, 1, 1, 1)
 		_shared_material.roughness = 0.8
 		_shared_material.metallic = 0.0
@@ -488,20 +488,5 @@ func _calculate_ao_for_face(direction: Vector3, x: int, y: int, z: int) -> Array
 
 	return ao
 
-func _calculate_vertex_ao(x1: int, y1: int, z1: int, x2: int, y2: int, z2: int, x3: int, y3: int, z3: int) -> float:
-	var side1 = 1 if _is_block_solid(x1, y1, z1) else 0
-	var side2 = 1 if _is_block_solid(x2, y2, z2) else 0
-	var corner = 1 if _is_block_solid(x3, y3, z3) else 0
-
-	if side1 == 1 and side2 == 1:
-		return 0.4
-
-	var total = side1 + side2 + corner
-	if total == 0:
-		return 1.0
-	elif total == 1:
-		return 0.85
-	elif total == 2:
-		return 0.65
-	else:
-		return 0.5
+func _calculate_vertex_ao(_x1: int, _y1: int, _z1: int, _x2: int, _y2: int, _z2: int, _x3: int, _y3: int, _z3: int) -> float:
+	return 1.0

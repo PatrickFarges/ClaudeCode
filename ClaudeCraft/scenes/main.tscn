@@ -18,11 +18,11 @@ ambient_light_source = 2
 ambient_light_color = Color(1, 1, 1, 1)
 ambient_light_energy = 0.8
 ssao_enabled = true
-ssao_radius = 1.5
-ssao_intensity = 1.0
+ssao_radius = 2.0
+ssao_intensity = 1.5
 ssao_power = 1.5
-ssao_detail = 0.3
-ssao_sharpness = 0.98
+ssao_detail = 0.5
+ssao_sharpness = 0.5
 
 [node name="Main" type="Node3D"]
 
@@ -43,6 +43,9 @@ transform = Transform3D(0.866025, -0.433013, 0.25, 0, 0.5, 0.866025, -0.5, -0.75
 light_color = Color(1, 0.95, 0.9, 1)
 light_energy = 0.8
 shadow_enabled = true
+shadow_bias = 0.3
+shadow_normal_bias = 3.0
+directional_shadow_blend_splits = true
 
 [node name="HotbarUI" parent="." instance=ExtResource("3_hotbar")]
 
