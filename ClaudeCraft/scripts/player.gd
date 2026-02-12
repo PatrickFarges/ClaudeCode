@@ -50,6 +50,7 @@ var mining_block_type: BlockRegistry.BlockType = BlockRegistry.BlockType.AIR
 var mining_time_required: float = 1.0
 
 var block_highlighter: BlockHighlighter = null
+var look_block_type: BlockRegistry.BlockType = BlockRegistry.BlockType.AIR
 
 # Détection table de craft
 const TABLE_DETECT_RANGE = 4.0
@@ -325,6 +326,7 @@ func _handle_block_interaction(delta: float):
 	
 	if not raycast.is_colliding():
 		_cancel_mining()
+		look_block_type = BlockRegistry.BlockType.AIR
 		if block_highlighter:
 			block_highlighter.hide_highlight()
 		return
@@ -335,6 +337,7 @@ func _handle_block_interaction(delta: float):
 	var place_pos = (collision_point + normal * 0.5).floor()
 	
 	var break_block_type = world_manager.get_block_at_position(break_pos)
+	look_block_type = break_block_type
 	var can_break = break_block_type != BlockRegistry.BlockType.AIR and BlockRegistry.is_solid(break_block_type)
 	
 	# Highlighter
