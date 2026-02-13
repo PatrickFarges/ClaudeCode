@@ -1,4 +1,4 @@
-[gd_scene load_steps=12 format=3 uid="uid://d3k8p4r5m1qhw"]
+[gd_scene load_steps=14 format=3 uid="uid://d3k8p4r5m1qhw"]
 
 [ext_resource type="Script" path="res://scripts/world_manager.gd" id="1_world"]
 [ext_resource type="PackedScene" uid="uid://c2yqr8n3m0qhv" path="res://scenes/player.tscn" id="2_player"]
@@ -10,6 +10,8 @@
 [ext_resource type="Script" path="res://scripts/audio_manager.gd" id="8_audio"]
 [ext_resource type="Script" path="res://scripts/day_night_cycle.gd" id="9_daynight"]
 [ext_resource type="PackedScene" uid="uid://health_ui_001" path="res://scenes/health_ui.tscn" id="10_health"]
+[ext_resource type="Script" path="res://scripts/pause_menu.gd" id="11_pause"]
+[ext_resource type="Script" path="res://scripts/save_manager.gd" id="12_save"]
 
 [sub_resource type="Environment" id="Environment_1"]
 background_mode = 1
@@ -70,3 +72,11 @@ script = ExtResource("9_daynight")
 
 [node name="AudioManager" type="Node" parent="." groups=["audio_manager"]]
 script = ExtResource("8_audio")
+
+[node name="PauseMenu" type="CanvasLayer" parent="." groups=["pause_menu"]]
+process_mode = 3
+script = ExtResource("11_pause")
+
+[node name="SaveManager" type="Node" parent="." groups=["save_manager"]]
+process_mode = 3
+script = ExtResource("12_save")

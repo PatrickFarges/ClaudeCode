@@ -44,6 +44,7 @@ var inventory_open: bool = false
 var crafting_open: bool = false
 var inventory_ui = null
 var crafting_ui = null
+var pause_menu = null
 
 # ============================================================
 # SYSTÈME DE MINAGE
@@ -103,6 +104,7 @@ func _ready():
 	inventory_ui = get_tree().get_first_node_in_group("inventory_ui")
 	crafting_ui = get_tree().get_first_node_in_group("crafting_ui")
 	audio_manager = get_tree().get_first_node_in_group("audio_manager")
+	pause_menu = get_tree().get_first_node_in_group("pause_menu")
 
 func _init_inventory():
 	inventory[BlockRegistry.BlockType.DIRT] = 32
@@ -153,7 +155,7 @@ func assign_hotbar_slot(slot_index: int, block_type: BlockRegistry.BlockType):
 			_update_selected_block()
 
 func _is_any_ui_open() -> bool:
-	return inventory_open or crafting_open
+	return inventory_open or crafting_open or (pause_menu and pause_menu.is_open)
 
 func _close_all_ui():
 	if inventory_open:
@@ -219,41 +221,54 @@ func _is_near_crafting_table() -> bool:
 	return false
 
 func _input(event):
-	# Touche E — inventaire
-	if event is InputEventKey and event.pressed and not event.echo:
+	# Bloquer E/C si pause menu ouvert
+	var pause_open = pause_menu and pause_menu.is_open
+
+	# Touche E — inventaire (pas si pause)
+	if event is InputEventKey and event.pressed and not event.echo and not pause_open:
 		if event.physical_keycode == KEY_E:
 			_toggle_inventory()
 			return
-		# Touche C — crafting
+		# Touche C — crafting (pas si pause)
 		if event.physical_keycode == KEY_C:
 			_toggle_crafting()
 			return
-	
-	# Si une UI est ouverte, Echap la ferme
-	if _is_any_ui_open():
-		if event.is_action_pressed("ui_cancel"):
+
+	# Gestion Escape : 3 cas
+	if event.is_action_pressed("ui_cancel"):
+		# Cas 1 : pause menu ouvert -> fermer pause
+		if pause_open:
+			pause_menu.close_pause()
+			return
+		# Cas 2 : inventaire/craft ouvert -> fermer UI
+		if inventory_open or crafting_open:
 			_close_all_ui()
+			return
+		# Cas 3 : rien d'ouvert + souris capturée -> ouvrir pause
+		if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+			if pause_menu:
+				pause_menu.open_pause()
+			return
+		# Souris visible sans UI -> recapturer
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		return
-	
+
+	# Si une UI est ouverte (inventaire/craft/pause), bloquer le reste
+	if _is_any_ui_open():
+		return
+
 	# Rotation de la caméra
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		rotate_y(-event.relative.x * mouse_sensitivity)
 		camera.rotate_x(-event.relative.y * mouse_sensitivity)
 		camera.rotation.x = clamp(camera.rotation.x, -PI/2, PI/2)
-	
-	# Échap souris
-	if event.is_action_pressed("ui_cancel"):
-		if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-		else:
-			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-	
+
 	# Slots 1-5
 	for i in range(5):
 		if event.is_action_pressed("slot_%d" % (i + 1)):
 			selected_slot = i
 			_update_selected_block()
-	
+
 	# Slots 6-9
 	if event is InputEventKey and event.pressed and not event.echo:
 		match event.physical_keycode:
@@ -269,7 +284,7 @@ func _input(event):
 			KEY_9:
 				selected_slot = 8
 				_update_selected_block()
-	
+
 	# Molette souris
 	if event is InputEventMouseButton and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:

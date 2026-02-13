@@ -77,6 +77,18 @@ const UI = {
 	# Santé
 	"health":               {"fr": "❤ %d/%d",                  "en": "❤ %d/%d"},
 	"you_died":             {"fr": "Vous êtes mort !",         "en": "You died!"},
+
+	# Menu pause
+	"pause_title":          {"fr": "Pause",                    "en": "Paused"},
+	"pause_resume":         {"fr": "Reprendre",                "en": "Resume"},
+	"pause_save":           {"fr": "Sauvegarder",              "en": "Save"},
+	"pause_load":           {"fr": "Charger",                  "en": "Load"},
+	"pause_quit":           {"fr": "Quitter",                  "en": "Quit"},
+	"save_success":         {"fr": "Monde sauvegardé !",       "en": "World saved!"},
+	"save_error":           {"fr": "Erreur de sauvegarde",     "en": "Save error"},
+	"load_no_save":         {"fr": "Aucune sauvegarde",        "en": "No save found"},
+	"saving":               {"fr": "Sauvegarde...",            "en": "Saving..."},
+	"loading":              {"fr": "Chargement...",            "en": "Loading..."},
 }
 
 # ============================================================

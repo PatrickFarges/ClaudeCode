@@ -10,6 +10,7 @@ var player: CharacterBody3D
 var last_player_chunk: Vector3i = Vector3i.ZERO  # Position précédente du joueur
 var chunk_generator: ChunkGenerator
 var world_seed: int = 0  # Seed du monde (0 = aléatoire)
+var saved_chunk_data: Dictionary = {}  # Vector3i -> PackedByteArray (chunks modifiés à restaurer)
 
 # Mobs passifs
 var mobs: Array = []
@@ -81,9 +82,37 @@ func _on_chunk_data_ready(chunk_data: Dictionary):
 	var p_y_min: int = chunk_data.get("y_min", 0)
 	var p_y_max: int = chunk_data.get("y_max", Chunk.CHUNK_HEIGHT - 1)
 
+	# Si un chunk existe déjà à cette position (race condition après load), le libérer
+	if chunks.has(chunk_pos):
+		var old_chunk = chunks[chunk_pos]
+		old_chunk.queue_free()
+		chunks.erase(chunk_pos)
+
+	# Remplacer par les données sauvegardées si ce chunk a été modifié
+	if saved_chunk_data.has(chunk_pos):
+		blocks = saved_chunk_data[chunk_pos].duplicate()
+		# Recalculer y_min/y_max pour les données restaurées
+		p_y_min = Chunk.CHUNK_HEIGHT
+		p_y_max = 0
+		for bx in range(Chunk.CHUNK_SIZE):
+			var x_off = bx * Chunk.CHUNK_SIZE * Chunk.CHUNK_HEIGHT
+			for bz in range(Chunk.CHUNK_SIZE):
+				var xz_off = x_off + bz * Chunk.CHUNK_HEIGHT
+				for by in range(Chunk.CHUNK_HEIGHT):
+					if blocks[xz_off + by] != 0:
+						if by < p_y_min:
+							p_y_min = by
+						if by > p_y_max:
+							p_y_max = by
+		if p_y_min > p_y_max:
+			p_y_min = 0
+			p_y_max = 0
+
 	# Créer le chunk avec les données générées
 	var chunk = Chunk.new(chunk_pos, blocks, p_y_min, p_y_max)
 	chunk.position = Vector3(chunk_pos.x * Chunk.CHUNK_SIZE, 0, chunk_pos.z * Chunk.CHUNK_SIZE)
+	if saved_chunk_data.has(chunk_pos):
+		chunk.is_modified = true
 	add_child(chunk)
 	chunks[chunk_pos] = chunk
 
@@ -106,6 +135,9 @@ func _unload_distant_chunks(player_chunk_pos: Vector3i):
 	
 	for chunk_pos in chunks_to_remove:
 		var chunk = chunks[chunk_pos]
+		# Conserver les données des chunks modifiés pour les restaurer plus tard
+		if chunk.is_modified:
+			saved_chunk_data[chunk_pos] = chunk.blocks.duplicate()
 		chunk.queue_free()
 		chunks.erase(chunk_pos)
 

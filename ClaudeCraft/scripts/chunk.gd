@@ -18,6 +18,7 @@ var water_mesh_instance: MeshInstance3D
 var collision_shape: CollisionShape3D
 var static_body: StaticBody3D
 var is_mesh_built: bool = false
+var is_modified: bool = false
 
 # Thread mesh build
 var _mesh_thread: Thread = null
@@ -72,6 +73,7 @@ func set_block(x: int, y: int, z: int, block_type: BlockRegistry.BlockType):
 	if x < 0 or x >= CHUNK_SIZE or y < 0 or y >= CHUNK_HEIGHT or z < 0 or z >= CHUNK_SIZE:
 		return
 	blocks[x * 4096 + z * 256 + y] = block_type
+	is_modified = true
 	if block_type != BlockRegistry.BlockType.AIR:
 		if y < y_min:
 			y_min = y
@@ -199,6 +201,16 @@ func _rebuild_mesh():
 	call_deferred("_deferred_rebuild")
 
 func _deferred_rebuild():
+	# Nettoyer les mesh créés entre _rebuild_mesh() et ce call_deferred
+	if mesh_instance:
+		mesh_instance.queue_free()
+		mesh_instance = null
+	if water_mesh_instance:
+		water_mesh_instance.queue_free()
+		water_mesh_instance = null
+	if static_body:
+		static_body.queue_free()
+		static_body = null
 	_compute_mesh_arrays()
 	_apply_mesh_data()
 
