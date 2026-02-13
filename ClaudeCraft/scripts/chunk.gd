@@ -5,7 +5,7 @@ const CHUNK_SIZE = 16
 const CHUNK_HEIGHT = 256
 
 # Shared material (un seul pour tous les chunks)
-static var _shared_material: StandardMaterial3D = null
+static var _shared_material: Material = null
 static var _shared_water_material: StandardMaterial3D = null
 const WATER_TYPE: int = 15  # BlockRegistry.BlockType.WATER
 
@@ -26,6 +26,8 @@ var _vertices: PackedVector3Array = PackedVector3Array()
 var _normals: PackedVector3Array = PackedVector3Array()
 var _colors: PackedColorArray = PackedColorArray()
 var _indices: PackedInt32Array = PackedInt32Array()
+var _uvs: PackedVector2Array = PackedVector2Array()
+var _custom0: PackedFloat32Array = PackedFloat32Array()
 var _collision_faces: PackedVector3Array = PackedVector3Array()
 
 # Water mesh arrays
@@ -40,14 +42,9 @@ func _init(pos: Vector3i, block_data: PackedByteArray, p_y_min: int = 0, p_y_max
 	y_min = p_y_min
 	y_max = p_y_max
 
-static func _get_shared_material() -> StandardMaterial3D:
+static func _get_shared_material() -> Material:
 	if not _shared_material:
-		_shared_material = StandardMaterial3D.new()
-		_shared_material.vertex_color_use_as_albedo = true
-		_shared_material.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
-		_shared_material.albedo_color = Color(1, 1, 1, 1)
-		_shared_material.roughness = 0.8
-		_shared_material.metallic = 0.0
+		_shared_material = TextureManager.get_shared_material()
 	return _shared_material
 
 static func _get_water_material() -> StandardMaterial3D:
@@ -100,6 +97,8 @@ func _compute_mesh_arrays():
 	_normals = PackedVector3Array()
 	_colors = PackedColorArray()
 	_indices = PackedInt32Array()
+	_uvs = PackedVector2Array()
+	_custom0 = PackedFloat32Array()
 	_collision_faces = PackedVector3Array()
 	_water_vertices = PackedVector3Array()
 	_water_normals = PackedVector3Array()
@@ -132,9 +131,12 @@ func _apply_mesh_data():
 		arrays[Mesh.ARRAY_NORMAL] = _normals
 		arrays[Mesh.ARRAY_COLOR] = _colors
 		arrays[Mesh.ARRAY_INDEX] = _indices
+		arrays[Mesh.ARRAY_TEX_UV] = _uvs
+		arrays[Mesh.ARRAY_CUSTOM0] = _custom0
 
 		var mesh: ArrayMesh = ArrayMesh.new()
-		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		var flags = Mesh.ARRAY_CUSTOM_R_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, flags)
 
 		mesh_instance = MeshInstance3D.new()
 		mesh_instance.mesh = mesh
@@ -177,6 +179,8 @@ func _apply_mesh_data():
 	_normals = PackedVector3Array()
 	_colors = PackedColorArray()
 	_indices = PackedInt32Array()
+	_uvs = PackedVector2Array()
+	_custom0 = PackedFloat32Array()
 	_collision_faces = PackedVector3Array()
 	_water_vertices = PackedVector3Array()
 	_water_normals = PackedVector3Array()
@@ -289,7 +293,9 @@ func _greedy_mesh_y_faces():
 			var quads = _run_greedy(mask, CHUNK_SIZE, CHUNK_SIZE)
 			for q in quads:
 				var u: int = q[0]; var v: int = q[1]; var w: int = q[2]; var h: int = q[3]; var bt: int = q[4]
-				var color: Color = BlockRegistry.get_block_color(bt)
+				var tint: Color = BlockRegistry.get_block_tint(bt, "top")
+				var tex_name: String = BlockRegistry.get_face_texture(bt, "top")
+				var layer: float = float(TextureManager.get_layer_index(tex_name))
 				var ao0 = _calculate_ao_for_face(Vector3.UP, u, y, v)
 				var ao1 = _calculate_ao_for_face(Vector3.UP, u + w - 1, y, v)
 				var ao2 = _calculate_ao_for_face(Vector3.UP, u + w - 1, y, v + h - 1)
@@ -297,7 +303,7 @@ func _greedy_mesh_y_faces():
 				_emit_quad(
 					Vector3(u, y + 1, v), Vector3(u + w, y + 1, v),
 					Vector3(u + w, y + 1, v + h), Vector3(u, y + 1, v + h),
-					Vector3.UP, color, [ao0[0], ao1[1], ao2[2], ao3[3]])
+					Vector3.UP, tint, [ao0[0], ao1[1], ao2[2], ao3[3]], float(w), float(h), layer)
 
 		# --- DOWN (-Y) ---
 		has_faces = false
@@ -320,7 +326,9 @@ func _greedy_mesh_y_faces():
 			var quads = _run_greedy(mask, CHUNK_SIZE, CHUNK_SIZE)
 			for q in quads:
 				var u: int = q[0]; var v: int = q[1]; var w: int = q[2]; var h: int = q[3]; var bt: int = q[4]
-				var color: Color = BlockRegistry.get_block_color(bt) * 0.6
+				var tint: Color = BlockRegistry.get_block_tint(bt, "bottom") * 0.6
+				var tex_name: String = BlockRegistry.get_face_texture(bt, "bottom")
+				var layer: float = float(TextureManager.get_layer_index(tex_name))
 				var ao0 = _calculate_ao_for_face(Vector3.DOWN, u, y, v + h - 1)
 				var ao1 = _calculate_ao_for_face(Vector3.DOWN, u + w - 1, y, v + h - 1)
 				var ao2 = _calculate_ao_for_face(Vector3.DOWN, u + w - 1, y, v)
@@ -328,7 +336,7 @@ func _greedy_mesh_y_faces():
 				_emit_quad(
 					Vector3(u, y, v + h), Vector3(u + w, y, v + h),
 					Vector3(u + w, y, v), Vector3(u, y, v),
-					Vector3.DOWN, color, [ao0[0], ao1[1], ao2[2], ao3[3]])
+					Vector3.DOWN, tint, [ao0[0], ao1[1], ao2[2], ao3[3]], float(w), float(h), layer)
 
 # ============================================================
 # FACES Z (BACK / FORWARD) — masque u=x, v=y (réduit à y_range)
@@ -368,7 +376,9 @@ func _greedy_mesh_z_faces():
 			var quads = _run_greedy(mask, CHUNK_SIZE, y_range)
 			for q in quads:
 				var u: int = q[0]; var v: int = q[1] + y_min; var w: int = q[2]; var h: int = q[3]; var bt: int = q[4]
-				var color: Color = BlockRegistry.get_block_color(bt) * 0.8
+				var tint: Color = BlockRegistry.get_block_tint(bt, "back") * 0.8
+				var tex_name: String = BlockRegistry.get_face_texture(bt, "back")
+				var layer: float = float(TextureManager.get_layer_index(tex_name))
 				var ao0 = _calculate_ao_for_face(Vector3.BACK, u + w - 1, v, z)
 				var ao1 = _calculate_ao_for_face(Vector3.BACK, u, v, z)
 				var ao2 = _calculate_ao_for_face(Vector3.BACK, u, v + h - 1, z)
@@ -376,7 +386,7 @@ func _greedy_mesh_z_faces():
 				_emit_quad(
 					Vector3(u + w, v, z + 1), Vector3(u, v, z + 1),
 					Vector3(u, v + h, z + 1), Vector3(u + w, v + h, z + 1),
-					Vector3.BACK, color, [ao0[0], ao1[1], ao2[2], ao3[3]])
+					Vector3.BACK, tint, [ao0[0], ao1[1], ao2[2], ao3[3]], float(w), float(h), layer)
 
 		# --- FORWARD (-Z) ---
 		has_faces = false
@@ -401,7 +411,9 @@ func _greedy_mesh_z_faces():
 			var quads = _run_greedy(mask, CHUNK_SIZE, y_range)
 			for q in quads:
 				var u: int = q[0]; var v: int = q[1] + y_min; var w: int = q[2]; var h: int = q[3]; var bt: int = q[4]
-				var color: Color = BlockRegistry.get_block_color(bt) * 0.8
+				var tint: Color = BlockRegistry.get_block_tint(bt, "front") * 0.8
+				var tex_name: String = BlockRegistry.get_face_texture(bt, "front")
+				var layer: float = float(TextureManager.get_layer_index(tex_name))
 				var ao0 = _calculate_ao_for_face(Vector3.FORWARD, u, v, z)
 				var ao1 = _calculate_ao_for_face(Vector3.FORWARD, u + w - 1, v, z)
 				var ao2 = _calculate_ao_for_face(Vector3.FORWARD, u + w - 1, v + h - 1, z)
@@ -409,7 +421,7 @@ func _greedy_mesh_z_faces():
 				_emit_quad(
 					Vector3(u, v, z), Vector3(u + w, v, z),
 					Vector3(u + w, v + h, z), Vector3(u, v + h, z),
-					Vector3.FORWARD, color, [ao0[0], ao1[1], ao2[2], ao3[3]])
+					Vector3.FORWARD, tint, [ao0[0], ao1[1], ao2[2], ao3[3]], float(w), float(h), layer)
 
 # ============================================================
 # FACES X (RIGHT / LEFT) — masque u=z, v=y (réduit à y_range)
@@ -451,7 +463,9 @@ func _greedy_mesh_x_faces():
 			var quads = _run_greedy(mask, CHUNK_SIZE, y_range)
 			for q in quads:
 				var u: int = q[0]; var v: int = q[1] + y_min; var w: int = q[2]; var h: int = q[3]; var bt: int = q[4]
-				var color: Color = BlockRegistry.get_block_color(bt) * 0.9
+				var tint: Color = BlockRegistry.get_block_tint(bt, "right") * 0.9
+				var tex_name: String = BlockRegistry.get_face_texture(bt, "right")
+				var layer: float = float(TextureManager.get_layer_index(tex_name))
 				var ao0 = _calculate_ao_for_face(Vector3.RIGHT, x, v, u)
 				var ao1 = _calculate_ao_for_face(Vector3.RIGHT, x, v, u + w - 1)
 				var ao2 = _calculate_ao_for_face(Vector3.RIGHT, x, v + h - 1, u + w - 1)
@@ -459,7 +473,7 @@ func _greedy_mesh_x_faces():
 				_emit_quad(
 					Vector3(x + 1, v, u), Vector3(x + 1, v, u + w),
 					Vector3(x + 1, v + h, u + w), Vector3(x + 1, v + h, u),
-					Vector3.RIGHT, color, [ao0[0], ao1[1], ao2[2], ao3[3]])
+					Vector3.RIGHT, tint, [ao0[0], ao1[1], ao2[2], ao3[3]], float(w), float(h), layer)
 
 		# --- LEFT (-X) ---
 		has_faces = false
@@ -482,7 +496,9 @@ func _greedy_mesh_x_faces():
 			var quads = _run_greedy(mask, CHUNK_SIZE, y_range)
 			for q in quads:
 				var u: int = q[0]; var v: int = q[1] + y_min; var w: int = q[2]; var h: int = q[3]; var bt: int = q[4]
-				var color: Color = BlockRegistry.get_block_color(bt) * 0.9
+				var tint: Color = BlockRegistry.get_block_tint(bt, "left") * 0.9
+				var tex_name: String = BlockRegistry.get_face_texture(bt, "left")
+				var layer: float = float(TextureManager.get_layer_index(tex_name))
 				var ao0 = _calculate_ao_for_face(Vector3.LEFT, x, v, u + w - 1)
 				var ao1 = _calculate_ao_for_face(Vector3.LEFT, x, v, u)
 				var ao2 = _calculate_ao_for_face(Vector3.LEFT, x, v + h - 1, u)
@@ -490,13 +506,13 @@ func _greedy_mesh_x_faces():
 				_emit_quad(
 					Vector3(x, v, u + w), Vector3(x, v, u),
 					Vector3(x, v + h, u), Vector3(x, v + h, u + w),
-					Vector3.LEFT, color, [ao0[0], ao1[1], ao2[2], ao3[3]])
+					Vector3.LEFT, tint, [ao0[0], ao1[1], ao2[2], ao3[3]], float(w), float(h), layer)
 
 # ============================================================
 # EMISSION D'UN QUAD FUSIONNE
 # ============================================================
 
-func _emit_quad(v0: Vector3, v1: Vector3, v2: Vector3, v3: Vector3, normal: Vector3, color: Color, ao: Array):
+func _emit_quad(v0: Vector3, v1: Vector3, v2: Vector3, v3: Vector3, normal: Vector3, color: Color, ao: Array, uv_w: float = 1.0, uv_h: float = 1.0, layer: float = 0.0):
 	var base: int = _vertices.size()
 
 	_vertices.append(v0)
@@ -513,6 +529,18 @@ func _emit_quad(v0: Vector3, v1: Vector3, v2: Vector3, v3: Vector3, normal: Vect
 	_colors.append(color * ao[1])
 	_colors.append(color * ao[2])
 	_colors.append(color * ao[3])
+
+	# UV: (0,0) → (W,H) pour tiler la texture sur le quad fusionné
+	_uvs.append(Vector2(0, 0))
+	_uvs.append(Vector2(uv_w, 0))
+	_uvs.append(Vector2(uv_w, uv_h))
+	_uvs.append(Vector2(0, uv_h))
+
+	# CUSTOM0: layer index dans le Texture2DArray
+	_custom0.append(layer)
+	_custom0.append(layer)
+	_custom0.append(layer)
+	_custom0.append(layer)
 
 	_indices.append(base)
 	_indices.append(base + 1)
