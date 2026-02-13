@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClocloWebUi</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+</head>
+<body>
+<div id="app">
+    <div id="terminal-panel">
+        <div id="terminal-header">
+            <div class="dot" id="header-dot"></div>
+            <span class="project-name" id="header-project">Aucun projet</span>
+            <span class="status" id="header-status"></span>
+        </div>
+        <div id="terminal-container">
+            <div id="placeholder">
+                <div class="arrow">&larr;</div>
+                <div>Selectionnez un projet dans la sidebar</div>
+            </div>
+        </div>
+    </div>
+    <div id="sidebar">
+        <div id="sidebar-header">Projets</div>
+        <div id="project-list"></div>
+        <div id="conn-status" class="disconnected">Deconnecte</div>
+    </div>
+</div>
+
+<script>
+(function() {
+    "use strict";
+
+    let term = null;
+    let fitAddon = null;
+    let ws = null;
+    let activeProject = null;
+    let projects = [];
+    let sessionsAlive = new Set();
+    let reconnectTimer = null;
+    let termInitialized = false;
+
+    // --- Terminal setup ---
+    function initTerminal() {
+        if (termInitialized) return;
+        document.getElementById("placeholder").style.display = "none";
+        term = new Terminal({
+            cursorBlink: true,
+            fontSize: 14,
+            fontFamily: "'Cascadia Code', 'Consolas', 'Courier New', monospace",
+            theme: {
+                background: "#1a1b26",
+                foreground: "#c0caf5",
+                cursor: "#c0caf5",
+                selectionBackground: "#33467c",
+                black: "#15161e",
+                red: "#f7768e",
+                green: "#9ece6a",
+                yellow: "#e0af68",
+                blue: "#7aa2f7",
+                magenta: "#bb9af7",
+                cyan: "#7dcfff",
+                white: "#a9b1d6",
+                brightBlack: "#414868",
+                brightRed: "#f7768e",
+                brightGreen: "#9ece6a",
+                brightYellow: "#e0af68",
+                brightBlue: "#7aa2f7",
+                brightMagenta: "#bb9af7",
+                brightCyan: "#7dcfff",
+                brightWhite: "#c0caf5"
+            },
+            allowProposedApi: true
+        });
+        fitAddon = new FitAddon.FitAddon();
+        term.loadAddon(fitAddon);
+        term.open(document.getElementById("terminal-container"));
+        fitAddon.fit();
+
+        term.onData(function(data) {
+            if (ws && ws.readyState === WebSocket.OPEN && activeProject) {
+                ws.send(JSON.stringify({
+                    type: "input",
+                    project: activeProject,
+                    data: btoa(unescape(encodeURIComponent(data)))
+                }));
+            }
+        });
+
+        window.addEventListener("resize", function() {
+            if (fitAddon) {
+                fitAddon.fit();
+                sendResize();
+            }
+        });
+
+        new ResizeObserver(function() {
+            if (fitAddon) {
+                fitAddon.fit();
+                sendResize();
+            }
+        }).observe(document.getElementById("terminal-container"));
+
+        termInitialized = true;
+    }
+
+    function sendResize() {
+        if (ws && ws.readyState === WebSocket.OPEN && activeProject && term) {
+            ws.send(JSON.stringify({
+                type: "resize",
+                project: activeProject,
+                cols: term.cols,
+                rows: term.rows
+            }));
+        }
+    }
+
+    // --- WebSocket ---
+    function connectWS() {
+        if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+        const proto = location.protocol === "https:" ? "wss:" : "ws:";
+        ws = new WebSocket(proto + "//" + location.host + "/ws");
+
+        ws.onopen = function() {
+            document.getElementById("conn-status").textContent = "Connecte";
+            document.getElementById("conn-status").className = "connected";
+            if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+            if (activeProject) {
+                ws.send(JSON.stringify({
+                    type: "attach",
+                    project: activeProject,
+                    cols: term ? term.cols : 120,
+                    rows: term ? term.rows : 30
+                }));
+            }
+        };
+
+        ws.onmessage = function(ev) {
+            let msg;
+            try { msg = JSON.parse(ev.data); } catch(e) { return; }
+
+            if (msg.type === "output" && msg.project === activeProject && term) {
+                const binaryStr = atob(msg.data);
+                const bytes = new Uint8Array(binaryStr.length);
+                for (let i = 0; i < binaryStr.length; i++) {
+                    bytes[i] = binaryStr.charCodeAt(i);
+                }
+                term.write(bytes);
+            } else if (msg.type === "attached") {
+                sessionsAlive.add(msg.project);
+                updateProjectList();
+                updateHeader();
+            } else if (msg.type === "exited") {
+                sessionsAlive.delete(msg.project);
+                updateProjectList();
+                if (msg.project === activeProject) {
+                    updateHeader();
+                    if (term) term.write("\r\n\x1b[33m--- Session terminee ---\x1b[0m\r\n");
+                }
+            }
+        };
+
+        ws.onclose = function() {
+            document.getElementById("conn-status").textContent = "Deconnecte";
+            document.getElementById("conn-status").className = "disconnected";
+            scheduleReconnect();
+        };
+
+        ws.onerror = function() {
+            ws.close();
+        };
+    }
+
+    function scheduleReconnect() {
+        if (reconnectTimer) return;
+        reconnectTimer = setTimeout(function() {
+            reconnectTimer = null;
+            connectWS();
+        }, 2000);
+    }
+
+    // --- Projects ---
+    function loadProjects() {
+        fetch("/api/projects")
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                projects = data;
+                updateProjectList();
+            })
+            .catch(function(e) { console.error("Failed to load projects", e); });
+    }
+
+    function updateProjectList() {
+        const list = document.getElementById("project-list");
+        list.innerHTML = "";
+        projects.forEach(function(p) {
+            const div = document.createElement("div");
+            div.className = "project-item";
+            if (p.name === activeProject) div.classList.add("active");
+            if (sessionsAlive.has(p.name)) div.classList.add("has-session");
+
+            div.innerHTML =
+                '<div class="name"><span class="session-dot"></span>' + escapeHtml(p.name) + '</div>' +
+                '<div class="desc">' + escapeHtml(p.description) + '</div>';
+
+            div.addEventListener("click", function() { switchProject(p.name); });
+            list.appendChild(div);
+        });
+    }
+
+    function switchProject(name) {
+        if (name === activeProject) return;
+
+        // Detach from current
+        if (activeProject && ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "detach", project: activeProject }));
+        }
+
+        activeProject = name;
+        initTerminal();
+        term.reset();
+        term.focus();
+        updateProjectList();
+        updateHeader();
+
+        // Attach to new
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: "attach",
+                project: name,
+                cols: term.cols,
+                rows: term.rows
+            }));
+        }
+
+        setTimeout(function() {
+            if (fitAddon) fitAddon.fit();
+            sendResize();
+        }, 50);
+    }
+
+    function updateHeader() {
+        const dot = document.getElementById("header-dot");
+        const nameEl = document.getElementById("header-project");
+        const statusEl = document.getElementById("header-status");
+
+        if (!activeProject) {
+            dot.className = "dot";
+            nameEl.textContent = "Aucun projet";
+            statusEl.textContent = "";
+            return;
+        }
+
+        nameEl.textContent = activeProject;
+        if (sessionsAlive.has(activeProject)) {
+            dot.className = "dot active";
+            statusEl.textContent = "Session active";
+        } else {
+            dot.className = "dot";
+            statusEl.textContent = "Demarrage...";
+        }
+    }
+
+    function escapeHtml(str) {
+        const div = document.createElement("div");
+        div.appendChild(document.createTextNode(str));
+        return div.innerHTML;
+    }
+
+    // --- Init ---
+    loadProjects();
+    connectWS();
+})();
+</script>
+</body>
+</html>
