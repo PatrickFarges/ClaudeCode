@@ -92,8 +92,17 @@ const UI = {
 	# Inventory UI
 	"inv_title":            {"fr": "🎒 Inventaire",            "en": "🎒 Inventory"},
 	"inv_active_slot":      {"fr": "Slot actif : %d  [%s]",    "en": "Active slot: %d  [%s]"},
-	"inv_hint":             {"fr": "Clic gauche → assigner au slot actif  •  [E] ou [Échap] pour fermer  •  [C] pour crafter",
-	                         "en": "Left click → assign to active slot  •  [E] or [Esc] to close  •  [C] to craft"},
+	"inv_hint":             {"fr": "Clic gauche → assigner au slot actif  •  [I] ou [Échap] pour fermer  •  [C] pour crafter",
+	                         "en": "Left click → assign to active slot  •  [I] or [Esc] to close  •  [C] to craft"},
+	"inv_tab_all":          {"fr": "TOUT",                    "en": "ALL"},
+	"inv_tab_basic":        {"fr": "Basique",                 "en": "Basic"},
+	"inv_tab_metal":        {"fr": "Métal",                   "en": "Metal"},
+	"inv_tab_stations":     {"fr": "Stations",                "en": "Stations"},
+	"inv_tab_weapons":      {"fr": "Armes",                   "en": "Weapons"},
+	"inv_tab_armor":        {"fr": "Armures",                 "en": "Armor"},
+	"inv_sort":             {"fr": "Trier ↕",                 "en": "Sort ↕"},
+	"inv_sort_active":      {"fr": "Trié ↕",                  "en": "Sorted ↕"},
+	"inv_coming_soon":      {"fr": "Bientôt disponible",      "en": "Coming soon"},
 	
 	# Version HUD
 	"version":              {"fr": "ClaudeCraft",              "en": "ClaudeCraft"},

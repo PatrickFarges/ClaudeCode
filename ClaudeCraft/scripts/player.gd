@@ -220,9 +220,9 @@ func _input(event):
 	# Bloquer E/C si pause menu ouvert
 	var pause_open = pause_menu and pause_menu.is_open
 
-	# Touche E — inventaire (pas si pause)
+	# Touche I — inventaire (pas si pause)
 	if event is InputEventKey and event.pressed and not event.echo and not pause_open:
-		if event.physical_keycode == KEY_E:
+		if event.physical_keycode == KEY_I:
 			_toggle_inventory()
 			return
 		# Touche C — crafting (pas si pause)

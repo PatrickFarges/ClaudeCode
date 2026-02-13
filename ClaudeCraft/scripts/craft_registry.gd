@@ -219,11 +219,17 @@ static func get_station_tier(station: String) -> int:
 		_: return 0
 
 static func is_recipe_available(recipe: Dictionary, tier: int, has_furnace: bool) -> bool:
+	"""Vérifie si la recette appartient exactement à la station courante"""
 	var station = recipe["station"]
-	if station == "furnace":
-		return has_furnace
-	var recipe_tier = get_station_tier(station)
-	return tier >= recipe_tier
+	if has_furnace:
+		return station == "furnace"
+	match tier:
+		0: return station == "hand"
+		1: return station == "wood_table"
+		2: return station == "stone_table"
+		3: return station == "iron_table"
+		4: return station == "gold_table"
+		_: return false
 
 static func get_recipe_station_label(recipe: Dictionary) -> String:
 	"""Retourne la clé UI pour le label du tier requis"""

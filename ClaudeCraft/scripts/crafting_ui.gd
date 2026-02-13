@@ -46,7 +46,7 @@ func _build_ui():
 	add_child(center)
 	
 	panel = PanelContainer.new()
-	panel.custom_minimum_size = Vector2(580, 420)
+	panel.custom_minimum_size = Vector2(700, 420)
 	var panel_style = StyleBoxFlat.new()
 	panel_style.bg_color = Color(0.12, 0.12, 0.15, 0.95)
 	panel_style.border_width_left = 2
@@ -167,38 +167,35 @@ func _rebuild_recipe_list():
 	else:
 		hint_label.text = Locale.tr_ui("craft_hint_station")
 
-	# Trier : craftables en premier, puis par disponibilité
-	var sorted_recipes = recipes.duplicate()
+	# Filtrer : ne garder que les recettes de cette station
 	var inventory = player.get_all_inventory() if player else {}
+	var filtered_recipes: Array = []
+	for recipe in recipes:
+		if CraftRegistry.is_recipe_available(recipe, current_tier, has_furnace):
+			filtered_recipes.append(recipe)
 
-	sorted_recipes.sort_custom(func(a, b):
+	# Trier : craftables en premier
+	filtered_recipes.sort_custom(func(a, b):
 		var can_a = CraftRegistry.can_craft(a, inventory)
 		var can_b = CraftRegistry.can_craft(b, inventory)
-		var avail_a = CraftRegistry.is_recipe_available(a, current_tier, has_furnace)
-		var avail_b = CraftRegistry.is_recipe_available(b, current_tier, has_furnace)
-		# Craftables et disponibles d'abord
-		if (can_a and avail_a) != (can_b and avail_b):
-			return can_a and avail_a
-		if avail_a != avail_b:
-			return avail_a
+		if can_a != can_b:
+			return can_a
 		return false
 	)
-	
-	for recipe in sorted_recipes:
+
+	for recipe in filtered_recipes:
 		_add_recipe_row(recipe)
 
 func _add_recipe_row(recipe: Dictionary):
 	"""Ajouter une ligne de recette"""
 	var inventory = player.get_all_inventory() if player else {}
-	var can_craft = CraftRegistry.can_craft(recipe, inventory)
-	var station_available = CraftRegistry.is_recipe_available(recipe, current_tier, has_furnace)
-	var is_craftable = can_craft and station_available
-	
+	var is_craftable = CraftRegistry.can_craft(recipe, inventory)
+
 	# Container horizontal pour la ligne
 	var row = HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	
+
 	# Style fond de la ligne
 	var row_panel = PanelContainer.new()
 	var row_style = StyleBoxFlat.new()
@@ -210,16 +207,13 @@ func _add_recipe_row(recipe: Dictionary):
 	row_style.content_margin_right = 10
 	row_style.content_margin_top = 6
 	row_style.content_margin_bottom = 6
-	
+
 	if is_craftable:
 		row_style.bg_color = Color(0.18, 0.22, 0.18, 1.0)
 		row_style.border_color = Color(0.4, 0.6, 0.4, 0.6)
-	elif station_available:
+	else:
 		row_style.bg_color = Color(0.18, 0.18, 0.18, 1.0)
 		row_style.border_color = Color(0.35, 0.35, 0.35, 0.4)
-	else:
-		row_style.bg_color = Color(0.15, 0.15, 0.17, 0.6)
-		row_style.border_color = Color(0.3, 0.3, 0.35, 0.3)
 	
 	row_style.border_width_left = 1
 	row_style.border_width_top = 1
@@ -247,10 +241,8 @@ func _add_recipe_row(recipe: Dictionary):
 	output_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if is_craftable:
 		output_label.add_theme_color_override("font_color", Color(1, 1, 0.9, 1))
-	elif station_available:
-		output_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6, 1))
 	else:
-		output_label.add_theme_color_override("font_color", Color(0.4, 0.4, 0.45, 1))
+		output_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6, 1))
 	row.add_child(output_label)
 	
 	# === Flèche ===
@@ -302,7 +294,7 @@ func _add_recipe_row(recipe: Dictionary):
 	if is_craftable:
 		craft_btn.text = Locale.tr_ui("craft_btn")
 		craft_btn.disabled = false
-		
+
 		var btn_style = StyleBoxFlat.new()
 		btn_style.bg_color = Color(0.25, 0.45, 0.25, 1.0)
 		btn_style.corner_radius_top_left = 4
@@ -315,24 +307,18 @@ func _add_recipe_row(recipe: Dictionary):
 		btn_style.border_width_bottom = 1
 		btn_style.border_color = Color(0.4, 0.7, 0.4, 0.8)
 		craft_btn.add_theme_stylebox_override("normal", btn_style)
-		
+
 		var btn_hover = btn_style.duplicate()
 		btn_hover.bg_color = Color(0.3, 0.55, 0.3, 1.0)
 		btn_hover.border_color = Color(0.5, 0.8, 0.5, 1.0)
 		craft_btn.add_theme_stylebox_override("hover", btn_hover)
-		
+
 		var btn_pressed = btn_style.duplicate()
 		btn_pressed.bg_color = Color(0.2, 0.35, 0.2, 1.0)
 		craft_btn.add_theme_stylebox_override("pressed", btn_pressed)
-		
+
 		craft_btn.add_theme_color_override("font_color", Color(0.9, 1, 0.9, 1))
 		craft_btn.add_theme_font_size_override("font_size", 13)
-	elif not station_available:
-		var need_key = CraftRegistry.get_recipe_station_label(recipe)
-		craft_btn.text = Locale.tr_ui(need_key) if need_key != "" else "?"
-		craft_btn.disabled = true
-		craft_btn.add_theme_color_override("font_color", Color(0.5, 0.45, 0.3, 1))
-		craft_btn.add_theme_font_size_override("font_size", 11)
 	else:
 		craft_btn.text = Locale.tr_ui("craft_missing")
 		craft_btn.disabled = true
