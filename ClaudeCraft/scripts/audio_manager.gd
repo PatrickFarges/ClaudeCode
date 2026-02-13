@@ -81,6 +81,12 @@ var snd_step_sand: Array = []
 var snd_step_snow: Array = []
 var snd_step_dirt: Array = []
 
+# Metal sounds (ingots, furnace)
+var snd_break_metal: Array = []
+var snd_place_metal: Array = []
+var snd_mine_metal: Array = []
+var snd_step_metal: Array = []
+
 # UI sounds
 var snd_ui_click: AudioStream = null
 var snd_craft_success: AudioStream = null
@@ -237,6 +243,34 @@ func _load_sound_banks():
 		load("res://Audio/footstep09.ogg"),
 	]
 
+	# === Metal sounds ===
+	snd_break_metal = [
+		load("res://Audio/impactMetal_heavy_000.ogg"),
+		load("res://Audio/impactMetal_heavy_001.ogg"),
+		load("res://Audio/impactMetal_heavy_002.ogg"),
+		load("res://Audio/impactMetal_heavy_003.ogg"),
+		load("res://Audio/impactMetal_heavy_004.ogg"),
+	]
+	snd_place_metal = [
+		load("res://Audio/impactMetal_light_000.ogg"),
+		load("res://Audio/impactMetal_light_001.ogg"),
+		load("res://Audio/impactMetal_light_002.ogg"),
+	]
+	snd_mine_metal = [
+		load("res://Audio/impactMetal_medium_000.ogg"),
+		load("res://Audio/impactMetal_medium_001.ogg"),
+		load("res://Audio/impactMetal_medium_002.ogg"),
+		load("res://Audio/impactMetal_medium_003.ogg"),
+		load("res://Audio/impactMetal_medium_004.ogg"),
+	]
+	snd_step_metal = [
+		load("res://Audio/impactMetal_light_000.ogg"),
+		load("res://Audio/impactMetal_light_001.ogg"),
+		load("res://Audio/impactMetal_light_002.ogg"),
+		load("res://Audio/impactMetal_light_003.ogg"),
+		load("res://Audio/impactMetal_light_004.ogg"),
+	]
+
 	# === UI sounds ===
 	snd_ui_click = load("res://Audio/metalClick.ogg")
 	snd_craft_success = load("res://Audio/pling.mp3")
@@ -373,10 +407,14 @@ func _get_break_sound(block_type: int) -> AudioStream:
 	match block_type:
 		BlockRegistry.BlockType.STONE, BlockRegistry.BlockType.GRAVEL, \
 		BlockRegistry.BlockType.BRICK, BlockRegistry.BlockType.SANDSTONE, \
-		BlockRegistry.BlockType.COAL_ORE, BlockRegistry.BlockType.IRON_ORE:
+		BlockRegistry.BlockType.COAL_ORE, BlockRegistry.BlockType.IRON_ORE, \
+		BlockRegistry.BlockType.GOLD_ORE, BlockRegistry.BlockType.FURNACE:
 			return _pick_random(snd_break_stone)
+		BlockRegistry.BlockType.IRON_INGOT, BlockRegistry.BlockType.GOLD_INGOT:
+			return _pick_random(snd_break_metal)
 		BlockRegistry.BlockType.WOOD, BlockRegistry.BlockType.PLANKS, \
-		BlockRegistry.BlockType.CRAFTING_TABLE:
+		BlockRegistry.BlockType.CRAFTING_TABLE, BlockRegistry.BlockType.STONE_TABLE, \
+		BlockRegistry.BlockType.IRON_TABLE, BlockRegistry.BlockType.GOLD_TABLE:
 			return _pick_random(snd_break_wood)
 		BlockRegistry.BlockType.DIRT, BlockRegistry.BlockType.GRASS, \
 		BlockRegistry.BlockType.DARK_GRASS:
@@ -394,10 +432,14 @@ func _get_place_sound(block_type: int) -> AudioStream:
 	match block_type:
 		BlockRegistry.BlockType.STONE, BlockRegistry.BlockType.BRICK, \
 		BlockRegistry.BlockType.SANDSTONE, BlockRegistry.BlockType.GRAVEL, \
-		BlockRegistry.BlockType.COAL_ORE, BlockRegistry.BlockType.IRON_ORE:
+		BlockRegistry.BlockType.COAL_ORE, BlockRegistry.BlockType.IRON_ORE, \
+		BlockRegistry.BlockType.GOLD_ORE, BlockRegistry.BlockType.FURNACE:
 			return _pick_random(snd_place_stone)
+		BlockRegistry.BlockType.IRON_INGOT, BlockRegistry.BlockType.GOLD_INGOT:
+			return _pick_random(snd_place_metal)
 		BlockRegistry.BlockType.WOOD, BlockRegistry.BlockType.PLANKS, \
-		BlockRegistry.BlockType.CRAFTING_TABLE:
+		BlockRegistry.BlockType.CRAFTING_TABLE, BlockRegistry.BlockType.STONE_TABLE, \
+		BlockRegistry.BlockType.IRON_TABLE, BlockRegistry.BlockType.GOLD_TABLE:
 			return _pick_random(snd_place_wood)
 		BlockRegistry.BlockType.SAND:
 			return _pick_random(snd_place_sand)
@@ -410,10 +452,14 @@ func _get_mining_sound(block_type: int) -> AudioStream:
 	match block_type:
 		BlockRegistry.BlockType.STONE, BlockRegistry.BlockType.GRAVEL, \
 		BlockRegistry.BlockType.BRICK, BlockRegistry.BlockType.SANDSTONE, \
-		BlockRegistry.BlockType.COAL_ORE, BlockRegistry.BlockType.IRON_ORE:
+		BlockRegistry.BlockType.COAL_ORE, BlockRegistry.BlockType.IRON_ORE, \
+		BlockRegistry.BlockType.GOLD_ORE, BlockRegistry.BlockType.FURNACE:
 			return _pick_random(snd_mine_stone)
+		BlockRegistry.BlockType.IRON_INGOT, BlockRegistry.BlockType.GOLD_INGOT:
+			return _pick_random(snd_mine_metal)
 		BlockRegistry.BlockType.WOOD, BlockRegistry.BlockType.PLANKS, \
-		BlockRegistry.BlockType.CRAFTING_TABLE:
+		BlockRegistry.BlockType.CRAFTING_TABLE, BlockRegistry.BlockType.STONE_TABLE, \
+		BlockRegistry.BlockType.IRON_TABLE, BlockRegistry.BlockType.GOLD_TABLE:
 			return _pick_random(snd_mine_wood)
 		BlockRegistry.BlockType.DIRT, BlockRegistry.BlockType.GRASS, \
 		BlockRegistry.BlockType.DARK_GRASS, BlockRegistry.BlockType.LEAVES, \
@@ -428,10 +474,14 @@ func _get_footstep_sound(surface_type: int) -> AudioStream:
 	match surface_type:
 		BlockRegistry.BlockType.STONE, BlockRegistry.BlockType.BRICK, \
 		BlockRegistry.BlockType.GRAVEL, BlockRegistry.BlockType.SANDSTONE, \
-		BlockRegistry.BlockType.COAL_ORE, BlockRegistry.BlockType.IRON_ORE:
+		BlockRegistry.BlockType.COAL_ORE, BlockRegistry.BlockType.IRON_ORE, \
+		BlockRegistry.BlockType.GOLD_ORE, BlockRegistry.BlockType.FURNACE:
 			return _pick_random(snd_step_stone)
+		BlockRegistry.BlockType.IRON_INGOT, BlockRegistry.BlockType.GOLD_INGOT:
+			return _pick_random(snd_step_metal)
 		BlockRegistry.BlockType.WOOD, BlockRegistry.BlockType.PLANKS, \
-		BlockRegistry.BlockType.CRAFTING_TABLE:
+		BlockRegistry.BlockType.CRAFTING_TABLE, BlockRegistry.BlockType.STONE_TABLE, \
+		BlockRegistry.BlockType.IRON_TABLE, BlockRegistry.BlockType.GOLD_TABLE:
 			return _pick_random(snd_step_wood)
 		BlockRegistry.BlockType.GRASS, BlockRegistry.BlockType.DARK_GRASS:
 			return _pick_random(snd_step_grass)

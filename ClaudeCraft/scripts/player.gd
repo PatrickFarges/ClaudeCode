@@ -58,8 +58,6 @@ var mining_time_required: float = 1.0
 var block_highlighter: BlockHighlighter = null
 var look_block_type: BlockRegistry.BlockType = BlockRegistry.BlockType.AIR
 
-# Détection table de craft
-const TABLE_DETECT_RANGE = 4.0
 
 # ============================================================
 # SYSTÈME DE VIE
@@ -123,6 +121,13 @@ func _init_inventory():
 	inventory[BlockRegistry.BlockType.SANDSTONE] = 0
 	inventory[BlockRegistry.BlockType.COAL_ORE] = 0
 	inventory[BlockRegistry.BlockType.IRON_ORE] = 0
+	inventory[BlockRegistry.BlockType.GOLD_ORE] = 0
+	inventory[BlockRegistry.BlockType.IRON_INGOT] = 0
+	inventory[BlockRegistry.BlockType.GOLD_INGOT] = 0
+	inventory[BlockRegistry.BlockType.FURNACE] = 0
+	inventory[BlockRegistry.BlockType.STONE_TABLE] = 0
+	inventory[BlockRegistry.BlockType.IRON_TABLE] = 0
+	inventory[BlockRegistry.BlockType.GOLD_TABLE] = 0
 
 func _create_block_highlighter():
 	block_highlighter = BlockHighlighter.new()
@@ -185,40 +190,31 @@ func _toggle_inventory():
 # ============================================================
 # CRAFTING TOGGLE
 # ============================================================
-func _toggle_crafting():
+func _toggle_crafting(tier: int = 0, furnace: bool = false):
 	if inventory_open:
 		_toggle_inventory()  # Fermer l'inventaire d'abord
-	
+
 	crafting_open = not crafting_open
 	if crafting_open:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-		var near_table = _is_near_crafting_table()
 		if crafting_ui:
 			crafting_ui.visible = true
-			crafting_ui.open_crafting(near_table)
+			crafting_ui.open_crafting(tier, furnace)
 	else:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		if crafting_ui:
 			crafting_ui.visible = false
 			crafting_ui.close_crafting()
 
-func _is_near_crafting_table() -> bool:
-	"""Vérifier s'il y a une table de craft à proximité"""
-	if not world_manager:
-		return false
-	
-	var pos = global_position
-	var check_range = TABLE_DETECT_RANGE
-	
-	# Scanner les blocs autour du joueur
-	for dx in range(-int(check_range), int(check_range) + 1):
-		for dy in range(-2, 3):
-			for dz in range(-int(check_range), int(check_range) + 1):
-				var check_pos = Vector3(floor(pos.x) + dx, floor(pos.y) + dy, floor(pos.z) + dz)
-				var block = world_manager.get_block_at_position(check_pos)
-				if block == BlockRegistry.BlockType.CRAFTING_TABLE:
-					return true
-	return false
+func _get_interact_tier(block_type) -> int:
+	"""Retourne le tier de craft pour un bloc interactif, ou -1 si pas interactif"""
+	match block_type:
+		BlockRegistry.BlockType.CRAFTING_TABLE: return 1
+		BlockRegistry.BlockType.STONE_TABLE: return 2
+		BlockRegistry.BlockType.IRON_TABLE: return 3
+		BlockRegistry.BlockType.GOLD_TABLE: return 4
+		BlockRegistry.BlockType.FURNACE: return 0  # tier 0 + furnace flag
+		_: return -1
 
 func _input(event):
 	# Bloquer E/C si pause menu ouvert
@@ -456,13 +452,21 @@ func _handle_block_interaction(delta: float):
 		if is_mining:
 			_cancel_mining()
 	
-	# Placement
+	# Clic droit : interaction avec bloc ou placement
 	if Input.is_action_just_pressed("place_block") and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		# Vérifier si on regarde un bloc interactif (table de craft, fourneau)
+		var interact_tier = _get_interact_tier(break_block_type)
+		if interact_tier >= 0:
+			var is_furnace = break_block_type == BlockRegistry.BlockType.FURNACE
+			_toggle_crafting(interact_tier, is_furnace)
+			return
+
+		# Sinon, placement normal
 		var place_block_type = world_manager.get_block_at_position(place_pos)
 		var player_aabb = AABB(global_position - Vector3(0.4, 0, 0.4), Vector3(0.8, 1.8, 0.8))
 		var block_aabb = AABB(place_pos, Vector3.ONE)
 		var can_place = (place_block_type == BlockRegistry.BlockType.AIR or place_block_type == BlockRegistry.BlockType.WATER) and not player_aabb.intersects(block_aabb)
-		
+
 		if can_place and get_inventory_count(selected_block_type) > 0:
 			world_manager.place_block_at_position(place_pos, selected_block_type)
 			_remove_from_inventory(selected_block_type)

@@ -220,7 +220,9 @@ func _generate_chunk_data(chunk_pos: Vector3i) -> Dictionary:
 
 					if near_cave:
 						var ore_val = ore_noise.get_noise_3d(owx, oy, owz)
-						if oy < 40 and ore_val > 0.7:
+						if oy < 25 and ore_val > 0.8:
+							blocks[ox][oz][oy] = BlockRegistry.BlockType.GOLD_ORE
+						elif oy < 40 and ore_val > 0.7:
 							blocks[ox][oz][oy] = BlockRegistry.BlockType.IRON_ORE
 						elif ore_val > 0.6:
 							blocks[ox][oz][oy] = BlockRegistry.BlockType.COAL_ORE

@@ -5,7 +5,8 @@ extends CanvasLayer
 
 var player: CharacterBody3D = null
 var is_open: bool = false
-var has_table_nearby: bool = false  # Est-ce qu'il y a une table de craft à proximité
+var current_tier: int = 0
+var has_furnace: bool = false
 
 # UI elements
 var background: ColorRect
@@ -118,10 +119,11 @@ func _build_ui():
 	hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	content_vbox.add_child(hint_label)
 
-func open_crafting(near_table: bool = false):
+func open_crafting(tier: int = 0, furnace: bool = false):
 	"""Ouvrir l'écran de crafting"""
 	is_open = true
-	has_table_nearby = near_table
+	current_tier = tier
+	has_furnace = furnace
 	visible = true
 	_rebuild_recipe_list()
 
@@ -138,24 +140,42 @@ func _rebuild_recipe_list():
 	recipe_rows.clear()
 	
 	var recipes = CraftRegistry.get_all_recipes()
-	
+
 	# Mettre à jour le label de station
-	if has_table_nearby:
-		station_label.text = Locale.tr_ui("craft_table")
+	if has_furnace:
+		station_label.text = Locale.tr_ui("craft_furnace")
+		station_label.add_theme_color_override("font_color", Color(0.9, 0.5, 0.3, 1))
+	elif current_tier >= 4:
+		station_label.text = Locale.tr_ui("craft_tier_4")
+		station_label.add_theme_color_override("font_color", Color(0.95, 0.85, 0.3, 1))
+	elif current_tier == 3:
+		station_label.text = Locale.tr_ui("craft_tier_3")
+		station_label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.8, 1))
+	elif current_tier == 2:
+		station_label.text = Locale.tr_ui("craft_tier_2")
+		station_label.add_theme_color_override("font_color", Color(0.7, 0.65, 0.6, 1))
+	elif current_tier == 1:
+		station_label.text = Locale.tr_ui("craft_tier_1")
 		station_label.add_theme_color_override("font_color", Color(0.9, 0.8, 0.4, 1))
 	else:
 		station_label.text = Locale.tr_ui("craft_hand")
 		station_label.add_theme_color_override("font_color", Color(0.6, 0.75, 0.9, 1))
-	
-	# Trier : craftables en premier, puis par station
+
+	# Mettre à jour le hint
+	if current_tier == 0 and not has_furnace:
+		hint_label.text = Locale.tr_ui("craft_hint_hand")
+	else:
+		hint_label.text = Locale.tr_ui("craft_hint_station")
+
+	# Trier : craftables en premier, puis par disponibilité
 	var sorted_recipes = recipes.duplicate()
 	var inventory = player.get_all_inventory() if player else {}
-	
+
 	sorted_recipes.sort_custom(func(a, b):
 		var can_a = CraftRegistry.can_craft(a, inventory)
 		var can_b = CraftRegistry.can_craft(b, inventory)
-		var avail_a = a["station"] == "hand" or has_table_nearby
-		var avail_b = b["station"] == "hand" or has_table_nearby
+		var avail_a = CraftRegistry.is_recipe_available(a, current_tier, has_furnace)
+		var avail_b = CraftRegistry.is_recipe_available(b, current_tier, has_furnace)
 		# Craftables et disponibles d'abord
 		if (can_a and avail_a) != (can_b and avail_b):
 			return can_a and avail_a
@@ -171,7 +191,7 @@ func _add_recipe_row(recipe: Dictionary):
 	"""Ajouter une ligne de recette"""
 	var inventory = player.get_all_inventory() if player else {}
 	var can_craft = CraftRegistry.can_craft(recipe, inventory)
-	var station_available = recipe["station"] == "hand" or has_table_nearby
+	var station_available = CraftRegistry.is_recipe_available(recipe, current_tier, has_furnace)
 	var is_craftable = can_craft and station_available
 	
 	# Container horizontal pour la ligne
@@ -308,7 +328,8 @@ func _add_recipe_row(recipe: Dictionary):
 		craft_btn.add_theme_color_override("font_color", Color(0.9, 1, 0.9, 1))
 		craft_btn.add_theme_font_size_override("font_size", 13)
 	elif not station_available:
-		craft_btn.text = Locale.tr_ui("craft_need_table")
+		var need_key = CraftRegistry.get_recipe_station_label(recipe)
+		craft_btn.text = Locale.tr_ui(need_key) if need_key != "" else "?"
 		craft_btn.disabled = true
 		craft_btn.add_theme_color_override("font_color", Color(0.5, 0.45, 0.3, 1))
 		craft_btn.add_theme_font_size_override("font_size", 11)

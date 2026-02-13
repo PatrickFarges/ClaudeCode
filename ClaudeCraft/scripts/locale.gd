@@ -27,6 +27,13 @@ const BLOCK_NAMES = {
 	"Water":      {"fr": "Eau",          "en": "Water"},
 	"Coal Ore":   {"fr": "Charbon",      "en": "Coal Ore"},
 	"Iron Ore":   {"fr": "Fer",          "en": "Iron Ore"},
+	"Gold Ore":   {"fr": "Or (minerai)", "en": "Gold Ore"},
+	"Iron Ingot": {"fr": "Lingot de fer","en": "Iron Ingot"},
+	"Gold Ingot": {"fr": "Lingot d'or", "en": "Gold Ingot"},
+	"Furnace":    {"fr": "Fourneau",     "en": "Furnace"},
+	"Stone Table":{"fr": "Table en pierre","en": "Stone Table"},
+	"Iron Table": {"fr": "Table en fer", "en": "Iron Table"},
+	"Gold Table": {"fr": "Table en or",  "en": "Gold Table"},
 }
 
 # ============================================================
@@ -42,6 +49,21 @@ const RECIPE_NAMES = {
 	"Briques (lot)":      {"fr": "Briques (lot)",      "en": "Bricks (bulk)"},
 	"Grès (lot)":         {"fr": "Grès (lot)",         "en": "Sandstone (bulk)"},
 	"Planches (lot)":     {"fr": "Planches (lot)",     "en": "Planks (bulk)"},
+	"Fourneau":           {"fr": "Fourneau",           "en": "Furnace"},
+	"Table en pierre":    {"fr": "Table en pierre",    "en": "Stone Table"},
+	"Table en fer":       {"fr": "Table en fer",       "en": "Iron Table"},
+	"Table en or":        {"fr": "Table en or",        "en": "Gold Table"},
+	"Lingot de fer":      {"fr": "Lingot de fer",      "en": "Iron Ingot"},
+	"Lingot d'or":        {"fr": "Lingot d'or",        "en": "Gold Ingot"},
+	"Briques (batch)":    {"fr": "Briques (batch)",    "en": "Bricks (batch)"},
+	"Grès (batch)":       {"fr": "Grès (batch)",       "en": "Sandstone (batch)"},
+	"Planches (batch)":   {"fr": "Planches (batch)",   "en": "Planks (batch)"},
+	"Briques (mega)":     {"fr": "Briques (mega)",     "en": "Bricks (mega)"},
+	"Grès (mega)":        {"fr": "Grès (mega)",        "en": "Sandstone (mega)"},
+	"Planches (mega)":    {"fr": "Planches (mega)",    "en": "Planks (mega)"},
+	"Briques (max)":      {"fr": "Briques (max)",      "en": "Bricks (max)"},
+	"Grès (max)":         {"fr": "Grès (max)",         "en": "Sandstone (max)"},
+	"Planches (max)":     {"fr": "Planches (max)",     "en": "Planks (max)"},
 }
 
 # ============================================================
@@ -51,12 +73,21 @@ const UI = {
 	# Crafting UI
 	"crafting_title":       {"fr": "⚒️ Artisanat",            "en": "⚒️ Crafting"},
 	"craft_hand":           {"fr": "🤲 Artisanat à la main",  "en": "🤲 Hand crafting"},
-	"craft_table":          {"fr": "🔨 Table de Craft (toutes les recettes)", "en": "🔨 Crafting Table (all recipes)"},
+	"craft_tier_1":         {"fr": "🔨 Table en bois",         "en": "🔨 Wood Table"},
+	"craft_tier_2":         {"fr": "⛏ Table en pierre",        "en": "⛏ Stone Table"},
+	"craft_tier_3":         {"fr": "🔧 Table en fer",          "en": "🔧 Iron Table"},
+	"craft_tier_4":         {"fr": "👑 Table en or (toutes)",   "en": "👑 Gold Table (all)"},
+	"craft_furnace":        {"fr": "🔥 Fourneau",              "en": "🔥 Furnace"},
 	"craft_btn":            {"fr": "Crafter",                  "en": "Craft"},
 	"craft_missing":        {"fr": "Manque",                   "en": "Missing"},
-	"craft_need_table":     {"fr": "🔨 Table",                 "en": "🔨 Table"},
-	"craft_hint":           {"fr": "[C] ou [Échap] pour fermer  •  Place une Table de Craft pour plus de recettes",
-	                         "en": "[C] or [Esc] to close  •  Place a Crafting Table for more recipes"},
+	"craft_need_wood":      {"fr": "🔨 Table bois",            "en": "🔨 Wood Table"},
+	"craft_need_stone":     {"fr": "⛏ Table pierre",           "en": "⛏ Stone Table"},
+	"craft_need_iron":      {"fr": "🔧 Table fer",             "en": "🔧 Iron Table"},
+	"craft_need_gold":      {"fr": "👑 Table or",              "en": "👑 Gold Table"},
+	"craft_need_furnace":   {"fr": "🔥 Fourneau",              "en": "🔥 Furnace"},
+	"craft_hint_hand":      {"fr": "[C] ou [Échap] pour fermer  •  Clic droit sur une table pour plus de recettes",
+	                         "en": "[C] or [Esc] to close  •  Right-click a table for more recipes"},
+	"craft_hint_station":   {"fr": "[Échap] pour fermer",      "en": "[Esc] to close"},
 	
 	# Inventory UI
 	"inv_title":            {"fr": "🎒 Inventaire",            "en": "🎒 Inventory"},

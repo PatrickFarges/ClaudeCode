@@ -21,7 +21,16 @@ enum BlockType {
 	# Blocs naturels supplémentaires
 	WATER,
 	COAL_ORE,
-	IRON_ORE
+	IRON_ORE,
+	GOLD_ORE,
+	# Blocs fondus
+	IRON_INGOT,
+	GOLD_INGOT,
+	# Stations de craft
+	FURNACE,
+	STONE_TABLE,
+	IRON_TABLE,
+	GOLD_TABLE
 }
 
 const BLOCK_DATA = {
@@ -133,6 +142,50 @@ const BLOCK_DATA = {
 		"name": "Iron Ore",
 		"solid": true,
 		"color": Color(0.75, 0.6, 0.55, 1.0),
+		"hardness": 2.0
+	},
+	BlockType.GOLD_ORE: {
+		"name": "Gold Ore",
+		"solid": true,
+		"color": Color(0.85, 0.75, 0.3, 1.0),
+		"hardness": 2.5
+	},
+	# === BLOCS FONDUS ===
+	BlockType.IRON_INGOT: {
+		"name": "Iron Ingot",
+		"solid": true,
+		"color": Color(0.8, 0.8, 0.85, 1.0),
+		"hardness": 1.5
+	},
+	BlockType.GOLD_INGOT: {
+		"name": "Gold Ingot",
+		"solid": true,
+		"color": Color(0.95, 0.85, 0.3, 1.0),
+		"hardness": 1.0
+	},
+	# === STATIONS DE CRAFT ===
+	BlockType.FURNACE: {
+		"name": "Furnace",
+		"solid": true,
+		"color": Color(0.45, 0.45, 0.5, 1.0),
+		"hardness": 2.0
+	},
+	BlockType.STONE_TABLE: {
+		"name": "Stone Table",
+		"solid": true,
+		"color": Color(0.6, 0.55, 0.5, 1.0),
+		"hardness": 1.8
+	},
+	BlockType.IRON_TABLE: {
+		"name": "Iron Table",
+		"solid": true,
+		"color": Color(0.65, 0.6, 0.6, 1.0),
+		"hardness": 2.5
+	},
+	BlockType.GOLD_TABLE: {
+		"name": "Gold Table",
+		"solid": true,
+		"color": Color(0.75, 0.65, 0.3, 1.0),
 		"hardness": 2.0
 	}
 }
