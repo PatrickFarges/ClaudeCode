@@ -1,3 +1,4 @@
 *.pdf
 *.xlsx
 __pycache__/
+.claude/
