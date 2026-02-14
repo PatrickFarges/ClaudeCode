@@ -165,6 +165,7 @@ python ClocloWebUi/server.py
 - **GitHub :** `https://github.com/PatrickFarges/ClaudeCode` — remote `origin`, branche principale `master`
 - **GitHub ComparePDF :** `https://github.com/PatrickFarges/ComparePDF` — repo séparé, synchronisé via `git subtree push --prefix=ComparePDF`
 - **GitHub CLI (`gh`) :** installé (v2.86.0), authentifié sur GitHub
+- **`.gitignore` racine :** `.claude/`, `__pycache__/`, `*.pyc`, fichiers système (`.DS_Store`, `Thumbs.db`)
 - Plateforme cible : Windows (`os.startfile()`, `winreg`, fallback `xdg-open` pour Linux)
 - Aucun système de build, framework de test ou linting dans aucun projet
 - Projets Python autonomes — pas de virtualenv partagé
