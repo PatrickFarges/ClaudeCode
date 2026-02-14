@@ -163,6 +163,7 @@ python ClocloWebUi/server.py
 ## Notes techniques
 
 - **GitHub :** `https://github.com/PatrickFarges/ClaudeCode` — remote `origin`, branche principale `master`
+- **GitHub ComparePDF :** `https://github.com/PatrickFarges/ComparePDF` — repo séparé, synchronisé via `git subtree push --prefix=ComparePDF`
 - **GitHub CLI (`gh`) :** installé (v2.86.0), authentifié sur GitHub
 - Plateforme cible : Windows (`os.startfile()`, `winreg`, fallback `xdg-open` pour Linux)
 - Aucun système de build, framework de test ou linting dans aucun projet
