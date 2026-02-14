@@ -22,9 +22,13 @@ var active_generations: Dictionary = {}
 var queue_mutex: Mutex = Mutex.new()
 var should_exit: bool = false
 var world_seed: int = 0
+var _structure_placements: Array = []
 
 func set_world_seed(seed_value: int):
 	world_seed = seed_value
+
+func set_structure_placements(data: Array):
+	_structure_placements = data
 
 func get_world_seed() -> int:
 	return world_seed
@@ -242,6 +246,16 @@ func _generate_chunk_data(chunk_pos: Vector3i) -> Dictionary:
 					blocks[wx2][wz2][wy] = BlockRegistry.BlockType.WATER
 				elif blocks[wx2][wz2][wy] != BlockRegistry.BlockType.WATER:
 					break
+
+	# ============================================================
+	# PASSE 4 : Appliquer les structures prédéfinies
+	# ============================================================
+	if _structure_placements.size() > 0:
+		var struct_bounds = _apply_structures(blocks, chunk_pos)
+		if struct_bounds.x < y_min:
+			y_min = struct_bounds.x
+		if struct_bounds.y > y_max:
+			y_max = struct_bounds.y
 
 	# Ajuster y_max pour les couronnes d'arbres et l'eau
 	if y_max > 0:
@@ -465,6 +479,66 @@ func _place_leaf_layer_square(blocks: Array, cx: int, cz: int, y: int, radius: i
 			if nx >= 0 and nx < CHUNK_SIZE and nz >= 0 and nz < CHUNK_SIZE:
 				if blocks[nx][nz][y] == BlockRegistry.BlockType.AIR:
 					blocks[nx][nz][y] = BlockRegistry.BlockType.LEAVES
+
+# ============================================================
+# STRUCTURES — Patch les blocs du chunk avec les structures placées
+# ============================================================
+
+func _apply_structures(blocks: Array, chunk_pos: Vector3i) -> Vector2i:
+	"""Applique les structures sur le chunk. Retourne Vector2i(y_min, y_max) des blocs ajoutés."""
+	var new_y_min: int = CHUNK_HEIGHT
+	var new_y_max: int = 0
+
+	var chunk_min_x: int = chunk_pos.x * CHUNK_SIZE
+	var chunk_min_z: int = chunk_pos.z * CHUNK_SIZE
+	var chunk_max_x: int = chunk_min_x + CHUNK_SIZE - 1
+	var chunk_max_z: int = chunk_min_z + CHUNK_SIZE - 1
+
+	for placement in _structure_placements:
+		# Test AABB rapide
+		if placement.aabb_max_x < chunk_min_x or placement.aabb_min_x > chunk_max_x:
+			continue
+		if placement.aabb_max_z < chunk_min_z or placement.aabb_min_z > chunk_max_z:
+			continue
+
+		var s_pos: Vector3i = placement.position
+		var s_blocks: PackedByteArray = placement.blocks
+		var s_size_x: int = placement.size_x
+		var s_size_y: int = placement.size_y
+		var s_size_z: int = placement.size_z
+
+		# Région de chevauchement en coordonnées monde
+		var ox_min: int = maxi(chunk_min_x, s_pos.x)
+		var ox_max: int = mini(chunk_max_x, s_pos.x + s_size_x - 1)
+		var oz_min: int = maxi(chunk_min_z, s_pos.z)
+		var oz_max: int = mini(chunk_max_z, s_pos.z + s_size_z - 1)
+		var oy_min: int = maxi(0, s_pos.y)
+		var oy_max: int = mini(CHUNK_HEIGHT - 1, s_pos.y + s_size_y - 1)
+
+		var sx_sz: int = s_size_x * s_size_z  # Pré-calcul pour l'indexation
+
+		for wx in range(ox_min, ox_max + 1):
+			var lx: int = wx - chunk_min_x  # Position locale dans le chunk
+			var sx: int = wx - s_pos.x       # Position dans la structure
+			for wz in range(oz_min, oz_max + 1):
+				var lz: int = wz - chunk_min_z
+				var sz: int = wz - s_pos.z
+				var base_idx: int = sz * s_size_x + sx  # Partie x,z de l'index structure
+				for wy in range(oy_min, oy_max + 1):
+					var sy: int = wy - s_pos.y
+					# Index structure : y * (sx * sz) + z * sx + x (layer-first)
+					var struct_idx: int = sy * sx_sz + base_idx
+					var block_val: int = s_blocks[struct_idx]
+					if block_val == 255:  # KEEP — ne pas toucher
+						continue
+					blocks[lx][lz][wy] = block_val
+					if block_val != 0:
+						if wy < new_y_min:
+							new_y_min = wy
+						if wy > new_y_max:
+							new_y_max = wy
+
+	return Vector2i(new_y_min, new_y_max)
 
 # ============================================================
 # TERRAIN (identique à v6.1)

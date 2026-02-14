@@ -33,6 +33,14 @@ func _ready():
 	add_child(chunk_generator)
 	chunk_generator.chunk_generated.connect(_on_chunk_data_ready)
 
+	# Charger les structures prédéfinies
+	var struct_mgr = get_node_or_null("/root/StructureManager")
+	if struct_mgr:
+		var placements = struct_mgr.get_placement_data()
+		if placements.size() > 0:
+			chunk_generator.set_structure_placements(placements)
+			print("WorldManager: %d structure(s) à placer" % placements.size())
+
 	# Attendre que le joueur soit prêt
 	await get_tree().process_frame
 	player = get_tree().get_first_node_in_group("player")

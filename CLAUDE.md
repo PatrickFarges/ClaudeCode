@@ -126,8 +126,9 @@ Jeu voxel type Minecraft en GDScript avec Godot 4.5+, style pastel.
 **Architecture GDScript (`scripts/`) :**
 - **`block_registry.gd`** : registre centralisé des types de blocs (15 types : AIR, GRASS, DIRT, STONE, SAND, WOOD, LEAVES, SNOW, CACTUS, PLANKS, BRICK...) avec couleurs pastel et dureté
 - **`chunk.gd`** : portion du monde (16×16×256 blocs), greedy meshing (faces visibles uniquement), Ambient Occlusion, variation luminosité par face, collision ConcavePolygon
-- **`chunk_generator.gd`** : génération procédurale threadée (4 workers max, Mutex), 5 noises Simplex/Perlin (terrain, élévation, température, humidité, cavernes), arbres 3D procéduraux (chêne, bouleau, pin, cactus)
-- **`world_manager.gd`** : orchestration chargement/déchargement chunks, `render_distance=4`, max 2 meshes/frame, hysteresis de déchargement, spawn mobs passifs (10% par chunk, max 20) et PNJ villageois (5% par chunk, max 10)
+- **`chunk_generator.gd`** : génération procédurale threadée (4 workers max, Mutex), 5 noises Simplex/Perlin (terrain, élévation, température, humidité, cavernes), arbres 3D procéduraux (chêne, bouleau, pin, cactus). **Passe 4 structures** : après eau, applique les structures prédéfinies via `_apply_structures()` (test AABB + patch blocs)
+- **`structure_manager.gd`** : Autoload — chargement des structures JSON depuis `res://structures/`, décompression RLE, résolution palette → BlockType, fournit `get_placement_data()` (snapshot thread-safe) au chunk_generator. Placements lus depuis `user://structures_placement.json` ou `res://structures/placements.json`
+- **`world_manager.gd`** : orchestration chargement/déchargement chunks, `render_distance=4`, max 2 meshes/frame, hysteresis de déchargement, spawn mobs passifs (10% par chunk, max 20) et PNJ villageois (5% par chunk, max 10). Connecte StructureManager au ChunkGenerator au démarrage
 - **`npc_villager.gd`** : PNJ humanoïdes utilisant les 18 modèles GLB BlockPNJ (Kenney.nl, `character-a` à `character-r`). Chargement statique des modèles, vagabondage (vitesse 2.0, timer 3-8s, 50% move), évitement eau/falaises, rotation vers direction de déplacement. Spawn uniquement sur GRASS/DARK_GRASS (pas sable). Script indépendant de PassiveMob (preload via `const NpcVillagerScene = preload(...)` dans world_manager). **Animations GLB activées** : 27 animations embarquées par modèle (walk, idle, sprint, attack, sit, die, etc.), recherche récursive de l'AnimationPlayer, loop forcé (`Animation.LOOP_LINEAR`), transition walk↔idle selon l'état de mouvement. **Auto-jump** : détection bloc solide devant les pieds + espace libre au-dessus → saut automatique (velocity.y=5.0) avec maintien du mouvement horizontal en l'air. **Anti-blocage** : si le PNJ ne bouge pas de >0.3 unités en 1s, changement de direction automatique
 - **`passive_mob.gd`** : mobs animaux (SHEEP, COW, CHICKEN) en BoxMesh colorés, vagabondage (vitesse 1.5, timer 2-5s), spawn sur herbe et sable
 - **`player.gd`** : contrôle FPS (CharacterBody3D), minage progressif (basé sur hardness), placement de blocs (vérif AABB chevauchement), inventaire 9 slots hotbar
@@ -139,7 +140,15 @@ Jeu voxel type Minecraft en GDScript avec Godot 4.5+, style pastel.
 
 **Scène principale (`scenes/main.tscn`) :** WorldManager + Player (spawn à y=80) + WorldEnvironment (SSAO, ciel pastel) + DirectionalLight3D + UI layers (Hotbar, Crosshair, Inventory, Crafting, VersionHUD, AudioManager)
 
-**Assets :** `Audio/` (~334 fichiers OGG/MP3), `BlockPNJ/` et `MiniPNJ/` (modèles 3D FBX/GLB/OBJ, personnages Kenney.nl), `NPC/` (dossier PNJ)
+**Système de structures prédéfinies (`structures/`) :**
+Permet de placer des constructions (villages, tours, cabanes...) n'importe où dans le monde généré. Les structures sont appliquées pendant la génération des chunks (passe 4), donc zéro coût en rendu.
+
+- **Format structure JSON :** palette de noms de blocs + données RLE en ordre layer-first (`index = y * sx * sz + z * sx + x`). Bloc spécial `KEEP` (valeur 255) = ne pas toucher le terrain. `AIR` = creuser.
+- **`structures/placements.json`** : liste de `{"structure": "nom", "position": [x, y, z]}` indiquant où placer chaque structure en coordonnées monde
+- **`scripts/convert_schem.py`** (~940 lignes) : convertisseur `.schem` (Sponge Schematic v2/v3) → JSON ClaudeCraft. Parseur NBT maison (zéro dépendance), décodage varint, mapping intelligent Minecraft→ClaudeCraft (200+ blocs explicites + ~60 règles par pattern pour escaliers, dalles, laines, végétation...). Usage : `python scripts/convert_schem.py fichier.schem [--info] [--output chemin.json]`
+- **Pipeline** : asset `.schem` → `convert_schem.py` → `structures/nom.json` → ajouter dans `placements.json` → apparaît automatiquement dans le monde
+
+**Assets :** `Audio/` (~334 fichiers OGG/MP3), `BlockPNJ/` et `MiniPNJ/` (modèles 3D FBX/GLB/OBJ, personnages Kenney.nl), `NPC/` (dossier PNJ), `assets/Lobbys/` (assets Minecraft .schem/.mca à convertir)
 
 **Documentation embarquée :** `ARCHITECTURE.md`, `QUICKSTART.md`, `BIOMES.md`, `MOVEMENT.md`, `MULTITHREADING.md`, `PERFORMANCE.md`
 
