@@ -1,0 +1,13 @@
+# Claude Code
+.claude/
+
+# Python
+__pycache__/
+*.pyc
+
+# System
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
