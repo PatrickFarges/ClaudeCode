@@ -1,0 +1,6 @@
+*.xlsx
+*.txt
+*.md
+!Options.ini
+__pycache__/
+.claude/
