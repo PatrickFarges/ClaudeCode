@@ -163,7 +163,7 @@ python ClocloWebUi/server.py
 ## Notes techniques
 
 - **GitHub :** `https://github.com/PatrickFarges/ClaudeCode` — remote `origin`, branche principale `master`
-- **GitHub CLI (`gh`) :** non installé sur la machine, opérations GitHub manuelles via navigateur
+- **GitHub CLI (`gh`) :** installé (v2.86.0), authentifié sur GitHub
 - Plateforme cible : Windows (`os.startfile()`, `winreg`, fallback `xdg-open` pour Linux)
 - Aucun système de build, framework de test ou linting dans aucun projet
 - Projets Python autonomes — pas de virtualenv partagé
