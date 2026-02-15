@@ -135,11 +135,43 @@ func update_held_tool_model(mesh: ArrayMesh):
 	var mesh_inst = MeshInstance3D.new()
 	mesh_inst.mesh = mesh
 	mesh_inst.layers = 2
-	# Échelle adaptée (les modèles MC sont en unités 0-16)
+	# Échelle adaptée (les modèles MC JSON sont en unités 0-16)
 	mesh_inst.scale = Vector3(0.025, 0.025, 0.025)
 	mesh_inst.position = Vector3(0, 0.05, 0)
 	current_item_node = mesh_inst
 	item_holder.add_child(current_item_node)
+
+func update_held_tool_node(node: Node3D):
+	# Supprimer l'ancien item
+	if current_item_node:
+		current_item_node.queue_free()
+		current_item_node = null
+
+	if node == null:
+		return
+
+	# Appliquer layer 2 + UNSHADED sur tous les MeshInstance3D du modèle
+	_apply_render_settings(node)
+	# Échelle pour les GLB (modèles Minecraft standard ~1 bloc = 1 unité)
+	node.scale = Vector3(0.2, 0.2, 0.2)
+	node.position = Vector3(0, 0.05, 0)
+	# Rotation pour que l'outil pointe vers l'avant
+	node.rotation_degrees = Vector3(0, -90, 0)
+	current_item_node = node
+	item_holder.add_child(current_item_node)
+
+func _apply_render_settings(node: Node):
+	if node is MeshInstance3D:
+		node.layers = 2
+		# Forcer UNSHADED sur chaque surface
+		var mesh_inst := node as MeshInstance3D
+		if mesh_inst.mesh:
+			for i in range(mesh_inst.mesh.get_surface_count()):
+				var mat = mesh_inst.mesh.surface_get_material(i)
+				if mat is StandardMaterial3D:
+					mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	for child in node.get_children():
+		_apply_render_settings(child)
 
 func _create_block_cube(block_type: BlockRegistry.BlockType) -> MeshInstance3D:
 	var mesh_inst = MeshInstance3D.new()

@@ -109,3 +109,26 @@ static func get_tool_mesh(tool_type: ToolType) -> ArrayMesh:
 	var model_path = TOOL_DATA[tool_type]["model_path"]
 	var texture_path = TOOL_DATA[tool_type]["texture_path"]
 	return ItemModelLoader.load_model(model_path, texture_path)
+
+## Retourne un Node3D prêt à l'emploi — GLB (instantié) ou JSON (MeshInstance3D)
+static func get_tool_node(tool_type: ToolType) -> Node3D:
+	if tool_type == ToolType.NONE or not TOOL_DATA.has(tool_type):
+		return null
+	var model_path: String = TOOL_DATA[tool_type]["model_path"]
+
+	if model_path.ends_with(".glb") or model_path.ends_with(".gltf"):
+		# Charger la scène GLB directement
+		var scene = load(model_path) as PackedScene
+		if scene:
+			return scene.instantiate()
+		push_warning("[ToolRegistry] Impossible de charger GLB: " + model_path)
+		return null
+	else:
+		# JSON Blockbench → ArrayMesh → MeshInstance3D
+		var texture_path = TOOL_DATA[tool_type]["texture_path"]
+		var mesh = ItemModelLoader.load_model(model_path, texture_path)
+		if mesh:
+			var inst = MeshInstance3D.new()
+			inst.mesh = mesh
+			return inst
+		return null

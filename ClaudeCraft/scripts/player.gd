@@ -565,8 +565,15 @@ func _update_hand_display():
 		return
 	var tool_type = _get_selected_tool()
 	if tool_type != ToolRegistry.ToolType.NONE:
-		var mesh = ToolRegistry.get_tool_mesh(tool_type)
-		hand_renderer.update_held_tool_model(mesh)
+		var node = ToolRegistry.get_tool_node(tool_type)
+		if node:
+			var model_path = ToolRegistry.get_model_path(tool_type)
+			if model_path.ends_with(".glb") or model_path.ends_with(".gltf"):
+				hand_renderer.update_held_tool_node(node)
+			else:
+				# JSON → le node est un MeshInstance3D, utiliser l'ancien chemin
+				hand_renderer.update_held_tool_model(node.mesh if node is MeshInstance3D else null)
+				node.queue_free()
 	else:
 		hand_renderer.update_held_item(selected_block_type)
 
