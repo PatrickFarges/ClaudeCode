@@ -14,6 +14,7 @@ Ordre des blocs : layer-first (y-major) → index = y * (sx * sz) + z * sx + x
 import gzip
 import io
 import json
+import math
 import struct
 import sys
 import os
@@ -243,6 +244,8 @@ MC_TO_CLAUDECRAFT = {
     "minecraft:red_terracotta": "BRICK",
 
     # Blocs divers → mapping approximatif
+    "minecraft:coal_block": "COAL_ORE",
+    "minecraft:decorated_pot": "BRICK",
     "minecraft:barrel": "PLANKS",
     "minecraft:bookshelf": "PLANKS",
     "minecraft:chest": "PLANKS",
@@ -375,7 +378,9 @@ class NBTReader:
         return val
 
     def read_signed_byte(self) -> int:
-        return struct.unpack_from('>b', self.data, self.pos)[0]; self.pos += 1
+        val = struct.unpack_from('>b', self.data, self.pos)[0]
+        self.pos += 1
+        return val
 
     def read_short(self) -> int:
         val = struct.unpack_from('>h', self.data, self.pos)[0]
@@ -492,6 +497,53 @@ def decode_varints(data: bytes, expected_count: int) -> list:
             if (b & 0x80) == 0:
                 break
         result.append(value)
+    return result
+
+
+# ============================================================
+# DÉCODAGE BIT-PACKED LONGARRAY (Litematica)
+# ============================================================
+
+def unpack_litematic_blocks(long_array: list, palette_size: int, volume: int) -> list:
+    """Décode un LongArray bit-packed du format Litematica.
+
+    Le format Litematica stocke les indices de blocs en compact bit-packing :
+    - bits_per_block = max(2, ceil(log2(palette_size)))
+    - Les valeurs peuvent chevaucher deux longs (format compact, pas paddé)
+    - Les longs NBT sont signés 64 bits → conversion en non-signé nécessaire
+    """
+    if palette_size <= 1:
+        return [0] * volume
+
+    bits = max(2, math.ceil(math.log2(palette_size)))
+    mask = (1 << bits) - 1
+
+    # Convertir les longs signés en non-signés
+    unsigned = [(v + (1 << 64)) if v < 0 else v for v in long_array]
+
+    result = []
+    for i in range(volume):
+        bit_start = i * bits
+        long_idx = bit_start // 64
+        bit_offset = bit_start % 64
+
+        if long_idx >= len(unsigned):
+            result.append(0)
+            continue
+
+        if bit_offset + bits <= 64:
+            # L'entrée tient dans un seul long
+            value = (unsigned[long_idx] >> bit_offset) & mask
+        else:
+            # L'entrée chevauche deux longs
+            bits_first = 64 - bit_offset
+            value = (unsigned[long_idx] >> bit_offset) & ((1 << bits_first) - 1)
+            if long_idx + 1 < len(unsigned):
+                bits_rem = bits - bits_first
+                value |= (unsigned[long_idx + 1] & ((1 << bits_rem) - 1)) << bits_first
+
+        result.append(value)
+
     return result
 
 
@@ -924,12 +976,218 @@ def convert_schem(schem_path: str, output_path: str = None, info_only: bool = Fa
 
 
 # ============================================================
+# CONVERSION .litematic → JSON
+# ============================================================
+
+def convert_litematic(litematic_path: str, output_path: str = None, info_only: bool = False):
+    """Convertit un fichier .litematic (Litematica) en JSON ClaudeCraft."""
+    with open(litematic_path, 'rb') as f:
+        raw = f.read()
+
+    if raw[:2] == b'\x1f\x8b':
+        data = gzip.decompress(raw)
+    else:
+        data = raw
+
+    nbt = parse_nbt(data)
+
+    version = nbt.get("Version", 0)
+    mc_version = nbt.get("MinecraftDataVersion", 0)
+    metadata = nbt.get("Metadata", {})
+    regions = nbt.get("Regions", {})
+
+    lit_name = metadata.get("Name", "unknown")
+    author = metadata.get("Author", "unknown")
+    enc_size = metadata.get("EnclosingSize", {})
+    total_blocks = metadata.get("TotalBlocks", 0)
+    total_volume = metadata.get("TotalVolume", 0)
+
+    print(f"Fichier          : {os.path.basename(litematic_path)}")
+    print(f"Format           : Litematica v{version} (MC data v{mc_version})")
+    print(f"Nom              : {lit_name}")
+    print(f"Auteur           : {author}")
+    print(f"Taille englobante: {enc_size.get('x', '?')} x {enc_size.get('y', '?')} x {enc_size.get('z', '?')}")
+    print(f"Blocs solides    : {total_blocks:,}")
+    print(f"Volume total     : {total_volume:,}")
+    print(f"Régions          : {len(regions)}")
+
+    # Collecter tous les blocs avec coordonnées globales
+    all_blocks = []  # [(x, y, z, cc_name), ...]
+    unmapped_all = {}
+
+    for region_name, region in regions.items():
+        pos = region.get("Position", {})
+        size = region.get("Size", {})
+
+        px, py, pz = pos.get("x", 0), pos.get("y", 0), pos.get("z", 0)
+        sx, sy, sz = size.get("x", 0), size.get("y", 0), size.get("z", 0)
+
+        # Gérer les dimensions négatives
+        if sx < 0:
+            px += sx + 1
+            sx = -sx
+        if sy < 0:
+            py += sy + 1
+            sy = -sy
+        if sz < 0:
+            pz += sz + 1
+            sz = -sz
+
+        palette_list = region.get("BlockStatePalette", [])
+        block_states = region.get("BlockStates", [])
+
+        print(f"\n  Région '{region_name}' :")
+        print(f"    Position  : ({px}, {py}, {pz})")
+        print(f"    Taille    : {sx} x {sy} x {sz}")
+        print(f"    Palette   : {len(palette_list)} types")
+
+        if not palette_list or not block_states:
+            print(f"    (vide)")
+            continue
+
+        # Construire la palette de noms Minecraft
+        palette_names = []
+        for entry in palette_list:
+            if isinstance(entry, dict):
+                block_name = entry.get("Name", "minecraft:air")
+            else:
+                block_name = str(entry)
+            palette_names.append(block_name)
+
+        volume = sx * sy * sz
+        block_ids = unpack_litematic_blocks(block_states, len(palette_names), volume)
+
+        if info_only:
+            counts = {}
+            for bid in block_ids:
+                if 0 <= bid < len(palette_names):
+                    bname = palette_names[bid]
+                else:
+                    bname = f"[invalid:{bid}]"
+                counts[bname] = counts.get(bname, 0) + 1
+
+            print(f"    Blocs :")
+            for bname, count in sorted(counts.items(), key=lambda kv: -kv[1])[:30]:
+                stripped = strip_block_states(bname)
+                cc = smart_map_block(stripped)
+                marker = "" if cc else "  <-- NON MAPPE"
+                if not cc:
+                    cc = "STONE"
+                print(f"      {bname:50s} x{count:>7,} -> {cc}{marker}")
+            continue
+
+        # Mapper vers coordonnées globales
+        for i, bid in enumerate(block_ids):
+            if 0 <= bid < len(palette_names):
+                mc_name = palette_names[bid]
+            else:
+                mc_name = "minecraft:air"
+
+            stripped = strip_block_states(mc_name)
+            cc_name = smart_map_block(stripped)
+            if cc_name is None:
+                cc_name = "STONE"
+                unmapped_all[stripped] = unmapped_all.get(stripped, 0) + 1
+
+            if cc_name == "AIR":
+                continue
+
+            # Ordre litematica : y * sx * sz + z * sx + x
+            y = i // (sx * sz)
+            remainder = i % (sx * sz)
+            z = remainder // sx
+            x = remainder % sx
+
+            all_blocks.append((px + x, py + y, pz + z, cc_name))
+
+    if info_only:
+        return
+
+    if not all_blocks:
+        print("ERREUR : aucun bloc non-air trouvé dans le fichier.")
+        return
+
+    # Normaliser l'origine (le coin min des blocs occupés = 0,0,0)
+    min_x = min(b[0] for b in all_blocks)
+    min_y = min(b[1] for b in all_blocks)
+    min_z = min(b[2] for b in all_blocks)
+    max_x = max(b[0] for b in all_blocks)
+    max_y = max(b[1] for b in all_blocks)
+    max_z = max(b[2] for b in all_blocks)
+
+    width = max_x - min_x + 1
+    height = max_y - min_y + 1
+    length = max_z - min_z + 1
+
+    print(f"\nBounding box normalisée : {width} x {height} x {length}")
+    print(f"Offset appliqué        : ({-min_x}, {-min_y}, {-min_z})")
+    print(f"Blocs non-air          : {len(all_blocks):,}")
+
+    # Construire palette et tableau 3D
+    cc_palette_set = {"AIR"}
+    for _, _, _, cc_name in all_blocks:
+        cc_palette_set.add(cc_name)
+
+    cc_palette = ["AIR"] + sorted(cc_palette_set - {"AIR"})
+    cc_name_to_idx = {name: idx for idx, name in enumerate(cc_palette)}
+
+    # Initialiser tout en AIR
+    total = width * height * length
+    blocks = [0] * total
+
+    for wx, wy, wz, cc_name in all_blocks:
+        x = wx - min_x
+        y = wy - min_y
+        z = wz - min_z
+        idx = y * (width * length) + z * width + x
+        blocks[idx] = cc_name_to_idx[cc_name]
+
+    # Stats et RLE
+    non_air = sum(1 for b in blocks if b != 0)
+    air_pct = (1 - non_air / total) * 100 if total else 0
+    rle = encode_rle(blocks)
+
+    print(f"Blocs pleins: {non_air:,} ({100 - air_pct:.1f}%), air: {air_pct:.1f}%")
+    print(f"RLE         : {len(rle)} valeurs ({len(rle) // 2} runs)")
+
+    if unmapped_all:
+        print(f"\n/!\\ {len(unmapped_all)} type(s) de blocs non mappé(s) -> STONE :")
+        for name in sorted(unmapped_all.keys()):
+            print(f"  {name}")
+
+    # Générer le JSON
+    structure_name = os.path.splitext(os.path.basename(litematic_path))[0]
+    structure_name = structure_name.lower().replace(" ", "_").replace("-", "_")
+
+    output = {
+        "name": structure_name,
+        "size": [width, height, length],
+        "palette": cc_palette,
+        "blocks_rle": rle
+    }
+
+    if output_path is None:
+        output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "structures")
+        os.makedirs(output_dir, exist_ok=True)
+        output_path = os.path.join(output_dir, structure_name + ".json")
+
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(output, f, separators=(',', ':'))
+
+    file_size = os.path.getsize(output_path)
+    print(f"\n-> Sauvegarde : {output_path}")
+    print(f"   Taille     : {file_size:,} octets ({file_size / 1024:.1f} Ko)")
+
+
+# ============================================================
 # MAIN
 # ============================================================
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage : python convert_schem.py fichier.schem [--output structure.json] [--info]")
+        print("Usage : python convert_schem.py fichier.schem|.litematic [--output structure.json] [--info]")
+        print()
+        print("Formats supportés : .schem, .schematic, .litematic")
         print()
         print("Options :")
         print("  --output FILE  Chemin du fichier JSON de sortie")
@@ -938,9 +1196,10 @@ def main():
         print("Exemples :")
         print('  python convert_schem.py "assets/Lobbys/Natural Lobby.schem" --info')
         print('  python convert_schem.py "ma_tour.schem"')
+        print('  python convert_schem.py "guard_outpost.litematic"')
         sys.exit(1)
 
-    schem_path = None
+    input_path = None
     output_path = None
     info_only = False
 
@@ -954,18 +1213,26 @@ def main():
             info_only = True
             i += 1
         else:
-            schem_path = arg
+            input_path = arg
             i += 1
 
-    if not schem_path:
-        print("ERREUR : aucun fichier .schem spécifié")
+    if not input_path:
+        print("ERREUR : aucun fichier spécifié")
         sys.exit(1)
 
-    if not os.path.exists(schem_path):
-        print(f"ERREUR : fichier introuvable : {schem_path}")
+    if not os.path.exists(input_path):
+        print(f"ERREUR : fichier introuvable : {input_path}")
         sys.exit(1)
 
-    convert_schem(schem_path, output_path, info_only)
+    ext = os.path.splitext(input_path)[1].lower()
+    if ext == ".litematic":
+        convert_litematic(input_path, output_path, info_only)
+    elif ext in (".schem", ".schematic"):
+        convert_schem(input_path, output_path, info_only)
+    else:
+        print(f"ERREUR : format non supporté : {ext}")
+        print("Formats supportés : .schem, .schematic, .litematic")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

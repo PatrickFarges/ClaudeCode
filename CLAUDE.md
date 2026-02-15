@@ -211,3 +211,21 @@ python ClocloWebUi/server.py
 - Projets Python autonomes — pas de virtualenv partagé
 - Nombres format SAP/français partout : `1.234,56-` (virgule décimale, point milliers, `-` suffixe négatif)
 - L'utilisateur parle français, toutes les interfaces et messages de commit sont en français
+
+## Prochain chantier — Éditeur de structures ClaudeCraft
+
+**Objectif :** Application desktop (Python/Tkinter ou PyQt) pour charger, convertir, visualiser en 3D et modifier des assets de structures pour ClaudeCraft.
+
+**Workflow prévu :**
+1. **Charger** un asset Minecraft `.schem` OU un asset ClaudeCraft `.json` déjà converti
+2. **Convertir** automatiquement le `.schem` → format JSON ClaudeCraft (via le moteur de `convert_schem.py`)
+3. **Visualiser en 3D** la structure sous tous les angles (rotation, zoom, pan) — rendu voxel des blocs avec les couleurs pastel ClaudeCraft
+4. **Modifier** la structure : ajouter/supprimer des cubes individuels, déplacer des éléments (arbres, etc.), changer le type de bloc
+5. **Enregistrer** l'asset modifié au format JSON ClaudeCraft dans `structures/`
+
+**Contexte existant :**
+- `scripts/convert_schem.py` (~940 lignes) : parseur NBT + convertisseur .schem → JSON, à réutiliser comme moteur de conversion
+- `scripts/block_registry.gd` : référence des types de blocs et couleurs pastel (à porter en Python pour le rendu)
+- `structures/` : dossier cible pour les assets finaux
+- `assets/Lobbys/` : assets Minecraft source de test (Natural Lobby 203x104x203, Factions Spawn 203x256x203)
+- Structures de taille variable : de petites cabanes (5x12x5) à de grands villages (200x250x200)
