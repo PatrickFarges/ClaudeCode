@@ -94,26 +94,39 @@ func _update_hotbar():
 	if not player:
 		return
 
-	# Nom du bloc sélectionné
+	# Nom du bloc ou de l'outil sélectionné
 	if name_label and player.selected_slot >= 0 and player.selected_slot < player.hotbar_slots.size():
-		var block_type = player.hotbar_slots[player.selected_slot]
-		name_label.text = BlockRegistry.get_block_name(block_type)
+		var tool_type = player._get_selected_tool()
+		if tool_type != ToolRegistry.ToolType.NONE:
+			name_label.text = ToolRegistry.get_tool_name(tool_type)
+		else:
+			var block_type = player.hotbar_slots[player.selected_slot]
+			name_label.text = BlockRegistry.get_block_name(block_type)
 
 	for i in range(min(slot_panels.size(), player.hotbar_slots.size())):
 		var slot = slot_panels[i]
-		var block_type = player.hotbar_slots[i]
-		var color = BlockRegistry.get_block_color(block_type)
-		var count = player.get_inventory_count(block_type)
-		
-		slot["color_rect"].color = color if count > 0 else color * 0.35
-		
-		slot["count_label"].text = str(count)
-		if count == 0:
-			slot["count_label"].add_theme_color_override("font_color", Color(0.4, 0.3, 0.3, 0.6))
-			slot["count_label"].add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.3))
-		else:
+		var tool_type = ToolRegistry.ToolType.NONE
+		if i < player.hotbar_tool_slots.size():
+			tool_type = player.hotbar_tool_slots[i]
+
+		if tool_type != ToolRegistry.ToolType.NONE:
+			# Slot outil — afficher couleur distinctive (gris acier)
+			slot["color_rect"].color = Color(0.6, 0.55, 0.5, 1.0)
+			slot["count_label"].text = "1"
 			slot["count_label"].add_theme_color_override("font_color", Color(1, 1, 1, 1))
 			slot["count_label"].add_theme_color_override("font_outline_color", Color(0, 0, 0, 1.0))
+		else:
+			var block_type = player.hotbar_slots[i]
+			var color = BlockRegistry.get_block_color(block_type)
+			var count = player.get_inventory_count(block_type)
+			slot["color_rect"].color = color if count > 0 else color * 0.35
+			slot["count_label"].text = str(count)
+			if count == 0:
+				slot["count_label"].add_theme_color_override("font_color", Color(0.4, 0.3, 0.3, 0.6))
+				slot["count_label"].add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.3))
+			else:
+				slot["count_label"].add_theme_color_override("font_color", Color(1, 1, 1, 1))
+				slot["count_label"].add_theme_color_override("font_outline_color", Color(0, 0, 0, 1.0))
 		
 		if i == player.selected_slot:
 			slot["style"].border_color = Color(1.0, 1.0, 0.5, 1.0)

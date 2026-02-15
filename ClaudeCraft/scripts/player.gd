@@ -84,6 +84,13 @@ const FOOTSTEP_INTERVAL = 0.4  # Secondes entre chaque pas
 var mining_hit_timer: float = 0.0
 const MINING_HIT_INTERVAL = 0.25  # Secondes entre chaque frappe
 
+# Bras / Item en main
+var hand_renderer = null
+const HandItemRendererScript = preload("res://scripts/hand_item_renderer.gd")
+
+# Outils — slots parallèles à la hotbar (NONE = bloc, sinon outil)
+var hotbar_tool_slots: Array = []
+
 func _ready():
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	world_manager = get_tree().get_first_node_in_group("world_manager")
@@ -94,9 +101,11 @@ func _ready():
 	
 	add_to_group("player")
 	spawn_position = global_position
-	_update_selected_block()
+	_init_tool_slots()
 	_init_inventory()
 	_create_block_highlighter()
+	_create_hand_renderer()
+	_update_selected_block()
 	
 	await get_tree().process_frame
 	inventory_ui = get_tree().get_first_node_in_group("inventory_ui")
@@ -132,6 +141,23 @@ func _init_inventory():
 func _create_block_highlighter():
 	block_highlighter = BlockHighlighter.new()
 	get_tree().root.call_deferred("add_child", block_highlighter)
+
+func _init_tool_slots():
+	hotbar_tool_slots.clear()
+	for i in range(hotbar_slots.size()):
+		hotbar_tool_slots.append(ToolRegistry.ToolType.NONE)
+	# Outils de test sur les derniers slots
+	hotbar_tool_slots[5] = ToolRegistry.ToolType.STONE_AXE
+	hotbar_tool_slots[6] = ToolRegistry.ToolType.STONE_PICKAXE
+	hotbar_tool_slots[7] = ToolRegistry.ToolType.STONE_SHOVEL
+	hotbar_tool_slots[8] = ToolRegistry.ToolType.STONE_HOE
+
+func _create_hand_renderer():
+	hand_renderer = HandItemRendererScript.new()
+	hand_renderer.name = "HandItemRenderer"
+	camera.add_child(hand_renderer)
+	# Activer le layer 2 sur la caméra pour voir le bras
+	camera.cull_mask = camera.cull_mask | 2
 
 func get_inventory_count(block_type: BlockRegistry.BlockType) -> int:
 	if inventory.has(block_type):
@@ -432,16 +458,23 @@ func _handle_block_interaction(delta: float):
 			mining_block_pos = break_pos
 			mining_block_type = break_block_type
 			mining_time_required = BlockRegistry.get_block_hardness(break_block_type)
+			# Appliquer le multiplicateur d'outil
+			var tool_mult = ToolRegistry.get_mining_multiplier(_get_selected_tool(), break_block_type)
+			if tool_mult > 0:
+				mining_time_required /= tool_mult
 			if mining_time_required <= 0:
 				mining_time_required = 0.1
 		
 		mining_progress += delta / mining_time_required
 		
-		# Son de frappe périodique
+		# Son de frappe périodique + animation swing
 		mining_hit_timer += delta
-		if mining_hit_timer >= MINING_HIT_INTERVAL and audio_manager:
+		if mining_hit_timer >= MINING_HIT_INTERVAL:
 			mining_hit_timer = 0.0
-			audio_manager.play_mining_hit(mining_block_type, mining_block_pos)
+			if audio_manager:
+				audio_manager.play_mining_hit(mining_block_type, mining_block_pos)
+			if hand_renderer:
+				hand_renderer.play_swing()
 		
 		if block_highlighter:
 			block_highlighter.set_mining_progress(mining_progress)
@@ -472,6 +505,8 @@ func _handle_block_interaction(delta: float):
 			_remove_from_inventory(selected_block_type)
 			if audio_manager:
 				audio_manager.play_place_sound(selected_block_type, place_pos)
+			if hand_renderer:
+				hand_renderer.play_swing()
 
 func _break_block(pos: Vector3, block_type: BlockRegistry.BlockType):
 	world_manager.break_block_at_position(pos)
@@ -523,6 +558,22 @@ func _spawn_break_particles(pos: Vector3, block_type: BlockRegistry.BlockType):
 func _update_selected_block():
 	if selected_slot >= 0 and selected_slot < hotbar_slots.size():
 		selected_block_type = hotbar_slots[selected_slot]
+		_update_hand_display()
+
+func _update_hand_display():
+	if not hand_renderer:
+		return
+	var tool_type = _get_selected_tool()
+	if tool_type != ToolRegistry.ToolType.NONE:
+		var mesh = ToolRegistry.get_tool_mesh(tool_type)
+		hand_renderer.update_held_tool_model(mesh)
+	else:
+		hand_renderer.update_held_item(selected_block_type)
+
+func _get_selected_tool() -> ToolRegistry.ToolType:
+	if selected_slot >= 0 and selected_slot < hotbar_tool_slots.size():
+		return hotbar_tool_slots[selected_slot]
+	return ToolRegistry.ToolType.NONE
 
 # ============================================================
 # GESTION DE LA VIE
