@@ -87,9 +87,17 @@ var snd_place_metal: Array = []
 var snd_mine_metal: Array = []
 var snd_step_metal: Array = []
 
+# Eating sounds
+var snd_eat: AudioStream = null
+
 # UI sounds
 var snd_ui_click: AudioStream = null
 var snd_craft_success: AudioStream = null
+
+# Forest ambient par heure du jour
+var forest_ambient_by_hour: Array = []  # Array de [heure_debut, heure_fin, Array[AudioStream]]
+var forest_current_hour_range: int = -1  # Index dans forest_ambient_by_hour
+var day_night_cycle_node: Node = null
 
 func _ready():
 	add_to_group("audio_manager")
@@ -271,6 +279,20 @@ func _load_sound_banks():
 		load("res://Audio/impactMetal_light_004.ogg"),
 	]
 
+	# === Eating sound ===
+	snd_eat = load("res://Audio/eating-effect-254996.mp3")
+
+	# === Forest ambient by hour ===
+	forest_ambient_by_hour = [
+		[5.0, 10.0, [load("res://Audio/Forest/5-10 matiné.mp3")]],
+		[10.0, 12.0, [load("res://Audio/Forest/10-12 Aurore.mp3"), load("res://Audio/Forest/10-12 ambiance légère.mp3")]],
+		[12.0, 15.0, [load("res://Audio/Forest/12-15 Midi1.mp3"), load("res://Audio/Forest/12-15 .mp3")]],
+		[15.0, 16.0, [load("res://Audio/Forest/15-16 Wind and birds.mp3")]],
+		[16.0, 18.0, [load("res://Audio/Forest/16-18 Après-midi1.mp3"), load("res://Audio/Forest/16-18 Après-midi and Birds.mp3")]],
+		[18.0, 21.0, [load("res://Audio/Forest/18-21 crépuscule.mp3"), load("res://Audio/Forest/18-21 Wind forest.mp3")]],
+		[21.0, 29.0, [load("res://Audio/Forest/21-5 night.mp3")]],  # 29 = 24+5, gère le wraparound
+	]
+
 	# === UI sounds ===
 	snd_ui_click = load("res://Audio/metalClick.ogg")
 	snd_craft_success = load("res://Audio/pling.mp3")
@@ -397,6 +419,15 @@ func play_craft_success():
 	var p = _get_free_sfx()
 	p.stream = snd_craft_success
 	p.volume_db = linear_to_db(sfx_volume * master_volume * 0.6)
+	p.play()
+
+func play_eat_sound():
+	if not snd_eat:
+		return
+	var p = _get_free_sfx()
+	p.stream = snd_eat
+	p.volume_db = linear_to_db(sfx_volume * master_volume * 0.6)
+	p.pitch_scale = randf_range(0.95, 1.05)
 	p.play()
 
 # ============================================================
@@ -526,10 +557,17 @@ func _update_biome_ambient(delta: float):
 	if biome != current_biome:
 		current_biome = biome
 		last_ambient_height = pos.y
+		forest_current_hour_range = -1
 		_crossfade_to_biome(biome, pos.y)
 	elif biome == BIOME_MOUNTAIN and abs(pos.y - last_ambient_height) > HEIGHT_CHANGE_THRESHOLD:
 		last_ambient_height = pos.y
 		_crossfade_to_biome(biome, pos.y)
+	elif biome == BIOME_FOREST:
+		# Vérifier si la plage horaire a changé
+		var old_range = forest_current_hour_range
+		_get_forest_ambient_for_current_hour()  # Met à jour forest_current_hour_range
+		if old_range != forest_current_hour_range and old_range >= 0:
+			_crossfade_to_biome(biome, pos.y)
 
 func _detect_biome(world_x: float, world_z: float) -> int:
 	var t = (temp_noise.get_noise_2d(world_x, world_z) + 1.0) / 2.0
@@ -585,18 +623,25 @@ func _handle_crossfade(delta: float):
 
 func _on_ambient_a_finished():
 	if active_ambient == "a" or is_crossfading:
-		ambient_player_a.stream = _generate_biome_ambient(current_biome, current_height)
-		ambient_player_a.play()
+		var stream = _generate_biome_ambient(current_biome, current_height)
+		if stream:
+			ambient_player_a.stream = stream
+			ambient_player_a.play()
 
 func _on_ambient_b_finished():
 	if active_ambient == "b" or is_crossfading:
-		ambient_player_b.stream = _generate_biome_ambient(current_biome, current_height)
-		ambient_player_b.play()
+		var stream = _generate_biome_ambient(current_biome, current_height)
+		if stream:
+			ambient_player_b.stream = stream
+			ambient_player_b.play()
 
-func _generate_biome_ambient(biome: int, height: float) -> AudioStreamWAV:
+func _generate_biome_ambient(biome: int, height: float) -> AudioStream:
+	if biome == BIOME_FOREST:
+		var forest_stream = _get_forest_ambient_for_current_hour()
+		if forest_stream:
+			return forest_stream
+		return _generate_ambient_forest()
 	match biome:
-		BIOME_FOREST:
-			return _generate_ambient_forest()
 		BIOME_DESERT:
 			return _generate_ambient_desert()
 		BIOME_MOUNTAIN:
@@ -605,6 +650,24 @@ func _generate_biome_ambient(biome: int, height: float) -> AudioStreamWAV:
 			return _generate_ambient_plains()
 		_:
 			return _generate_ambient_plains()
+
+func _get_forest_ambient_for_current_hour() -> AudioStream:
+	if not day_night_cycle_node:
+		day_night_cycle_node = get_tree().get_first_node_in_group("day_night_cycle")
+	if not day_night_cycle_node:
+		return null
+	var hour: float = day_night_cycle_node.get_hour()
+	for i in range(forest_ambient_by_hour.size()):
+		var entry = forest_ambient_by_hour[i]
+		var h_start: float = entry[0]
+		var h_end: float = entry[1]
+		# Gestion wraparound nuit (21-5 stocké comme 21-29)
+		var check_hour = hour if h_end <= 24.0 else (hour if hour >= h_start else hour + 24.0)
+		if check_hour >= h_start and check_hour < h_end:
+			forest_current_hour_range = i
+			var streams: Array = entry[2]
+			return streams[randi() % streams.size()]
+	return null
 
 # ============================================================
 # GÉNÉRATION PROCÉDURALE DES AMBIANCES

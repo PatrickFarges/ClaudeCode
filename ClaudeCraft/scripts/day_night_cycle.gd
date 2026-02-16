@@ -96,5 +96,8 @@ func get_time_string() -> String:
 func get_current_time() -> float:
 	return current_time
 
+func get_hour() -> float:
+	return current_time * 24.0
+
 func set_time(time: float):
 	current_time = clampf(time, 0.0, 1.0)

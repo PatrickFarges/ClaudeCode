@@ -4,9 +4,9 @@ extends Node3D
 ## Attaché comme enfant de Camera3D
 
 const ARM_COLOR = Color(0.9, 0.75, 0.65)
-const BLOCK_SIZE = 0.2
-const ARM_SIZE = Vector3(0.15, 0.4, 0.15)
-const BASE_POSITION = Vector3(0.45, -0.35, -0.55)
+const BLOCK_SIZE = 0.28
+const ARM_SIZE = Vector3(0.15, 0.55, 0.15)
+const BASE_POSITION = Vector3(0.55, -0.35, -0.55)
 const SPRINT_OFFSET = Vector3(-0.1, 0.0, -0.05)
 
 const TEXTURE_PATH = "res://TexturesPack/Aurore Stone/assets/minecraft/textures/block/"
@@ -39,7 +39,7 @@ func _build_hierarchy():
 	hand_pivot.position = BASE_POSITION
 	add_child(hand_pivot)
 
-	# Bras — BoxMesh couleur peau
+	# Bras — BoxMesh couleur peau, décalé vers le bas pour dépasser sous l'item
 	arm_mesh = MeshInstance3D.new()
 	arm_mesh.name = "Arm"
 	var arm_box = BoxMesh.new()
@@ -50,12 +50,13 @@ func _build_hierarchy():
 	arm_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	arm_mesh.material_override = arm_mat
 	arm_mesh.layers = 2  # Layer de rendu dédié
+	arm_mesh.position = Vector3(0, -0.08, 0)
 	hand_pivot.add_child(arm_mesh)
 
-	# ItemHolder — point d'attache de l'item, au-dessus du bras
+	# ItemHolder — point d'attache de l'item, bas du bras (position « main »)
 	item_holder = Node3D.new()
 	item_holder.name = "ItemHolder"
-	item_holder.position = Vector3(0.0, ARM_SIZE.y * 0.5 + BLOCK_SIZE * 0.5, 0.0)
+	item_holder.position = Vector3(0.0, 0.05, 0.0)
 	hand_pivot.add_child(item_holder)
 
 func _process(delta: float):
@@ -116,9 +117,12 @@ func update_held_item(block_type: BlockRegistry.BlockType):
 		current_item_node = null
 
 	if block_type == BlockRegistry.BlockType.AIR:
+		# Main vide — bras visible
+		arm_mesh.visible = true
 		return
 
-	# Créer un cube représentant le bloc
+	# Bloc en main — bras masqué, cube visible
+	arm_mesh.visible = false
 	current_item_node = _create_block_cube(block_type)
 	if current_item_node:
 		item_holder.add_child(current_item_node)
@@ -129,7 +133,10 @@ func update_held_tool_model(mesh: ArrayMesh):
 		current_item_node.queue_free()
 		current_item_node = null
 
+	arm_mesh.visible = false
+
 	if mesh == null:
+		arm_mesh.visible = true
 		return
 
 	var mesh_inst = MeshInstance3D.new()
@@ -141,29 +148,72 @@ func update_held_tool_model(mesh: ArrayMesh):
 	current_item_node = mesh_inst
 	item_holder.add_child(current_item_node)
 
-func update_held_tool_node(node: Node3D):
+func update_held_tool_node(node: Node3D, hand_rotation := Vector3(-25, -135, 45), hand_scale := 0.35):
 	# Supprimer l'ancien item
 	if current_item_node:
 		current_item_node.queue_free()
 		current_item_node = null
 
+	arm_mesh.visible = false
+
 	if node == null:
+		arm_mesh.visible = true
 		return
 
-	# Appliquer layer 2 + UNSHADED sur tous les MeshInstance3D du modèle
-	_apply_render_settings(node)
-	# Échelle pour les GLB (modèles Minecraft standard ~1 bloc = 1 unité)
-	node.scale = Vector3(0.2, 0.2, 0.2)
-	node.position = Vector3(0, 0.05, 0)
-	# Rotation pour que l'outil pointe vers l'avant
-	node.rotation_degrees = Vector3(0, -90, 0)
+	# GLB : layers 1+2 (reçoit la lumière + visible par la caméra FPS)
+	_apply_glb_render_settings(node)
+
+	# Auto-scale basé sur l'AABB du modèle
+	var aabb = _compute_model_aabb(node)
+	var max_dim = maxf(aabb.size.x, maxf(aabb.size.y, aabb.size.z))
+	if max_dim > 0.001:
+		var s = hand_scale / max_dim
+		node.scale = Vector3(s, s, s)
+		var center = aabb.get_center() * s
+		node.position = Vector3(-center.x, -center.y, -center.z)
+	else:
+		node.scale = Vector3(0.03, 0.03, 0.03)
+		node.position = Vector3.ZERO
+
+	# Rotation par outil — tenu en main droite, diagonal (manche bas-droite, tête haut-gauche)
+	node.rotation_degrees = hand_rotation
 	current_item_node = node
 	item_holder.add_child(current_item_node)
+
+func _compute_model_aabb(root: Node3D) -> AABB:
+	var points: Array = []
+	_collect_mesh_points(root, root, points)
+	if points.is_empty():
+		return AABB(Vector3.ZERO, Vector3(0.1, 0.1, 0.1))
+	var aabb = AABB(points[0], Vector3.ZERO)
+	for i in range(1, points.size()):
+		aabb = aabb.expand(points[i])
+	return aabb
+
+func _collect_mesh_points(node: Node, root: Node3D, points: Array):
+	if node is MeshInstance3D and node.mesh:
+		var mesh_aabb = node.mesh.get_aabb()
+		var xform = _get_relative_transform(node as Node3D, root)
+		for i in range(8):
+			points.append(xform * mesh_aabb.get_endpoint(i))
+	for child in node.get_children():
+		_collect_mesh_points(child, root, points)
+
+func _get_relative_transform(from_node: Node3D, to_node: Node3D) -> Transform3D:
+	if from_node == to_node:
+		return Transform3D.IDENTITY
+	var xform = from_node.transform
+	var current = from_node.get_parent()
+	while current != to_node and current != null:
+		if current is Node3D:
+			xform = (current as Node3D).transform * xform
+		current = current.get_parent()
+	return xform
 
 func _apply_render_settings(node: Node):
 	if node is MeshInstance3D:
 		node.layers = 2
-		# Forcer UNSHADED sur chaque surface
+		# Forcer UNSHADED sur chaque surface (pour JSON Blockbench / blocs)
 		var mesh_inst := node as MeshInstance3D
 		if mesh_inst.mesh:
 			for i in range(mesh_inst.mesh.get_surface_count()):
@@ -172,6 +222,13 @@ func _apply_render_settings(node: Node):
 					mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	for child in node.get_children():
 		_apply_render_settings(child)
+
+func _apply_glb_render_settings(node: Node):
+	if node is MeshInstance3D:
+		# Layers 1+2 : visible par la caméra FPS ET éclairé par la DirectionalLight
+		node.layers = 3
+	for child in node.get_children():
+		_apply_glb_render_settings(child)
 
 func _create_block_cube(block_type: BlockRegistry.BlockType) -> MeshInstance3D:
 	var mesh_inst = MeshInstance3D.new()

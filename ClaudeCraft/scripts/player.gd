@@ -91,6 +91,22 @@ const HandItemRendererScript = preload("res://scripts/hand_item_renderer.gd")
 # Outils — slots parallèles à la hotbar (NONE = bloc, sinon outil)
 var hotbar_tool_slots: Array = []
 
+# Nourriture — slots parallèles (true = ce slot contient de la nourriture)
+var hotbar_food_slots: Array = []
+const APPLE_MODEL_PATH = "res://assets/Deco/apple.glb"
+
+# ============================================================
+# SYSTÈME DE NOURRITURE
+# ============================================================
+var is_eating: bool = false
+var eating_progress: float = 0.0
+const EATING_TIME: float = 2.0
+var eating_particle_timer: float = 0.0
+const EATING_PARTICLE_INTERVAL: float = 0.3
+var eating_sound_timer: float = 0.0
+const EATING_SOUND_INTERVAL: float = 0.5
+const EATING_HEAL_AMOUNT: int = 4
+
 func _ready():
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	world_manager = get_tree().get_first_node_in_group("world_manager")
@@ -144,13 +160,18 @@ func _create_block_highlighter():
 
 func _init_tool_slots():
 	hotbar_tool_slots.clear()
+	hotbar_food_slots.clear()
 	for i in range(hotbar_slots.size()):
 		hotbar_tool_slots.append(ToolRegistry.ToolType.NONE)
-	# Outils de test sur les derniers slots
-	hotbar_tool_slots[5] = ToolRegistry.ToolType.STONE_AXE
-	hotbar_tool_slots[6] = ToolRegistry.ToolType.STONE_PICKAXE
-	hotbar_tool_slots[7] = ToolRegistry.ToolType.STONE_SHOVEL
-	hotbar_tool_slots[8] = ToolRegistry.ToolType.STONE_HOE
+		hotbar_food_slots.append(false)
+	# Outils sur les slots du milieu
+	hotbar_tool_slots[3] = ToolRegistry.ToolType.STONE_AXE
+	hotbar_tool_slots[4] = ToolRegistry.ToolType.STONE_PICKAXE
+	hotbar_tool_slots[5] = ToolRegistry.ToolType.DIAMOND_PICKAXE
+	hotbar_tool_slots[6] = ToolRegistry.ToolType.BOW
+	hotbar_tool_slots[7] = ToolRegistry.ToolType.SHIELD
+	hotbar_tool_slots[8] = ToolRegistry.ToolType.NETHERITE_SWORD
+	# Pas de slot nourriture dans la hotbar actuelle
 
 func _create_hand_renderer():
 	hand_renderer = HandItemRendererScript.new()
@@ -383,6 +404,7 @@ func _physics_process(delta):
 	move_and_slide()
 	_update_damage(delta)
 	_handle_block_interaction(delta)
+	_handle_eating(delta)
 	_handle_footsteps(delta, direction)
 
 func _handle_auto_step(direction: Vector3):
@@ -485,8 +507,24 @@ func _handle_block_interaction(delta: float):
 		if is_mining:
 			_cancel_mining()
 	
-	# Clic droit : interaction avec bloc ou placement
+	# Clic droit : manger / interaction avec bloc / placement
+	if Input.is_action_pressed("place_block") and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		# Si on tient de la nourriture, manger (maintenir clic droit)
+		if _is_food_slot() and current_health < max_health:
+			if not is_eating:
+				is_eating = true
+				eating_progress = 0.0
+				eating_particle_timer = 0.0
+				eating_sound_timer = 0.0
+				if audio_manager:
+					audio_manager.play_eat_sound()
+			return
+
 	if Input.is_action_just_pressed("place_block") and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		# Nourriture — ne pas placer
+		if _is_food_slot():
+			return
+
 		# Vérifier si on regarde un bloc interactif (table de craft, fourneau)
 		var interact_tier = _get_interact_tier(break_block_type)
 		if interact_tier >= 0:
@@ -507,6 +545,10 @@ func _handle_block_interaction(delta: float):
 				audio_manager.play_place_sound(selected_block_type, place_pos)
 			if hand_renderer:
 				hand_renderer.play_swing()
+
+	# Arrêter de manger si clic droit relâché
+	if not Input.is_action_pressed("place_block") and is_eating:
+		_cancel_eating()
 
 func _break_block(pos: Vector3, block_type: BlockRegistry.BlockType):
 	world_manager.break_block_at_position(pos)
@@ -555,6 +597,78 @@ func _spawn_break_particles(pos: Vector3, block_type: BlockRegistry.BlockType):
 			particles.queue_free()
 	)
 
+# ============================================================
+# NOURRITURE — Manger
+# ============================================================
+func _is_food_slot() -> bool:
+	return selected_slot >= 0 and selected_slot < hotbar_food_slots.size() and hotbar_food_slots[selected_slot]
+
+func _handle_eating(delta: float):
+	if not is_eating:
+		return
+
+	eating_progress += delta / EATING_TIME
+
+	# Particules rouges périodiques
+	eating_particle_timer += delta
+	if eating_particle_timer >= EATING_PARTICLE_INTERVAL:
+		eating_particle_timer = 0.0
+		_spawn_eating_particles()
+
+	# Son de mâchage périodique
+	eating_sound_timer += delta
+	if eating_sound_timer >= EATING_SOUND_INTERVAL:
+		eating_sound_timer = 0.0
+		if audio_manager:
+			audio_manager.play_eat_sound()
+
+	# Animation swing périodique (bras qui porte vers la bouche)
+	if hand_renderer and fmod(eating_progress * EATING_TIME, 0.4) < delta:
+		hand_renderer.play_swing()
+
+	# Fin du repas
+	if eating_progress >= 1.0:
+		heal(EATING_HEAL_AMOUNT)
+		is_eating = false
+		eating_progress = 0.0
+		eating_particle_timer = 0.0
+		eating_sound_timer = 0.0
+
+func _cancel_eating():
+	is_eating = false
+	eating_progress = 0.0
+	eating_particle_timer = 0.0
+	eating_sound_timer = 0.0
+
+func _spawn_eating_particles():
+	var particles = CPUParticles3D.new()
+	particles.one_shot = true
+	particles.explosiveness = 0.8
+	particles.amount = 6
+	particles.lifetime = 0.4
+	particles.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	particles.emission_sphere_radius = 0.1
+	particles.direction = -camera.global_basis.z
+	particles.spread = 30.0
+	particles.initial_velocity_min = 1.0
+	particles.initial_velocity_max = 2.5
+	particles.gravity = Vector3(0, -6, 0)
+	particles.scale_amount_min = 0.04
+	particles.scale_amount_max = 0.08
+	particles.color = Color(0.85, 0.15, 0.15)  # Rouge pomme
+	var box_mesh = BoxMesh.new()
+	box_mesh.size = Vector3(1, 1, 1)
+	particles.mesh = box_mesh
+	particles.emitting = false
+	get_tree().root.add_child(particles)
+	# Position devant la caméra (zone de la bouche)
+	particles.global_position = camera.global_position + camera.global_basis.z * -0.5 + Vector3(0, -0.15, 0)
+	particles.restart()
+	get_tree().create_timer(1.0).timeout.connect(func():
+		if is_instance_valid(particles):
+			particles.queue_free()
+	)
+
 func _update_selected_block():
 	if selected_slot >= 0 and selected_slot < hotbar_slots.size():
 		selected_block_type = hotbar_slots[selected_slot]
@@ -563,17 +677,32 @@ func _update_selected_block():
 func _update_hand_display():
 	if not hand_renderer:
 		return
+	# Nourriture ?
+	if _is_food_slot():
+		var scene = load(APPLE_MODEL_PATH) as PackedScene
+		if scene:
+			var node = scene.instantiate()
+			hand_renderer.update_held_tool_node(node, Vector3(0, -45, 0), 0.20)
+		else:
+			hand_renderer.update_held_item(BlockRegistry.BlockType.AIR)
+		return
+	# Outil ?
 	var tool_type = _get_selected_tool()
 	if tool_type != ToolRegistry.ToolType.NONE:
 		var node = ToolRegistry.get_tool_node(tool_type)
 		if node:
 			var model_path = ToolRegistry.get_model_path(tool_type)
 			if model_path.ends_with(".glb") or model_path.ends_with(".gltf"):
-				hand_renderer.update_held_tool_node(node)
+				var rot = ToolRegistry.get_hand_rotation(tool_type)
+				var scl = ToolRegistry.get_hand_scale(tool_type)
+				hand_renderer.update_held_tool_node(node, rot, scl)
 			else:
 				# JSON → le node est un MeshInstance3D, utiliser l'ancien chemin
 				hand_renderer.update_held_tool_model(node.mesh if node is MeshInstance3D else null)
 				node.queue_free()
+		else:
+			# Modèle non chargeable — vider la main
+			hand_renderer.update_held_tool_node(null)
 	else:
 		hand_renderer.update_held_item(selected_block_type)
 

@@ -10,6 +10,14 @@ enum ToolType {
 	STONE_SHOVEL,
 	STONE_HOE,
 	STONE_HAMMER,
+	DIAMOND_AXE,
+	DIAMOND_PICKAXE,
+	IRON_PICKAXE,
+	STONE_SWORD,
+	DIAMOND_SWORD,
+	NETHERITE_SWORD,
+	BOW,
+	SHIELD,
 }
 
 const TOOL_DATA = {
@@ -73,6 +81,99 @@ const TOOL_DATA = {
 		},
 		"durability": 132
 	},
+	ToolType.DIAMOND_AXE: {
+		"name": "Hache en diamant",
+		"model_path": "res://assets/Weapon/GLB/diamond_axe_minecraft.glb",
+		"texture_path": "",
+		"mining_speed": {
+			"WOOD": 4.0,
+			"PLANKS": 4.0,
+			"LEAVES": 3.0,
+			"CRAFTING_TABLE": 3.0,
+		},
+		"durability": 1561,
+		"hand_rotation": Vector3(-25, -135, 45),
+		"hand_scale": 0.35,
+	},
+	ToolType.DIAMOND_PICKAXE: {
+		"name": "Pioche en diamant",
+		"model_path": "res://assets/Weapon/GLB/minecraft_diamond-pickaxe.glb",
+		"texture_path": "",
+		"mining_speed": {
+			"STONE": 4.0,
+			"BRICK": 4.0,
+			"SANDSTONE": 4.0,
+			"COAL_ORE": 4.0,
+			"IRON_ORE": 4.0,
+			"GOLD_ORE": 4.0,
+			"FURNACE": 3.0,
+		},
+		"durability": 1561,
+		"hand_rotation": Vector3(-25, -135, 45),
+		"hand_scale": 0.35,
+	},
+	ToolType.IRON_PICKAXE: {
+		"name": "Pioche en fer",
+		"model_path": "res://assets/Weapon/GLB/minecraft_iron_pickaxe.glb",
+		"texture_path": "",
+		"mining_speed": {
+			"STONE": 3.0,
+			"BRICK": 3.0,
+			"SANDSTONE": 3.0,
+			"COAL_ORE": 3.0,
+			"IRON_ORE": 3.0,
+			"GOLD_ORE": 3.0,
+			"FURNACE": 2.0,
+		},
+		"durability": 250,
+		"hand_rotation": Vector3(-25, -135, 45),
+		"hand_scale": 0.35,
+	},
+	ToolType.STONE_SWORD: {
+		"name": "Épée en pierre",
+		"model_path": "res://assets/Weapon/GLB/minecraft_stone_sword.glb",
+		"texture_path": "",
+		"mining_speed": {},
+		"durability": 132,
+		"hand_rotation": Vector3(-25, -135, 45),
+		"hand_scale": 0.35,
+	},
+	ToolType.DIAMOND_SWORD: {
+		"name": "Épée en diamant",
+		"model_path": "res://assets/Weapon/GLB/minecraft_diamond_sword_pre1.14.glb",
+		"texture_path": "",
+		"mining_speed": {},
+		"durability": 1561,
+		"hand_rotation": Vector3(-25, -135, 45),
+		"hand_scale": 0.35,
+	},
+	ToolType.NETHERITE_SWORD: {
+		"name": "Épée en Netherite",
+		"model_path": "res://assets/Weapon/GLB/mincraft_nethrite_sword.glb",
+		"texture_path": "",
+		"mining_speed": {},
+		"durability": 2031,
+		"hand_rotation": Vector3(-25, -135, 45),
+		"hand_scale": 0.35,
+	},
+	ToolType.BOW: {
+		"name": "Arc",
+		"model_path": "res://assets/Weapon/GLB/minecraft_bow.glb",
+		"texture_path": "",
+		"mining_speed": {},
+		"durability": 384,
+		"hand_rotation": Vector3(0, -90, 15),
+		"hand_scale": 0.35,
+	},
+	ToolType.SHIELD: {
+		"name": "Bouclier",
+		"model_path": "res://assets/Weapon/GLB/minecraft_shield.glb",
+		"texture_path": "",
+		"mining_speed": {},
+		"durability": 336,
+		"hand_rotation": Vector3(10, 0, 0),
+		"hand_scale": 0.42,
+	},
 }
 
 static func get_tool_name(tool_type: ToolType) -> String:
@@ -89,6 +190,16 @@ static func get_texture_path(tool_type: ToolType) -> String:
 	if TOOL_DATA.has(tool_type):
 		return TOOL_DATA[tool_type]["texture_path"]
 	return ""
+
+static func get_hand_rotation(tool_type: ToolType) -> Vector3:
+	if TOOL_DATA.has(tool_type) and TOOL_DATA[tool_type].has("hand_rotation"):
+		return TOOL_DATA[tool_type]["hand_rotation"]
+	return Vector3(-25, -135, 45)
+
+static func get_hand_scale(tool_type: ToolType) -> float:
+	if TOOL_DATA.has(tool_type) and TOOL_DATA[tool_type].has("hand_scale"):
+		return TOOL_DATA[tool_type]["hand_scale"]
+	return 0.35
 
 static func get_mining_multiplier(tool_type: ToolType, block_type: BlockRegistry.BlockType) -> float:
 	if tool_type == ToolType.NONE:
