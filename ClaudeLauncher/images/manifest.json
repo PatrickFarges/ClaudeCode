@@ -1,0 +1,1167 @@
+{
+  "Baldur's Gate 3": {
+    "search_term": "Baldur's Gate 3",
+    "real_name": "Baldur's Gate 3",
+    "category": "game",
+    "status": "ok",
+    "steamgriddb_id": 5138060,
+    "steamgriddb_name": "Baldur's Gate III",
+    "images": [
+      {
+        "filename": "grid_1.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/b122b82883a834cbcec5c2d2f5c0585c.png",
+        "type": "grid",
+        "steamgriddb_image_id": 120739,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "grid_2.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/a8157a33fd9ce98aff39b78de8fb6133.png",
+        "type": "grid",
+        "steamgriddb_image_id": 356123,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "logo_3.png",
+        "source_url": "https://cdn2.steamgriddb.com/logo/71d9945703c17fafe19f7dd1c706d448.png",
+        "type": "logo",
+        "steamgriddb_image_id": 45256,
+        "original_size": "1218x718",
+        "saved_size": "1218x718"
+      },
+      {
+        "filename": "logo_4.png",
+        "source_url": "https://cdn2.steamgriddb.com/logo/9d01f88c4721c244674284dbfc79ab77.png",
+        "type": "logo",
+        "steamgriddb_image_id": 24089,
+        "original_size": "1964x2369",
+        "saved_size": "1591x1920"
+      },
+      {
+        "filename": "icon_5.png",
+        "source_url": "https://cdn2.steamgriddb.com/icon/47349ceba889b6f2a39cc1c3566cea17.png",
+        "type": "icon",
+        "steamgriddb_image_id": 68444,
+        "original_size": "256x256",
+        "saved_size": "512x512"
+      }
+    ]
+  },
+  "Black Desert": {
+    "search_term": "Black Desert Online",
+    "real_name": "Black Desert Online",
+    "category": "game",
+    "status": "ok",
+    "steamgriddb_id": 16376,
+    "steamgriddb_name": "Black Desert",
+    "images": [
+      {
+        "filename": "hero_1.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/hero/79d51f4d7e4d54d54b55519c3b462d00.jpg",
+        "type": "hero",
+        "steamgriddb_image_id": 17415,
+        "original_size": "1920x620",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "hero_2.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/hero/e492a12a76a5c4ea7e42539c17d6bafe.png",
+        "type": "hero",
+        "steamgriddb_image_id": 38849,
+        "original_size": "1920x620",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "grid_3.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/883b4172416f7b84234d3aeda4199f8f.png",
+        "type": "grid",
+        "steamgriddb_image_id": 121634,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "grid_4.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/a1e19f4b3b361936e8f079cb77c7edd4.png",
+        "type": "grid",
+        "steamgriddb_image_id": 112190,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "logo_5.png",
+        "source_url": "https://cdn2.steamgriddb.com/logo/ae424762d5d1dd48ae40441d66960086.png",
+        "type": "logo",
+        "steamgriddb_image_id": 101700,
+        "original_size": "1004x170",
+        "saved_size": "1919x325"
+      }
+    ]
+  },
+  "Grinn": {
+    "search_term": "Skyrim Special Edition",
+    "real_name": "Skyrim Special Edition (modlist Grinn)",
+    "category": "game",
+    "status": "ok",
+    "steamgriddb_id": 12404,
+    "steamgriddb_name": "The Elder Scrolls V: Skyrim - Special Edition",
+    "images": [
+      {
+        "filename": "grid_1.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/3fefb4dece2d90708c94ccc3846d8d40.png",
+        "type": "grid",
+        "steamgriddb_image_id": 74659,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "grid_2.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/df815c57edc6e02bfcd510d0a5dbc6a2.png",
+        "type": "grid",
+        "steamgriddb_image_id": 66699,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "logo_3.png",
+        "source_url": "https://cdn2.steamgriddb.com/logo/2e2079d63348233d91cad1fa9b1361e9.png",
+        "type": "logo",
+        "steamgriddb_image_id": 5034,
+        "original_size": "611x271",
+        "saved_size": "1154x512"
+      },
+      {
+        "filename": "logo_4.png",
+        "source_url": "https://cdn2.steamgriddb.com/logo/deb5dc8c64bcfcb91001d895cbc800ab.png",
+        "type": "logo",
+        "steamgriddb_image_id": 37447,
+        "original_size": "584x300",
+        "saved_size": "996x512"
+      },
+      {
+        "filename": "icon_5.png",
+        "source_url": "https://cdn2.steamgriddb.com/icon/b1b20d09041289e6c3fbb81850c5da54.png",
+        "type": "icon",
+        "steamgriddb_image_id": 6079,
+        "original_size": "256x256",
+        "saved_size": "512x512"
+      }
+    ]
+  },
+  "Magnum": {
+    "search_term": "Fallout 4",
+    "real_name": "Fallout 4 (modlist Magnum Opus)",
+    "category": "game",
+    "status": "ok",
+    "steamgriddb_id": 7993,
+    "steamgriddb_name": "Fallout 4",
+    "images": [
+      {
+        "filename": "hero_1.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/hero/eab1bceaa6c5823d7ed86cfc7a8bd824.png",
+        "type": "hero",
+        "steamgriddb_image_id": 10856,
+        "original_size": "3840x1240",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "hero_2.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/hero/e1bd06c3f8089e7552aa0552cb387c92.png",
+        "type": "hero",
+        "steamgriddb_image_id": 33559,
+        "original_size": "1920x620",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "grid_3.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/2d92b989deeb771206e2f924073f81cd.png",
+        "type": "grid",
+        "steamgriddb_image_id": 157353,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "grid_4.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/326f943aa3d93ba49df3e93d7d538965.png",
+        "type": "grid",
+        "steamgriddb_image_id": 211507,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "logo_5.png",
+        "source_url": "https://cdn2.steamgriddb.com/logo/b31e6e16d9f0cc4d1627621bbc4731c7.png",
+        "type": "logo",
+        "steamgriddb_image_id": 58465,
+        "original_size": "2378x1006",
+        "saved_size": "1920x812"
+      }
+    ]
+  },
+  "No Man's Sky": {
+    "search_term": "No Man's Sky",
+    "real_name": "No Man's Sky",
+    "category": "game",
+    "status": "ok",
+    "steamgriddb_id": 3779,
+    "steamgriddb_name": "No Man's Sky",
+    "images": [
+      {
+        "filename": "hero_1.png",
+        "source_url": "https://cdn2.steamgriddb.com/hero/a50abba8132a77191791390c3eb19fe7.png",
+        "type": "hero",
+        "steamgriddb_image_id": 1344,
+        "original_size": "1920x620",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "hero_2.png",
+        "source_url": "https://cdn2.steamgriddb.com/hero/5e1b18c4c6a6d31695acbae3fd70ecc6.png",
+        "type": "hero",
+        "steamgriddb_image_id": 1342,
+        "original_size": "1920x620",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "grid_3.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/c8d77146931324f4001237a93fe4ba8c.png",
+        "type": "grid",
+        "steamgriddb_image_id": 95505,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "grid_4.png",
+        "source_url": "https://cdn2.steamgriddb.com/grid/a0790fa4aed5ce3a68901eab3e3bcf4c.png",
+        "type": "grid",
+        "steamgriddb_image_id": 135387,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "logo_5.png",
+        "source_url": "https://cdn2.steamgriddb.com/logo/c61085b95025e125ca4ef45f74c5f537.png",
+        "type": "logo",
+        "steamgriddb_image_id": 44132,
+        "original_size": "418x308",
+        "saved_size": "694x512"
+      }
+    ]
+  },
+  "SoulFrame": {
+    "search_term": "Soulframe",
+    "real_name": "Soulframe",
+    "category": "game",
+    "status": "ok",
+    "steamgriddb_id": 5439024,
+    "steamgriddb_name": "Soulframe",
+    "images": [
+      {
+        "filename": "hero_1.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/hero/c8cf45ef0e1df7726ba2d9720c103e1d.png",
+        "type": "hero",
+        "steamgriddb_image_id": 121963,
+        "original_size": "1920x620",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "hero_2.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/hero/0aa677b54ecce3ebda8fe19ad7d5d42d.png",
+        "type": "hero",
+        "steamgriddb_image_id": 128023,
+        "original_size": "3840x1240",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "grid_3.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/1fba4a4aa1da6e6c9363998af4a8eaf5.png",
+        "type": "grid",
+        "steamgriddb_image_id": 570808,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "grid_4.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/70f17a2033a7d200238a528e3ac9ec75.png",
+        "type": "grid",
+        "steamgriddb_image_id": 604951,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "logo_5.png",
+        "source_url": "https://cdn2.steamgriddb.com/logo/e3503afa06a7b801e65a153f74b74f02.png",
+        "type": "logo",
+        "steamgriddb_image_id": 131640,
+        "original_size": "2006x642",
+        "saved_size": "1920x614"
+      }
+    ]
+  },
+  "Core Keeper": {
+    "search_term": "Core Keeper",
+    "real_name": "Core Keeper",
+    "category": "game",
+    "status": "ok",
+    "steamgriddb_id": 5287511,
+    "steamgriddb_name": "Core Keeper",
+    "images": [
+      {
+        "filename": "hero_1.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/hero/30d1c0efdb41655c2dbe9a7eac90c3d7.jpg",
+        "type": "hero",
+        "steamgriddb_image_id": 55884,
+        "original_size": "1920x620",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "hero_2.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/hero/2b73e45fb99230e3426779dc70378ad4.png",
+        "type": "hero",
+        "steamgriddb_image_id": 56168,
+        "original_size": "1920x620",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "grid_3.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/692c02657d799e5d7b11bf1b00797b1f.jpg",
+        "type": "grid",
+        "steamgriddb_image_id": 548599,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "grid_4.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/dc24c4971d18ed50c7661e5d095f3208.jpg",
+        "type": "grid",
+        "steamgriddb_image_id": 427488,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "logo_5.png",
+        "source_url": "https://cdn2.steamgriddb.com/logo/396575ce4346ed129de4f3c4ba5ab91c.png",
+        "type": "logo",
+        "steamgriddb_image_id": 126551,
+        "original_size": "1280x629",
+        "saved_size": "1280x629"
+      }
+    ]
+  },
+  "Lost Ark": {
+    "search_term": "Lost Ark",
+    "real_name": "Lost Ark",
+    "category": "game",
+    "status": "ok",
+    "steamgriddb_id": 5259237,
+    "steamgriddb_name": "Lost Ark",
+    "images": [
+      {
+        "filename": "hero_1.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/hero/7800d0f0f334c2321b199f08fbfbe476.jpg",
+        "type": "hero",
+        "steamgriddb_image_id": 47777,
+        "original_size": "1920x620",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "hero_2.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/hero/4c69e694f411fe8138a5242020efdc8d.png",
+        "type": "hero",
+        "steamgriddb_image_id": 145824,
+        "original_size": "3840x1240",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "grid_3.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/a0021532ce8ea9fb7d13ea5d30fbc5e5.jpg",
+        "type": "grid",
+        "steamgriddb_image_id": 183883,
+        "original_size": "660x930",
+        "saved_size": "660x930"
+      },
+      {
+        "filename": "grid_4.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/48f3425c1a7fffb14a17e647a1a7cb94.jpg",
+        "type": "grid",
+        "steamgriddb_image_id": 184047,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "logo_5.png",
+        "source_url": "https://cdn2.steamgriddb.com/logo/1a4f44ed6b4af67129c6c0b1564a2120.png",
+        "type": "logo",
+        "steamgriddb_image_id": 51396,
+        "original_size": "4985x1212",
+        "saved_size": "1919x466"
+      }
+    ]
+  },
+  "Path of Exile": {
+    "search_term": "Path of Exile",
+    "real_name": "Path of Exile",
+    "category": "game",
+    "status": "ok",
+    "steamgriddb_id": 2710,
+    "steamgriddb_name": "Path of Exile",
+    "images": [
+      {
+        "filename": "hero_1.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/hero/44f683a84163b3523afe57c2e008bc8c.png",
+        "type": "hero",
+        "steamgriddb_image_id": 62,
+        "original_size": "3840x1240",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "hero_2.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/hero/56785794b4f2bfa3f27ec4bdbf15b0eb.jpg",
+        "type": "hero",
+        "steamgriddb_image_id": 27486,
+        "original_size": "1920x620",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "grid_3.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/b18f9c54e6efde8a08b8b478b0806587.png",
+        "type": "grid",
+        "steamgriddb_image_id": 51744,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "grid_4.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/57bbcd58a5a7b7e430faf8bbc7932b27.png",
+        "type": "grid",
+        "steamgriddb_image_id": 46066,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "logo_5.png",
+        "source_url": "https://cdn2.steamgriddb.com/logo/a6ce91443f690d0979d788694448382d.png",
+        "type": "logo",
+        "steamgriddb_image_id": 6780,
+        "original_size": "2344x1824",
+        "saved_size": "1920x1494"
+      }
+    ]
+  },
+  "Wild Terra 2": {
+    "search_term": "Wild Terra 2",
+    "real_name": "Wild Terra 2: New Lands",
+    "category": "game",
+    "status": "ok",
+    "steamgriddb_id": 5252637,
+    "steamgriddb_name": "Wild Terra 2: New Lands",
+    "images": [
+      {
+        "filename": "hero_1.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/hero/acfa83c92debcf87ed71c14214382992.png",
+        "type": "hero",
+        "steamgriddb_image_id": 154110,
+        "original_size": "1920x620",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "hero_2.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/hero/e6b04203d77f2c41cff9e3e43c974dc9.jpg",
+        "type": "hero",
+        "steamgriddb_image_id": 154059,
+        "original_size": "3840x1240",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "grid_3.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/f7df8ec851d8453250643906e1d7bcf9.jpg",
+        "type": "grid",
+        "steamgriddb_image_id": 682152,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "grid_4.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/cfc96bc77b7fc4d2158bf830d72dc01f.png",
+        "type": "grid",
+        "steamgriddb_image_id": 681441,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "logo_5.png",
+        "source_url": "https://cdn2.steamgriddb.com/logo/f7efb7a3709894b196379656df578e10.png",
+        "type": "logo",
+        "steamgriddb_image_id": 156502,
+        "original_size": "1713x1697",
+        "saved_size": "1713x1697"
+      }
+    ]
+  },
+  "7-Zip": {
+    "search_term": "7-Zip",
+    "real_name": "7-Zip",
+    "category": "app",
+    "status": "ok",
+    "steamgriddb_id": 5289438,
+    "steamgriddb_name": "7-Zip (Program)",
+    "images": [
+      {
+        "filename": "hero_1.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/hero/6317ab82c78854ba39ae3d37aca9b131.png",
+        "type": "hero",
+        "steamgriddb_image_id": 80950,
+        "original_size": "1920x620",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "grid_2.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/2bc29035e18665f505dbe329f344f679.png",
+        "type": "grid",
+        "steamgriddb_image_id": 337755,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "grid_3.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/38071f9a8d96caad0c1f8b0a33f0e13c.jpg",
+        "type": "grid",
+        "steamgriddb_image_id": 367707,
+        "original_size": "920x430",
+        "saved_size": "1095x512"
+      },
+      {
+        "filename": "logo_4.png",
+        "source_url": "https://cdn2.steamgriddb.com/logo/a499c24fdf7372ec1405c34b3fd1fc0a.png",
+        "type": "logo",
+        "steamgriddb_image_id": 85951,
+        "original_size": "1100x632",
+        "saved_size": "1100x632"
+      },
+      {
+        "filename": "logo_5.png",
+        "source_url": "https://cdn2.steamgriddb.com/logo/6b8aee8bdeb2553cbbd0f1a4cfada7ec.png",
+        "type": "logo",
+        "steamgriddb_image_id": 39379,
+        "original_size": "110x63",
+        "saved_size": "893x512"
+      }
+    ]
+  },
+  "Brave": {
+    "search_term": "Brave Browser",
+    "real_name": "Brave Browser",
+    "category": "app",
+    "status": "ok",
+    "steamgriddb_id": 5259583,
+    "steamgriddb_name": "Brave Browser (Program)",
+    "images": [
+      {
+        "filename": "hero_1.png",
+        "source_url": "https://cdn2.steamgriddb.com/hero/6912d2c14ccb33bd784493fe3a41d500.png",
+        "type": "hero",
+        "steamgriddb_image_id": 100442,
+        "original_size": "1920x620",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "hero_2.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/hero/bddcda5d65fcfdec9de3838794a77265.png",
+        "type": "hero",
+        "steamgriddb_image_id": 11741,
+        "original_size": "1920x620",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "grid_3.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/ff322a928e41ea322e9223c63f62c8f9.png",
+        "type": "grid",
+        "steamgriddb_image_id": 617069,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "grid_4.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/ca7b8787d17c1d9875bfe6b06b6547e2.png",
+        "type": "grid",
+        "steamgriddb_image_id": 84328,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "logo_5.png",
+        "source_url": "https://cdn2.steamgriddb.com/logo/4c043d766300360b113df7751f2d2f49.png",
+        "type": "logo",
+        "steamgriddb_image_id": 89695,
+        "original_size": "497x156",
+        "saved_size": "1631x512"
+      }
+    ]
+  },
+  "Discord": {
+    "search_term": "Discord",
+    "real_name": "Discord",
+    "category": "app",
+    "status": "ok",
+    "steamgriddb_id": 5248354,
+    "steamgriddb_name": "Discord (Program)",
+    "images": [
+      {
+        "filename": "hero_1.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/hero/e355819c0931a90b594aeb8d6a73587f.png",
+        "type": "hero",
+        "steamgriddb_image_id": 48455,
+        "original_size": "1920x620",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "hero_2.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/hero/9cd013fe250ebffc853b386569ab18c0.png",
+        "type": "hero",
+        "steamgriddb_image_id": 8789,
+        "original_size": "1920x620",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "grid_3.png",
+        "source_url": "https://cdn2.steamgriddb.com/grid/657c5f18a3319eedbb05dda3d66e3e4b.png",
+        "type": "grid",
+        "steamgriddb_image_id": 186787,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "grid_4.png",
+        "source_url": "https://cdn2.steamgriddb.com/grid/1974a767627527a2f88ea3f2818676d7.png",
+        "type": "grid",
+        "steamgriddb_image_id": 186661,
+        "original_size": "920x430",
+        "saved_size": "1095x512"
+      },
+      {
+        "filename": "logo_5.png",
+        "source_url": "https://cdn2.steamgriddb.com/logo/91bb27109949e95a96c563d2d4222604.png",
+        "type": "logo",
+        "steamgriddb_image_id": 52338,
+        "original_size": "876x170",
+        "saved_size": "1920x372"
+      }
+    ]
+  },
+  "Foxit PDF Editor": {
+    "search_term": "Foxit PDF Editor",
+    "real_name": "Foxit PDF Editor",
+    "category": "app",
+    "status": "ok",
+    "source": "brandfetch.io",
+    "images": [
+      {
+        "filename": "icon_1.png",
+        "source_url": "extracted from C:\\Program Files (x86)\\Foxit Software\\Foxit PDF Editor\\FoxitPDFEditor.exe",
+        "original_size": "256x256",
+        "saved_size": "512x512"
+      },
+      {
+        "filename": "icon_2.png",
+        "source_url": "extracted from C:\\Program Files (x86)\\Foxit Software\\Foxit PDF Editor\\FoxitUpdater.exe",
+        "original_size": "128x128",
+        "saved_size": "512x512"
+      }
+    ]
+  },
+  "Kodi": {
+    "search_term": "Kodi",
+    "real_name": "Kodi",
+    "category": "app",
+    "status": "ok",
+    "steamgriddb_id": 5247915,
+    "steamgriddb_name": "Kodi (Program)",
+    "images": [
+      {
+        "filename": "hero_1.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/hero/01de4c21eacf934da60552507a4696e6.jpg",
+        "type": "hero",
+        "steamgriddb_image_id": 14940,
+        "original_size": "1920x620",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "hero_2.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/hero/3dbaf4b9020576df8f8505b50e4853a4.png",
+        "type": "hero",
+        "steamgriddb_image_id": 55174,
+        "original_size": "3840x1240",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "grid_3.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/ba7a7accbfd45c83d4eae936f454db2e.png",
+        "type": "grid",
+        "steamgriddb_image_id": 227825,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "grid_4.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/9bd81dc8888424bc78667f18017bdf42.png",
+        "type": "grid",
+        "steamgriddb_image_id": 38671,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "logo_5.png",
+        "source_url": "https://cdn2.steamgriddb.com/logo/cc535d6609c5a9ed0fec0f30ba78b7fd.png",
+        "type": "logo",
+        "steamgriddb_image_id": 14996,
+        "original_size": "414x118",
+        "saved_size": "1796x512"
+      }
+    ]
+  },
+  "Microsoft Edge": {
+    "search_term": "Microsoft Edge",
+    "real_name": "Microsoft Edge",
+    "category": "app",
+    "status": "ok",
+    "steamgriddb_id": 5274650,
+    "steamgriddb_name": "Microsoft Edge",
+    "images": [
+      {
+        "filename": "hero_1.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/hero/2c81a094d632c8b510c6c676eec4c358.png",
+        "type": "hero",
+        "steamgriddb_image_id": 48908,
+        "original_size": "1920x620",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "hero_2.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/hero/f8b7548640ea5e5e49065484c792ce6f.png",
+        "type": "hero",
+        "steamgriddb_image_id": 61354,
+        "original_size": "1920x620",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "grid_3.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/ca0dadd4ae381d26d4771208c1aa4408.png",
+        "type": "grid",
+        "steamgriddb_image_id": 189984,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "grid_4.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/2dcb28abfae350b37be949989913aebc.png",
+        "type": "grid",
+        "steamgriddb_image_id": 617067,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "logo_5.png",
+        "source_url": "https://cdn2.steamgriddb.com/logo/c05a1a7ec49bc3608c9c8cbf57f331a6.png",
+        "type": "logo",
+        "steamgriddb_image_id": 47884,
+        "original_size": "4671x704",
+        "saved_size": "1920x289"
+      }
+    ]
+  },
+  "Visual Studio Code": {
+    "search_term": "Visual Studio Code",
+    "real_name": "Visual Studio Code",
+    "category": "app",
+    "status": "ok",
+    "steamgriddb_id": 5265410,
+    "steamgriddb_name": "Visual Studio Code",
+    "images": [
+      {
+        "filename": "hero_1.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/hero/90f489687126854b708f866befcec1ea.png",
+        "type": "hero",
+        "steamgriddb_image_id": 47582,
+        "original_size": "1920x620",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "hero_2.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/hero/284452bdab5c8151f9f079dc367ceb6b.png",
+        "type": "hero",
+        "steamgriddb_image_id": 145068,
+        "original_size": "3840x1240",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "grid_3.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/2b7ea94dfad38b8ed3f68c7a1f5b9a57.png",
+        "type": "grid",
+        "steamgriddb_image_id": 103824,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "grid_4.png",
+        "source_url": "https://cdn2.steamgriddb.com/grid/3df5e5bd22bbdb70bce1b604f462935b.png",
+        "type": "grid",
+        "steamgriddb_image_id": 183288,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "logo_5.png",
+        "source_url": "https://cdn2.steamgriddb.com/logo/64d66ac279dff5b6d3936ee5d751ebc5.png",
+        "type": "logo",
+        "steamgriddb_image_id": 51170,
+        "original_size": "843x102",
+        "saved_size": "1920x232"
+      }
+    ]
+  },
+  "OneCommander": {
+    "search_term": "OneCommander",
+    "real_name": "OneCommander",
+    "category": "app",
+    "status": "ok",
+    "source": "local installation icons",
+    "images": [
+      {
+        "filename": "main_icon.png",
+        "source_url": "C:\\Users\\CA\\AppData\\Local\\OneCommander\\Resources\\ProgramIcons\\MainIcon.ico",
+        "original_size": "256x256",
+        "saved_size": "512x512"
+      },
+      {
+        "filename": "blue1.png",
+        "source_url": "C:\\Users\\CA\\AppData\\Local\\OneCommander\\Resources\\ProgramIcons\\Blue1.ico",
+        "original_size": "256x256",
+        "saved_size": "512x512"
+      },
+      {
+        "filename": "blue2.png",
+        "source_url": "C:\\Users\\CA\\AppData\\Local\\OneCommander\\Resources\\ProgramIcons\\Blue2.ico",
+        "original_size": "256x256",
+        "saved_size": "512x512"
+      }
+    ]
+  },
+  "Playnite": {
+    "search_term": "Playnite",
+    "real_name": "Playnite",
+    "category": "app",
+    "status": "ok",
+    "steamgriddb_id": 5248053,
+    "steamgriddb_name": "Playnite (Program)",
+    "images": [
+      {
+        "filename": "hero_1.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/hero/060f31652cdb061a8e40a99c31190d6a.jpg",
+        "type": "hero",
+        "steamgriddb_image_id": 46683,
+        "original_size": "1920x620",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "hero_2.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/hero/accc518d3a7ff21f1a99dc00802eabc3.png",
+        "type": "hero",
+        "steamgriddb_image_id": 96865,
+        "original_size": "1920x620",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "grid_3.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/d89f6d0c753a12d9bbd6f963beb258a3.png",
+        "type": "grid",
+        "steamgriddb_image_id": 87293,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "grid_4.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/a10209ad45dc4a150ee333767e74242a.jpg",
+        "type": "grid",
+        "steamgriddb_image_id": 181650,
+        "original_size": "920x430",
+        "saved_size": "1095x512"
+      },
+      {
+        "filename": "logo_5.png",
+        "source_url": "https://cdn2.steamgriddb.com/logo/db10579cd6a91c599220192b86e380eb.png",
+        "type": "logo",
+        "steamgriddb_image_id": 14730,
+        "original_size": "971x220",
+        "saved_size": "1920x435"
+      }
+    ]
+  },
+  "Visual Studio 2022": {
+    "search_term": "Visual Studio",
+    "real_name": "Visual Studio Community 2022",
+    "category": "app",
+    "status": "ok",
+    "steamgriddb_id": 5287758,
+    "steamgriddb_name": "Microsoft Visual Studio",
+    "images": [
+      {
+        "filename": "grid_1.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/43c72152905e17ee81f3de2ea6004d86.png",
+        "type": "grid",
+        "steamgriddb_image_id": 554321,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "grid_2.png",
+        "source_url": "https://cdn2.steamgriddb.com/grid/463f68072aec736f1f704fa733bfea0a.png",
+        "type": "grid",
+        "steamgriddb_image_id": 403108,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "logo_3.png",
+        "source_url": "https://cdn2.steamgriddb.com/logo/daa7103cf8ad1ba37c19eb5440a14da5.png",
+        "type": "logo",
+        "steamgriddb_image_id": 150421,
+        "original_size": "1155x155",
+        "saved_size": "1919x257"
+      },
+      {
+        "filename": "logo_4.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/logo/57c688ee65bbd421b7f4f67881736605.png",
+        "type": "logo",
+        "steamgriddb_image_id": 135272,
+        "original_size": "1920x1080",
+        "saved_size": "1920x1080"
+      },
+      {
+        "filename": "icon_5.png",
+        "source_url": "https://cdn2.steamgriddb.com/icon/9ee70b7987a735c046ac30a1556272c8.png",
+        "type": "icon",
+        "steamgriddb_image_id": 4370,
+        "original_size": "512x512",
+        "saved_size": "512x512"
+      }
+    ]
+  },
+  "Vivaldi": {
+    "search_term": "Vivaldi",
+    "real_name": "Vivaldi Browser",
+    "category": "app",
+    "status": "ok",
+    "steamgriddb_id": 5321250,
+    "steamgriddb_name": "Vivaldi",
+    "images": [
+      {
+        "filename": "hero_1.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/hero/d231420fda34541e691c58019767ab04.png",
+        "type": "hero",
+        "steamgriddb_image_id": 48694,
+        "original_size": "1920x620",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "hero_2.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/hero/a67cb040b69828940b27dd4e83891ebb.png",
+        "type": "hero",
+        "steamgriddb_image_id": 151686,
+        "original_size": "3840x1240",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "grid_3.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/b36fd3216f102b4fcafca011edb537c6.png",
+        "type": "grid",
+        "steamgriddb_image_id": 187211,
+        "original_size": "920x430",
+        "saved_size": "1095x512"
+      },
+      {
+        "filename": "grid_4.png",
+        "source_url": "https://cdn2.steamgriddb.com/grid/7247bb7005c1c01148ad55dd051fe08a.png",
+        "type": "grid",
+        "steamgriddb_image_id": 187210,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "logo_5.png",
+        "source_url": "https://cdn2.steamgriddb.com/logo/5dd2f889155dc830b691c685de929162.png",
+        "type": "logo",
+        "steamgriddb_image_id": 154323,
+        "original_size": "7926x1333",
+        "saved_size": "1920x322"
+      }
+    ]
+  },
+  "Bitdefender": {
+    "search_term": "Bitdefender",
+    "real_name": "Bitdefender Antivirus",
+    "category": "app",
+    "status": "ok",
+    "source": "brandfetch.io / wikimedia",
+    "images": [
+      {
+        "filename": "icon_1.png",
+        "source_url": "extracted from C:\\Program Files\\Bitdefender Agent\\ProductAgentUI.exe",
+        "original_size": "256x256",
+        "saved_size": "512x512"
+      },
+      {
+        "filename": "icon_2.png",
+        "source_url": "extracted from C:\\Program Files\\Bitdefender Agent\\ProductAgentUI.exe",
+        "original_size": "256x256",
+        "saved_size": "512x512"
+      }
+    ]
+  },
+  "Samsung Magician": {
+    "search_term": "Samsung Magician",
+    "real_name": "Samsung Magician",
+    "category": "app",
+    "status": "partial",
+    "source": "brandfetch.io",
+    "images": [
+      {
+        "filename": "icon_1.png",
+        "source_url": "extracted from C:\\Program Files (x86)\\Samsung\\Samsung Magician\\SamsungMagician.exe",
+        "original_size": "256x256",
+        "saved_size": "512x512"
+      }
+    ]
+  },
+  "Python": {
+    "search_term": "Python",
+    "real_name": "Python 3.12",
+    "category": "app",
+    "status": "ok",
+    "source": "python.org (official)",
+    "images": [
+      {
+        "filename": "logo_only.png",
+        "source_url": "https://s3.dualstack.us-east-2.amazonaws.com/pythondotorg-assets/media/community/logos/python-logo-only.png",
+        "original_size": "269x326",
+        "saved_size": "512x620"
+      },
+      {
+        "filename": "logo_full.png",
+        "source_url": "https://www.python.org/static/community_logos/python-logo-master-v3-TM.png",
+        "original_size": "601x203",
+        "saved_size": "1515x512"
+      },
+      {
+        "filename": "logo_flat.png",
+        "source_url": "https://www.python.org/static/community_logos/python-logo-master-v3-TM-flattened.png",
+        "original_size": "601x203",
+        "saved_size": "1515x512"
+      }
+    ]
+  },
+  "Git": {
+    "search_term": "Git",
+    "real_name": "Git",
+    "category": "app",
+    "status": "ok",
+    "source": "git-scm.com (official)",
+    "images": [
+      {
+        "filename": "logo_color.png",
+        "source_url": "https://git-scm.com/images/logos/downloads/Git-Logo-2Color.png",
+        "original_size": "910x380",
+        "saved_size": "1226x512"
+      },
+      {
+        "filename": "icon_orange.png",
+        "source_url": "https://git-scm.com/images/logos/downloads/Git-Icon-1788C.png",
+        "original_size": "383x383",
+        "saved_size": "512x512"
+      },
+      {
+        "filename": "logo_orange.png",
+        "source_url": "https://git-scm.com/images/logos/downloads/Git-Logo-1788C.png",
+        "original_size": "910x380",
+        "saved_size": "1226x512"
+      }
+    ]
+  },
+  "PowerShell": {
+    "search_term": "PowerShell",
+    "real_name": "PowerShell 7",
+    "category": "app",
+    "status": "ok",
+    "source": "github.com/PowerShell (official)",
+    "images": [
+      {
+        "filename": "icon_color_256.png",
+        "source_url": "https://raw.githubusercontent.com/PowerShell/PowerShell/master/assets/Powershell_256.png",
+        "original_size": "256x256",
+        "saved_size": "512x512"
+      },
+      {
+        "filename": "icon_64.png",
+        "source_url": "https://raw.githubusercontent.com/PowerShell/PowerShell/master/assets/Powershell_64.png",
+        "original_size": "64x64",
+        "saved_size": "512x512"
+      },
+      {
+        "filename": "store_logo.png",
+        "source_url": "https://raw.githubusercontent.com/PowerShell/PowerShell/master/assets/StoreLogo.png",
+        "original_size": "64x64",
+        "saved_size": "512x512"
+      }
+    ]
+  },
+  "Godot Engine": {
+    "search_term": "Godot Engine",
+    "real_name": "Godot Engine 4.5",
+    "category": "app",
+    "status": "ok",
+    "steamgriddb_id": 9226,
+    "steamgriddb_name": "Godot Engine",
+    "images": [
+      {
+        "filename": "hero_1.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/hero/809a0816e8c88a1d0988d716b5a38e3d.jpg",
+        "type": "hero",
+        "steamgriddb_image_id": 73384,
+        "original_size": "1920x620",
+        "saved_size": "1920x620"
+      },
+      {
+        "filename": "grid_2.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/ef05b664c6ed342599d949001afa7b4a.png",
+        "type": "grid",
+        "steamgriddb_image_id": 55887,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "grid_3.jpg",
+        "source_url": "https://cdn2.steamgriddb.com/grid/b5c05269b4e98fb5b697efcc0c0cd178.png",
+        "type": "grid",
+        "steamgriddb_image_id": 368274,
+        "original_size": "600x900",
+        "saved_size": "600x900"
+      },
+      {
+        "filename": "logo_4.png",
+        "source_url": "https://cdn2.steamgriddb.com/logo/00ac3d1c613168d1a5d25e33d18981cc.png",
+        "type": "logo",
+        "steamgriddb_image_id": 95215,
+        "original_size": "6443x2625",
+        "saved_size": "1919x782"
+      },
+      {
+        "filename": "logo_5.png",
+        "source_url": "https://cdn2.steamgriddb.com/logo/4c55349435c8698e2e57b576e4377293.png",
+        "type": "logo",
+        "steamgriddb_image_id": 95216,
+        "original_size": "3221x1312",
+        "saved_size": "1920x782"
+      }
+    ]
+  }
+}
