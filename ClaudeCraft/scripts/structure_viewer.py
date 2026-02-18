@@ -2,8 +2,10 @@
 """
 Visualiseur 3D de structures ClaudeCraft.
 
-Charge et affiche des structures voxel en 3D avec controles de camera.
-Formats supportes : .json (ClaudeCraft), .schem (Sponge Schematic), .litematic (Litematica)
+Charge et affiche des structures voxel et des modeles 3D en 3D avec controles de camera.
+Formats supportes :
+  - Voxel : .json (ClaudeCraft), .schem (Sponge Schematic), .litematic (Litematica)
+  - Mesh  : .glb (glTF Binary), .obj (Wavefront OBJ)
 
 Controles souris :
   - Clic droit maintenu + deplacement  : rotation
@@ -12,12 +14,12 @@ Controles souris :
   - Molette souris                      : zoom
 
 Dependances :
-  pip install PyQt6 PyOpenGL
+  pip install PyQt6 PyOpenGL numpy
 
 Usage :
   python structure_viewer.py
   python structure_viewer.py "chemin/vers/structure.litematic"
-  python structure_viewer.py "chemin/vers/structure.json"
+  python structure_viewer.py "chemin/vers/modele.glb"
 """
 
 import sys
@@ -26,8 +28,11 @@ import json
 import math
 import gzip
 import time
+import struct
 from pathlib import Path
 from array import array
+
+import numpy as np
 
 # Ajouter le repertoire du script au path pour l'import
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -139,6 +144,64 @@ class StructureData:
                     if self.blocks[y][z][x] != 0:
                         count += 1
         return count
+
+
+class SubMesh:
+    """Sous-maillage avec positions, normales et couleur."""
+
+    __slots__ = ('positions', 'normals', 'indices', 'color')
+
+    def __init__(self, positions, normals, indices, color):
+        self.positions = positions  # numpy Nx3 float32
+        self.normals = normals      # numpy Nx3 float32
+        self.indices = indices      # numpy M uint32
+        self.color = color          # (r, g, b) tuple
+
+
+class MeshData:
+    """Donnees de mesh 3D (GLB/OBJ)."""
+
+    def __init__(self, name, submeshes):
+        self.name = name
+        self.submeshes = submeshes  # list of SubMesh
+
+        # Bounding box
+        all_positions = [sm.positions for sm in submeshes if len(sm.positions) > 0]
+        if all_positions:
+            all_pos = np.vstack(all_positions)
+            self.bbox_min = all_pos.min(axis=0)
+            self.bbox_max = all_pos.max(axis=0)
+        else:
+            self.bbox_min = np.zeros(3)
+            self.bbox_max = np.zeros(3)
+
+        self.dimensions = self.bbox_max - self.bbox_min
+        self.center = (self.bbox_min + self.bbox_max) / 2.0
+
+    @property
+    def vertex_count(self):
+        return sum(len(sm.positions) for sm in self.submeshes)
+
+    @property
+    def triangle_count(self):
+        return sum(len(sm.indices) // 3 for sm in self.submeshes)
+
+    def origin_analysis(self):
+        """Analyse la position de l'origine par rapport au mesh."""
+        cx, cy, cz = float(self.center[0]), float(self.center[1]), float(self.center[2])
+        bmin = self.bbox_min
+        dims = self.dimensions
+        max_d = max(float(dims[0]), float(dims[1]), float(dims[2]))
+        tol = max_d * 0.1 if max_d > 0 else 0.1
+
+        if abs(cx) < tol and abs(cy) < tol and abs(cz) < tol:
+            return "centre"
+        elif abs(cx) < tol and abs(float(bmin[1])) < tol and abs(cz) < tol:
+            return "bas-centre"
+        elif abs(float(bmin[0])) < tol and abs(float(bmin[1])) < tol and abs(float(bmin[2])) < tol:
+            return "coin min"
+        else:
+            return f"decale ({cx:.2f}, {cy:.2f}, {cz:.2f})"
 
 
 # ============================================================
@@ -336,6 +399,389 @@ def load_structure(path):
 
 
 # ============================================================
+# PARSEURS GLB / OBJ
+# ============================================================
+
+def _read_accessor(gltf_json, bin_data, accessor_idx):
+    """Lit un accessor glTF depuis le buffer BIN via numpy."""
+    accessor = gltf_json['accessors'][accessor_idx]
+    bv_idx = accessor.get('bufferView')
+    if bv_idx is None:
+        # Accessor sans bufferView = zeros
+        type_map = {'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4, 'MAT4': 16}
+        n = type_map.get(accessor['type'], 1)
+        return np.zeros((accessor['count'], n), dtype=np.float32)
+
+    buffer_view = gltf_json['bufferViews'][bv_idx]
+    byte_offset = buffer_view.get('byteOffset', 0) + accessor.get('byteOffset', 0)
+    count = accessor['count']
+
+    comp_type = accessor['componentType']
+    comp_map = {
+        5120: ('b', np.int8, 1),
+        5121: ('B', np.uint8, 1),
+        5122: ('h', np.int16, 2),
+        5123: ('H', np.uint16, 2),
+        5125: ('I', np.uint32, 4),
+        5126: ('f', np.float32, 4),
+    }
+    fmt_char, np_dtype, comp_size = comp_map.get(comp_type, ('f', np.float32, 4))
+
+    type_map = {'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4, 'MAT4': 16}
+    num_components = type_map.get(accessor['type'], 1)
+
+    stride = buffer_view.get('byteStride', comp_size * num_components)
+
+    if stride == comp_size * num_components:
+        total_bytes = count * num_components * comp_size
+        raw = bin_data[byte_offset:byte_offset + total_bytes]
+        arr = np.frombuffer(raw, dtype=np_dtype)
+    else:
+        arr = np.empty(count * num_components, dtype=np_dtype)
+        for i in range(count):
+            off = byte_offset + i * stride
+            for j in range(num_components):
+                arr[i * num_components + j] = struct.unpack_from(
+                    f'<{fmt_char}', bin_data, off + j * comp_size)[0]
+
+    if num_components > 1:
+        arr = arr.reshape(-1, num_components)
+    return arr
+
+
+def _quat_to_matrix(q):
+    """Convertit un quaternion (x, y, z, w) en matrice de rotation 3x3."""
+    x, y, z, w = q
+    return np.array([
+        [1 - 2*(y*y + z*z), 2*(x*y - w*z), 2*(x*z + w*y)],
+        [2*(x*y + w*z), 1 - 2*(x*x + z*z), 2*(y*z - w*x)],
+        [2*(x*z - w*y), 2*(y*z + w*x), 1 - 2*(x*x + y*y)]
+    ], dtype=np.float64)
+
+
+def _build_transform(node):
+    """Construit la matrice 4x4 de transformation d'un noeud glTF."""
+    if 'matrix' in node:
+        return np.array(node['matrix'], dtype=np.float64).reshape(4, 4).T  # column-major
+
+    mat = np.eye(4, dtype=np.float64)
+
+    if 'scale' in node:
+        s = node['scale']
+        scale_mat = np.eye(4, dtype=np.float64)
+        scale_mat[0, 0] = s[0]
+        scale_mat[1, 1] = s[1]
+        scale_mat[2, 2] = s[2]
+        mat = scale_mat
+
+    if 'rotation' in node:
+        rot = _quat_to_matrix(node['rotation'])
+        rot4 = np.eye(4, dtype=np.float64)
+        rot4[:3, :3] = rot
+        mat = rot4 @ mat
+
+    if 'translation' in node:
+        t = node['translation']
+        trans4 = np.eye(4, dtype=np.float64)
+        trans4[:3, 3] = t
+        mat = trans4 @ mat
+
+    return mat
+
+
+def _collect_mesh_nodes(gltf_json, node_idx, parent_transform):
+    """Traverse recursivement les noeuds glTF, accumule les transforms."""
+    node = gltf_json['nodes'][node_idx]
+    local_transform = _build_transform(node)
+    world_transform = parent_transform @ local_transform
+
+    results = []
+    if 'mesh' in node:
+        results.append((node['mesh'], world_transform))
+
+    for child_idx in node.get('children', []):
+        results.extend(_collect_mesh_nodes(gltf_json, child_idx, world_transform))
+
+    return results
+
+
+def load_glb(path):
+    """Charge un fichier GLB et retourne un MeshData."""
+    with open(path, 'rb') as f:
+        data = f.read()
+
+    # Header: magic(4) + version(4) + length(4)
+    if len(data) < 12:
+        raise ValueError("Fichier GLB trop petit")
+    magic = struct.unpack_from('<I', data, 0)[0]
+    if magic != 0x46546C67:  # 'glTF'
+        raise ValueError(f"Fichier GLB invalide (magic: 0x{magic:08x})")
+
+    # Chunks
+    offset = 12
+    json_data = None
+    bin_data = None
+
+    while offset + 8 <= len(data):
+        chunk_length, chunk_type = struct.unpack_from('<II', data, offset)
+        chunk_bytes = data[offset + 8:offset + 8 + chunk_length]
+
+        if chunk_type == 0x4E4F534A:  # JSON
+            json_data = json.loads(chunk_bytes)
+        elif chunk_type == 0x004E4942:  # BIN
+            bin_data = chunk_bytes
+
+        offset += 8 + chunk_length
+
+    if json_data is None:
+        raise ValueError("Chunk JSON introuvable dans le fichier GLB")
+    if bin_data is None:
+        bin_data = b''
+
+    # Collecter tous les mesh nodes avec leurs transforms
+    mesh_nodes = []
+    scenes = json_data.get('scenes', [])
+    scene_idx = json_data.get('scene', 0)
+    if scenes:
+        scene = scenes[scene_idx] if scene_idx < len(scenes) else scenes[0]
+        for root_node in scene.get('nodes', []):
+            mesh_nodes.extend(_collect_mesh_nodes(json_data, root_node, np.eye(4)))
+
+    # Fallback : noeuds racine non references comme enfants
+    if not mesh_nodes and 'nodes' in json_data:
+        all_children = set()
+        for n in json_data['nodes']:
+            all_children.update(n.get('children', []))
+        for i in range(len(json_data['nodes'])):
+            if i not in all_children:
+                mesh_nodes.extend(_collect_mesh_nodes(json_data, i, np.eye(4)))
+
+    # Construire les submeshes
+    submeshes = []
+    materials = json_data.get('materials', [])
+
+    for mesh_idx, world_transform in mesh_nodes:
+        mesh = json_data['meshes'][mesh_idx]
+
+        for prim in mesh.get('primitives', []):
+            attrs = prim.get('attributes', {})
+
+            if 'POSITION' not in attrs:
+                continue
+            positions = _read_accessor(json_data, bin_data, attrs['POSITION']).astype(np.float64)
+
+            # Appliquer le transform hierarchique
+            if not np.allclose(world_transform, np.eye(4)):
+                ones = np.ones((len(positions), 1), dtype=np.float64)
+                pos4 = np.hstack([positions, ones])
+                transformed = (world_transform @ pos4.T).T
+                positions = transformed[:, :3]
+
+            # Normales
+            if 'NORMAL' in attrs:
+                normals = _read_accessor(json_data, bin_data, attrs['NORMAL']).astype(np.float64)
+                if not np.allclose(world_transform[:3, :3], np.eye(3)):
+                    rot = world_transform[:3, :3]
+                    normals = (rot @ normals.T).T
+                    nrm = np.linalg.norm(normals, axis=1, keepdims=True)
+                    nrm[nrm == 0] = 1
+                    normals = normals / nrm
+            else:
+                normals = np.zeros_like(positions)
+
+            # Indices
+            if 'indices' in prim:
+                indices = _read_accessor(json_data, bin_data, prim['indices']).astype(np.uint32).flatten()
+            else:
+                indices = np.arange(len(positions), dtype=np.uint32)
+
+            # Couleur : COLOR_0 > material baseColorFactor > gris
+            color = (0.7, 0.7, 0.7)
+
+            if 'COLOR_0' in attrs:
+                colors = _read_accessor(json_data, bin_data, attrs['COLOR_0'])
+                if colors.dtype == np.uint8:
+                    colors = colors.astype(np.float32) / 255.0
+                elif colors.dtype == np.uint16:
+                    colors = colors.astype(np.float32) / 65535.0
+                else:
+                    colors = colors.astype(np.float32)
+                if len(colors.shape) == 2 and colors.shape[1] >= 3:
+                    color = tuple(float(c) for c in colors[:, :3].mean(axis=0))
+            elif 'material' in prim:
+                mat_idx = prim['material']
+                if mat_idx < len(materials):
+                    mat = materials[mat_idx]
+                    pbr = mat.get('pbrMetallicRoughness', {})
+                    if 'baseColorFactor' in pbr:
+                        bc = pbr['baseColorFactor']
+                        color = (bc[0], bc[1], bc[2])
+                    elif 'extensions' in mat:
+                        ext = mat['extensions']
+                        if 'KHR_materials_pbrSpecularGlossiness' in ext:
+                            sg = ext['KHR_materials_pbrSpecularGlossiness']
+                            if 'diffuseFactor' in sg:
+                                df = sg['diffuseFactor']
+                                color = (df[0], df[1], df[2])
+
+            submeshes.append(SubMesh(
+                positions.astype(np.float32),
+                normals.astype(np.float32),
+                indices,
+                color
+            ))
+
+    if not submeshes:
+        raise ValueError("Aucun mesh trouve dans le fichier GLB")
+
+    name = Path(path).stem
+    return MeshData(name, submeshes)
+
+
+def load_obj(path):
+    """Charge un fichier OBJ et retourne un MeshData."""
+    lines = None
+    for enc in ('utf-8', 'latin-1', 'cp1252'):
+        try:
+            with open(path, 'r', encoding=enc) as f:
+                lines = f.readlines()
+            break
+        except (UnicodeDecodeError, UnicodeError):
+            continue
+    if lines is None:
+        raise ValueError("Impossible de lire le fichier OBJ : encodage non supporte")
+
+    positions = []
+    normals_list = []
+    vertex_colors = []
+    faces = []  # list of (v_indices, vn_indices)
+    mtl_file = None
+    current_material = None
+
+    for line in lines:
+        line = line.strip()
+        if line.startswith('mtllib '):
+            mtl_file = line[7:].strip()
+
+    # Lire le .mtl si present
+    mtl_colors = {}
+    if mtl_file:
+        mtl_path = os.path.join(os.path.dirname(path), mtl_file)
+        if os.path.exists(mtl_path):
+            try:
+                with open(mtl_path, 'r', encoding='utf-8') as f:
+                    mtl_lines = f.readlines()
+                cur_name = None
+                for ml in mtl_lines:
+                    ml = ml.strip()
+                    if ml.startswith('newmtl '):
+                        cur_name = ml[7:].strip()
+                    elif ml.startswith('Kd ') and cur_name:
+                        parts = ml.split()
+                        if len(parts) >= 4:
+                            mtl_colors[cur_name] = (float(parts[1]), float(parts[2]), float(parts[3]))
+            except Exception:
+                pass
+
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+
+        parts = line.split()
+
+        if parts[0] == 'v' and len(parts) >= 4:
+            positions.append([float(parts[1]), float(parts[2]), float(parts[3])])
+            if len(parts) >= 7:
+                vertex_colors.append([float(parts[4]), float(parts[5]), float(parts[6])])
+
+        elif parts[0] == 'vn' and len(parts) >= 4:
+            normals_list.append([float(parts[1]), float(parts[2]), float(parts[3])])
+
+        elif parts[0] == 'usemtl':
+            current_material = parts[1] if len(parts) > 1 else None
+
+        elif parts[0] == 'f':
+            v_indices = []
+            vn_indices = []
+            for p in parts[1:]:
+                components = p.split('/')
+                vi = int(components[0])
+                vi = vi - 1 if vi > 0 else len(positions) + vi
+                v_indices.append(vi)
+                if len(components) >= 3 and components[2]:
+                    ni = int(components[2])
+                    ni = ni - 1 if ni > 0 else len(normals_list) + ni
+                    vn_indices.append(ni)
+
+            # Triangulation fan
+            for i in range(1, len(v_indices) - 1):
+                tri_v = [v_indices[0], v_indices[i], v_indices[i + 1]]
+                tri_vn = ([vn_indices[0], vn_indices[i], vn_indices[i + 1]]
+                          if len(vn_indices) == len(v_indices) else [])
+                faces.append((tri_v, tri_vn))
+
+    if not positions:
+        raise ValueError("Aucun vertex trouve dans le fichier OBJ")
+
+    pos_array = np.array(positions, dtype=np.float32)
+    all_indices = []
+    all_normals = np.zeros_like(pos_array)
+    has_normals = len(normals_list) > 0
+
+    for v_idx, vn_idx in faces:
+        all_indices.extend(v_idx)
+        if has_normals and vn_idx:
+            for vi, ni in zip(v_idx, vn_idx):
+                if 0 <= ni < len(normals_list):
+                    all_normals[vi] = normals_list[ni]
+
+    # Calculer les normales si absentes
+    if not has_normals:
+        for v_idx, _ in faces:
+            if len(v_idx) >= 3:
+                p0 = pos_array[v_idx[0]]
+                p1 = pos_array[v_idx[1]]
+                p2 = pos_array[v_idx[2]]
+                n = np.cross(p1 - p0, p2 - p0)
+                norm = np.linalg.norm(n)
+                if norm > 0:
+                    n = n / norm
+                for vi in v_idx:
+                    all_normals[vi] = n
+
+    indices = np.array(all_indices, dtype=np.uint32)
+
+    # Couleur
+    if vertex_colors:
+        vc = np.array(vertex_colors, dtype=np.float32)
+        color = tuple(float(c) for c in vc.mean(axis=0))
+    elif current_material and current_material in mtl_colors:
+        color = mtl_colors[current_material]
+    elif mtl_colors:
+        color = list(mtl_colors.values())[0]
+    else:
+        color = (0.7, 0.7, 0.7)
+
+    submeshes = [SubMesh(pos_array, all_normals, indices, color)]
+    name = Path(path).stem
+    return MeshData(name, submeshes)
+
+
+def load_file_data(path):
+    """Charge un fichier et retourne StructureData ou MeshData selon le format."""
+    ext = Path(path).suffix.lower()
+    if ext in ('.json', '.schem', '.schematic', '.litematic'):
+        return load_structure(path)
+    elif ext == '.glb':
+        return load_glb(path)
+    elif ext == '.obj':
+        return load_obj(path)
+    else:
+        raise ValueError(f"Format non supporte : {ext}")
+
+
+# ============================================================
 # WIDGET OPENGL 3D
 # ============================================================
 
@@ -378,12 +824,23 @@ class VoxelGLWidget(QOpenGLWidget):
         self.right_pressed = False
         self.left_pressed = False
 
+        # Mesh mode (GLB/OBJ)
+        self.mesh_data = None
+        self.mesh_display_list = 0
+        self.mesh_face_count = 0
+        self.show_wireframe = False
+
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setMinimumSize(640, 480)
 
     def set_structure(self, structure):
         """Charge une nouvelle structure et reconstruit le mesh."""
         self.structure = structure
+        self.mesh_data = None
+        if self.mesh_display_list:
+            glDeleteLists(self.mesh_display_list, 2)
+            self.mesh_display_list = 0
+            self.mesh_face_count = 0
         sx, sy, sz = structure.size
         self.center = (sx / 2.0, sy / 2.0, sz / 2.0)
         self.zoom = max(sx, sy, sz) * 1.8
@@ -393,6 +850,28 @@ class VoxelGLWidget(QOpenGLWidget):
         self.pan_y = 0.0
         self.pan_z = 0.0
         self._rebuild_display_list()
+        self.update()
+
+    def set_mesh(self, mesh_data):
+        """Charge un mesh 3D (GLB/OBJ) et centre la camera."""
+        self.mesh_data = mesh_data
+        self.structure = None
+        if self.display_list_id:
+            glDeleteLists(self.display_list_id, 1)
+            self.display_list_id = 0
+            self.face_count = 0
+
+        dims = mesh_data.dimensions
+        center = mesh_data.center
+        self.center = (float(center[0]), float(center[1]), float(center[2]))
+        max_dim = max(float(dims[0]), float(dims[1]), float(dims[2]), 0.1)
+        self.zoom = max_dim * 2.5
+        self.rot_x = 25.0
+        self.rot_y = -45.0
+        self.pan_x = 0.0
+        self.pan_y = 0.0
+        self.pan_z = 0.0
+        self._rebuild_mesh_display_list()
         self.update()
 
     # ---- OpenGL lifecycle ----
@@ -431,20 +910,46 @@ class VoxelGLWidget(QOpenGLWidget):
         self._draw_axes()
 
         # Grille au sol
-        self._draw_grid()
+        if self.mesh_data:
+            self._draw_mesh_grid()
+        else:
+            self._draw_grid()
 
-        # Structure
+        # Structure voxel
         if self.display_list_id:
+            glEnable(GL_CULL_FACE)
             glCallList(self.display_list_id)
+
+        # Mesh 3D (GLB/OBJ)
+        if self.mesh_display_list:
+            glDisable(GL_CULL_FACE)
+            glCallList(self.mesh_display_list)
+
+            # Wireframe overlay
+            if self.show_wireframe:
+                glEnable(GL_POLYGON_OFFSET_LINE)
+                glPolygonOffset(-1.0, -1.0)
+                glLineWidth(1.0)
+                glDepthFunc(GL_LEQUAL)
+                glCallList(self.mesh_display_list + 1)
+                glDepthFunc(GL_LESS)
+                glDisable(GL_POLYGON_OFFSET_LINE)
+
+            glEnable(GL_CULL_FACE)
 
     # ---- Dessin des helpers ----
 
     def _draw_axes(self):
-        sx, sy, sz = (10, 10, 10)
         if self.structure:
             sx, sy, sz = self.structure.size
-        length = max(sx, sy, sz) * 0.3
-        length = max(length, 3.0)
+            length = max(sx, sy, sz) * 0.3
+            length = max(length, 3.0)
+        elif self.mesh_data:
+            dims = self.mesh_data.dimensions
+            max_dim = max(float(dims[0]), float(dims[1]), float(dims[2]), 0.1)
+            length = max(max_dim * 0.3, 0.3)
+        else:
+            length = 3.0
 
         glLineWidth(2.5)
         glBegin(GL_LINES)
@@ -490,6 +995,39 @@ class VoxelGLWidget(QOpenGLWidget):
         for z in range(sz + 1):
             glVertex3f(0, 0, z)
             glVertex3f(sx, 0, z)
+        glEnd()
+
+    def _draw_mesh_grid(self):
+        """Dessine une grille centree sur l'origine pour les meshes."""
+        if not self.mesh_data:
+            return
+        dims = self.mesh_data.dimensions
+        max_dim = max(float(dims[0]), float(dims[1]), float(dims[2]), 1.0)
+
+        # Espacement adaptatif
+        if max_dim < 1:
+            step = 0.1
+        elif max_dim < 5:
+            step = 0.5
+        elif max_dim < 20:
+            step = 1.0
+        elif max_dim < 100:
+            step = 5.0
+        else:
+            step = 10.0
+
+        half = math.ceil(max_dim * 0.8 / step) * step
+
+        glColor4f(0.3, 0.3, 0.4, 0.5)
+        glLineWidth(1.0)
+        glBegin(GL_LINES)
+        n = int(half / step)
+        for i in range(-n, n + 1):
+            x = i * step
+            glVertex3f(x, 0, -half)
+            glVertex3f(x, 0, half)
+            glVertex3f(-half, 0, x)
+            glVertex3f(half, 0, x)
         glEnd()
 
     # ---- Construction du mesh ----
@@ -558,6 +1096,67 @@ class VoxelGLWidget(QOpenGLWidget):
         glEndList()
         self.face_count = face_count
 
+    def _rebuild_mesh_display_list(self):
+        """Construit les display lists OpenGL pour un mesh 3D (filled + wireframe)."""
+        if self.mesh_display_list:
+            glDeleteLists(self.mesh_display_list, 2)
+            self.mesh_display_list = 0
+            self.mesh_face_count = 0
+
+        if not self.mesh_data:
+            return
+
+        # Direction de lumiere normalisee
+        light_dir = np.array([0.5, 0.8, 0.6], dtype=np.float32)
+        light_dir = light_dir / np.linalg.norm(light_dir)
+
+        # 2 display lists consecutifs : [0]=filled, [1]=wireframe
+        self.mesh_display_list = glGenLists(2)
+
+        # --- List 1 : triangles pleins ---
+        glNewList(self.mesh_display_list, GL_COMPILE)
+        glBegin(GL_TRIANGLES)
+        face_count = 0
+        for sm in self.mesh_data.submeshes:
+            r, g, b = sm.color
+            for i in range(0, len(sm.indices) - 2, 3):
+                i0 = int(sm.indices[i])
+                i1 = int(sm.indices[i + 1])
+                i2 = int(sm.indices[i + 2])
+                if i0 >= len(sm.positions) or i1 >= len(sm.positions) or i2 >= len(sm.positions):
+                    continue
+                for vi in (i0, i1, i2):
+                    n = sm.normals[vi]
+                    brightness = max(0.3, min(1.0, float(np.dot(n, light_dir)) * 0.5 + 0.5))
+                    glColor3f(r * brightness, g * brightness, b * brightness)
+                    p = sm.positions[vi]
+                    glVertex3f(float(p[0]), float(p[1]), float(p[2]))
+                face_count += 1
+        glEnd()
+        glEndList()
+
+        # --- List 2 : wireframe ---
+        glNewList(self.mesh_display_list + 1, GL_COMPILE)
+        glColor3f(0.1, 0.1, 0.15)
+        glBegin(GL_LINES)
+        for sm in self.mesh_data.submeshes:
+            for i in range(0, len(sm.indices) - 2, 3):
+                i0 = int(sm.indices[i])
+                i1 = int(sm.indices[i + 1])
+                i2 = int(sm.indices[i + 2])
+                if i0 >= len(sm.positions) or i1 >= len(sm.positions) or i2 >= len(sm.positions):
+                    continue
+                p0 = sm.positions[i0]
+                p1 = sm.positions[i1]
+                p2 = sm.positions[i2]
+                for a, b_ in ((p0, p1), (p1, p2), (p2, p0)):
+                    glVertex3f(float(a[0]), float(a[1]), float(a[2]))
+                    glVertex3f(float(b_[0]), float(b_[1]), float(b_[2]))
+        glEnd()
+        glEndList()
+
+        self.mesh_face_count = face_count
+
     # ---- Controles souris ----
 
     def mousePressEvent(self, event):
@@ -607,11 +1206,16 @@ class VoxelGLWidget(QOpenGLWidget):
         self.update()
 
     def keyPressEvent(self, event):
-        """Raccourcis clavier : R=reset vue, F=vue de face, T=vue de dessus."""
+        """Raccourcis clavier : R=reset vue, F=vue de face, T=vue de dessus, W=wireframe."""
         key = event.key()
         if key == Qt.Key.Key_R:
             # Reset camera
-            if self.structure:
+            if self.mesh_data:
+                center = self.mesh_data.center
+                dims = self.mesh_data.dimensions
+                self.center = (float(center[0]), float(center[1]), float(center[2]))
+                self.zoom = max(float(dims[0]), float(dims[1]), float(dims[2]), 0.1) * 2.5
+            elif self.structure:
                 sx, sy, sz = self.structure.size
                 self.center = (sx / 2.0, sy / 2.0, sz / 2.0)
                 self.zoom = max(sx, sy, sz) * 1.8
@@ -628,6 +1232,10 @@ class VoxelGLWidget(QOpenGLWidget):
             # Vue de dessus
             self.rot_x = 90.0
             self.rot_y = 0.0
+            self.update()
+        elif key == Qt.Key.Key_W:
+            # Toggle wireframe
+            self.show_wireframe = not self.show_wireframe
             self.update()
         else:
             super().keyPressEvent(event)
@@ -660,7 +1268,8 @@ def _save_config(cfg):
 # PANNEAU NAVIGATEUR DE FICHIERS
 # ============================================================
 
-_SUPPORTED_EXTENSIONS = {".json", ".schem", ".litematic", ".schematic"}
+_SUPPORTED_EXTENSIONS = {".json", ".schem", ".litematic", ".schematic", ".glb", ".obj"}
+_MESH_EXTENSIONS = {".glb", ".obj"}
 
 class FileBrowserPanel(QWidget):
     """Panneau de navigation dans les fichiers et dossiers."""
@@ -783,9 +1392,16 @@ class FileBrowserPanel(QWidget):
 
         # Fichiers
         for f in files:
-            item = QListWidgetItem(f"\U0001f4c4  {f}")
+            ext = os.path.splitext(f)[1].lower()
+            if ext in _MESH_EXTENSIONS:
+                icon = "\U0001f4a0"  # diamant pour mesh
+                color = "#f38ba8"    # rose pour mesh
+            else:
+                icon = "\U0001f4c4"
+                color = "#89b4fa"    # bleu pour voxel
+            item = QListWidgetItem(f"{icon}  {f}")
             item.setData(Qt.ItemDataRole.UserRole, ("file", os.path.join(dir_path, f)))
-            item.setForeground(QColor("#89b4fa"))
+            item.setForeground(QColor(color))
             self.file_list.addItem(item)
 
         # Sauvegarder le dernier repertoire
@@ -842,6 +1458,7 @@ class StructureViewer(QMainWindow):
         self.resize(1280, 800)
 
         self.current_structure = None
+        self.current_mesh = None
         self.current_path = None
 
         # Widget OpenGL
@@ -895,7 +1512,7 @@ class StructureViewer(QMainWindow):
         self._create_toolbar()
 
         # Status bar
-        self.statusBar().showMessage("Pret — Ouvrir un fichier .json, .schem ou .litematic  |  Ctrl+O: Ouvrir  |  Echap/Ctrl+Q: Quitter")
+        self.statusBar().showMessage("Pret — Ouvrir .json, .schem, .litematic, .glb ou .obj  |  Ctrl+O: Ouvrir  |  Echap/Ctrl+Q: Quitter")
         self.statusBar().setStyleSheet("color: #a6adc8;")
 
         # Drag and drop
@@ -942,6 +1559,11 @@ class StructureViewer(QMainWindow):
         act_top.triggered.connect(self._view_top)
         toolbar.addAction(act_top)
 
+        # Fil de fer
+        act_wire = QAction("Fil de fer (W)", self)
+        act_wire.triggered.connect(self._toggle_wireframe)
+        toolbar.addAction(act_wire)
+
         # Masquer/afficher panneau info
         act_toggle = QAction("Infos (I)", self)
         act_toggle.setShortcut(QKeySequence("I"))
@@ -960,13 +1582,22 @@ class StructureViewer(QMainWindow):
         toolbar.addAction(act_quit)
 
     def _reset_view(self):
-        if self.gl_widget.structure:
+        if self.gl_widget.mesh_data:
+            center = self.gl_widget.mesh_data.center
+            dims = self.gl_widget.mesh_data.dimensions
+            self.gl_widget.center = (float(center[0]), float(center[1]), float(center[2]))
+            self.gl_widget.zoom = max(float(dims[0]), float(dims[1]), float(dims[2]), 0.1) * 2.5
+        elif self.gl_widget.structure:
             sx, sy, sz = self.gl_widget.structure.size
             self.gl_widget.center = (sx/2, sy/2, sz/2)
             self.gl_widget.zoom = max(sx, sy, sz) * 1.8
         self.gl_widget.rot_x = 25.0
         self.gl_widget.rot_y = -45.0
         self.gl_widget.pan_x = self.gl_widget.pan_y = self.gl_widget.pan_z = 0.0
+        self.gl_widget.update()
+
+    def _toggle_wireframe(self):
+        self.gl_widget.show_wireframe = not self.gl_widget.show_wireframe
         self.gl_widget.update()
 
     def _view_front(self):
@@ -1005,12 +1636,14 @@ class StructureViewer(QMainWindow):
         <td valign="top" width="33%">
             <b style="color:#89b4fa;">Raccourcis</b><br>
             R = Reset vue &nbsp;|&nbsp; F = Vue face &nbsp;|&nbsp; T = Vue dessus &nbsp;|&nbsp;
+            W = Fil de fer &nbsp;|&nbsp;
             I = Masquer/afficher ce panneau &nbsp;|&nbsp;
             Ctrl+O = Ouvrir &nbsp;|&nbsp; Ctrl+S = Exporter &nbsp;|&nbsp; Echap = Quitter
         </td>
         <td valign="top" width="33%">
             <b style="color:#89b4fa;">Formats</b><br>
-            .json (ClaudeCraft) &nbsp;|&nbsp; .schem (Sponge) &nbsp;|&nbsp; .litematic (Litematica)
+            .json (ClaudeCraft) &nbsp;|&nbsp; .schem (Sponge) &nbsp;|&nbsp; .litematic (Litematica)<br>
+            <span style="color:#f38ba8;">.glb (glTF Binary) &nbsp;|&nbsp; .obj (Wavefront)</span>
         </td>
         </tr></table>
         """
@@ -1025,15 +1658,18 @@ class StructureViewer(QMainWindow):
 
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "Ouvrir une structure",
+            "Ouvrir une structure ou un modele 3D",
             start_dir,
-            "Structures (*.json *.schem *.litematic *.schematic);;Tous les fichiers (*.*)"
+            "Tous les formats (*.json *.schem *.litematic *.schematic *.glb *.obj);;"
+            "Structures (*.json *.schem *.litematic *.schematic);;"
+            "Modeles 3D (*.glb *.obj);;"
+            "Tous les fichiers (*.*)"
         )
         if path:
             self.load_file(path)
 
     def load_file(self, path):
-        """Charge et affiche un fichier de structure."""
+        """Charge et affiche un fichier (structure voxel ou modele 3D)."""
         basename = os.path.basename(path)
         self.statusBar().showMessage(f"Chargement de {basename}...")
         QApplication.processEvents()
@@ -1041,7 +1677,7 @@ class StructureViewer(QMainWindow):
         t0 = time.time()
 
         try:
-            structure = load_structure(path)
+            data = load_file_data(path)
         except Exception as e:
             QMessageBox.critical(self, "Erreur de chargement",
                                  f"Impossible de charger :\n{basename}\n\n{e}")
@@ -1051,33 +1687,48 @@ class StructureViewer(QMainWindow):
             return
 
         t_load = time.time() - t0
-
-        self.current_structure = structure
         self.current_path = path
 
-        # Afficher dans le viewport
-        self.statusBar().showMessage(f"Construction du mesh 3D...")
+        self.statusBar().showMessage("Construction du rendu 3D...")
         QApplication.processEvents()
 
         t1 = time.time()
-        self.gl_widget.set_structure(structure)
-        t_mesh = time.time() - t1
 
-        # Stats
-        sx, sy, sz = structure.size
-        non_air = structure.count_non_air()
-        total = sx * sy * sz
-        faces = self.gl_widget.face_count
+        if isinstance(data, MeshData):
+            # Modele 3D (GLB/OBJ)
+            self.current_mesh = data
+            self.current_structure = None
+            self.gl_widget.set_mesh(data)
+            t_render = time.time() - t1
 
-        self.statusBar().showMessage(
-            f"{structure.name} — {sx}x{sy}x{sz} — "
-            f"{non_air:,} blocs — {faces:,} faces — "
-            f"Charge en {t_load:.1f}s, mesh en {t_mesh:.1f}s"
-        )
-        self.setWindowTitle(f"ClaudeCraft Viewer — {structure.name}")
+            dims = data.dimensions
+            self.statusBar().showMessage(
+                f"{data.name} — {float(dims[0]):.2f}x{float(dims[1]):.2f}x{float(dims[2]):.2f} — "
+                f"{data.vertex_count:,} vertices — {data.triangle_count:,} triangles — "
+                f"{len(data.submeshes)} sous-objets — "
+                f"Charge en {t_load:.2f}s, rendu en {t_render:.2f}s"
+            )
+            self.setWindowTitle(f"ClaudeCraft Viewer — {data.name}")
+            self._update_mesh_info_panel(data, t_load, t_render)
+        else:
+            # Structure voxel
+            self.current_structure = data
+            self.current_mesh = None
+            self.gl_widget.set_structure(data)
+            t_render = time.time() - t1
 
-        # Panneau d'infos
-        self._update_info_panel(structure, non_air, total, faces, t_load, t_mesh)
+            sx, sy, sz = data.size
+            non_air = data.count_non_air()
+            total = sx * sy * sz
+            faces = self.gl_widget.face_count
+
+            self.statusBar().showMessage(
+                f"{data.name} — {sx}x{sy}x{sz} — "
+                f"{non_air:,} blocs — {faces:,} faces — "
+                f"Charge en {t_load:.1f}s, mesh en {t_render:.1f}s"
+            )
+            self.setWindowTitle(f"ClaudeCraft Viewer — {data.name}")
+            self._update_info_panel(data, non_air, total, faces, t_load, t_render)
 
         # Mettre en surbrillance dans le navigateur
         self.file_browser.highlight_file(path)
@@ -1127,9 +1778,57 @@ class StructureViewer(QMainWindow):
 
         self.info_panel.setHtml(html)
 
+    def _update_mesh_info_panel(self, m, t_load, t_render):
+        dims = m.dimensions
+        bmin = m.bbox_min
+        bmax = m.bbox_max
+        center = m.center
+        origin = m.origin_analysis()
+
+        html = f"""<table width="100%"><tr>
+        <td valign="top" width="40%">
+            <b style="color:#f38ba8;">{m.name}</b> &nbsp;
+            <span style="color:#cdd6f4;">
+            Dimensions: <b>{float(dims[0]):.3f} x {float(dims[1]):.3f} x {float(dims[2]):.3f}</b><br>
+            BBox min: ({float(bmin[0]):.3f}, {float(bmin[1]):.3f}, {float(bmin[2]):.3f}) &nbsp;|&nbsp;
+            max: ({float(bmax[0]):.3f}, {float(bmax[1]):.3f}, {float(bmax[2]):.3f})<br>
+            Centre: ({float(center[0]):.3f}, {float(center[1]):.3f}, {float(center[2]):.3f}) &nbsp;|&nbsp;
+            Origine: <b>{origin}</b> &nbsp;|&nbsp;
+            Charge: {t_load:.2f}s &nbsp; Rendu: {t_render:.2f}s
+            </span>
+        </td>
+        <td valign="top" width="30%">
+            <b style="color:#a6e3a1;">Geometrie</b><br>
+            <span style="color:#cdd6f4;">
+            Vertices: <b>{m.vertex_count:,}</b> &nbsp;|&nbsp;
+            Triangles: <b>{m.triangle_count:,}</b> &nbsp;|&nbsp;
+            Sous-objets: <b>{len(m.submeshes)}</b>
+            </span>
+        </td>
+        <td valign="top" width="30%">
+            <b style="color:#a6e3a1;">Sous-objets</b><br>
+        """
+
+        for i, sm in enumerate(m.submeshes):
+            r, g, b = sm.color
+            hex_color = "#{:02x}{:02x}{:02x}".format(
+                int(min(1.0, r) * 255), int(min(1.0, g) * 255), int(min(1.0, b) * 255))
+            swatch = f'<span style="color:{hex_color};">&#9608;</span>'
+            verts = len(sm.positions)
+            tris = len(sm.indices) // 3
+            html += f"{swatch} #{i}: {verts} v, {tris} tri &nbsp; "
+
+        html += "</td></tr></table>"
+        self.info_panel.setHtml(html)
+
     def export_json(self):
         if not self.current_structure:
-            QMessageBox.information(self, "Info", "Aucune structure chargee.")
+            if self.current_mesh:
+                QMessageBox.information(self, "Info",
+                    "L'export JSON n'est disponible que pour les structures voxel.\n"
+                    "Le modele 3D charge ne peut pas etre converti en structure voxel.")
+            else:
+                QMessageBox.information(self, "Info", "Aucune structure chargee.")
             return
 
         s = self.current_structure
