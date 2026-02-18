@@ -151,6 +151,27 @@ Permet de placer des constructions (villages, tours, cabanes...) n'importe où d
 - **`scripts/convert_schem.py`** (~940 lignes) : convertisseur `.schem` (Sponge Schematic v2/v3) → JSON ClaudeCraft. Parseur NBT maison (zéro dépendance), décodage varint, mapping intelligent Minecraft→ClaudeCraft (200+ blocs explicites + ~60 règles par pattern pour escaliers, dalles, laines, végétation...). Usage : `python scripts/convert_schem.py fichier.schem [--info] [--output chemin.json]`
 - **Pipeline** : asset `.schem` → `convert_schem.py` → `structures/nom.json` → ajouter dans `placements.json` → apparaît automatiquement dans le monde
 
+**Structure Viewer (`scripts/structure_viewer.py`, ~1920 lignes) :**
+Application desktop PyQt6/PyOpenGL de visualisation 3D de structures voxel et de modèles 3D (GLB/OBJ). Zéro dépendance supplémentaire pour le parsing GLB/OBJ (parseurs maison avec numpy).
+
+```bash
+pip install PyQt6 PyOpenGL numpy
+python scripts/structure_viewer.py
+python scripts/structure_viewer.py "assets/Weapon/GLB/diamond_axe_minecraft.glb"
+```
+
+- **Formats voxel** : `.json` (ClaudeCraft), `.schem` (Sponge Schematic), `.litematic` (Litematica) — rendu face-culled avec couleurs pastel ClaudeCraft
+- **Formats mesh** : `.glb` (glTF Binary), `.obj` (Wavefront OBJ) — rendu triangle avec éclairage directionnel simulé
+- **Parseur GLB maison** (~180 lignes) : header 12 octets + chunks JSON/BIN, `_read_accessor()` numpy (FLOAT/UINT/UBYTE avec stride), traversée récursive des nœuds avec accumulation des transforms 4x4 (quaternion→matrice), couleur par submesh : COLOR_0 > baseColorFactor > KHR_materials_pbrSpecularGlossiness > gris défaut
+- **Parseur OBJ** (~70 lignes) : vertex colors Kenney (`v x y z r g b`), lecture `.mtl` pour couleur Kd, triangulation fan, fallback encodage UTF-8→Latin-1→CP1252
+- **Classes données** : `SubMesh` (positions/normals/indices numpy + couleur), `MeshData` (bbox, centre, dimensions, `origin_analysis()` : centre/bas-centre/coin/décalé)
+- **Rendu mesh OpenGL** : 2 display lists (filled + wireframe), `glDisable(GL_CULL_FACE)` pour meshes double-sided, wireframe overlay avec `GL_POLYGON_OFFSET_LINE`
+- **Grille mesh** : centrée sur l'origine (pas sur le mesh), espacement adaptatif (0.1/0.5/1/5/10 selon la taille)
+- **File browser** : navigateur de fichiers intégré, icône rose (`#f38ba8`) pour meshes vs bleu (`#89b4fa`) pour voxels
+- **Panneau info mesh** : dimensions, bbox min/max, centre, analyse d'origine, vertices/triangles, sous-objets avec couleurs
+- **Contrôles** : clic droit=rotation, clic gauche=pan X/Y, Ctrl+clic gauche=pan Z, molette=zoom, R=reset, F=face, T=dessus, W=wireframe, I=infos, Ctrl+O=ouvrir, Ctrl+S=exporter JSON (voxel uniquement)
+- **Config persistante** : `~/.claudecraft_viewer_config.json` (dernier répertoire)
+
 **Assets :** `Audio/` (~334 fichiers OGG/MP3, dont `Audio/Forest/` 11 MP3 d'ambiance par heure du jour), `BlockPNJ/` et `MiniPNJ/` (modèles 3D FBX/GLB/OBJ, personnages Kenney.nl), `NPC/` (dossier PNJ), `assets/Lobbys/` (assets Minecraft .schem/.mca à convertir), `assets/Weapon/` (modèles JSON Blockbench d'armes/outils : Stone Tools 5 outils + textures 64x64 ; `GLB/` 13 modèles GLB Sketchfab : diamond_axe, diamond-pickaxe, iron_pickaxe, stone_sword, diamond_sword, netherite_sword, bow, shield, arrow, etc.), `assets/Deco/` (apple.glb pour la nourriture), `TexturesPack/Aurore Stone/` (pack de textures Minecraft complet, ~10K fichiers, utilisé pour les textures de blocs en main et dans le monde)
 
 **Documentation embarquée :** `ARCHITECTURE.md`, `QUICKSTART.md`, `BIOMES.md`, `MOVEMENT.md`, `MULTITHREADING.md`, `PERFORMANCE.md`
