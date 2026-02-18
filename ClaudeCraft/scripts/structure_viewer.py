@@ -37,10 +37,11 @@ try:
     from PyQt6.QtWidgets import (
         QApplication, QMainWindow, QFileDialog, QMessageBox,
         QToolBar, QLabel, QProgressDialog, QSplitter, QTextEdit,
-        QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy
+        QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy,
+        QListWidget, QListWidgetItem, QPushButton
     )
-    from PyQt6.QtCore import Qt, QSize, QTimer
-    from PyQt6.QtGui import QAction, QKeySequence, QSurfaceFormat
+    from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal
+    from PyQt6.QtGui import QAction, QKeySequence, QSurfaceFormat, QColor
     from PyQt6.QtOpenGLWidgets import QOpenGLWidget
 except ImportError:
     print("ERREUR : PyQt6 requis. Installer avec : pip install PyQt6")
@@ -633,6 +634,202 @@ class VoxelGLWidget(QOpenGLWidget):
 
 
 # ============================================================
+# CONFIG PERSISTANCE
+# ============================================================
+
+_CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".claudecraft_viewer_config.json")
+
+def _load_config():
+    """Charge la configuration persistante."""
+    try:
+        with open(_CONFIG_PATH, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+def _save_config(cfg):
+    """Sauvegarde la configuration persistante."""
+    try:
+        with open(_CONFIG_PATH, 'w', encoding='utf-8') as f:
+            json.dump(cfg, f, indent=2)
+    except OSError:
+        pass
+
+
+# ============================================================
+# PANNEAU NAVIGATEUR DE FICHIERS
+# ============================================================
+
+_SUPPORTED_EXTENSIONS = {".json", ".schem", ".litematic", ".schematic"}
+
+class FileBrowserPanel(QWidget):
+    """Panneau de navigation dans les fichiers et dossiers."""
+
+    file_selected = pyqtSignal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.current_dir = None
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(2)
+
+        # Barre de chemin
+        path_bar = QHBoxLayout()
+        path_bar.setContentsMargins(4, 4, 4, 0)
+        path_bar.setSpacing(4)
+
+        self.btn_parent = QPushButton("\u2191")
+        self.btn_parent.setFixedSize(28, 28)
+        self.btn_parent.setToolTip("Dossier parent")
+        self.btn_parent.clicked.connect(self._go_parent)
+        self.btn_parent.setStyleSheet("""
+            QPushButton {
+                background: #313244; color: #cdd6f4; border: 1px solid #45475a;
+                border-radius: 4px; font-size: 14px; font-weight: bold;
+            }
+            QPushButton:hover { background: #45475a; }
+        """)
+        path_bar.addWidget(self.btn_parent)
+
+        self.path_label = QLabel("")
+        self.path_label.setStyleSheet("""
+            QLabel {
+                color: #a6adc8; font-size: 11px; font-family: Consolas, monospace;
+                padding: 2px 4px;
+            }
+        """)
+        self.path_label.setWordWrap(False)
+        path_bar.addWidget(self.path_label, 1)
+        layout.addLayout(path_bar)
+
+        # Liste de fichiers
+        self.file_list = QListWidget()
+        self.file_list.setStyleSheet("""
+            QListWidget {
+                background-color: #1e1e2e; border: 1px solid #45475a;
+                font-family: Consolas, monospace; font-size: 12px;
+                outline: none;
+            }
+            QListWidget::item {
+                padding: 3px 6px; border: none;
+            }
+            QListWidget::item:selected {
+                background-color: #313244;
+            }
+            QListWidget::item:hover {
+                background-color: #2a2b3d;
+            }
+        """)
+        self.file_list.itemClicked.connect(self._on_item_clicked)
+        self.file_list.itemDoubleClicked.connect(self._on_item_double_clicked)
+        layout.addWidget(self.file_list)
+
+        self.setStyleSheet("background-color: #1e1e2e;")
+
+    def set_directory(self, dir_path):
+        """Navigue vers un repertoire et rafraichit la liste."""
+        dir_path = os.path.abspath(dir_path)
+        if not os.path.isdir(dir_path):
+            return
+        self.current_dir = dir_path
+
+        # Tronquer le chemin affiche si trop long
+        display = dir_path
+        if len(display) > 40:
+            display = "..." + display[-37:]
+        self.path_label.setText(display)
+        self.path_label.setToolTip(dir_path)
+
+        # Activer/desactiver bouton parent
+        parent = os.path.dirname(dir_path)
+        self.btn_parent.setEnabled(parent != dir_path)
+
+        # Lister le contenu
+        self.file_list.clear()
+        try:
+            entries = os.listdir(dir_path)
+        except OSError:
+            return
+
+        dirs = []
+        files = []
+        for entry in entries:
+            full = os.path.join(dir_path, entry)
+            if os.path.isdir(full):
+                dirs.append(entry)
+            else:
+                ext = os.path.splitext(entry)[1].lower()
+                if ext in _SUPPORTED_EXTENSIONS:
+                    files.append(entry)
+
+        dirs.sort(key=str.lower)
+        files.sort(key=str.lower)
+
+        # Entree parent (..)
+        if os.path.dirname(dir_path) != dir_path:
+            item = QListWidgetItem("\U0001f4c1  ..")
+            item.setData(Qt.ItemDataRole.UserRole, ("dir", os.path.dirname(dir_path)))
+            item.setForeground(QColor("#f9e2af"))
+            self.file_list.addItem(item)
+
+        # Dossiers
+        for d in dirs:
+            item = QListWidgetItem(f"\U0001f4c1  {d}")
+            item.setData(Qt.ItemDataRole.UserRole, ("dir", os.path.join(dir_path, d)))
+            item.setForeground(QColor("#f9e2af"))
+            self.file_list.addItem(item)
+
+        # Fichiers
+        for f in files:
+            item = QListWidgetItem(f"\U0001f4c4  {f}")
+            item.setData(Qt.ItemDataRole.UserRole, ("file", os.path.join(dir_path, f)))
+            item.setForeground(QColor("#89b4fa"))
+            self.file_list.addItem(item)
+
+        # Sauvegarder le dernier repertoire
+        cfg = _load_config()
+        cfg["last_directory"] = dir_path
+        _save_config(cfg)
+
+    def highlight_file(self, file_path):
+        """Met en surbrillance un fichier dans la liste s'il est visible."""
+        file_path = os.path.abspath(file_path)
+        for i in range(self.file_list.count()):
+            item = self.file_list.item(i)
+            data = item.data(Qt.ItemDataRole.UserRole)
+            if data and data[0] == "file" and os.path.abspath(data[1]) == file_path:
+                self.file_list.setCurrentItem(item)
+                self.file_list.scrollToItem(item)
+                return
+
+    def _go_parent(self):
+        if self.current_dir:
+            parent = os.path.dirname(self.current_dir)
+            if parent != self.current_dir:
+                self.set_directory(parent)
+
+    def _on_item_clicked(self, item):
+        data = item.data(Qt.ItemDataRole.UserRole)
+        if not data:
+            return
+        kind, path = data
+        if kind == "file":
+            self.file_selected.emit(path)
+
+    def _on_item_double_clicked(self, item):
+        data = item.data(Qt.ItemDataRole.UserRole)
+        if not data:
+            return
+        kind, path = data
+        if kind == "dir":
+            self.set_directory(path)
+        elif kind == "file":
+            self.file_selected.emit(path)
+
+
+# ============================================================
 # FENETRE PRINCIPALE
 # ============================================================
 
@@ -666,14 +863,33 @@ class StructureViewer(QMainWindow):
         """)
         self.info_panel.setHtml(self._default_info_html())
 
-        # Layout principal : viewport en haut (etire), info en bas (fixe)
-        splitter = QSplitter(Qt.Orientation.Vertical, self)
-        splitter.addWidget(self.gl_widget)
-        splitter.addWidget(self.info_panel)
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 0)
-        splitter.setSizes([700, 140])
-        self.setCentralWidget(splitter)
+        # Panneau navigateur de fichiers (gauche)
+        self.file_browser = FileBrowserPanel(self)
+        self.file_browser.file_selected.connect(self._on_browser_file_selected)
+
+        # Layout : splitter vertical (viewport + info)
+        right_splitter = QSplitter(Qt.Orientation.Vertical, self)
+        right_splitter.addWidget(self.gl_widget)
+        right_splitter.addWidget(self.info_panel)
+        right_splitter.setStretchFactor(0, 1)
+        right_splitter.setStretchFactor(1, 0)
+        right_splitter.setSizes([700, 140])
+
+        # Layout principal : splitter horizontal (browser | viewport+info)
+        main_splitter = QSplitter(Qt.Orientation.Horizontal, self)
+        main_splitter.addWidget(self.file_browser)
+        main_splitter.addWidget(right_splitter)
+        main_splitter.setStretchFactor(0, 0)
+        main_splitter.setStretchFactor(1, 1)
+        main_splitter.setSizes([250, 1030])
+        self.setCentralWidget(main_splitter)
+
+        # Initialiser le navigateur avec le dernier repertoire ou CWD
+        cfg = _load_config()
+        start_dir = cfg.get("last_directory", "")
+        if not start_dir or not os.path.isdir(start_dir):
+            start_dir = os.getcwd()
+        self.file_browser.set_directory(start_dir)
 
         # Toolbar
         self._create_toolbar()
@@ -765,6 +981,10 @@ class StructureViewer(QMainWindow):
 
     def _toggle_info_panel(self):
         self.info_panel.setVisible(not self.info_panel.isVisible())
+
+    def _on_browser_file_selected(self, path):
+        """Appele quand un fichier est selectionne dans le navigateur."""
+        self.load_file(path)
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:
@@ -858,6 +1078,9 @@ class StructureViewer(QMainWindow):
 
         # Panneau d'infos
         self._update_info_panel(structure, non_air, total, faces, t_load, t_mesh)
+
+        # Mettre en surbrillance dans le navigateur
+        self.file_browser.highlight_file(path)
 
     def _update_info_panel(self, s, non_air, total, faces, t_load, t_mesh):
         sx, sy, sz = s.size
@@ -980,6 +1203,7 @@ def main():
         QToolBar QToolButton:hover { background: #45475a; }
         QStatusBar { background-color: #181825; color: #a6adc8; font-size: 11px; }
         QSplitter::handle { background-color: #45475a; width: 2px; }
+        QSplitter::handle:horizontal { width: 3px; }
     """)
 
     viewer = StructureViewer()

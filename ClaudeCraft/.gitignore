@@ -4,6 +4,9 @@
 export.cfg
 export_presets.cfg
 
+# Godot import cache files (auto-generated)
+*.import
+
 # Imported translations (automatically generated from CSV files)
 *.translation
 
