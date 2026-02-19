@@ -153,6 +153,47 @@ func _init_inventory():
 	inventory[BlockRegistry.BlockType.STONE_TABLE] = 0
 	inventory[BlockRegistry.BlockType.IRON_TABLE] = 0
 	inventory[BlockRegistry.BlockType.GOLD_TABLE] = 0
+	# Nouveaux blocs
+	inventory[BlockRegistry.BlockType.COBBLESTONE] = 0
+	inventory[BlockRegistry.BlockType.MOSSY_COBBLESTONE] = 0
+	inventory[BlockRegistry.BlockType.ANDESITE] = 0
+	inventory[BlockRegistry.BlockType.GRANITE] = 0
+	inventory[BlockRegistry.BlockType.DIORITE] = 0
+	inventory[BlockRegistry.BlockType.DEEPSLATE] = 0
+	inventory[BlockRegistry.BlockType.SMOOTH_STONE] = 0
+	inventory[BlockRegistry.BlockType.SPRUCE_LOG] = 0
+	inventory[BlockRegistry.BlockType.BIRCH_LOG] = 0
+	inventory[BlockRegistry.BlockType.JUNGLE_LOG] = 0
+	inventory[BlockRegistry.BlockType.ACACIA_LOG] = 0
+	inventory[BlockRegistry.BlockType.DARK_OAK_LOG] = 0
+	inventory[BlockRegistry.BlockType.SPRUCE_PLANKS] = 0
+	inventory[BlockRegistry.BlockType.BIRCH_PLANKS] = 0
+	inventory[BlockRegistry.BlockType.JUNGLE_PLANKS] = 0
+	inventory[BlockRegistry.BlockType.ACACIA_PLANKS] = 0
+	inventory[BlockRegistry.BlockType.DARK_OAK_PLANKS] = 0
+	inventory[BlockRegistry.BlockType.CHERRY_LOG] = 0
+	inventory[BlockRegistry.BlockType.CHERRY_PLANKS] = 0
+	inventory[BlockRegistry.BlockType.SPRUCE_LEAVES] = 0
+	inventory[BlockRegistry.BlockType.BIRCH_LEAVES] = 0
+	inventory[BlockRegistry.BlockType.JUNGLE_LEAVES] = 0
+	inventory[BlockRegistry.BlockType.ACACIA_LEAVES] = 0
+	inventory[BlockRegistry.BlockType.DARK_OAK_LEAVES] = 0
+	inventory[BlockRegistry.BlockType.CHERRY_LEAVES] = 0
+	inventory[BlockRegistry.BlockType.DIAMOND_ORE] = 0
+	inventory[BlockRegistry.BlockType.COPPER_ORE] = 0
+	inventory[BlockRegistry.BlockType.DIAMOND_BLOCK] = 0
+	inventory[BlockRegistry.BlockType.COPPER_BLOCK] = 0
+	inventory[BlockRegistry.BlockType.COPPER_INGOT] = 0
+	inventory[BlockRegistry.BlockType.COAL_BLOCK] = 0
+	inventory[BlockRegistry.BlockType.CLAY] = 0
+	inventory[BlockRegistry.BlockType.PODZOL] = 0
+	inventory[BlockRegistry.BlockType.ICE] = 0
+	inventory[BlockRegistry.BlockType.PACKED_ICE] = 0
+	inventory[BlockRegistry.BlockType.MOSS_BLOCK] = 0
+	inventory[BlockRegistry.BlockType.GLASS] = 0
+	inventory[BlockRegistry.BlockType.BOOKSHELF] = 0
+	inventory[BlockRegistry.BlockType.HAY_BLOCK] = 0
+	inventory[BlockRegistry.BlockType.BARREL] = 0
 
 func _create_block_highlighter():
 	block_highlighter = BlockHighlighter.new()

@@ -7,13 +7,14 @@ const VProfession = preload("res://scripts/villager_profession.gd")
 var poi_registry: Dictionary = {}
 
 # Workstation block type values (valeurs de BlockRegistry.BlockType enum)
-# CRAFTING_TABLE=12, FURNACE=21, STONE_TABLE=22, IRON_TABLE=23, GOLD_TABLE=24
+# CRAFTING_TABLE=12, FURNACE=21, STONE_TABLE=22, IRON_TABLE=23, GOLD_TABLE=24, BARREL=64
 const WORKSTATION_TYPES: Dictionary = {
 	12: true,
 	21: true,
 	22: true,
 	23: true,
 	24: true,
+	64: true,
 }
 
 const CHUNK_SIZE = 16

@@ -13,12 +13,12 @@ enum BlockType {
 	CACTUS,
 	DARK_GRASS,
 	GRAVEL,
-	# Nouveaux blocs craftables
+	# Blocs craftables
 	PLANKS,
 	CRAFTING_TABLE,
 	BRICK,
 	SANDSTONE,
-	# Blocs naturels supplémentaires
+	# Blocs naturels
 	WATER,
 	COAL_ORE,
 	IRON_ORE,
@@ -30,7 +30,54 @@ enum BlockType {
 	FURNACE,
 	STONE_TABLE,
 	IRON_TABLE,
-	GOLD_TABLE
+	GOLD_TABLE,
+	# === VARIANTES DE PIERRE (25-31) ===
+	COBBLESTONE,
+	MOSSY_COBBLESTONE,
+	ANDESITE,
+	GRANITE,
+	DIORITE,
+	DEEPSLATE,
+	SMOOTH_STONE,
+	# === TYPES DE BOIS (32-43) ===
+	SPRUCE_LOG,
+	BIRCH_LOG,
+	JUNGLE_LOG,
+	ACACIA_LOG,
+	DARK_OAK_LOG,
+	SPRUCE_PLANKS,
+	BIRCH_PLANKS,
+	JUNGLE_PLANKS,
+	ACACIA_PLANKS,
+	DARK_OAK_PLANKS,
+	CHERRY_LOG,
+	CHERRY_PLANKS,
+	# === FEUILLAGES (44-49) ===
+	SPRUCE_LEAVES,
+	BIRCH_LEAVES,
+	JUNGLE_LEAVES,
+	ACACIA_LEAVES,
+	DARK_OAK_LEAVES,
+	CHERRY_LEAVES,
+	# === MINERAIS (50-51) ===
+	DIAMOND_ORE,
+	COPPER_ORE,
+	# === MATERIAUX RAFFINES (52-55) ===
+	DIAMOND_BLOCK,
+	COPPER_BLOCK,
+	COPPER_INGOT,
+	COAL_BLOCK,
+	# === BLOCS NATURELS (56-60) ===
+	CLAY,
+	PODZOL,
+	ICE,
+	PACKED_ICE,
+	MOSS_BLOCK,
+	# === BLOCS FONCTIONNELS/DECORATIFS (61-64) ===
+	GLASS,
+	BOOKSHELF,
+	HAY_BLOCK,
+	BARREL,
 }
 
 const BLOCK_DATA = {
@@ -212,7 +259,295 @@ const BLOCK_DATA = {
 		"color": Color(0.75, 0.65, 0.3, 1.0),
 		"hardness": 2.0,
 		"faces": { "all": "gold_block" }
-	}
+	},
+	# === VARIANTES DE PIERRE ===
+	BlockType.COBBLESTONE: {
+		"name": "Cobblestone",
+		"solid": true,
+		"color": Color(0.6, 0.6, 0.65, 1.0),
+		"hardness": 1.5,
+		"faces": { "all": "cobblestone" }
+	},
+	BlockType.MOSSY_COBBLESTONE: {
+		"name": "Mossy Cobblestone",
+		"solid": true,
+		"color": Color(0.5, 0.65, 0.5, 1.0),
+		"hardness": 1.5,
+		"faces": { "all": "mossy_cobblestone" }
+	},
+	BlockType.ANDESITE: {
+		"name": "Andesite",
+		"solid": true,
+		"color": Color(0.6, 0.6, 0.6, 1.0),
+		"hardness": 1.2,
+		"faces": { "all": "andesite" }
+	},
+	BlockType.GRANITE: {
+		"name": "Granite",
+		"solid": true,
+		"color": Color(0.65, 0.5, 0.45, 1.0),
+		"hardness": 1.2,
+		"faces": { "all": "granite" }
+	},
+	BlockType.DIORITE: {
+		"name": "Diorite",
+		"solid": true,
+		"color": Color(0.75, 0.75, 0.75, 1.0),
+		"hardness": 1.2,
+		"faces": { "all": "diorite" }
+	},
+	BlockType.DEEPSLATE: {
+		"name": "Deepslate",
+		"solid": true,
+		"color": Color(0.35, 0.35, 0.4, 1.0),
+		"hardness": 2.5,
+		"faces": { "top": "deepslate_top", "bottom": "deepslate_top", "side": "deepslate" }
+	},
+	BlockType.SMOOTH_STONE: {
+		"name": "Smooth Stone",
+		"solid": true,
+		"color": Color(0.72, 0.72, 0.76, 1.0),
+		"hardness": 1.5,
+		"faces": { "all": "smooth_stone" }
+	},
+	# === TYPES DE BOIS — LOGS ===
+	BlockType.SPRUCE_LOG: {
+		"name": "Spruce Log",
+		"solid": true,
+		"color": Color(0.45, 0.3, 0.2, 1.0),
+		"hardness": 1.0,
+		"faces": { "top": "spruce_log_top", "bottom": "spruce_log_top", "side": "spruce_log" }
+	},
+	BlockType.BIRCH_LOG: {
+		"name": "Birch Log",
+		"solid": true,
+		"color": Color(0.85, 0.82, 0.75, 1.0),
+		"hardness": 1.0,
+		"faces": { "top": "birch_log_top", "bottom": "birch_log_top", "side": "birch_log" }
+	},
+	BlockType.JUNGLE_LOG: {
+		"name": "Jungle Log",
+		"solid": true,
+		"color": Color(0.6, 0.45, 0.3, 1.0),
+		"hardness": 1.0,
+		"faces": { "top": "jungle_log_top", "bottom": "jungle_log_top", "side": "jungle_log" }
+	},
+	BlockType.ACACIA_LOG: {
+		"name": "Acacia Log",
+		"solid": true,
+		"color": Color(0.6, 0.4, 0.3, 1.0),
+		"hardness": 1.0,
+		"faces": { "top": "acacia_log_top", "bottom": "acacia_log_top", "side": "acacia_log" }
+	},
+	BlockType.DARK_OAK_LOG: {
+		"name": "Dark Oak Log",
+		"solid": true,
+		"color": Color(0.35, 0.25, 0.15, 1.0),
+		"hardness": 1.0,
+		"faces": { "top": "dark_oak_log_top", "bottom": "dark_oak_log_top", "side": "dark_oak_log" }
+	},
+	# === TYPES DE BOIS — PLANCHES ===
+	BlockType.SPRUCE_PLANKS: {
+		"name": "Spruce Planks",
+		"solid": true,
+		"color": Color(0.55, 0.4, 0.25, 1.0),
+		"hardness": 0.8,
+		"faces": { "all": "spruce_planks" }
+	},
+	BlockType.BIRCH_PLANKS: {
+		"name": "Birch Planks",
+		"solid": true,
+		"color": Color(0.9, 0.85, 0.7, 1.0),
+		"hardness": 0.8,
+		"faces": { "all": "birch_planks" }
+	},
+	BlockType.JUNGLE_PLANKS: {
+		"name": "Jungle Planks",
+		"solid": true,
+		"color": Color(0.7, 0.5, 0.35, 1.0),
+		"hardness": 0.8,
+		"faces": { "all": "jungle_planks" }
+	},
+	BlockType.ACACIA_PLANKS: {
+		"name": "Acacia Planks",
+		"solid": true,
+		"color": Color(0.75, 0.45, 0.25, 1.0),
+		"hardness": 0.8,
+		"faces": { "all": "acacia_planks" }
+	},
+	BlockType.DARK_OAK_PLANKS: {
+		"name": "Dark Oak Planks",
+		"solid": true,
+		"color": Color(0.4, 0.28, 0.15, 1.0),
+		"hardness": 0.8,
+		"faces": { "all": "dark_oak_planks" }
+	},
+	BlockType.CHERRY_LOG: {
+		"name": "Cherry Log",
+		"solid": true,
+		"color": Color(0.7, 0.45, 0.5, 1.0),
+		"hardness": 1.0,
+		"faces": { "top": "cherry_log_top", "bottom": "cherry_log_top", "side": "cherry_log" }
+	},
+	BlockType.CHERRY_PLANKS: {
+		"name": "Cherry Planks",
+		"solid": true,
+		"color": Color(0.85, 0.6, 0.6, 1.0),
+		"hardness": 0.8,
+		"faces": { "all": "cherry_planks" }
+	},
+	# === FEUILLAGES ===
+	BlockType.SPRUCE_LEAVES: {
+		"name": "Spruce Leaves",
+		"solid": true,
+		"color": Color(0.35, 0.55, 0.35, 1.0),
+		"hardness": 0.2,
+		"faces": { "all": "spruce_leaves" }
+	},
+	BlockType.BIRCH_LEAVES: {
+		"name": "Birch Leaves",
+		"solid": true,
+		"color": Color(0.6, 0.8, 0.45, 1.0),
+		"hardness": 0.2,
+		"faces": { "all": "birch_leaves" }
+	},
+	BlockType.JUNGLE_LEAVES: {
+		"name": "Jungle Leaves",
+		"solid": true,
+		"color": Color(0.3, 0.7, 0.25, 1.0),
+		"hardness": 0.2,
+		"faces": { "all": "jungle_leaves" }
+	},
+	BlockType.ACACIA_LEAVES: {
+		"name": "Acacia Leaves",
+		"solid": true,
+		"color": Color(0.55, 0.7, 0.3, 1.0),
+		"hardness": 0.2,
+		"faces": { "all": "acacia_leaves" }
+	},
+	BlockType.DARK_OAK_LEAVES: {
+		"name": "Dark Oak Leaves",
+		"solid": true,
+		"color": Color(0.3, 0.5, 0.25, 1.0),
+		"hardness": 0.2,
+		"faces": { "all": "dark_oak_leaves" }
+	},
+	BlockType.CHERRY_LEAVES: {
+		"name": "Cherry Leaves",
+		"solid": true,
+		"color": Color(0.9, 0.6, 0.7, 1.0),
+		"hardness": 0.2,
+		"faces": { "all": "cherry_leaves" }
+	},
+	# === MINERAIS ===
+	BlockType.DIAMOND_ORE: {
+		"name": "Diamond Ore",
+		"solid": true,
+		"color": Color(0.5, 0.85, 0.9, 1.0),
+		"hardness": 3.0,
+		"faces": { "all": "diamond_ore" }
+	},
+	BlockType.COPPER_ORE: {
+		"name": "Copper Ore",
+		"solid": true,
+		"color": Color(0.7, 0.55, 0.45, 1.0),
+		"hardness": 2.0,
+		"faces": { "all": "copper_ore" }
+	},
+	# === MATERIAUX RAFFINES ===
+	BlockType.DIAMOND_BLOCK: {
+		"name": "Diamond Block",
+		"solid": true,
+		"color": Color(0.55, 0.9, 0.95, 1.0),
+		"hardness": 3.0,
+		"faces": { "all": "diamond_block" }
+	},
+	BlockType.COPPER_BLOCK: {
+		"name": "Copper Block",
+		"solid": true,
+		"color": Color(0.75, 0.55, 0.4, 1.0),
+		"hardness": 2.0,
+		"faces": { "all": "copper_block" }
+	},
+	BlockType.COPPER_INGOT: {
+		"name": "Copper Ingot",
+		"solid": true,
+		"color": Color(0.8, 0.6, 0.45, 1.0),
+		"hardness": 1.5,
+		"faces": { "all": "copper_block" }
+	},
+	BlockType.COAL_BLOCK: {
+		"name": "Coal Block",
+		"solid": true,
+		"color": Color(0.15, 0.15, 0.18, 1.0),
+		"hardness": 1.5,
+		"faces": { "all": "coal_block" }
+	},
+	# === BLOCS NATURELS ===
+	BlockType.CLAY: {
+		"name": "Clay",
+		"solid": true,
+		"color": Color(0.65, 0.65, 0.72, 1.0),
+		"hardness": 0.6,
+		"faces": { "all": "clay" }
+	},
+	BlockType.PODZOL: {
+		"name": "Podzol",
+		"solid": true,
+		"color": Color(0.5, 0.38, 0.25, 1.0),
+		"hardness": 0.5,
+		"faces": { "top": "podzol_top", "side": "podzol_side", "bottom": "dirt" }
+	},
+	BlockType.ICE: {
+		"name": "Ice",
+		"solid": true,
+		"color": Color(0.7, 0.85, 0.95, 1.0),
+		"hardness": 0.5,
+		"faces": { "all": "ice" }
+	},
+	BlockType.PACKED_ICE: {
+		"name": "Packed Ice",
+		"solid": true,
+		"color": Color(0.6, 0.75, 0.9, 1.0),
+		"hardness": 1.5,
+		"faces": { "all": "packed_ice" }
+	},
+	BlockType.MOSS_BLOCK: {
+		"name": "Moss Block",
+		"solid": true,
+		"color": Color(0.4, 0.6, 0.3, 1.0),
+		"hardness": 0.5,
+		"faces": { "all": "moss_block" }
+	},
+	# === BLOCS FONCTIONNELS / DECORATIFS ===
+	BlockType.GLASS: {
+		"name": "Glass",
+		"solid": true,
+		"color": Color(0.85, 0.9, 0.95, 0.8),
+		"hardness": 0.3,
+		"faces": { "all": "glass" }
+	},
+	BlockType.BOOKSHELF: {
+		"name": "Bookshelf",
+		"solid": true,
+		"color": Color(0.55, 0.4, 0.3, 1.0),
+		"hardness": 0.8,
+		"faces": { "top": "oak_planks", "bottom": "oak_planks", "side": "bookshelf" }
+	},
+	BlockType.HAY_BLOCK: {
+		"name": "Hay Block",
+		"solid": true,
+		"color": Color(0.85, 0.75, 0.3, 1.0),
+		"hardness": 0.5,
+		"faces": { "top": "hay_block_top", "bottom": "hay_block_top", "side": "hay_block_side" }
+	},
+	BlockType.BARREL: {
+		"name": "Barrel",
+		"solid": true,
+		"color": Color(0.6, 0.45, 0.3, 1.0),
+		"hardness": 1.0,
+		"faces": { "top": "barrel_top", "bottom": "barrel_bottom", "side": "barrel_side" }
+	},
 }
 
 static func get_block_color(block_type: BlockType) -> Color:
@@ -244,6 +579,7 @@ const WORKSTATION_BLOCKS: Dictionary = {
 	BlockType.STONE_TABLE: true,
 	BlockType.IRON_TABLE: true,
 	BlockType.GOLD_TABLE: true,
+	BlockType.BARREL: true,
 }
 
 static func is_workstation(block_type) -> bool:
@@ -261,5 +597,17 @@ static func get_block_tint(block_type: BlockType, face: String = "all") -> Color
 			return Color(0.75, 0.85, 0.75, 1.0)
 		BlockType.LEAVES:
 			return Color(0.47, 0.82, 0.35, 1.0)
+		BlockType.SPRUCE_LEAVES:
+			return Color(0.35, 0.65, 0.35, 1.0)
+		BlockType.BIRCH_LEAVES:
+			return Color(0.6, 0.85, 0.35, 1.0)
+		BlockType.JUNGLE_LEAVES:
+			return Color(0.3, 0.8, 0.25, 1.0)
+		BlockType.ACACIA_LEAVES:
+			return Color(0.55, 0.75, 0.3, 1.0)
+		BlockType.DARK_OAK_LEAVES:
+			return Color(0.3, 0.55, 0.25, 1.0)
+		BlockType.CHERRY_LEAVES:
+			return Color(0.9, 0.6, 0.7, 1.0)
 		_:
 			return Color(1.0, 1.0, 1.0, 1.0)

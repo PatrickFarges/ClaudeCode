@@ -1,7 +1,7 @@
 extends CanvasLayer
 
-# Écran d'inventaire complet — ouvert avec I
-# 6 onglets : TOUT, Basique, Métal, Stations, Armes, Armures
+# Ecran d'inventaire complet — ouvert avec I
+# 7 onglets : TOUT, Terrain, Bois, Pierre, Minerais, Deco, Stations
 
 var player: CharacterBody3D = null
 var is_open: bool = false
@@ -45,44 +45,135 @@ const ALL_BLOCK_TYPES = [
 	BlockRegistry.BlockType.STONE_TABLE,
 	BlockRegistry.BlockType.IRON_TABLE,
 	BlockRegistry.BlockType.GOLD_TABLE,
+	BlockRegistry.BlockType.COBBLESTONE,
+	BlockRegistry.BlockType.MOSSY_COBBLESTONE,
+	BlockRegistry.BlockType.ANDESITE,
+	BlockRegistry.BlockType.GRANITE,
+	BlockRegistry.BlockType.DIORITE,
+	BlockRegistry.BlockType.DEEPSLATE,
+	BlockRegistry.BlockType.SMOOTH_STONE,
+	BlockRegistry.BlockType.SPRUCE_LOG,
+	BlockRegistry.BlockType.BIRCH_LOG,
+	BlockRegistry.BlockType.JUNGLE_LOG,
+	BlockRegistry.BlockType.ACACIA_LOG,
+	BlockRegistry.BlockType.DARK_OAK_LOG,
+	BlockRegistry.BlockType.SPRUCE_PLANKS,
+	BlockRegistry.BlockType.BIRCH_PLANKS,
+	BlockRegistry.BlockType.JUNGLE_PLANKS,
+	BlockRegistry.BlockType.ACACIA_PLANKS,
+	BlockRegistry.BlockType.DARK_OAK_PLANKS,
+	BlockRegistry.BlockType.CHERRY_LOG,
+	BlockRegistry.BlockType.CHERRY_PLANKS,
+	BlockRegistry.BlockType.SPRUCE_LEAVES,
+	BlockRegistry.BlockType.BIRCH_LEAVES,
+	BlockRegistry.BlockType.JUNGLE_LEAVES,
+	BlockRegistry.BlockType.ACACIA_LEAVES,
+	BlockRegistry.BlockType.DARK_OAK_LEAVES,
+	BlockRegistry.BlockType.CHERRY_LEAVES,
+	BlockRegistry.BlockType.DIAMOND_ORE,
+	BlockRegistry.BlockType.COPPER_ORE,
+	BlockRegistry.BlockType.DIAMOND_BLOCK,
+	BlockRegistry.BlockType.COPPER_BLOCK,
+	BlockRegistry.BlockType.COPPER_INGOT,
+	BlockRegistry.BlockType.COAL_BLOCK,
+	BlockRegistry.BlockType.CLAY,
+	BlockRegistry.BlockType.PODZOL,
+	BlockRegistry.BlockType.ICE,
+	BlockRegistry.BlockType.PACKED_ICE,
+	BlockRegistry.BlockType.MOSS_BLOCK,
+	BlockRegistry.BlockType.GLASS,
+	BlockRegistry.BlockType.BOOKSHELF,
+	BlockRegistry.BlockType.HAY_BLOCK,
+	BlockRegistry.BlockType.BARREL,
 ]
 
-const TAB_BASIC = [
+const TAB_TERRAIN = [
 	BlockRegistry.BlockType.DIRT,
 	BlockRegistry.BlockType.GRASS,
 	BlockRegistry.BlockType.DARK_GRASS,
 	BlockRegistry.BlockType.STONE,
 	BlockRegistry.BlockType.SAND,
 	BlockRegistry.BlockType.GRAVEL,
-	BlockRegistry.BlockType.WOOD,
-	BlockRegistry.BlockType.LEAVES,
 	BlockRegistry.BlockType.SNOW,
 	BlockRegistry.BlockType.CACTUS,
+	BlockRegistry.BlockType.CLAY,
+	BlockRegistry.BlockType.PODZOL,
+	BlockRegistry.BlockType.MOSS_BLOCK,
+	BlockRegistry.BlockType.ICE,
+	BlockRegistry.BlockType.PACKED_ICE,
 ]
 
-const TAB_METAL = [
+const TAB_WOOD = [
+	BlockRegistry.BlockType.WOOD,
+	BlockRegistry.BlockType.PLANKS,
+	BlockRegistry.BlockType.SPRUCE_LOG,
+	BlockRegistry.BlockType.SPRUCE_PLANKS,
+	BlockRegistry.BlockType.BIRCH_LOG,
+	BlockRegistry.BlockType.BIRCH_PLANKS,
+	BlockRegistry.BlockType.JUNGLE_LOG,
+	BlockRegistry.BlockType.JUNGLE_PLANKS,
+	BlockRegistry.BlockType.ACACIA_LOG,
+	BlockRegistry.BlockType.ACACIA_PLANKS,
+	BlockRegistry.BlockType.DARK_OAK_LOG,
+	BlockRegistry.BlockType.DARK_OAK_PLANKS,
+	BlockRegistry.BlockType.CHERRY_LOG,
+	BlockRegistry.BlockType.CHERRY_PLANKS,
+]
+
+const TAB_STONE = [
+	BlockRegistry.BlockType.STONE,
+	BlockRegistry.BlockType.COBBLESTONE,
+	BlockRegistry.BlockType.MOSSY_COBBLESTONE,
+	BlockRegistry.BlockType.ANDESITE,
+	BlockRegistry.BlockType.GRANITE,
+	BlockRegistry.BlockType.DIORITE,
+	BlockRegistry.BlockType.DEEPSLATE,
+	BlockRegistry.BlockType.SMOOTH_STONE,
+	BlockRegistry.BlockType.BRICK,
+	BlockRegistry.BlockType.SANDSTONE,
+]
+
+const TAB_ORES = [
 	BlockRegistry.BlockType.COAL_ORE,
 	BlockRegistry.BlockType.IRON_ORE,
 	BlockRegistry.BlockType.GOLD_ORE,
+	BlockRegistry.BlockType.COPPER_ORE,
+	BlockRegistry.BlockType.DIAMOND_ORE,
 	BlockRegistry.BlockType.IRON_INGOT,
 	BlockRegistry.BlockType.GOLD_INGOT,
+	BlockRegistry.BlockType.COPPER_INGOT,
+	BlockRegistry.BlockType.DIAMOND_BLOCK,
+	BlockRegistry.BlockType.COAL_BLOCK,
+	BlockRegistry.BlockType.COPPER_BLOCK,
+]
+
+const TAB_DECO = [
+	BlockRegistry.BlockType.GLASS,
+	BlockRegistry.BlockType.BOOKSHELF,
+	BlockRegistry.BlockType.HAY_BLOCK,
+	BlockRegistry.BlockType.BARREL,
+	BlockRegistry.BlockType.LEAVES,
+	BlockRegistry.BlockType.SPRUCE_LEAVES,
+	BlockRegistry.BlockType.BIRCH_LEAVES,
+	BlockRegistry.BlockType.JUNGLE_LEAVES,
+	BlockRegistry.BlockType.ACACIA_LEAVES,
+	BlockRegistry.BlockType.DARK_OAK_LEAVES,
+	BlockRegistry.BlockType.CHERRY_LEAVES,
 ]
 
 const TAB_STATIONS = [
-	BlockRegistry.BlockType.PLANKS,
-	BlockRegistry.BlockType.BRICK,
-	BlockRegistry.BlockType.SANDSTONE,
 	BlockRegistry.BlockType.CRAFTING_TABLE,
 	BlockRegistry.BlockType.FURNACE,
 	BlockRegistry.BlockType.STONE_TABLE,
 	BlockRegistry.BlockType.IRON_TABLE,
 	BlockRegistry.BlockType.GOLD_TABLE,
+	BlockRegistry.BlockType.BARREL,
 ]
 
-# Valeurs de tri (plus haut = plus rare, affiché en premier)
+# Valeurs de tri (plus haut = plus rare, affiche en premier)
 var SORT_VALUES: Dictionary = {}
 
-const TAB_KEYS = ["inv_tab_all", "inv_tab_basic", "inv_tab_metal", "inv_tab_stations", "inv_tab_weapons", "inv_tab_armor"]
+const TAB_KEYS = ["inv_tab_all", "inv_tab_terrain", "inv_tab_wood", "inv_tab_stone", "inv_tab_ores", "inv_tab_deco", "inv_tab_stations"]
 
 func _ready():
 	layer = 10
@@ -97,27 +188,67 @@ func _ready():
 	_build_ui()
 
 func _init_sort_values():
-	SORT_VALUES[BlockRegistry.BlockType.GOLD_TABLE] = 100
-	SORT_VALUES[BlockRegistry.BlockType.GOLD_INGOT] = 95
-	SORT_VALUES[BlockRegistry.BlockType.GOLD_ORE] = 90
-	SORT_VALUES[BlockRegistry.BlockType.IRON_TABLE] = 85
-	SORT_VALUES[BlockRegistry.BlockType.IRON_INGOT] = 80
-	SORT_VALUES[BlockRegistry.BlockType.IRON_ORE] = 75
-	SORT_VALUES[BlockRegistry.BlockType.STONE_TABLE] = 70
-	SORT_VALUES[BlockRegistry.BlockType.FURNACE] = 65
-	SORT_VALUES[BlockRegistry.BlockType.CRAFTING_TABLE] = 60
-	SORT_VALUES[BlockRegistry.BlockType.COAL_ORE] = 55
-	SORT_VALUES[BlockRegistry.BlockType.BRICK] = 50
-	SORT_VALUES[BlockRegistry.BlockType.SANDSTONE] = 45
-	SORT_VALUES[BlockRegistry.BlockType.PLANKS] = 40
-	SORT_VALUES[BlockRegistry.BlockType.STONE] = 35
-	SORT_VALUES[BlockRegistry.BlockType.GRAVEL] = 30
-	SORT_VALUES[BlockRegistry.BlockType.WOOD] = 25
-	SORT_VALUES[BlockRegistry.BlockType.SAND] = 20
-	SORT_VALUES[BlockRegistry.BlockType.SNOW] = 15
-	SORT_VALUES[BlockRegistry.BlockType.CACTUS] = 12
-	SORT_VALUES[BlockRegistry.BlockType.DARK_GRASS] = 10
-	SORT_VALUES[BlockRegistry.BlockType.LEAVES] = 8
+	SORT_VALUES[BlockRegistry.BlockType.GOLD_TABLE] = 200
+	SORT_VALUES[BlockRegistry.BlockType.GOLD_INGOT] = 195
+	SORT_VALUES[BlockRegistry.BlockType.GOLD_ORE] = 190
+	SORT_VALUES[BlockRegistry.BlockType.IRON_TABLE] = 185
+	SORT_VALUES[BlockRegistry.BlockType.IRON_INGOT] = 180
+	SORT_VALUES[BlockRegistry.BlockType.IRON_ORE] = 175
+	SORT_VALUES[BlockRegistry.BlockType.DIAMOND_BLOCK] = 170
+	SORT_VALUES[BlockRegistry.BlockType.DIAMOND_ORE] = 165
+	SORT_VALUES[BlockRegistry.BlockType.STONE_TABLE] = 160
+	SORT_VALUES[BlockRegistry.BlockType.FURNACE] = 155
+	SORT_VALUES[BlockRegistry.BlockType.CRAFTING_TABLE] = 150
+	SORT_VALUES[BlockRegistry.BlockType.BARREL] = 145
+	SORT_VALUES[BlockRegistry.BlockType.COPPER_BLOCK] = 140
+	SORT_VALUES[BlockRegistry.BlockType.COPPER_INGOT] = 135
+	SORT_VALUES[BlockRegistry.BlockType.COPPER_ORE] = 130
+	SORT_VALUES[BlockRegistry.BlockType.COAL_BLOCK] = 125
+	SORT_VALUES[BlockRegistry.BlockType.COAL_ORE] = 120
+	SORT_VALUES[BlockRegistry.BlockType.BOOKSHELF] = 115
+	SORT_VALUES[BlockRegistry.BlockType.GLASS] = 110
+	SORT_VALUES[BlockRegistry.BlockType.HAY_BLOCK] = 105
+	SORT_VALUES[BlockRegistry.BlockType.DEEPSLATE] = 100
+	SORT_VALUES[BlockRegistry.BlockType.SMOOTH_STONE] = 95
+	SORT_VALUES[BlockRegistry.BlockType.BRICK] = 90
+	SORT_VALUES[BlockRegistry.BlockType.SANDSTONE] = 85
+	SORT_VALUES[BlockRegistry.BlockType.MOSSY_COBBLESTONE] = 80
+	SORT_VALUES[BlockRegistry.BlockType.COBBLESTONE] = 75
+	SORT_VALUES[BlockRegistry.BlockType.ANDESITE] = 70
+	SORT_VALUES[BlockRegistry.BlockType.GRANITE] = 68
+	SORT_VALUES[BlockRegistry.BlockType.DIORITE] = 66
+	SORT_VALUES[BlockRegistry.BlockType.PACKED_ICE] = 64
+	SORT_VALUES[BlockRegistry.BlockType.ICE] = 62
+	SORT_VALUES[BlockRegistry.BlockType.PLANKS] = 60
+	SORT_VALUES[BlockRegistry.BlockType.SPRUCE_PLANKS] = 59
+	SORT_VALUES[BlockRegistry.BlockType.BIRCH_PLANKS] = 58
+	SORT_VALUES[BlockRegistry.BlockType.JUNGLE_PLANKS] = 57
+	SORT_VALUES[BlockRegistry.BlockType.ACACIA_PLANKS] = 56
+	SORT_VALUES[BlockRegistry.BlockType.DARK_OAK_PLANKS] = 55
+	SORT_VALUES[BlockRegistry.BlockType.CHERRY_PLANKS] = 54
+	SORT_VALUES[BlockRegistry.BlockType.STONE] = 50
+	SORT_VALUES[BlockRegistry.BlockType.GRAVEL] = 45
+	SORT_VALUES[BlockRegistry.BlockType.WOOD] = 40
+	SORT_VALUES[BlockRegistry.BlockType.SPRUCE_LOG] = 39
+	SORT_VALUES[BlockRegistry.BlockType.BIRCH_LOG] = 38
+	SORT_VALUES[BlockRegistry.BlockType.JUNGLE_LOG] = 37
+	SORT_VALUES[BlockRegistry.BlockType.ACACIA_LOG] = 36
+	SORT_VALUES[BlockRegistry.BlockType.DARK_OAK_LOG] = 35
+	SORT_VALUES[BlockRegistry.BlockType.CHERRY_LOG] = 34
+	SORT_VALUES[BlockRegistry.BlockType.SAND] = 30
+	SORT_VALUES[BlockRegistry.BlockType.CLAY] = 28
+	SORT_VALUES[BlockRegistry.BlockType.PODZOL] = 26
+	SORT_VALUES[BlockRegistry.BlockType.MOSS_BLOCK] = 24
+	SORT_VALUES[BlockRegistry.BlockType.SNOW] = 20
+	SORT_VALUES[BlockRegistry.BlockType.CACTUS] = 18
+	SORT_VALUES[BlockRegistry.BlockType.DARK_GRASS] = 15
+	SORT_VALUES[BlockRegistry.BlockType.CHERRY_LEAVES] = 13
+	SORT_VALUES[BlockRegistry.BlockType.LEAVES] = 12
+	SORT_VALUES[BlockRegistry.BlockType.SPRUCE_LEAVES] = 11
+	SORT_VALUES[BlockRegistry.BlockType.BIRCH_LEAVES] = 10
+	SORT_VALUES[BlockRegistry.BlockType.JUNGLE_LEAVES] = 9
+	SORT_VALUES[BlockRegistry.BlockType.ACACIA_LEAVES] = 8
+	SORT_VALUES[BlockRegistry.BlockType.DARK_OAK_LEAVES] = 7
 	SORT_VALUES[BlockRegistry.BlockType.GRASS] = 5
 	SORT_VALUES[BlockRegistry.BlockType.DIRT] = 3
 
@@ -139,7 +270,7 @@ func _build_ui():
 	add_child(center)
 
 	panel = PanelContainer.new()
-	panel.custom_minimum_size = Vector2(700, 0)
+	panel.custom_minimum_size = Vector2(780, 0)
 	var panel_style = StyleBoxFlat.new()
 	panel_style.bg_color = Color(0.12, 0.12, 0.15, 0.95)
 	panel_style.border_width_left = 2
@@ -221,7 +352,7 @@ func _build_ui():
 	_update_sort_style()
 
 	# ============================================================
-	# SÉPARATEUR
+	# SEPARATEUR
 	# ============================================================
 	var sep2 = HSeparator.new()
 	sep2.add_theme_constant_override("separation", 6)
@@ -231,12 +362,12 @@ func _build_ui():
 	# ZONE DE CONTENU SCROLLABLE
 	# ============================================================
 	scroll = ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(0, 320)
+	scroll.custom_minimum_size = Vector2(0, 360)
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content_vbox.add_child(scroll)
 
 	grid = GridContainer.new()
-	grid.columns = 7
+	grid.columns = 8
 	grid.add_theme_constant_override("h_separation", 6)
 	grid.add_theme_constant_override("v_separation", 6)
 	scroll.add_child(grid)
@@ -359,15 +490,16 @@ func _rebuild_grid():
 		child.queue_free()
 	block_buttons.clear()
 
-	# Déterminer les blocs à afficher selon l'onglet
+	# Determiner les blocs a afficher selon l'onglet
 	var blocks: Array = []
 	match current_tab:
 		0: blocks = ALL_BLOCK_TYPES.duplicate()
-		1: blocks = TAB_BASIC.duplicate()
-		2: blocks = TAB_METAL.duplicate()
-		3: blocks = TAB_STATIONS.duplicate()
-		4: blocks = []  # Armes — vide
-		5: blocks = []  # Armures — vide
+		1: blocks = TAB_TERRAIN.duplicate()
+		2: blocks = TAB_WOOD.duplicate()
+		3: blocks = TAB_STONE.duplicate()
+		4: blocks = TAB_ORES.duplicate()
+		5: blocks = TAB_DECO.duplicate()
+		6: blocks = TAB_STATIONS.duplicate()
 
 	# Onglets vides : afficher le placeholder
 	if blocks.is_empty():
@@ -378,7 +510,7 @@ func _rebuild_grid():
 	grid.visible = true
 	placeholder_label.visible = false
 
-	# Tri par rareté si activé
+	# Tri par rarete si active
 	if is_sorted:
 		blocks.sort_custom(func(a, b):
 			var val_a = SORT_VALUES.get(a, 0)
@@ -386,13 +518,13 @@ func _rebuild_grid():
 			return val_a > val_b
 		)
 
-	# Créer les boutons
+	# Creer les boutons
 	for block_type in blocks:
 		var btn_data = _create_block_button(block_type)
 		grid.add_child(btn_data["button"])
 		block_buttons.append(btn_data)
 
-	# Mettre à jour les compteurs
+	# Mettre a jour les compteurs
 	_update_display()
 
 func _create_block_button(block_type: BlockRegistry.BlockType) -> Dictionary:

@@ -21,16 +21,17 @@ enum Activity {
 	SLEEP,
 }
 
-# BlockType values (évite les références cross-script dans les const)
+# BlockType values (evite les references cross-script dans les const)
 # AIR=0, GRASS=1, DIRT=2, STONE=3, SAND=4, WOOD=5, LEAVES=6, SNOW=7, CACTUS=8,
 # DARK_GRASS=9, GRAVEL=10, PLANKS=11, CRAFTING_TABLE=12, BRICK=13, SANDSTONE=14,
 # WATER=15, COAL_ORE=16, IRON_ORE=17, GOLD_ORE=18, IRON_INGOT=19, GOLD_INGOT=20,
-# FURNACE=21, STONE_TABLE=22, IRON_TABLE=23, GOLD_TABLE=24
+# FURNACE=21, STONE_TABLE=22, IRON_TABLE=23, GOLD_TABLE=24, ..., BARREL=64
 const BT_CRAFTING_TABLE = 12
 const BT_FURNACE = 21
 const BT_STONE_TABLE = 22
 const BT_IRON_TABLE = 23
 const BT_GOLD_TABLE = 24
+const BT_BARREL = 64
 
 # Mapping profession -> data
 # models: 2 indices parmi les 18 modèles character-a (0) à character-r (17)
