@@ -19,13 +19,19 @@ const MAX_MOBS = 20
 # PNJ villageois
 const NpcVillagerScene = preload("res://scripts/npc_villager.gd")
 var npcs: Array = []
-const MAX_NPCS = 10
+const MAX_NPCS = 20
+
+# POI Manager
+var poi_manager: POIManager = null
 
 func _ready():
 	# Générer un seed aléatoire si non défini
 	if world_seed == 0:
 		randomize()
 		world_seed = randi()
+
+	# Créer le POI Manager
+	poi_manager = POIManager.new()
 
 	# Créer le générateur de chunks avec le seed du monde
 	chunk_generator = ChunkGenerator.new()
@@ -132,6 +138,10 @@ func _on_chunk_data_ready(chunk_data: Dictionary):
 	# Lancer la construction du mesh en arrière-plan (thread dédié)
 	chunk.build_mesh_async()
 
+	# Scanner le chunk pour les POI (workstations)
+	if poi_manager:
+		poi_manager.scan_chunk(chunk_pos, blocks)
+
 	# Tenter de spawn des mobs passifs
 	_try_spawn_mobs(chunk_pos, chunk_data)
 
@@ -167,15 +177,23 @@ func _unload_distant_chunks(player_chunk_pos: Vector3i):
 			remaining_mobs.append(mob_data)
 	mobs = remaining_mobs
 
-	# Supprimer les NPCs des chunks déchargés
+	# Supprimer les NPCs des chunks déchargés + libérer leurs POI
 	var remaining_npcs = []
 	for npc_data in npcs:
 		if chunks_to_remove.has(npc_data["chunk_pos"]):
 			if is_instance_valid(npc_data["npc"]):
-				npc_data["npc"].queue_free()
+				var npc = npc_data["npc"]
+				if poi_manager and npc.claimed_poi != Vector3i(-9999, -9999, -9999):
+					poi_manager.release_poi(npc.claimed_poi)
+				npc.queue_free()
 		else:
 			remaining_npcs.append(npc_data)
 	npcs = remaining_npcs
+
+	# Retirer les POI des chunks déchargés
+	if poi_manager:
+		for chunk_pos in chunks_to_remove:
+			poi_manager.remove_chunk_pois(chunk_pos)
 
 func _world_to_chunk(world_pos: Vector3) -> Vector3i:
 	return Vector3i(
@@ -329,13 +347,17 @@ func _try_spawn_npcs(chunk_pos: Vector3i, chunk_data: Dictionary):
 	if surface_block not in valid_blocks:
 		return
 
-	# Choisir un modèle aléatoire parmi les 18
-	var model_index = hash_val % NpcVillagerScene.MODEL_NAMES.size()
+	# Assigner une profession déterministe via hash
+	var prof = (hash_val * 7 + 3) % 9  # 0-8, réparti sur les 9 valeurs de Profession
+	var model_index = VillagerProfession.get_model_for_profession(prof, hash_val)
 
 	var world_x = chunk_pos.x * Chunk.CHUNK_SIZE + lx + 0.5
 	var world_z = chunk_pos.z * Chunk.CHUNK_SIZE + lz + 0.5
+	var spawn_pos = Vector3(world_x, surface_y, world_z)
 
 	var npc = NpcVillagerScene.new()
-	npc.setup(model_index, Vector3(world_x, surface_y, world_z), chunk_pos)
+	npc.setup(model_index, spawn_pos, chunk_pos, prof)
+	if poi_manager:
+		npc.poi_manager = poi_manager
 	get_parent().call_deferred("add_child", npc)
 	npcs.append({"npc": npc, "chunk_pos": chunk_pos})

@@ -238,6 +238,10 @@ static func get_face_texture(block_type: BlockType, face: String) -> String:
 		return faces["all"]
 	return "dirt"
 
+static func is_workstation(block_type) -> bool:
+	return block_type in [BlockType.CRAFTING_TABLE, BlockType.FURNACE,
+		BlockType.STONE_TABLE, BlockType.IRON_TABLE, BlockType.GOLD_TABLE]
+
 static func get_block_tint(block_type: BlockType, face: String = "all") -> Color:
 	match block_type:
 		BlockType.GRASS:
