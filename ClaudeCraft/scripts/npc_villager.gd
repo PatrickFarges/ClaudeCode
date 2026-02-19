@@ -1,6 +1,8 @@
 extends CharacterBody3D
 class_name NpcVillager
 
+const VProfession = preload("res://scripts/villager_profession.gd")
+
 const MODEL_PATH = "res://BlockPNJ/Models/GLB format/"
 const MODEL_NAMES: Array[String] = [
 	"character-a", "character-b", "character-c", "character-d",
@@ -23,7 +25,7 @@ static func _preload_models():
 var mob_type_index: int = 0
 var chunk_position: Vector3i = Vector3i.ZERO
 var _spawn_pos: Vector3 = Vector3.ZERO
-var profession: int = 0  # VillagerProfession.Profession
+var profession: int = 0  # VProfession.Profession
 
 # === Mouvement ===
 var move_speed: float = 2.0
@@ -39,7 +41,7 @@ var _stuck_timer: float = 0.0
 var _last_pos: Vector3 = Vector3.ZERO
 
 # === Emploi du temps ===
-var current_activity: int = 0  # VillagerProfession.Activity
+var current_activity: int = 0  # VProfession.Activity
 var home_position: Vector3 = Vector3.ZERO
 var _schedule_timer: float = 0.0
 var _day_night: Node = null
@@ -128,15 +130,15 @@ func _physics_process(delta):
 
 	# Dispatcher selon l'activité courante
 	match current_activity:
-		VillagerProfession.Activity.WANDER:
+		VProfession.Activity.WANDER:
 			_behavior_wander(delta)
-		VillagerProfession.Activity.WORK:
+		VProfession.Activity.WORK:
 			_behavior_work(delta)
-		VillagerProfession.Activity.GATHER:
+		VProfession.Activity.GATHER:
 			_behavior_gather(delta)
-		VillagerProfession.Activity.GO_HOME:
+		VProfession.Activity.GO_HOME:
 			_behavior_go_home(delta)
-		VillagerProfession.Activity.SLEEP:
+		VProfession.Activity.SLEEP:
 			_behavior_sleep(delta)
 		_:
 			_behavior_wander(delta)
@@ -151,14 +153,14 @@ func _update_schedule():
 	if not _day_night:
 		return
 	var hour = _day_night.get_hour()
-	var new_activity = VillagerProfession.get_activity_for_hour(hour)
+	var new_activity = VProfession.get_activity_for_hour(hour)
 	if new_activity != current_activity:
 		_on_activity_changed(current_activity, new_activity)
 		current_activity = new_activity
 
 func _on_activity_changed(old_activity: int, new_activity: int):
 	# Libérer le POI si on quitte le travail
-	if old_activity == VillagerProfession.Activity.WORK:
+	if old_activity == VProfession.Activity.WORK:
 		if poi_manager and claimed_poi != INVALID_POI:
 			poi_manager.release_poi(claimed_poi)
 			claimed_poi = INVALID_POI
@@ -170,7 +172,7 @@ func _on_activity_changed(old_activity: int, new_activity: int):
 	_detour_timer = 0.0
 
 	# Reprendre le wander timer
-	if new_activity == VillagerProfession.Activity.WANDER or new_activity == VillagerProfession.Activity.GATHER:
+	if new_activity == VProfession.Activity.WANDER or new_activity == VProfession.Activity.GATHER:
 		_pick_new_wander()
 
 # ============================================================
@@ -255,7 +257,7 @@ func _behavior_work(delta):
 
 	is_moving = false
 	_decelerate()
-	var work_anim = VillagerProfession.get_work_anim(profession)
+	var work_anim = VProfession.get_work_anim(profession)
 	_play_anim(work_anim)
 
 # ============================================================
@@ -365,13 +367,13 @@ func _pick_new_wander():
 # ============================================================
 
 func get_info_text() -> String:
-	var prof_name = VillagerProfession.get_profession_name(profession)
+	var prof_name = VProfession.get_profession_name(profession)
 	var activity_names = {
-		VillagerProfession.Activity.WANDER: "Se promène",
-		VillagerProfession.Activity.WORK: "Au travail",
-		VillagerProfession.Activity.GATHER: "Socialise",
-		VillagerProfession.Activity.GO_HOME: "Rentre chez lui",
-		VillagerProfession.Activity.SLEEP: "Dort",
+		VProfession.Activity.WANDER: "Se promène",
+		VProfession.Activity.WORK: "Au travail",
+		VProfession.Activity.GATHER: "Socialise",
+		VProfession.Activity.GO_HOME: "Rentre chez lui",
+		VProfession.Activity.SLEEP: "Dort",
 	}
 	var activity_text = activity_names.get(current_activity, "")
 	return "%s - %s" % [prof_name, activity_text]

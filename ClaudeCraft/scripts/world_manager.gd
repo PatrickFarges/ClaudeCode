@@ -18,11 +18,13 @@ const MAX_MOBS = 20
 
 # PNJ villageois
 const NpcVillagerScene = preload("res://scripts/npc_villager.gd")
+const VProfession = preload("res://scripts/villager_profession.gd")
+const POIManagerScript = preload("res://scripts/poi_manager.gd")
 var npcs: Array = []
 const MAX_NPCS = 20
 
 # POI Manager
-var poi_manager: POIManager = null
+var poi_manager = null
 
 func _ready():
 	# Générer un seed aléatoire si non défini
@@ -31,7 +33,7 @@ func _ready():
 		world_seed = randi()
 
 	# Créer le POI Manager
-	poi_manager = POIManager.new()
+	poi_manager = POIManagerScript.new()
 
 	# Créer le générateur de chunks avec le seed du monde
 	chunk_generator = ChunkGenerator.new()
@@ -138,9 +140,9 @@ func _on_chunk_data_ready(chunk_data: Dictionary):
 	# Lancer la construction du mesh en arrière-plan (thread dédié)
 	chunk.build_mesh_async()
 
-	# Scanner le chunk pour les POI (workstations)
+	# Scanner le chunk pour les POI (workstations) — limité au range y utile
 	if poi_manager:
-		poi_manager.scan_chunk(chunk_pos, blocks)
+		poi_manager.scan_chunk(chunk_pos, blocks, p_y_min, p_y_max)
 
 	# Tenter de spawn des mobs passifs
 	_try_spawn_mobs(chunk_pos, chunk_data)
@@ -349,7 +351,7 @@ func _try_spawn_npcs(chunk_pos: Vector3i, chunk_data: Dictionary):
 
 	# Assigner une profession déterministe via hash
 	var prof = (hash_val * 7 + 3) % 9  # 0-8, réparti sur les 9 valeurs de Profession
-	var model_index = VillagerProfession.get_model_for_profession(prof, hash_val)
+	var model_index = VProfession.get_model_for_profession(prof, hash_val)
 
 	var world_x = chunk_pos.x * Chunk.CHUNK_SIZE + lx + 0.5
 	var world_z = chunk_pos.z * Chunk.CHUNK_SIZE + lz + 0.5
