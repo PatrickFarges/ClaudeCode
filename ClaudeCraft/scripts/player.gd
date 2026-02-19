@@ -244,6 +244,11 @@ func _remove_from_inventory(block_type: BlockRegistry.BlockType, count: int = 1)
 func assign_hotbar_slot(slot_index: int, block_type: BlockRegistry.BlockType):
 	if slot_index >= 0 and slot_index < hotbar_slots.size():
 		hotbar_slots[slot_index] = block_type
+		# Retirer l'outil et la nourriture du slot remplacé
+		if slot_index < hotbar_tool_slots.size():
+			hotbar_tool_slots[slot_index] = ToolRegistry.ToolType.NONE
+		if slot_index < hotbar_food_slots.size():
+			hotbar_food_slots[slot_index] = false
 		if slot_index == selected_slot:
 			_update_selected_block()
 
@@ -337,6 +342,32 @@ func _input(event):
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		return
 
+	# Sélection de slot (1-9) — autorisé même quand inventaire/craft ouvert
+	if not pause_open:
+		for i in range(5):
+			if event.is_action_pressed("slot_%d" % (i + 1)):
+				selected_slot = i
+				_update_selected_block()
+				return
+		if event is InputEventKey and event.pressed and not event.echo:
+			match event.physical_keycode:
+				KEY_6:
+					selected_slot = 5
+					_update_selected_block()
+					return
+				KEY_7:
+					selected_slot = 6
+					_update_selected_block()
+					return
+				KEY_8:
+					selected_slot = 7
+					_update_selected_block()
+					return
+				KEY_9:
+					selected_slot = 8
+					_update_selected_block()
+					return
+
 	# Si une UI est ouverte (inventaire/craft/pause), bloquer le reste
 	if _is_any_ui_open():
 		return
@@ -346,28 +377,6 @@ func _input(event):
 		rotate_y(-event.relative.x * mouse_sensitivity)
 		camera.rotate_x(-event.relative.y * mouse_sensitivity)
 		camera.rotation.x = clamp(camera.rotation.x, -PI/2, PI/2)
-
-	# Slots 1-5
-	for i in range(5):
-		if event.is_action_pressed("slot_%d" % (i + 1)):
-			selected_slot = i
-			_update_selected_block()
-
-	# Slots 6-9
-	if event is InputEventKey and event.pressed and not event.echo:
-		match event.physical_keycode:
-			KEY_6:
-				selected_slot = 5
-				_update_selected_block()
-			KEY_7:
-				selected_slot = 6
-				_update_selected_block()
-			KEY_8:
-				selected_slot = 7
-				_update_selected_block()
-			KEY_9:
-				selected_slot = 8
-				_update_selected_block()
 
 	# Molette souris
 	if event is InputEventMouseButton and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:

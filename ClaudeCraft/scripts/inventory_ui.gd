@@ -592,6 +592,7 @@ func _create_block_button(block_type: BlockRegistry.BlockType) -> Dictionary:
 	vbox.add_child(count_label)
 
 	button.pressed.connect(_on_block_button_pressed.bind(block_type))
+	button.gui_input.connect(_on_block_gui_input.bind(block_type))
 
 	return {
 		"button": button,
@@ -606,6 +607,12 @@ func _on_block_button_pressed(block_type: BlockRegistry.BlockType):
 	if not player:
 		return
 	player.assign_hotbar_slot(player.selected_slot, block_type)
+
+func _on_block_gui_input(event: InputEvent, block_type: BlockRegistry.BlockType):
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
+		if not player:
+			return
+		player.assign_hotbar_slot(player.selected_slot, block_type)
 
 func open_inventory():
 	is_open = true

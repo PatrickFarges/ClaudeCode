@@ -165,8 +165,8 @@ const UI = {
 	# Inventory UI
 	"inv_title":            {"fr": "Inventaire",               "en": "Inventory"},
 	"inv_active_slot":      {"fr": "Slot actif : %d  [%s]",    "en": "Active slot: %d  [%s]"},
-	"inv_hint":             {"fr": "Clic gauche = assigner au slot actif  -  [I] ou [Echap] pour fermer  -  [C] pour crafter",
-	                         "en": "Left click = assign to active slot  -  [I] or [Esc] to close  -  [C] to craft"},
+	"inv_hint":             {"fr": "Clic gauche/droit = assigner au slot actif  -  [1-9] changer de slot  -  [I]/[Echap] fermer  -  [C] crafter",
+	                         "en": "Left/Right click = assign to active slot  -  [1-9] change slot  -  [I]/[Esc] close  -  [C] craft"},
 	"inv_tab_all":          {"fr": "TOUT",                    "en": "ALL"},
 	"inv_tab_terrain":      {"fr": "Terrain",                 "en": "Terrain"},
 	"inv_tab_wood":         {"fr": "Bois",                    "en": "Wood"},
