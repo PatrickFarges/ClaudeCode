@@ -5,6 +5,9 @@
 __pycache__/
 *.pyc
 
+# Minecraft extracted data (too large for git, regenerable via minecraft_import.py)
+ClaudeCraft/minecraft_data/
+
 # System
 .DS_Store
 Thumbs.db
