@@ -134,12 +134,14 @@ Jeu voxel type Minecraft en GDScript avec Godot 4.5+, style pastel.
 **Config Godot :** Physics JoltPhysics3D, résolution 1920x1080 fullscreen, cible 60 FPS.
 
 **Architecture GDScript (`scripts/`) :**
-- **`block_registry.gd`** : registre centralisé des types de blocs (15 types : AIR, GRASS, DIRT, STONE, SAND, WOOD, LEAVES, SNOW, CACTUS, PLANKS, BRICK...) avec couleurs pastel et dureté
+- **`block_registry.gd`** : registre centralisé des types de blocs (25 types : AIR, GRASS, DIRT, STONE, SAND, WOOD, LEAVES, SNOW, CACTUS, DARK_GRASS, GRAVEL, PLANKS, CRAFTING_TABLE, BRICK, SANDSTONE, WATER, COAL_ORE, IRON_ORE, GOLD_ORE, IRON_INGOT, GOLD_INGOT, FURNACE, STONE_TABLE, IRON_TABLE, GOLD_TABLE) avec couleurs pastel, dureté, textures par face, et `is_workstation()` (const `WORKSTATION_BLOCKS` Dictionary pour lookup O(1))
 - **`chunk.gd`** : portion du monde (16×16×256 blocs), greedy meshing (faces visibles uniquement), Ambient Occlusion, variation luminosité par face, collision ConcavePolygon
 - **`chunk_generator.gd`** : génération procédurale threadée (4 workers max, Mutex), 5 noises Simplex/Perlin (terrain, élévation, température, humidité, cavernes), arbres 3D procéduraux (chêne, bouleau, pin, cactus). **Passe 4 structures** : après eau, applique les structures prédéfinies via `_apply_structures()` (test AABB + patch blocs)
 - **`structure_manager.gd`** : Autoload — chargement des structures JSON depuis `res://structures/`, décompression RLE, résolution palette → BlockType, fournit `get_placement_data()` (snapshot thread-safe) au chunk_generator. Placements lus depuis `user://structures_placement.json` ou `res://structures/placements.json`
-- **`world_manager.gd`** : orchestration chargement/déchargement chunks, `render_distance=4`, max 2 meshes/frame, hysteresis de déchargement, spawn mobs passifs (10% par chunk, max 20) et PNJ villageois (5% par chunk, max 10). Connecte StructureManager au ChunkGenerator au démarrage
-- **`npc_villager.gd`** : PNJ humanoïdes utilisant les 18 modèles GLB BlockPNJ (Kenney.nl, `character-a` à `character-r`). Chargement statique des modèles, vagabondage (vitesse 2.0, timer 3-8s, 50% move), évitement eau/falaises, rotation vers direction de déplacement. Spawn uniquement sur GRASS/DARK_GRASS (pas sable). Script indépendant de PassiveMob (preload via `const NpcVillagerScene = preload(...)` dans world_manager). **Animations GLB activées** : 27 animations embarquées par modèle (walk, idle, sprint, attack, sit, die, etc.), recherche récursive de l'AnimationPlayer, loop forcé (`Animation.LOOP_LINEAR`), transition walk↔idle selon l'état de mouvement. **Auto-jump** : détection bloc solide devant les pieds + espace libre au-dessus → saut automatique (velocity.y=5.0) avec maintien du mouvement horizontal en l'air. **Anti-blocage** : si le PNJ ne bouge pas de >0.3 unités en 1s, changement de direction automatique
+- **`world_manager.gd`** : orchestration chargement/déchargement chunks, `render_distance=4`, max 2 meshes/frame, hysteresis de déchargement, spawn mobs passifs (10% par chunk, max 20) et PNJ villageois (5% par chunk, max 20). Connecte StructureManager au ChunkGenerator au démarrage. **POI Manager** : instancie `POIManagerScript` pour tracker les workstations, scan des chunks au chargement (range y_min→y_max), cleanup au déchargement. **Professions** : assigne une profession déterministe par hash (`(hash_val * 7 + 3) % 9`) et le modèle GLB correspondant via `VProfession.get_model_for_profession()`. Passe `poi_manager` aux NPCs. Libère les POI claimés quand les NPCs sont despawn
+- **`villager_profession.gd`** : données statiques des professions et emploi du temps. **Enum Profession** (9 valeurs) : NONE, BUCHERON, MENUISIER, FORGERON, BATISSEUR, FERMIER, BOULANGER, CHAMAN, MINEUR. **Enum Activity** (5 valeurs) : WANDER, WORK, GATHER, GO_HOME, SLEEP. **PROFESSION_DATA** : mapping profession → workstation BlockType (constantes entières locales BT_CRAFTING_TABLE=12, BT_FURNACE=21, etc.), 2 modèles GLB par profession (répartis dans les 18 character-a→r), animation de travail, noms FR/EN. **SCHEDULE** : 8 plages horaires (0-6 SLEEP, 6-8 WANDER, 8-12 WORK, 12-14 GATHER, 14-17 WORK, 17-19 GATHER, 19-20 GO_HOME, 20-24 SLEEP). Fonctions statiques : `get_activity_for_hour()`, `get_workstation_block()`, `get_model_for_profession()`, `get_profession_name()`, `get_work_anim()`
+- **`poi_manager.gd`** : gestionnaire de Points of Interest (workstations). **`poi_registry`** : Dictionary Vector3i → {block_type, claimed_by, chunk_pos}. **`WORKSTATION_TYPES`** : const Dictionary {12,21,22,23,24} pour lookup O(1). `scan_chunk(chunk_pos, packed_blocks, y_min, y_max)` : scan limité au range vertical utile. `find_nearest_unclaimed(profession, world_pos)` : cherche le POI libre le plus proche pour la profession. `claim_poi()` / `release_poi()` : système de réservation (1 villageois = 1 POI). `remove_chunk_pois()` : cleanup au déchargement de chunk. Utilise `preload()` pour VillagerProfession et constantes locales CHUNK_SIZE/HEIGHT (évite dépendances class_name)
+- **`npc_villager.gd`** : PNJ humanoïdes avec professions et emploi du temps. Utilise les 18 modèles GLB BlockPNJ (Kenney.nl, `character-a` à `character-r`), 2 modèles par profession. **Système de professions** : `var profession: int`, assigné au spawn par WorldManager, détermine le modèle GLB et le workstation cible. **Emploi du temps** : vérifie le schedule toutes les 2s via `_day_night.get_hour()`, dispatche vers 5 comportements : `_behavior_wander` (errance classique), `_behavior_sleep` (immobile la nuit), `_behavior_gather` (errance dans un rayon de 15 blocs autour de home), `_behavior_go_home` (marche vers spawn), `_behavior_work` (claim POI → marche vers workstation → animation de travail). **Navigation** : `_walk_toward(target, delta)` avec détour perpendiculaire anti-stuck (2s de blocage → déviation 2s). **POI** : `claimed_poi: Vector3i`, claim/release via `poi_manager`. **Mouvement commun** : `_apply_movement(delta)` factorisé (auto-jump, évitement eau/falaises, stuck detection). **Animations GLB** : 27 animations embarquées par modèle, loop forcé, transition walk↔idle↔attack selon état. `get_info_text()` retourne "Forgeron - Au travail" etc.
 - **`passive_mob.gd`** : mobs animaux (SHEEP, COW, CHICKEN) en BoxMesh colorés, vagabondage (vitesse 1.5, timer 2-5s), spawn sur herbe et sable
 - **`player.gd`** : contrôle FPS (CharacterBody3D), minage progressif (basé sur hardness, accéléré par les outils), placement de blocs (vérif AABB chevauchement), inventaire 9 slots hotbar + slots outils parallèles (`hotbar_tool_slots`) + slots nourriture parallèles (`hotbar_food_slots`), intégration HandItemRenderer pour le bras FPS. **Système de nourriture** : `_handle_eating(delta)` — maintenir clic droit pour manger (2s), émet des particules rouges (`_spawn_eating_particles`), joue un son de mastication périodique, restaure 4 PV à la fin. `_is_food_slot()` vérifie si le slot actuel est alimentaire. `_update_hand_display()` passe la rotation/scale par outil au HandItemRenderer via `ToolRegistry.get_hand_rotation()` / `get_hand_scale()`
 - **`hand_item_renderer.gd`** : rendu du bras et de l'item en main (vue FPS). Attaché comme enfant de Camera3D. Bras BoxMesh couleur peau (ARM_SIZE 0.15×0.55×0.15) masqué quand un item est tenu, visible uniquement mains vides. Cube texturé du bloc actif (BLOCK_SIZE 0.28, textures par face depuis TexturesPack avec tint) ou modèle 3D d'outil. Trois chemins de rendu : `update_held_item(BlockType)` pour les blocs, `update_held_tool_model(ArrayMesh)` pour JSON Blockbench, `update_held_tool_node(Node3D, hand_rotation, hand_scale)` pour GLB/glTF avec auto-scale AABB et rotation par outil. **GLB render** : layers 1+2 (visible caméra FPS + éclairé par DirectionalLight), auto-centrage basé sur AABB calculé récursivement (`_compute_model_aabb`). **Bobbing** : balancement avant/arrière (rotation X ±12°, ±20° au sprint) au rythme de la marche. **Swing** : animation Tween (-30° en X, 0.3s) au minage/placement. Cache de matériaux par texture+tint
@@ -182,7 +184,39 @@ python scripts/structure_viewer.py "assets/Weapon/GLB/diamond_axe_minecraft.glb"
 - **Contrôles** : clic droit=rotation, clic gauche=pan X/Y, Ctrl+clic gauche=pan Z, molette=zoom, R=reset, F=face, T=dessus, W=wireframe, I=infos, Ctrl+O=ouvrir, Ctrl+S=exporter JSON (voxel uniquement)
 - **Config persistante** : `~/.claudecraft_viewer_config.json` (dernier répertoire)
 
-**Assets :** `Audio/` (~334 fichiers OGG/MP3, dont `Audio/Forest/` 11 MP3 d'ambiance par heure du jour), `BlockPNJ/` et `MiniPNJ/` (modèles 3D FBX/GLB/OBJ, personnages Kenney.nl), `NPC/` (dossier PNJ), `assets/Lobbys/` (assets Minecraft .schem/.mca à convertir), `assets/Weapon/` (modèles JSON Blockbench d'armes/outils : Stone Tools 5 outils + textures 64x64 ; `GLB/` 13 modèles GLB Sketchfab : diamond_axe, diamond-pickaxe, iron_pickaxe, stone_sword, diamond_sword, netherite_sword, bow, shield, arrow, etc.), `assets/Deco/` (apple.glb pour la nourriture), `TexturesPack/Aurore Stone/` (pack de textures Minecraft complet, ~10K fichiers, utilisé pour les textures de blocs en main et dans le monde)
+**Assets :** `Audio/` (~334 fichiers OGG/MP3, dont `Audio/Forest/` 11 MP3 d'ambiance par heure du jour), `BlockPNJ/` et `MiniPNJ/` (modèles 3D FBX/GLB/OBJ, personnages Kenney.nl), `NPC/` (dossier PNJ), `assets/Lobbys/` (assets Minecraft .schem/.mca à convertir), `assets/Weapon/` (modèles JSON Blockbench d'armes/outils : Stone Tools 5 outils + textures 64x64 ; `GLB/` 13 modèles GLB Sketchfab : diamond_axe, diamond-pickaxe, iron_pickaxe, stone_sword, diamond_sword, netherite_sword, bow, shield, arrow, etc.), `assets/Deco/` (apple.glb pour la nourriture), `TexturesPack/Aurore Stone/` (pack de textures Minecraft complet, structure `assets/minecraft/textures/{block,item,entity}/`, ~3520 PNG, utilisé pour les textures de blocs en main et dans le monde)
+
+**Pipeline de données Minecraft (`scripts/minecraft_import.py`, ~700 lignes) :**
+Extracteur complet qui parse le `client.jar` Java Edition 1.21.11 (`D:\Games\Minecraft - 1.21.11\client.jar`) et les assets Bedrock Edition (`D:\Games\Minecraft - Bedrock Edition\data\`), puis génère 8 fichiers JSON consolidés dans `minecraft_data/`.
+
+```bash
+python scripts/minecraft_import.py
+```
+
+| Fichier de sortie | Contenu | Volume |
+|-------------------|---------|--------|
+| `minecraft_blocks.json` | Modèles de blocs : nom, type (cube_all/cube_column/stairs/slab/...), parent, textures résolues, disponibilité TexturesPack | 2 390 blocs (2 144 avec textures) |
+| `minecraft_items.json` | Modèles d'items : nom, type (flat/block/handheld), parent, textures | 1 283 items |
+| `minecraft_recipes.json` | Recettes (crafting_shaped, crafting_shapeless, smelting, blasting, smoking, campfire_cooking, stonecutting), tags résolus | 1 396 recettes |
+| `minecraft_blockstates.json` | Mapping état → modèle (orientation, allumé/éteint, ouvert/fermé...) | 1 168 blockstates |
+| `minecraft_textures.json` | Inventaire de toutes les textures MC, catégorisées (block/item/entity), avec flag `in_texturepack` | 2 518 textures (2 516 dispo) |
+| `minecraft_entities_bedrock.json` | Modèles d'entités 3D Bedrock (.geo.json) : bones, géométrie, texture dimensions | 113 entités |
+| `minecraft_animations_bedrock.json` | Animations d'entités Bedrock : walk, idle, attack, etc. avec durée et loop | 325 animations (83 fichiers) |
+| `minecraft_tags.json` | Tags/groupes d'items et blocs (#minecraft:planks, #minecraft:logs, #minecraft:stone_tool_materials...) | 402 tags |
+
+**Classification des blocs par template parent :**
+- `cube_all` (283) : un cube, même texture sur 6 faces — stone, diamond_block, gold_block...
+- `cube_column` (89) : texture top/bottom + side — oak_log, quartz_pillar...
+- `cube_bottom_top` (27) : texture top + bottom + side — grass_block, sandstone...
+- `orientable` (48) : texture front + side + top — furnace, dispenser, dropper...
+- `stairs` (162), `slab` (116), `wall` (119), `fence` (90), `door` (157), `cross` (118 = fleurs/herbes)...
+
+**Sources de données Minecraft locales :**
+- Java Edition 1.21.11 : `D:\Games\Minecraft - 1.21.11\client.jar` (31 Mo, extrait vers `minecraft_data/client_jar/`)
+- Bedrock Edition : `D:\Games\Minecraft - Bedrock Edition\data\resource_packs\vanilla\` (modèles entités, animations, textures)
+- TexturesPack : `TexturesPack/Aurore Stone/assets/minecraft/textures/` (1114 block, 792 item, 615 entity PNG)
+
+**Note importante :** `minecraft_data/` est dans `.gitignore` (trop volumineux). Régénérable à tout moment via `python scripts/minecraft_import.py`.
 
 **Documentation embarquée :** `ARCHITECTURE.md`, `QUICKSTART.md`, `BIOMES.md`, `MOVEMENT.md`, `MULTITHREADING.md`, `PERFORMANCE.md`
 
@@ -246,7 +280,20 @@ python ClocloWebUi/server.py
 - Nombres format SAP/français partout : `1.234,56-` (virgule décimale, point milliers, `-` suffixe négatif)
 - L'utilisateur parle français, toutes les interfaces et messages de commit sont en français
 
-## Prochain chantier — Éditeur de structures ClaudeCraft
+## Direction du projet — ClaudeCraft "The Settlers"
+
+**Vision :** ClaudeCraft évolue d'un Minecraft-like vers un jeu de gestion/colonie inspiré de **The Settlers** (chaînes de production, villageois autonomes, construction, économie). Minecraft sert de base pour la simplicité du rendu voxel et l'immense catalogue de blocs/items/recettes réutilisables sans effort de design.
+
+**Phase 1 (fait) :** Monde voxel, biomes, minage, craft, outils, nourriture
+**Phase 2 (fait) :** Professions villageoises (9 métiers), emploi du temps jour/nuit, POI workstations, navigation vers cibles
+**Phase 3 (à venir) :** Import massif des données Minecraft (447+ blocs, 1396 recettes), chaînes de production, bâtiments fonctionnels
+**Phase 4 (à venir) :** Transport de ressources, économie villageoise, construction automatique
+
+**Données Minecraft disponibles :** 2390 blocs, 1283 items, 1396 recettes, 113 entités 3D, 325 animations — tout extrait et prêt à l'emploi dans `minecraft_data/`.
+
+---
+
+### Prochain chantier — Éditeur de structures ClaudeCraft
 
 **Objectif :** Application desktop (Python/Tkinter ou PyQt) pour charger, convertir, visualiser en 3D et modifier des assets de structures pour ClaudeCraft.
 
