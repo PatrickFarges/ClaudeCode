@@ -8,7 +8,7 @@ const GC = preload("res://scripts/game_config.gd")
 const ARM_COLOR = Color(0.9, 0.75, 0.65)
 const BLOCK_SIZE = 0.28
 const ARM_SIZE = Vector3(0.15, 0.55, 0.15)
-const BASE_POSITION = Vector3(0.55, -0.35, -0.55)
+const BASE_POSITION = Vector3(0.56, -0.52, -0.72)
 const SPRINT_OFFSET = Vector3(-0.1, 0.0, -0.05)
 const SPRITE_SIZE = 0.38
 
@@ -22,6 +22,9 @@ var current_item_node: Node3D = null
 var bob_time: float = 0.0
 var is_swinging: bool = false
 var swing_tween: Tween = null
+var swing_progress: float = 0.0
+var _smooth_pos := Vector3(0.56, -0.52, -0.72)
+var _smooth_rot_x: float = 0.0
 
 # Reference
 var player: CharacterBody3D = null
@@ -77,20 +80,26 @@ func _update_bobbing(delta: float):
 	var sprint_target = 1.0 if player.is_sprinting else 0.0
 	_sprint_blend = lerpf(_sprint_blend, sprint_target, delta * 6.0)
 
+	var target_pos = BASE_POSITION + SPRINT_OFFSET * _sprint_blend
+
 	if moving:
 		var speed_mult = 1.3 if player.is_sprinting else 1.0
 		var swing_amp = 20.0 if player.is_sprinting else 12.0
 		bob_time += delta * speed_mult
 		var bob_y = abs(sin(bob_time * 14.0)) * 0.015
-		hand_pivot.position = BASE_POSITION + Vector3(0, bob_y, 0.0) + SPRINT_OFFSET * _sprint_blend
-		hand_pivot.rotation_degrees.x = sin(bob_time * 7.0) * swing_amp
-		hand_pivot.rotation_degrees.z = 0.0
+		_smooth_pos = target_pos + Vector3(0, bob_y, 0)
+		_smooth_rot_x = sin(bob_time * 7.0) * swing_amp
 	else:
 		bob_time = 0.0
-		var target_pos = BASE_POSITION + SPRINT_OFFSET * _sprint_blend
-		hand_pivot.position = hand_pivot.position.lerp(target_pos, delta * 10.0)
-		hand_pivot.rotation_degrees.x = lerpf(hand_pivot.rotation_degrees.x, 0.0, delta * 10.0)
-		hand_pivot.rotation_degrees.z = 0.0
+		_smooth_pos = _smooth_pos.lerp(target_pos, delta * 10.0)
+		_smooth_rot_x = lerpf(_smooth_rot_x, 0.0, delta * 10.0)
+
+	# MC-style swing overlay (sinusoidal multi-axis arc)
+	var swing_rot = _compute_swing_rotation()
+	var swing_pos = _compute_swing_position()
+
+	hand_pivot.position = _smooth_pos + swing_pos
+	hand_pivot.rotation_degrees = Vector3(_smooth_rot_x + swing_rot.x, swing_rot.y, swing_rot.z)
 
 var _holding_tool: bool = false
 
@@ -98,21 +107,40 @@ func play_swing():
 	if is_swinging:
 		return
 	is_swinging = true
+	swing_progress = 0.0
 
 	if swing_tween and swing_tween.is_valid():
 		swing_tween.kill()
 
 	swing_tween = create_tween()
+	swing_tween.tween_property(self, "swing_progress", 1.0, 0.28)
+	swing_tween.tween_callback(func():
+		is_swinging = false
+		swing_progress = 0.0
+	)
+
+func _compute_swing_rotation() -> Vector3:
+	if swing_progress <= 0.0:
+		return Vector3.ZERO
+	var t = swing_progress
+	var f = sin(t * t * PI)
+	var f1 = sin(sqrt(t) * PI)
 	if _holding_tool:
-		# Outils : grand coup franc rapide de haut en bas
-		var start_z = hand_pivot.rotation_degrees.z
-		swing_tween.tween_property(hand_pivot, "rotation_degrees:z", start_z + 110.0, 0.10).set_ease(Tween.EASE_IN)
-		swing_tween.tween_property(hand_pivot, "rotation_degrees:z", start_z, 0.18).set_ease(Tween.EASE_OUT)
+		# MC-style : arc descendant dominant (X) + oscillation Y + twist Z
+		return Vector3(f1 * -60.0, f * -15.0, f1 * -15.0)
 	else:
-		# Blocs / mains vides : coup franc vers l'avant
-		swing_tween.tween_property(hand_pivot, "rotation_degrees:x", -45.0, 0.10).set_ease(Tween.EASE_IN)
-		swing_tween.tween_property(hand_pivot, "rotation_degrees:x", 0.0, 0.18).set_ease(Tween.EASE_OUT)
-	swing_tween.tween_callback(func(): is_swinging = false)
+		# Blocs / mains vides : coup frontal
+		return Vector3(f1 * -40.0, 0.0, 0.0)
+
+func _compute_swing_position() -> Vector3:
+	if swing_progress <= 0.0:
+		return Vector3.ZERO
+	var t = swing_progress
+	return Vector3(
+		-0.2 * sin(sqrt(t) * PI),
+		0.1 * sin(sqrt(t) * TAU),
+		-0.1 * sin(t * PI)
+	)
 
 # ============================================================
 # AFFICHAGE BLOC EN MAIN
@@ -221,10 +249,9 @@ func _create_item_sprite(tex_path: String) -> MeshInstance3D:
 	inst.mesh = mesh
 	inst.layers = 2
 
-	# Rotation Minecraft first-person : outil tenu par le manche
-	# Face plate visible, manche en bas-droite, tete en haut-gauche
-	inst.rotation_degrees = Vector3(10, -5, 35)
-	inst.position = Vector3(0.05, -0.02, 0.0)
+	# Rotation MC first-person : outil en diagonale, manche bas-droite
+	inst.rotation_degrees = Vector3(0, -10, 40)
+	inst.position = Vector3(0.03, 0.0, 0.0)
 
 	return inst
 
@@ -326,7 +353,7 @@ func _create_block_cube(block_type: BlockRegistry.BlockType) -> MeshInstance3D:
 		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		mesh_inst.material_override = mat
 
-	mesh_inst.rotation_degrees = Vector3(-15, 30, 0)
+	mesh_inst.rotation_degrees = Vector3(0, 45, 0)
 	return mesh_inst
 
 func _has_any_texture_file(faces: Dictionary) -> bool:
