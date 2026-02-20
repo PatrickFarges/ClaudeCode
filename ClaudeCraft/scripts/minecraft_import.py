@@ -23,7 +23,10 @@ MC_BASE = PROJECT_DIR / "minecraft_data" / "client_jar"
 MC_ASSETS = MC_BASE / "assets" / "minecraft"
 MC_DATA = MC_BASE / "data" / "minecraft"
 OUTPUT_DIR = PROJECT_DIR / "minecraft_data"
-TEXTURE_PACK = PROJECT_DIR / "TexturesPack" / "Aurore Stone" / "assets" / "minecraft" / "textures"
+# Pack de textures actif (doit correspondre a GameConfig.ACTIVE_PACK dans le jeu)
+ACTIVE_PACK = "Aurore Stone"
+# ACTIVE_PACK = "Faithful64x64"
+TEXTURE_PACK = PROJECT_DIR / "TexturesPack" / ACTIVE_PACK / "assets" / "minecraft" / "textures"
 
 # ============================================================
 # TAGS — résoudre les références #minecraft:xxx dans les recettes

@@ -7,6 +7,7 @@ var player: CharacterBody3D = null
 var is_open: bool = false
 var current_tab: int = 0
 var is_sorted: bool = false
+var _icon_cache: Dictionary = {}
 
 var background: ColorRect
 var panel: PanelContainer
@@ -575,6 +576,22 @@ func _create_block_button(block_type: BlockRegistry.BlockType) -> Dictionary:
 	color_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	color_container.add_child(color_rect)
 
+	# Texture du bloc par dessus le ColorRect (fallback couleur si pas de texture)
+	var tex_rect = TextureRect.new()
+	tex_rect.custom_minimum_size = Vector2(30, 30)
+	tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	tex_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	tex_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var block_tex = _load_block_icon(block_type)
+	if block_tex:
+		tex_rect.texture = block_tex
+		tex_rect.visible = true
+		color_rect.visible = false
+	else:
+		tex_rect.visible = false
+	color_container.add_child(tex_rect)
+
 	var name_label = Label.new()
 	name_label.text = BlockRegistry.get_block_name(block_type)
 	name_label.add_theme_font_size_override("font_size", 10)
@@ -597,6 +614,7 @@ func _create_block_button(block_type: BlockRegistry.BlockType) -> Dictionary:
 	return {
 		"button": button,
 		"color_rect": color_rect,
+		"tex_rect": tex_rect,
 		"count_label": count_label,
 		"name_label": name_label,
 		"block_type": block_type,
@@ -642,10 +660,14 @@ func _update_display():
 
 		if count == 0:
 			btn_data["color_rect"].color = BlockRegistry.get_block_color(btn_data["block_type"]) * 0.35
+			if btn_data.has("tex_rect"):
+				btn_data["tex_rect"].modulate = Color(0.4, 0.4, 0.4, 0.6)
 			btn_data["count_label"].add_theme_color_override("font_color", Color(0.5, 0.4, 0.4, 1))
 			btn_data["name_label"].add_theme_color_override("font_color", Color(0.5, 0.5, 0.5, 1))
 		else:
 			btn_data["color_rect"].color = BlockRegistry.get_block_color(btn_data["block_type"])
+			if btn_data.has("tex_rect"):
+				btn_data["tex_rect"].modulate = Color(1, 1, 1, 1)
 			btn_data["count_label"].add_theme_color_override("font_color", Color(0.7, 0.9, 0.7, 1))
 			btn_data["name_label"].add_theme_color_override("font_color", Color(0.85, 0.85, 0.85, 1))
 
@@ -662,3 +684,30 @@ func _update_display():
 			btn_data["normal_style"].border_width_top = 1
 			btn_data["normal_style"].border_width_right = 1
 			btn_data["normal_style"].border_width_bottom = 1
+
+func _load_block_icon(block_type: BlockRegistry.BlockType) -> ImageTexture:
+	var cache_key = "block_" + str(block_type)
+	if _icon_cache.has(cache_key):
+		return _icon_cache[cache_key]
+	var tex_name = BlockRegistry.get_face_texture(block_type, "top")
+	if tex_name == "dirt" and block_type != BlockRegistry.BlockType.DIRT:
+		tex_name = BlockRegistry.get_face_texture(block_type, "all")
+	var path = GameConfig.get_block_texture_path() + tex_name + ".png"
+	var abs_path = ProjectSettings.globalize_path(path)
+	if not FileAccess.file_exists(abs_path):
+		_icon_cache[cache_key] = null
+		return null
+	var img = Image.new()
+	if img.load(abs_path) != OK:
+		_icon_cache[cache_key] = null
+		return null
+	img.convert(Image.FORMAT_RGBA8)
+	var tint = BlockRegistry.get_block_tint(block_type, "top")
+	if tint != Color(1, 1, 1, 1):
+		for y in range(img.get_height()):
+			for x in range(img.get_width()):
+				var c = img.get_pixel(x, y)
+				img.set_pixel(x, y, Color(c.r * tint.r, c.g * tint.g, c.b * tint.b, c.a))
+	var tex = ImageTexture.create_from_image(img)
+	_icon_cache[cache_key] = tex
+	return tex

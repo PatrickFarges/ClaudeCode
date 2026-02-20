@@ -736,23 +736,10 @@ func _update_hand_display():
 		else:
 			hand_renderer.update_held_item(BlockRegistry.BlockType.AIR)
 		return
-	# Outil ?
+	# Outil ? → flat sprite depuis la texture d'item du pack
 	var tool_type = _get_selected_tool()
 	if tool_type != ToolRegistry.ToolType.NONE:
-		var node = ToolRegistry.get_tool_node(tool_type)
-		if node:
-			var model_path = ToolRegistry.get_model_path(tool_type)
-			if model_path.ends_with(".glb") or model_path.ends_with(".gltf"):
-				var rot = ToolRegistry.get_hand_rotation(tool_type)
-				var scl = ToolRegistry.get_hand_scale(tool_type)
-				hand_renderer.update_held_tool_node(node, rot, scl)
-			else:
-				# JSON → le node est un MeshInstance3D, utiliser l'ancien chemin
-				hand_renderer.update_held_tool_model(node.mesh if node is MeshInstance3D else null)
-				node.queue_free()
-		else:
-			# Modèle non chargeable — vider la main
-			hand_renderer.update_held_tool_node(null)
+		hand_renderer.update_held_item_sprite(tool_type)
 	else:
 		hand_renderer.update_held_item(selected_block_type)
 

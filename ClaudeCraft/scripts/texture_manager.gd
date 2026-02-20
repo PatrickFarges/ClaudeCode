@@ -1,6 +1,8 @@
 extends Node
 
-const TEXTURE_PATH = "res://TexturesPack/Aurore Stone/assets/minecraft/textures/block/"
+## Gestionnaire de Texture2DArray pour les blocs du monde
+## Utilise GameConfig pour le chemin du pack actif
+## Auto-detecte la resolution des textures (16x16, 32x32, 64x64...)
 
 # Liste ordonnee des textures — chaque entree = une couche du Texture2DArray
 const TEXTURE_LIST: Array[String] = [
@@ -90,16 +92,23 @@ const TEXTURE_LIST: Array[String] = [
 var _texture_array: Texture2DArray
 var _layer_map: Dictionary = {}
 var _shared_material: ShaderMaterial
+var _tex_resolution: int = 16
 
 func _ready():
 	# Construire le lookup name -> index
 	for i in range(TEXTURE_LIST.size()):
 		_layer_map[TEXTURE_LIST[i]] = i
 
-	# Charger les images (Image.load_from_file bypasse le systeme d'import Godot)
+	var tex_path = GameConfig.get_block_texture_path()
+
+	# Auto-detecter la resolution depuis la premiere texture trouvee
+	_tex_resolution = _detect_resolution(tex_path)
+	print("[TextureManager] Pack: %s | Resolution: %dx%d" % [GameConfig.ACTIVE_PACK, _tex_resolution, _tex_resolution])
+
+	# Charger les images
 	var images: Array[Image] = []
 	for tex_name in TEXTURE_LIST:
-		var path = TEXTURE_PATH + tex_name + ".png"
+		var path = tex_path + tex_name + ".png"
 		var abs_path = ProjectSettings.globalize_path(path)
 		var img := Image.new()
 		var err = img.load(abs_path)
@@ -107,8 +116,8 @@ func _ready():
 			img = _fallback_color_image(tex_name)
 			print("[TextureManager] Fallback pour: ", tex_name)
 		img.convert(Image.FORMAT_RGBA8)
-		if img.get_width() != 16 or img.get_height() != 16:
-			img.resize(16, 16, Image.INTERPOLATE_NEAREST)
+		if img.get_width() != _tex_resolution or img.get_height() != _tex_resolution:
+			img.resize(_tex_resolution, _tex_resolution, Image.INTERPOLATE_NEAREST)
 		images.append(img)
 
 	# Construire le Texture2DArray
@@ -121,6 +130,17 @@ func _ready():
 	_shared_material.shader = shader
 	_shared_material.set_shader_parameter("block_textures", _texture_array)
 
+func _detect_resolution(tex_path: String) -> int:
+	for tex_name in TEXTURE_LIST:
+		var path = tex_path + tex_name + ".png"
+		var abs_path = ProjectSettings.globalize_path(path)
+		var img := Image.new()
+		if img.load(abs_path) == OK:
+			var size = img.get_width()
+			if size >= 16:
+				return size
+	return 16
+
 func get_layer_index(texture_name: String) -> int:
 	if _layer_map.has(texture_name):
 		return _layer_map[texture_name]
@@ -129,8 +149,11 @@ func get_layer_index(texture_name: String) -> int:
 func get_shared_material() -> ShaderMaterial:
 	return _shared_material
 
+func get_texture_resolution() -> int:
+	return _tex_resolution
+
 func _fallback_color_image(tex_name: String) -> Image:
 	var color := Color(0.75, 0.6, 0.5, 1.0)  # dirt par defaut
-	var img := Image.create(16, 16, false, Image.FORMAT_RGBA8)
+	var img := Image.create(_tex_resolution, _tex_resolution, false, Image.FORMAT_RGBA8)
 	img.fill(color)
 	return img
