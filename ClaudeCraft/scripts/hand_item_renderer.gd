@@ -8,7 +8,7 @@ const GC = preload("res://scripts/game_config.gd")
 const ARM_COLOR = Color(0.9, 0.75, 0.65)
 const BLOCK_SIZE = 0.28
 const ARM_SIZE = Vector3(0.15, 0.55, 0.15)
-const BASE_POSITION = Vector3(0.56, -0.52, -0.72)
+const BASE_POSITION = Vector3(0.62, -0.42, -0.68)
 const SPRINT_OFFSET = Vector3(-0.1, 0.0, -0.05)
 const SPRITE_SIZE = 0.38
 
@@ -23,7 +23,7 @@ var bob_time: float = 0.0
 var is_swinging: bool = false
 var swing_tween: Tween = null
 var swing_progress: float = 0.0
-var _smooth_pos := Vector3(0.56, -0.52, -0.72)
+var _smooth_pos := Vector3(0.62, -0.42, -0.68)
 var _smooth_rot_x: float = 0.0
 
 # Reference
