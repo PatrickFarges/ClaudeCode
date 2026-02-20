@@ -24,8 +24,8 @@ MC_ASSETS = MC_BASE / "assets" / "minecraft"
 MC_DATA = MC_BASE / "data" / "minecraft"
 OUTPUT_DIR = PROJECT_DIR / "minecraft_data"
 # Pack de textures actif (doit correspondre a GameConfig.ACTIVE_PACK dans le jeu)
-ACTIVE_PACK = "Aurore Stone"
-# ACTIVE_PACK = "Faithful64x64"
+# ACTIVE_PACK = "Aurore Stone"
+ACTIVE_PACK = "Faithful64x64"
 TEXTURE_PACK = PROJECT_DIR / "TexturesPack" / ACTIVE_PACK / "assets" / "minecraft" / "textures"
 
 # ============================================================
