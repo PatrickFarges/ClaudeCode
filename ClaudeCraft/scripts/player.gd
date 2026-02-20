@@ -84,6 +84,12 @@ const FOOTSTEP_INTERVAL = 0.4  # Secondes entre chaque pas
 var mining_hit_timer: float = 0.0
 const MINING_HIT_INTERVAL = 0.25  # Secondes entre chaque frappe
 
+# Multiplicateur global du temps de minage
+# temps = dureté_bloc × BASE_MINING_TIME / multiplicateur_outil
+# Ex: tronc (dureté 1.0) × 10.0 / 1.0 (mains nues) = 10.0 secondes
+# Modifier cette valeur pour accélérer/ralentir TOUT le minage
+const BASE_MINING_TIME = 10.0
+
 # Bras / Item en main
 var hand_renderer = null
 const HandItemRendererScript = preload("res://scripts/hand_item_renderer.gd")
@@ -205,12 +211,12 @@ func _init_tool_slots():
 	for i in range(hotbar_slots.size()):
 		hotbar_tool_slots.append(ToolRegistry.ToolType.NONE)
 		hotbar_food_slots.append(false)
-	# Outils sur les slots du milieu
-	hotbar_tool_slots[3] = ToolRegistry.ToolType.STONE_AXE
-	hotbar_tool_slots[4] = ToolRegistry.ToolType.STONE_PICKAXE
-	hotbar_tool_slots[5] = ToolRegistry.ToolType.DIAMOND_PICKAXE
-	hotbar_tool_slots[6] = ToolRegistry.ToolType.BOW
-	hotbar_tool_slots[7] = ToolRegistry.ToolType.SHIELD
+	# Outils sur les slots du milieu — 4 tiers de haches pour tester le minage
+	hotbar_tool_slots[3] = ToolRegistry.ToolType.WOOD_AXE       # 6s sur tronc
+	hotbar_tool_slots[4] = ToolRegistry.ToolType.STONE_AXE      # 5s sur tronc
+	hotbar_tool_slots[5] = ToolRegistry.ToolType.IRON_AXE       # 4s sur tronc
+	hotbar_tool_slots[6] = ToolRegistry.ToolType.DIAMOND_AXE    # 3s sur tronc
+	hotbar_tool_slots[7] = ToolRegistry.ToolType.DIAMOND_PICKAXE
 	hotbar_tool_slots[8] = ToolRegistry.ToolType.NETHERITE_SWORD
 	# Pas de slot nourriture dans la hotbar actuelle
 
@@ -529,8 +535,8 @@ func _handle_block_interaction(delta: float):
 			mining_progress = 0.0
 			mining_block_pos = break_pos
 			mining_block_type = break_block_type
-			mining_time_required = BlockRegistry.get_block_hardness(break_block_type)
-			# Appliquer le multiplicateur d'outil
+			# temps = dureté × BASE_MINING_TIME / multiplicateur_outil
+			mining_time_required = BlockRegistry.get_block_hardness(break_block_type) * BASE_MINING_TIME
 			var tool_mult = ToolRegistry.get_mining_multiplier(_get_selected_tool(), break_block_type)
 			if tool_mult > 0:
 				mining_time_required /= tool_mult
