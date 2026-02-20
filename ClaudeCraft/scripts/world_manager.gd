@@ -14,7 +14,7 @@ var saved_chunk_data: Dictionary = {}  # Vector3i -> PackedByteArray (chunks mod
 
 # Mobs passifs
 var mobs: Array = []
-const MAX_MOBS = 20
+const MAX_MOBS = 100
 
 # PNJ villageois
 const NpcVillagerScene = preload("res://scripts/npc_villager.gd")
@@ -252,13 +252,13 @@ func _try_spawn_mobs(chunk_pos: Vector3i, chunk_data: Dictionary):
 	if mobs.size() >= MAX_MOBS:
 		return
 
-	# 10% de chance par chunk (déterministe via hash)
+	# 60% de chance par chunk (déterministe via hash)
 	var hash_val = abs((chunk_pos.x * 374761393 + chunk_pos.z * 668265263) >> 13) % 100
-	if hash_val >= 10:
+	if hash_val >= 60:
 		return
 
 	var packed_blocks = chunk_data["blocks"]
-	var num_mobs = 1 + (hash_val % 2)
+	var num_mobs = 2 + (hash_val % 3)  # 2-4 mobs par spawn
 
 	for i in range(num_mobs):
 		if mobs.size() >= MAX_MOBS:
@@ -280,27 +280,56 @@ func _try_spawn_mobs(chunk_pos: Vector3i, chunk_data: Dictionary):
 		if surface_y < 0 or surface_y >= Chunk.CHUNK_HEIGHT - 2:
 			continue
 
-		# Seulement sur herbe ou sable
+		# Seulement sur herbe, sable ou neige
 		var valid_blocks = [
 			BlockRegistry.BlockType.GRASS,
 			BlockRegistry.BlockType.DARK_GRASS,
-			BlockRegistry.BlockType.SAND
+			BlockRegistry.BlockType.SAND,
+			BlockRegistry.BlockType.SNOW,
 		]
 		if surface_block not in valid_blocks:
 			continue
 
-		# Choisir le type de mob
+		# Choisir le type de mob selon le biome
 		var mob_type: PassiveMob.MobType
 		if surface_block == BlockRegistry.BlockType.SAND:
-			mob_type = PassiveMob.MobType.CHICKEN
-		else:
+			# Désert : poulets et chevaux
 			var type_hash = (hash_val + i * 31) % 3
+			if type_hash == 0:
+				mob_type = PassiveMob.MobType.CHICKEN
+			elif type_hash == 1:
+				mob_type = PassiveMob.MobType.HORSE
+			else:
+				mob_type = PassiveMob.MobType.CHICKEN
+		elif surface_block == BlockRegistry.BlockType.SNOW:
+			# Montagne : loups
+			mob_type = PassiveMob.MobType.WOLF
+		elif surface_block == BlockRegistry.BlockType.DARK_GRASS:
+			# Forêt : cochons, loups, moutons
+			var type_hash = (hash_val + i * 31) % 4
+			if type_hash == 0:
+				mob_type = PassiveMob.MobType.PIG
+			elif type_hash == 1:
+				mob_type = PassiveMob.MobType.WOLF
+			elif type_hash == 2:
+				mob_type = PassiveMob.MobType.SHEEP
+			else:
+				mob_type = PassiveMob.MobType.COW
+		else:
+			# Plaines : moutons, vaches, cochons, chevaux
+			var type_hash = (hash_val + i * 31) % 6
 			if type_hash == 0:
 				mob_type = PassiveMob.MobType.SHEEP
 			elif type_hash == 1:
 				mob_type = PassiveMob.MobType.COW
-			else:
+			elif type_hash == 2:
+				mob_type = PassiveMob.MobType.PIG
+			elif type_hash == 3:
+				mob_type = PassiveMob.MobType.HORSE
+			elif type_hash == 4:
 				mob_type = PassiveMob.MobType.CHICKEN
+			else:
+				mob_type = PassiveMob.MobType.SHEEP
 
 		var world_x = chunk_pos.x * Chunk.CHUNK_SIZE + lx + 0.5
 		var world_z = chunk_pos.z * Chunk.CHUNK_SIZE + lz + 0.5

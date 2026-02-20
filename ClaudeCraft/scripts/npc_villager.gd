@@ -26,6 +26,7 @@ var mob_type_index: int = 0
 var chunk_position: Vector3i = Vector3i.ZERO
 var _spawn_pos: Vector3 = Vector3.ZERO
 var profession: int = 0  # VProfession.Profession
+var health: int = 20
 
 # === Mouvement ===
 var move_speed: float = 2.0
@@ -365,6 +366,14 @@ func _pick_new_wander():
 # ============================================================
 # INFO
 # ============================================================
+
+func take_hit(damage: int, knockback: Vector3 = Vector3.ZERO):
+	health -= damage
+	velocity += knockback
+	if health <= 0:
+		if claimed_poi != Vector3i(-9999, -9999, -9999) and poi_manager:
+			poi_manager.release_poi(claimed_poi)
+		queue_free()
 
 func get_info_text() -> String:
 	var prof_name = VProfession.get_profession_name(profession)

@@ -125,6 +125,9 @@ func _ready():
 		img.convert(Image.FORMAT_RGBA8)
 		if img.get_width() != _tex_resolution or img.get_height() != _tex_resolution:
 			img.resize(_tex_resolution, _tex_resolution, Image.INTERPOLATE_NEAREST)
+		# Forcer alpha opaque sauf pour les textures qui ont besoin de transparence (glass)
+		if tex_name != "glass":
+			_force_opaque(img)
 		images.append(img)
 
 	# Construire le Texture2DArray
@@ -136,6 +139,13 @@ func _ready():
 	_shared_material = ShaderMaterial.new()
 	_shared_material.shader = shader
 	_shared_material.set_shader_parameter("block_textures", _texture_array)
+
+func _force_opaque(img: Image) -> void:
+	for y in range(img.get_height()):
+		for x in range(img.get_width()):
+			var c = img.get_pixel(x, y)
+			if c.a < 1.0:
+				img.set_pixel(x, y, Color(c.r, c.g, c.b, 1.0))
 
 func _detect_resolution(tex_path: String) -> int:
 	for tex_name in TEXTURE_LIST:

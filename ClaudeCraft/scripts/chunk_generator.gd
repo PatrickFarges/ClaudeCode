@@ -358,13 +358,13 @@ func _place_all_vegetation(blocks: Array, heightmap: Array, biome_map: Array, ch
 				continue
 
 			match biome:
-				0:  # DESERT — Cactus + acacias rares
-					if _hash_2d(wx, wz, 19) < 2:
-						var h = 2 + _hash_2d(wx, wz, 3)
+				0:  # DESERT — Cactus espacés + acacias rares
+					if _hash_2d(wx, wz, 150) < 1:  # ~0.7% — cactus bien espacés
+						var h = 1 + _hash_2d(wx, wz, 3)  # 1-3 blocs de haut
 						for i in range(h):
 							if height + i < CHUNK_HEIGHT:
 								blocks[x][z][height + i] = BlockRegistry.BlockType.CACTUS
-					elif _hash_2d(wx, wz, 60) < 1:  # ~1.6% acacia
+					elif _hash_2d(wx, wz, 40) < 1:  # ~2.5% acacia (plus d'arbres)
 						_place_acacia_tree(blocks, x, z, height, wx, wz)
 
 				1:  # FOREST — Chenes + chenes noirs

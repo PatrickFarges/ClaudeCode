@@ -33,6 +33,10 @@ var player: CharacterBody3D = null
 var _texture_cache: Dictionary = {}
 var _sprite_cache: Dictionary = {}
 
+# État arc (bow pulling)
+var _holding_bow: bool = false
+var _bow_pull: float = 0.0  # 0.0 à 1.0
+
 func _ready():
 	player = get_tree().get_first_node_in_group("player")
 	_build_hierarchy()
@@ -181,6 +185,57 @@ func update_held_item_sprite(tool_type: ToolRegistry.ToolType):
 		item_holder.add_child(current_item_node)
 	else:
 		arm_mesh.visible = true
+
+# ============================================================
+# AFFICHAGE ARC — Change la texture selon le pull (charge)
+# ============================================================
+
+func update_bow_pull(pull: float):
+	"""Met à jour la texture de l'arc selon le niveau de charge (0.0 à 1.0)"""
+	_bow_pull = pull
+	if not _holding_bow:
+		return
+	# Sélectionner la texture selon les seuils MC
+	var tex_name: String
+	if pull <= 0.0:
+		tex_name = "bow"
+	elif pull < 0.65:
+		tex_name = "bow_pulling_0"
+	elif pull < 0.9:
+		tex_name = "bow_pulling_1"
+	else:
+		tex_name = "bow_pulling_2"
+
+	var tex_path = GC.get_item_texture_path() + tex_name + ".png"
+	_rebuild_bow_sprite(tex_path)
+
+func _rebuild_bow_sprite(tex_path: String):
+	"""Reconstruit le mesh extrudé de l'arc avec une nouvelle texture"""
+	if not current_item_node:
+		return
+	var abs_path = ProjectSettings.globalize_path(tex_path)
+	if not FileAccess.file_exists(abs_path):
+		return
+	var img = Image.new()
+	if img.load(abs_path) != OK:
+		return
+	img.convert(Image.FORMAT_RGBA8)
+	if img.get_width() != MODEL_GRID or img.get_height() != MODEL_GRID:
+		img.resize(MODEL_GRID, MODEL_GRID, Image.INTERPOLATE_NEAREST)
+	var mesh = _build_extruded_mesh(img)
+	current_item_node.mesh = mesh
+
+func start_bow_pull():
+	_holding_bow = true
+	_bow_pull = 0.0
+
+func stop_bow_pull():
+	_holding_bow = false
+	_bow_pull = 0.0
+	# Remettre la texture par défaut
+	if current_item_node:
+		var tex_path = GC.get_item_texture_path() + "bow.png"
+		_rebuild_bow_sprite(tex_path)
 
 # ============================================================
 # AFFICHAGE NODE 3D ARBITRAIRE (pour food GLB etc.)

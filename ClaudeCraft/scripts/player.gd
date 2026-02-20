@@ -100,6 +100,15 @@ var hotbar_tool_slots: Array = []
 # Nourriture — slots parallèles (true = ce slot contient de la nourriture)
 var hotbar_food_slots: Array = []
 const APPLE_MODEL_PATH = "res://assets/Deco/apple.glb"
+const ArrowEntityScript = preload("res://scripts/arrow_entity.gd")
+
+# ============================================================
+# SYSTÈME D'ARC
+# ============================================================
+var is_drawing_bow: bool = false
+var bow_charge_time: float = 0.0
+const BOW_MAX_CHARGE: float = 1.0  # Secondes pour charge max (MC: 1s = 20 ticks)
+const BOW_ARROW_OFFSET = Vector3(0, 1.5, 0)  # Hauteur des yeux
 
 # ============================================================
 # SYSTÈME DE NOURRITURE
@@ -217,7 +226,7 @@ func _init_tool_slots():
 	hotbar_tool_slots[5] = ToolRegistry.ToolType.IRON_AXE       # 4s sur tronc
 	hotbar_tool_slots[6] = ToolRegistry.ToolType.DIAMOND_AXE    # 3s sur tronc
 	hotbar_tool_slots[7] = ToolRegistry.ToolType.DIAMOND_PICKAXE
-	hotbar_tool_slots[8] = ToolRegistry.ToolType.NETHERITE_SWORD
+	hotbar_tool_slots[8] = ToolRegistry.ToolType.BOW
 	# Pas de slot nourriture dans la hotbar actuelle
 
 func _create_hand_renderer():
@@ -459,6 +468,7 @@ func _physics_process(delta):
 	_handle_auto_step(direction)
 	move_and_slide()
 	_update_damage(delta)
+	_handle_bow(delta)
 	_handle_block_interaction(delta)
 	_handle_eating(delta)
 	_handle_footsteps(delta, direction)
@@ -565,6 +575,9 @@ func _handle_block_interaction(delta: float):
 	
 	# Clic droit : manger / interaction avec bloc / placement
 	if Input.is_action_pressed("place_block") and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		# Arc géré par _handle_bow() — ne pas interférer
+		if is_drawing_bow or _get_selected_tool() == ToolRegistry.ToolType.BOW:
+			return
 		# Si on tient de la nourriture, manger (maintenir clic droit)
 		if _is_food_slot() and current_health < max_health:
 			if not is_eating:
@@ -577,6 +590,9 @@ func _handle_block_interaction(delta: float):
 			return
 
 	if Input.is_action_just_pressed("place_block") and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		# Arc — ne pas placer
+		if _get_selected_tool() == ToolRegistry.ToolType.BOW:
+			return
 		# Nourriture — ne pas placer
 		if _is_food_slot():
 			return
@@ -696,6 +712,57 @@ func _cancel_eating():
 	eating_particle_timer = 0.0
 	eating_sound_timer = 0.0
 
+# ============================================================
+# ARC — Charge et tir
+# ============================================================
+func _handle_bow(delta: float):
+	var is_bow = _get_selected_tool() == ToolRegistry.ToolType.BOW
+	var right_held = Input.is_action_pressed("place_block") and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+
+	# Relâché — tirer
+	if is_drawing_bow and not right_held:
+		_fire_arrow()
+		return
+
+	# Début de charge
+	if is_bow and right_held and not is_drawing_bow:
+		is_drawing_bow = true
+		bow_charge_time = 0.0
+		if hand_renderer:
+			hand_renderer.start_bow_pull()
+
+	# Mise à jour charge
+	if is_drawing_bow:
+		bow_charge_time += delta
+		var pull = clampf(bow_charge_time / BOW_MAX_CHARGE, 0.0, 1.0)
+		if hand_renderer:
+			hand_renderer.update_bow_pull(pull)
+
+func _fire_arrow():
+	if not is_drawing_bow:
+		return
+	var charge = clampf(bow_charge_time / BOW_MAX_CHARGE, 0.0, 1.0)
+	# MC formula: velocity factor = (f² + 2f) / 3
+	var factor = (charge * charge + 2.0 * charge) / 3.0
+
+	# Reset bow state
+	is_drawing_bow = false
+	bow_charge_time = 0.0
+	if hand_renderer:
+		hand_renderer.stop_bow_pull()
+		hand_renderer.play_swing()
+
+	# Trop court — pas de flèche
+	if factor < 0.1:
+		return
+
+	# Créer la flèche
+	var arrow = ArrowEntityScript.new()
+	get_tree().root.add_child(arrow)
+	var cam_dir = -camera.global_basis.z
+	var origin = camera.global_position
+	arrow.initialize(origin, cam_dir, factor, self)
+
 func _spawn_eating_particles():
 	var particles = CPUParticles3D.new()
 	particles.one_shot = true
@@ -733,6 +800,11 @@ func _update_selected_block():
 func _update_hand_display():
 	if not hand_renderer:
 		return
+	# Annuler l'arc si on change de slot
+	if is_drawing_bow:
+		is_drawing_bow = false
+		bow_charge_time = 0.0
+		hand_renderer.stop_bow_pull()
 	# Nourriture ?
 	if _is_food_slot():
 		var scene = load(APPLE_MODEL_PATH) as PackedScene
@@ -812,6 +884,11 @@ func _die():
 	respawn_timer = RESPAWN_DELAY
 	velocity = Vector3.ZERO
 	_cancel_mining()
+	if is_drawing_bow:
+		is_drawing_bow = false
+		bow_charge_time = 0.0
+		if hand_renderer:
+			hand_renderer.stop_bow_pull()
 
 func _respawn():
 	is_dead = false

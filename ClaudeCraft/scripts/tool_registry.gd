@@ -29,21 +29,28 @@ enum ToolType {
 # ============================================================
 # TIERS DE MINAGE — Modifier ces valeurs pour ajuster la vitesse
 # Formule : temps = (dureté_bloc × BASE_MINING_TIME) / multiplicateur
-# BASE_MINING_TIME = 10.0 (défini dans player.gd)
+# BASE_MINING_TIME = 5.0 (défini dans player.gd)
 # ============================================================
-# Tier      | Const       | Mult  | Tronc (d=1.0) | Pierre (d=1.5)
-# Main nue  | (aucun)     | 1.0   | 10.0s          | 15.0s
-# Bois      | TIER_WOOD   | 1.667 |  6.0s          |  9.0s
-# Pierre    | TIER_STONE  | 2.0   |  5.0s          |  7.5s
-# Fer       | TIER_IRON   | 2.5   |  4.0s          |  6.0s
-# Diamant   | TIER_DIAMOND| 3.333 |  3.0s          |  4.5s
-# Netherite | TIER_NETHER | 4.0   |  2.5s          |  3.75s
+# Tier      | Const       | Mult Axe | Mult Pick(2x)
+# Main nue  | (aucun)     | 1.0      | 1.0
+# Bois      | TIER_WOOD   | 1.667    | 3.334
+# Pierre    | TIER_STONE  | 2.0      | 4.0
+# Fer       | TIER_IRON   | 2.5      | 5.0
+# Diamant   | TIER_DIAMOND| 3.333    | 6.666
+# Netherite | TIER_NETHER | 4.0      | 8.0
 # ============================================================
 const TIER_WOOD     = 1.667  # 10/6
 const TIER_STONE    = 2.0    # 10/5
 const TIER_IRON     = 2.5    # 10/4
 const TIER_DIAMOND  = 3.333  # 10/3
 const TIER_NETHER   = 4.0    # 10/2.5
+
+# Bonus pioches (2x plus rapides sur la pierre que les haches sur le bois)
+const PICK_BOOST    = 2.0
+
+# Multiplicateur "mauvais outil" — un outil sur un bloc non-spécialisé
+# Ex: pioche sur bois = 1.3x (mieux que mains nues mais pas optimal)
+const CROSS_TOOL_MULT = 1.3
 
 # Blocs affectés par les haches (bois et dérivés)
 const AXE_BLOCKS = {
@@ -210,13 +217,27 @@ static func _ensure_speeds():
 	_speeds_initialized = true
 	var tier_map = {"WOOD": TIER_WOOD, "STONE": TIER_STONE, "IRON": TIER_IRON, "DIAMOND": TIER_DIAMOND, "NETHER": TIER_NETHER}
 	var type_map = {"AXE": AXE_BLOCKS, "PICK": PICK_BLOCKS, "SHOVEL": SHOVEL_BLOCKS, "HOE": HOE_BLOCKS}
+	# Tous les blocs minables (pour le cross-tool)
+	var all_minable = {}
+	for bdict in [AXE_BLOCKS, PICK_BLOCKS, SHOVEL_BLOCKS, HOE_BLOCKS]:
+		for bname in bdict:
+			all_minable[bname] = true
+
 	for tool_type in TOOL_DATA:
 		var data = TOOL_DATA[tool_type]
 		if data.has("_tier") and data.has("_type"):
-			var mult = tier_map.get(data["_tier"], 1.0)
-			var blocks = type_map.get(data["_type"], {})
-			for block_name in blocks:
-				data["mining_speed"][block_name] = mult
+			var base_mult = tier_map.get(data["_tier"], 1.0)
+			var tool_cat = data["_type"]
+			var specialty_blocks = type_map.get(tool_cat, {})
+			# Boost pioches (2x plus rapides)
+			var boost = PICK_BOOST if tool_cat == "PICK" else 1.0
+			# Spécialité : bonus complet
+			for block_name in specialty_blocks:
+				data["mining_speed"][block_name] = base_mult * boost
+			# Cross-tool : bonus réduit sur les autres blocs
+			for block_name in all_minable:
+				if not specialty_blocks.has(block_name):
+					data["mining_speed"][block_name] = CROSS_TOOL_MULT
 
 static func get_tool_name(tool_type: ToolType) -> String:
 	if TOOL_DATA.has(tool_type):
