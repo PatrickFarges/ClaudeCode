@@ -88,7 +88,7 @@ const MINING_HIT_INTERVAL = 0.25  # Secondes entre chaque frappe
 # temps = dureté_bloc × BASE_MINING_TIME / multiplicateur_outil
 # Ex: tronc (dureté 1.0) × 10.0 / 1.0 (mains nues) = 10.0 secondes
 # Modifier cette valeur pour accélérer/ralentir TOUT le minage
-const BASE_MINING_TIME = 10.0
+const BASE_MINING_TIME = 5.0
 
 # Bras / Item en main
 var hand_renderer = null
