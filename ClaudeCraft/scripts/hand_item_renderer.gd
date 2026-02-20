@@ -4,6 +4,7 @@ extends Node3D
 ## Blocs : cube texture par face depuis le pack actif
 ## Outils : flat sprite Minecraft-style depuis les textures d'items du pack
 
+const GC = preload("res://scripts/game_config.gd")
 const ARM_COLOR = Color(0.9, 0.75, 0.65)
 const BLOCK_SIZE = 0.28
 const ARM_SIZE = Vector3(0.15, 0.55, 0.15)
@@ -263,12 +264,9 @@ func _create_block_cube(block_type: BlockRegistry.BlockType) -> MeshInstance3D:
 	return mesh_inst
 
 func _has_any_texture_file(faces: Dictionary) -> bool:
-	var tex_path = GameConfig.get_block_texture_path()
 	for key in faces:
 		var tex_name = faces[key]
-		var path = tex_path + tex_name + ".png"
-		var abs_path = ProjectSettings.globalize_path(path)
-		if FileAccess.file_exists(abs_path):
+		if not GC.resolve_block_texture(tex_name).is_empty():
 			return true
 	return false
 
@@ -321,10 +319,9 @@ func _get_face_material(tex_name: String, tint: Color) -> StandardMaterial3D:
 	var mat = StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 
-	var path = GameConfig.get_block_texture_path() + tex_name + ".png"
-	var abs_path = ProjectSettings.globalize_path(path)
+	var abs_path = GC.resolve_block_texture(tex_name)
 
-	if FileAccess.file_exists(abs_path):
+	if not abs_path.is_empty():
 		var img = Image.new()
 		if img.load(abs_path) == OK:
 			img.convert(Image.FORMAT_RGBA8)

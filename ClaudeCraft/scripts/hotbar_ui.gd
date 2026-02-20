@@ -1,5 +1,6 @@
 extends CanvasLayer
 
+const GC = preload("res://scripts/game_config.gd")
 @onready var hotbar: HBoxContainer = $MarginContainer/HBoxContainer
 var slot_panels: Array = []
 var player: CharacterBody3D
@@ -193,9 +194,8 @@ func _load_block_icon(block_type: BlockRegistry.BlockType) -> ImageTexture:
 	var tex_name = BlockRegistry.get_face_texture(block_type, "top")
 	if tex_name == "dirt" and block_type != BlockRegistry.BlockType.DIRT:
 		tex_name = BlockRegistry.get_face_texture(block_type, "all")
-	var path = GameConfig.get_block_texture_path() + tex_name + ".png"
-	var abs_path = ProjectSettings.globalize_path(path)
-	if not FileAccess.file_exists(abs_path):
+	var abs_path = GC.resolve_block_texture(tex_name)
+	if abs_path.is_empty():
 		_icon_cache[cache_key] = null
 		return null
 	var img = Image.new()

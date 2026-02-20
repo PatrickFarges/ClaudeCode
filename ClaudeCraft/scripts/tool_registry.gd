@@ -3,6 +3,8 @@ class_name ToolRegistry
 
 ## Registre des outils — utilise les textures d'items du pack actif (flat sprites Minecraft-style)
 
+const GC = preload("res://scripts/game_config.gd")
+
 enum ToolType {
 	NONE,
 	STONE_AXE,
@@ -173,9 +175,9 @@ static func get_item_texture_path(tool_type: ToolType) -> String:
 	var base_path: String
 	match folder:
 		"entity":
-			base_path = GameConfig.get_entity_texture_path()
+			base_path = GC.get_entity_texture_path()
 		_:
-			base_path = GameConfig.get_item_texture_path()
+			base_path = GC.get_item_texture_path()
 	return base_path + data["item_texture"] + ".png"
 
 static func get_mining_multiplier(tool_type: ToolType, block_type: BlockRegistry.BlockType) -> float:

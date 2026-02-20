@@ -4,6 +4,8 @@ extends Node
 ## Utilise GameConfig pour le chemin du pack actif
 ## Auto-detecte la resolution des textures (16x16, 32x32, 64x64...)
 
+const GC = preload("res://scripts/game_config.gd")
+
 # Liste ordonnee des textures — chaque entree = une couche du Texture2DArray
 const TEXTURE_LIST: Array[String] = [
 	"grass_block_top",   # 0
@@ -99,22 +101,27 @@ func _ready():
 	for i in range(TEXTURE_LIST.size()):
 		_layer_map[TEXTURE_LIST[i]] = i
 
-	var tex_path = GameConfig.get_block_texture_path()
+	var tex_path = GC.get_block_texture_path()
 
 	# Auto-detecter la resolution depuis la premiere texture trouvee
 	_tex_resolution = _detect_resolution(tex_path)
-	print("[TextureManager] Pack: %s | Resolution: %dx%d" % [GameConfig.ACTIVE_PACK, _tex_resolution, _tex_resolution])
+	print("[TextureManager] Pack: %s | Resolution: %dx%d" % [GC.ACTIVE_PACK, _tex_resolution, _tex_resolution])
 
-	# Charger les images
+	# Charger les images (avec systeme d'alias pour les noms manquants)
 	var images: Array[Image] = []
 	for tex_name in TEXTURE_LIST:
-		var path = tex_path + tex_name + ".png"
-		var abs_path = ProjectSettings.globalize_path(path)
 		var img := Image.new()
-		var err = img.load(abs_path)
-		if err != OK:
+		var loaded = false
+
+		# Essayer le nom original, puis alias via GameConfig
+		var resolved = GC.resolve_block_texture(tex_name)
+		if not resolved.is_empty() and img.load(resolved) == OK:
+			loaded = true
+
+		if not loaded:
 			img = _fallback_color_image(tex_name)
-			print("[TextureManager] Fallback pour: ", tex_name)
+			print("[TextureManager] Fallback couleur pour: ", tex_name)
+
 		img.convert(Image.FORMAT_RGBA8)
 		if img.get_width() != _tex_resolution or img.get_height() != _tex_resolution:
 			img.resize(_tex_resolution, _tex_resolution, Image.INTERPOLATE_NEAREST)
