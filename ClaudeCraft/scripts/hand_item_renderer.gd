@@ -10,7 +10,7 @@ const BLOCK_SIZE = 0.28
 const ARM_SIZE = Vector3(0.15, 0.55, 0.15)
 const BASE_POSITION = Vector3(0.55, -0.35, -0.55)
 const SPRINT_OFFSET = Vector3(-0.1, 0.0, -0.05)
-const SPRITE_SIZE = 0.32
+const SPRITE_SIZE = 0.38
 
 # Noeuds
 var hand_pivot: Node3D
@@ -92,6 +92,8 @@ func _update_bobbing(delta: float):
 		hand_pivot.rotation_degrees.x = lerpf(hand_pivot.rotation_degrees.x, 0.0, delta * 10.0)
 		hand_pivot.rotation_degrees.z = 0.0
 
+var _holding_tool: bool = false
+
 func play_swing():
 	if is_swinging:
 		return
@@ -101,8 +103,15 @@ func play_swing():
 		swing_tween.kill()
 
 	swing_tween = create_tween()
-	swing_tween.tween_property(hand_pivot, "rotation_degrees:x", -30.0, 0.15)
-	swing_tween.tween_property(hand_pivot, "rotation_degrees:x", 0.0, 0.15)
+	if _holding_tool:
+		# Outils : grand coup franc rapide de haut en bas
+		var start_z = hand_pivot.rotation_degrees.z
+		swing_tween.tween_property(hand_pivot, "rotation_degrees:z", start_z + 110.0, 0.10).set_ease(Tween.EASE_IN)
+		swing_tween.tween_property(hand_pivot, "rotation_degrees:z", start_z, 0.18).set_ease(Tween.EASE_OUT)
+	else:
+		# Blocs / mains vides : coup franc vers l'avant
+		swing_tween.tween_property(hand_pivot, "rotation_degrees:x", -45.0, 0.10).set_ease(Tween.EASE_IN)
+		swing_tween.tween_property(hand_pivot, "rotation_degrees:x", 0.0, 0.18).set_ease(Tween.EASE_OUT)
 	swing_tween.tween_callback(func(): is_swinging = false)
 
 # ============================================================
@@ -111,6 +120,7 @@ func play_swing():
 
 func update_held_item(block_type: BlockRegistry.BlockType):
 	_clear_held_item()
+	_holding_tool = false
 
 	if block_type == BlockRegistry.BlockType.AIR:
 		arm_mesh.visible = true
@@ -127,14 +137,17 @@ func update_held_item(block_type: BlockRegistry.BlockType):
 
 func update_held_item_sprite(tool_type: ToolRegistry.ToolType):
 	_clear_held_item()
+	_holding_tool = true
 	arm_mesh.visible = false
 
 	var tex_path = ToolRegistry.get_item_texture_path(tool_type)
+	print("[HandItemRenderer] tool_type=%s tex_path=%s" % [str(tool_type), tex_path])
 	if tex_path.is_empty():
 		arm_mesh.visible = true
 		return
 
 	var sprite_node = _create_item_sprite(tex_path)
+	print("[HandItemRenderer] sprite_node=%s" % str(sprite_node))
 	if sprite_node:
 		current_item_node = sprite_node
 		item_holder.add_child(current_item_node)
@@ -147,6 +160,7 @@ func update_held_item_sprite(tool_type: ToolRegistry.ToolType):
 
 func update_held_tool_node(node: Node3D, hand_rotation := Vector3(-25, -135, 45), hand_scale := 0.35):
 	_clear_held_item()
+	_holding_tool = false
 	arm_mesh.visible = false
 
 	if node == null:
@@ -176,8 +190,12 @@ func _clear_held_item():
 		current_item_node = null
 
 # ============================================================
-# CREATION DU SPRITE PLAT (flat textured quad Minecraft-style)
+# CREATION DU MODELE 3D EXTRUDE (pixel-extruded Minecraft-style)
+# Chaque pixel opaque de la texture est extrude en petit cube 3D
 # ============================================================
+
+const EXTRUDE_DEPTH = 0.04  # epaisseur de l'item en unites 3D
+const MODEL_GRID = 16  # resolution de la grille d'extrusion (toujours 16x16 comme MC)
 
 func _create_item_sprite(tex_path: String) -> MeshInstance3D:
 	var abs_path = ProjectSettings.globalize_path(tex_path)
@@ -191,53 +209,101 @@ func _create_item_sprite(tex_path: String) -> MeshInstance3D:
 		return null
 
 	img.convert(Image.FORMAT_RGBA8)
-	var tex = ImageTexture.create_from_image(img)
 
-	# Construire un quad plat texture
-	var st = SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	# Redimensionner en 16x16 pour la grille d'extrusion (comme MC)
+	if img.get_width() != MODEL_GRID or img.get_height() != MODEL_GRID:
+		img.resize(MODEL_GRID, MODEL_GRID, Image.INTERPOLATE_NEAREST)
 
-	var mat = StandardMaterial3D.new()
-	mat.albedo_texture = tex
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
-	mat.alpha_scissor_threshold = 0.5
-	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	st.set_material(mat)
-
-	var s = SPRITE_SIZE * 0.5
-	var normal = Vector3(0, 0, 1)
-
-	# Face avant
-	var verts = [
-		Vector3(-s, -s, 0), Vector3(s, -s, 0),
-		Vector3(s, s, 0), Vector3(-s, s, 0)
-	]
-	var uvs = [Vector2(0, 1), Vector2(1, 1), Vector2(1, 0), Vector2(0, 0)]
-
-	for idx in [0, 1, 2]:
-		st.set_normal(normal)
-		st.set_uv(uvs[idx])
-		st.add_vertex(verts[idx])
-	for idx in [0, 2, 3]:
-		st.set_normal(normal)
-		st.set_uv(uvs[idx])
-		st.add_vertex(verts[idx])
-
-	var mesh = ArrayMesh.new()
-	st.commit(mesh)
+	var mesh = _build_extruded_mesh(img)
+	print("[HandItemRenderer] Extruded mesh: %d surfaces" % mesh.get_surface_count())
 
 	var inst = MeshInstance3D.new()
 	inst.mesh = mesh
 	inst.layers = 2
 
-	# Rotation Minecraft first-person : outil tenu en diagonale
-	# Manche vers le bas-droite, tete vers le haut-gauche
-	inst.rotation_degrees = Vector3(-10, -45, -20)
-	inst.position = Vector3(0.0, 0.02, 0.0)
+	# Rotation Minecraft first-person : outil tenu par le manche
+	# Face plate visible, manche en bas-droite, tete en haut-gauche
+	inst.rotation_degrees = Vector3(10, -5, 35)
+	inst.position = Vector3(0.05, -0.02, 0.0)
 
 	return inst
+
+func _build_extruded_mesh(img: Image) -> ArrayMesh:
+	var mesh = ArrayMesh.new()
+	var grid = MODEL_GRID
+	var pixel_size = SPRITE_SIZE / float(grid)
+	var half = SPRITE_SIZE * 0.5
+	var half_d = EXTRUDE_DEPTH * 0.5
+
+	# Grouper les pixels par couleur pour minimiser les surfaces/materiaux
+	var color_quads: Dictionary = {}  # Color -> Array of [v0,v1,v2,v3,normal]
+
+	for py in range(grid):
+		for px in range(grid):
+			var c = img.get_pixel(px, py)
+			if c.a < 0.5:
+				continue
+
+			var x0 = -half + px * pixel_size
+			var x1 = x0 + pixel_size
+			var y1 = half - py * pixel_size
+			var y0 = y1 - pixel_size
+
+			# Face avant (Z+)
+			_collect_quad(color_quads, c, 1.0,
+				Vector3(x0, y0, half_d), Vector3(x1, y0, half_d),
+				Vector3(x1, y1, half_d), Vector3(x0, y1, half_d))
+			# Face arriere (Z-)
+			_collect_quad(color_quads, c, 1.0,
+				Vector3(x1, y0, -half_d), Vector3(x0, y0, -half_d),
+				Vector3(x0, y1, -half_d), Vector3(x1, y1, -half_d))
+			# Gauche
+			if px == 0 or img.get_pixel(px - 1, py).a < 0.5:
+				_collect_quad(color_quads, c, 0.7,
+					Vector3(x0, y0, -half_d), Vector3(x0, y0, half_d),
+					Vector3(x0, y1, half_d), Vector3(x0, y1, -half_d))
+			# Droite
+			if px == grid - 1 or img.get_pixel(px + 1, py).a < 0.5:
+				_collect_quad(color_quads, c, 0.7,
+					Vector3(x1, y0, half_d), Vector3(x1, y0, -half_d),
+					Vector3(x1, y1, -half_d), Vector3(x1, y1, half_d))
+			# Bas
+			if py == grid - 1 or img.get_pixel(px, py + 1).a < 0.5:
+				_collect_quad(color_quads, c, 0.85,
+					Vector3(x0, y0, half_d), Vector3(x0, y0, -half_d),
+					Vector3(x1, y0, -half_d), Vector3(x1, y0, half_d))
+			# Haut
+			if py == 0 or img.get_pixel(px, py - 1).a < 0.5:
+				_collect_quad(color_quads, c, 0.85,
+					Vector3(x0, y1, -half_d), Vector3(x0, y1, half_d),
+					Vector3(x1, y1, half_d), Vector3(x1, y1, -half_d))
+
+	# Construire une surface par couleur unique
+	for key in color_quads:
+		var quads = color_quads[key]
+		var st = SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		var mat = StandardMaterial3D.new()
+		mat.albedo_color = key
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		st.set_material(mat)
+		for q in quads:
+			var n = Vector3(0, 0, 1)
+			st.set_normal(n); st.add_vertex(q[0])
+			st.set_normal(n); st.add_vertex(q[1])
+			st.set_normal(n); st.add_vertex(q[2])
+			st.set_normal(n); st.add_vertex(q[0])
+			st.set_normal(n); st.add_vertex(q[2])
+			st.set_normal(n); st.add_vertex(q[3])
+		st.commit(mesh)
+
+	return mesh
+
+func _collect_quad(dict: Dictionary, base_color: Color, shade: float, v0: Vector3, v1: Vector3, v2: Vector3, v3: Vector3):
+	var c = Color(base_color.r * shade, base_color.g * shade, base_color.b * shade, 1.0)
+	if not dict.has(c):
+		dict[c] = []
+	dict[c].append([v0, v1, v2, v3])
 
 # ============================================================
 # CREATION DU CUBE BLOC TEXTURE

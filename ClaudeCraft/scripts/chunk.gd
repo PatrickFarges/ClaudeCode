@@ -530,11 +530,11 @@ func _emit_quad(v0: Vector3, v1: Vector3, v2: Vector3, v3: Vector3, normal: Vect
 	_colors.append(color * ao[2])
 	_colors.append(color * ao[3])
 
-	# UV: (0,0) → (W,H) pour tiler la texture sur le quad fusionné
-	_uvs.append(Vector2(0, 0))
-	_uvs.append(Vector2(uv_w, 0))
-	_uvs.append(Vector2(uv_w, uv_h))
+	# UV: V inversé pour que le haut de la texture soit en haut du quad
 	_uvs.append(Vector2(0, uv_h))
+	_uvs.append(Vector2(uv_w, uv_h))
+	_uvs.append(Vector2(uv_w, 0))
+	_uvs.append(Vector2(0, 0))
 
 	# CUSTOM0: layer index dans le Texture2DArray
 	_custom0.append(layer)
