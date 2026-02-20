@@ -85,7 +85,7 @@ static func _make_speed(blocks: Dictionary, mult: float) -> Dictionary:
 		result[block_name] = mult
 	return result
 
-const TOOL_DATA = {
+static var TOOL_DATA = {
 	ToolType.WOOD_AXE: {
 		"name": "Hache en bois",
 		"item_texture": "wooden_axe",
