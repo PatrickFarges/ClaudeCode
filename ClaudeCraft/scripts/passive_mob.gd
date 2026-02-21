@@ -11,7 +11,7 @@ const MOB_DATA = {
 	MobType.SHEEP: {
 		"collision_size": Vector3(0.9, 1.3, 0.9),
 		"geo_path": BEDROCK_BASE + "models/sheep.geo.json",
-		"geo_id": "geometry.sheep.v1.8",
+		"geo_id": "geometry.sheep.sheared.v1.8",
 		"texture": BEDROCK_BASE + "textures/sheep.tga",
 		"health": 8, "meat_name": "Mouton", "meat_count": 2,
 		"bone_map": { "body": "body", "head": "head",
