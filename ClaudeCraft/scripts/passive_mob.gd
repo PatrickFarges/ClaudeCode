@@ -130,9 +130,7 @@ func _create_bedrock_model():
 	var data: Dictionary = MOB_DATA[mob_type]
 	var geo_path: String = data["geo_path"]
 	var geo_id: String = data["geo_id"]
-	var tex_path: String = data["texture"]
-	# Load texture (cached)
-	var texture: Texture2D = _load_texture(tex_path)
+	var texture: Texture2D = _load_texture(data["texture"])
 	if not texture:
 		_create_fallback_mesh()
 		return
