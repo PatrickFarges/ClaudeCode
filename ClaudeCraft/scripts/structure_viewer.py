@@ -768,10 +768,287 @@ def load_obj(path):
     return MeshData(name, submeshes)
 
 
+def _is_bedrock_geo_json(path):
+    """Check if a .json file is a Bedrock .geo.json entity model."""
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            return False
+        if "minecraft:geometry" in data:
+            return True
+        for key in data.keys():
+            if key.startswith("geometry."):
+                return True
+        return False
+    except Exception:
+        return False
+
+
+def load_bedrock_geo(path, geometry_id="", skip_bones=None):
+    """Charge un fichier Bedrock .geo.json et retourne un MeshData.
+
+    Applique la même logique que bedrock_entity.gd :
+    - bind_pose_rotation → rotation du mesh uniquement (pas les enfants)
+    - rotation → rotation du bone (affecte les enfants)
+    """
+    SCALE = 1.0 / 16.0
+
+    with open(path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+
+    if skip_bones is None:
+        skip_bones = set()
+    else:
+        skip_bones = set(skip_bones)
+
+    # --- Parse geometry ---
+    bones_data = []
+    tex_w, tex_h = 64.0, 32.0
+
+    if "minecraft:geometry" in data:
+        # Format 1.12.0+
+        for geo in data["minecraft:geometry"]:
+            desc = geo.get("description", {})
+            gid = desc.get("identifier", "")
+            if geometry_id == "" or gid == geometry_id:
+                tex_w = float(desc.get("texture_width", 64))
+                tex_h = float(desc.get("texture_height", 32))
+                bones_data = geo.get("bones", [])
+                break
+        if not bones_data and data["minecraft:geometry"]:
+            geo = data["minecraft:geometry"][0]
+            desc = geo.get("description", {})
+            tex_w = float(desc.get("texture_width", 64))
+            tex_h = float(desc.get("texture_height", 32))
+            bones_data = geo.get("bones", [])
+    else:
+        # Format 1.8.0
+        for key in data.keys():
+            if not key.startswith("geometry."):
+                continue
+            gid = key.split(":")[0]
+            if geometry_id != "" and gid != geometry_id:
+                continue
+            gdata = data[key]
+            tex_w = float(gdata.get("texturewidth", 64))
+            tex_h = float(gdata.get("textureheight", 32))
+            bones_data = gdata.get("bones", [])
+            break
+        if not bones_data:
+            for key in data.keys():
+                if key.startswith("geometry.") and key != "format_version":
+                    gdata = data[key]
+                    tex_w = float(gdata.get("texturewidth", 64))
+                    tex_h = float(gdata.get("textureheight", 32))
+                    bones_data = gdata.get("bones", [])
+                    break
+
+    if not bones_data:
+        raise ValueError("No geometry found in " + path)
+
+    # --- Rotation helpers ---
+    def _rot_matrix_x(deg):
+        r = np.radians(deg)
+        c, s = np.cos(r), np.sin(r)
+        return np.array([[1,0,0],[0,c,-s],[0,s,c]], dtype=np.float64)
+
+    def _rot_matrix_y(deg):
+        r = np.radians(deg)
+        c, s = np.cos(r), np.sin(r)
+        return np.array([[c,0,s],[0,1,0],[-s,0,c]], dtype=np.float64)
+
+    def _rot_matrix_z(deg):
+        r = np.radians(deg)
+        c, s = np.cos(r), np.sin(r)
+        return np.array([[c,-s,0],[s,c,0],[0,0,1]], dtype=np.float64)
+
+    def _euler_to_matrix(rx, ry, rz):
+        """YXZ order (same as Godot default)."""
+        return _rot_matrix_y(ry) @ _rot_matrix_x(rx) @ _rot_matrix_z(rz)
+
+    # --- Build bone data ---
+    bone_pivots = {}
+    bone_parents = {}
+    bone_node_rot = {}  # "rotation" field (affects children)
+    bone_bind_rot = {}  # "bind_pose_rotation" field (mesh only)
+    bone_cubes = {}
+    bone_mirror = {}
+
+    for bd in bones_data:
+        bname = bd.get("name", "unnamed")
+        if bname in skip_bones:
+            continue
+        bone_pivots[bname] = np.array(bd.get("pivot", [0, 0, 0]), dtype=np.float64)
+        pname = bd.get("parent", "")
+        # Skip if parent was skipped
+        if pname in skip_bones:
+            pname = ""
+        bone_parents[bname] = pname
+
+        bind_r = bd.get("bind_pose_rotation", [0, 0, 0])
+        node_r = bd.get("rotation", [0, 0, 0])
+        bone_bind_rot[bname] = np.array(bind_r, dtype=np.float64)
+        bone_node_rot[bname] = np.array(node_r, dtype=np.float64)
+        bone_cubes[bname] = bd.get("cubes", [])
+        bone_mirror[bname] = bd.get("mirror", False)
+
+    # Compute world positions and accumulated node rotation matrices
+    bone_world_pos = {}  # name → world position
+    bone_accum_rot = {}  # name → accumulated node rotation matrix (3x3)
+
+    # Assign a color per bone for visual debugging
+    bone_colors = {}
+    palette = [
+        (0.85, 0.45, 0.45),  # red
+        (0.45, 0.75, 0.45),  # green
+        (0.45, 0.55, 0.85),  # blue
+        (0.85, 0.75, 0.45),  # yellow
+        (0.75, 0.45, 0.75),  # purple
+        (0.45, 0.80, 0.80),  # cyan
+        (0.85, 0.60, 0.40),  # orange
+        (0.65, 0.65, 0.65),  # grey
+    ]
+
+    submeshes = []
+    bone_idx = 0
+
+    # Process bones in order (parents before children guaranteed by Bedrock format)
+    for bd in bones_data:
+        bname = bd.get("name", "unnamed")
+        if bname not in bone_pivots:
+            continue
+
+        pivot = bone_pivots[bname]
+        pname = bone_parents[bname]
+        node_rot = bone_node_rot[bname]
+        bind_rot = bone_bind_rot[bname]
+
+        # Node rotation matrix (from "rotation" field — affects children)
+        node_mat = np.eye(3, dtype=np.float64)
+        if np.any(node_rot != 0):
+            node_mat = _euler_to_matrix(node_rot[0], node_rot[1], node_rot[2])
+
+        # Bind-pose rotation matrix (mesh only)
+        bind_mat = np.eye(3, dtype=np.float64)
+        if np.any(bind_rot != 0):
+            bind_mat = _euler_to_matrix(bind_rot[0], bind_rot[1], bind_rot[2])
+
+        # Compute world position
+        if pname and pname in bone_pivots:
+            pp = bone_pivots[pname]
+            world_offset = (pivot - pp) * SCALE
+            parent_accum = bone_accum_rot.get(pname, np.eye(3))
+            # local_pos = parent_accum_inv * world_offset (same as Godot code)
+            local_pos = np.linalg.inv(parent_accum) @ world_offset
+            parent_world = bone_world_pos.get(pname, pp * SCALE)
+            bone_world_pos[bname] = parent_world + parent_accum @ local_pos
+            bone_accum_rot[bname] = parent_accum @ node_mat
+        else:
+            bone_world_pos[bname] = pivot * SCALE
+            bone_accum_rot[bname] = node_mat
+
+        # Build cube meshes for this bone
+        cubes = bone_cubes[bname]
+        is_mirror_bone = bone_mirror[bname]
+        color = palette[bone_idx % len(palette)]
+        bone_colors[bname] = color
+        bone_idx += 1
+
+        if not cubes:
+            continue
+
+        for cube in cubes:
+            origin = np.array(cube.get("origin", [0, 0, 0]), dtype=np.float64)
+            size = np.array(cube.get("size", [1, 1, 1]), dtype=np.float64)
+            inflate = float(cube.get("inflate", 0.0))
+
+            # Cube corners relative to bone pivot
+            mn = (origin - inflate - pivot) * SCALE
+            mx = mn + (size + inflate * 2.0) * SCALE
+
+            x0, y0, z0 = mn
+            x1, y1, z1 = mx
+
+            # 8 corners of the cube
+            corners = np.array([
+                [x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0],  # -Z face
+                [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1],  # +Z face
+            ], dtype=np.float64)
+
+            # Apply bind_pose_rotation to mesh vertices (rotate around pivot = origin)
+            if np.any(bind_rot != 0):
+                corners = (bind_mat @ corners.T).T
+
+            # Transform to world space
+            world_pos = bone_world_pos[bname]
+            corners = corners + world_pos
+
+            # 6 faces (2 triangles each), CCW winding for outward normals
+            # Each face: 4 corner indices → 2 triangles
+            face_defs = [
+                # (v0, v1, v2, v3, normal_before_transform)
+                ([1, 0, 3, 2], [0, 0, -1]),  # North (-Z)
+                ([4, 5, 6, 7], [0, 0, 1]),   # South (+Z)
+                ([5, 1, 2, 6], [1, 0, 0]),   # East (+X)
+                ([0, 4, 7, 3], [-1, 0, 0]),  # West (-X)
+                ([3, 7, 6, 2], [0, 1, 0]),   # Top (+Y)
+                ([0, 1, 5, 4], [0, -1, 0]),  # Bottom (-Y)
+            ]
+
+            positions = []
+            normals = []
+            indices = []
+            idx_base = 0
+
+            for vert_ids, normal in face_defs:
+                v0 = corners[vert_ids[0]]
+                v1 = corners[vert_ids[1]]
+                v2 = corners[vert_ids[2]]
+                v3 = corners[vert_ids[3]]
+
+                # Apply bind_pose_rotation to normals too
+                n = np.array(normal, dtype=np.float64)
+                if np.any(bind_rot != 0):
+                    n = bind_mat @ n
+                    nn = np.linalg.norm(n)
+                    if nn > 0:
+                        n = n / nn
+
+                positions.extend([v0, v1, v2, v3])
+                normals.extend([n, n, n, n])
+                # Two CCW triangles: 0-1-2, 0-2-3
+                indices.extend([idx_base, idx_base + 1, idx_base + 2,
+                               idx_base, idx_base + 2, idx_base + 3])
+                idx_base += 4
+
+            if positions:
+                submeshes.append(SubMesh(
+                    np.array(positions, dtype=np.float32),
+                    np.array(normals, dtype=np.float32),
+                    np.array(indices, dtype=np.uint32),
+                    color
+                ))
+
+    if not submeshes:
+        raise ValueError("No renderable bones found in " + path)
+
+    name = Path(path).stem
+    if geometry_id:
+        name += " [" + geometry_id.replace("geometry.", "") + "]"
+    return MeshData(name, submeshes)
+
+
 def load_file_data(path):
     """Charge un fichier et retourne StructureData ou MeshData selon le format."""
     ext = Path(path).suffix.lower()
+    # .geo.json files (double extension)
+    if path.lower().endswith('.geo.json'):
+        return load_bedrock_geo(path)
     if ext in ('.json', '.schem', '.schematic', '.litematic'):
+        # Check if .json is actually a Bedrock geo file
+        if ext == '.json' and _is_bedrock_geo_json(path):
+            return load_bedrock_geo(path)
         return load_structure(path)
     elif ext == '.glb':
         return load_glb(path)
@@ -1270,6 +1547,7 @@ def _save_config(cfg):
 
 _SUPPORTED_EXTENSIONS = {".json", ".schem", ".litematic", ".schematic", ".glb", ".obj"}
 _MESH_EXTENSIONS = {".glb", ".obj"}
+_BEDROCK_GEO_EXTENSION = ".geo.json"  # double extension handled separately
 
 class FileBrowserPanel(QWidget):
     """Panneau de navigation dans les fichiers et dossiers."""
@@ -1370,7 +1648,7 @@ class FileBrowserPanel(QWidget):
                 dirs.append(entry)
             else:
                 ext = os.path.splitext(entry)[1].lower()
-                if ext in _SUPPORTED_EXTENSIONS:
+                if ext in _SUPPORTED_EXTENSIONS or entry.lower().endswith('.geo.json'):
                     files.append(entry)
 
         dirs.sort(key=str.lower)
@@ -1393,7 +1671,7 @@ class FileBrowserPanel(QWidget):
         # Fichiers
         for f in files:
             ext = os.path.splitext(f)[1].lower()
-            if ext in _MESH_EXTENSIONS:
+            if ext in _MESH_EXTENSIONS or f.lower().endswith('.geo.json'):
                 icon = "\U0001f4a0"  # diamant pour mesh
                 color = "#f38ba8"    # rose pour mesh
             else:

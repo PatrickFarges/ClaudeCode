@@ -11,11 +11,12 @@ const MOB_DATA = {
 	MobType.SHEEP: {
 		"collision_size": Vector3(0.9, 1.3, 0.9),
 		"geo_path": BEDROCK_BASE + "models/sheep.geo.json",
-		"geo_id": "geometry.sheep.sheared.v1.8",
+		"geo_id": "geometry.sheep.v1.8",
 		"texture": BEDROCK_BASE + "textures/sheep.tga",
 		"health": 8, "meat_name": "Mouton", "meat_count": 2,
 		"bone_map": { "body": "body", "head": "head",
 			"leg0": "leg0", "leg1": "leg1", "leg2": "leg2", "leg3": "leg3" },
+		"leg_nudge": 0.12,
 	},
 	MobType.COW: {
 		"collision_size": Vector3(0.9, 1.4, 0.9),
@@ -25,6 +26,7 @@ const MOB_DATA = {
 		"health": 10, "meat_name": "Boeuf", "meat_count": 3,
 		"bone_map": { "body": "body", "head": "head",
 			"leg0": "leg0", "leg1": "leg1", "leg2": "leg2", "leg3": "leg3" },
+		"leg_nudge": 0.10,
 	},
 	MobType.CHICKEN: {
 		"collision_size": Vector3(0.5, 0.7, 0.5),
@@ -44,6 +46,7 @@ const MOB_DATA = {
 		"health": 10, "meat_name": "Porc", "meat_count": 3,
 		"bone_map": { "body": "body", "head": "head",
 			"leg0": "leg0", "leg1": "leg1", "leg2": "leg2", "leg3": "leg3" },
+		"leg_nudge": 0.10,
 	},
 	MobType.WOLF: {
 		"collision_size": Vector3(0.6, 0.85, 0.6),
@@ -64,6 +67,10 @@ const MOB_DATA = {
 		"bone_map": { "body": "Body", "head": "Head", "neck": "Neck",
 			"leg0": "Leg1A", "leg1": "Leg2A", "leg2": "Leg3A", "leg3": "Leg4A",
 			"tail": "TailA" },
+		"skip_bones": ["Saddle", "HeadSaddle", "SaddleMouthL", "SaddleMouthR",
+			"SaddleMouthLine", "SaddleMouthLineR", "Bag1", "Bag2",
+			"MuleEarL", "MuleEarR"],
+		"leg_nudge": 0.08,
 	},
 }
 
@@ -126,7 +133,6 @@ func _create_bedrock_model():
 	var geo_path: String = data["geo_path"]
 	var geo_id: String = data["geo_id"]
 	var tex_path: String = data["texture"]
-
 	# Load texture (cached)
 	var texture: Texture2D = _load_texture(tex_path)
 	if not texture:
@@ -134,7 +140,8 @@ func _create_bedrock_model():
 		return
 
 	# Build model from Bedrock geometry
-	var model := BedrockEntity.build_model(geo_path, texture, geo_id)
+	var skip: Array = data.get("skip_bones", [])
+	var model := BedrockEntity.build_model(geo_path, texture, geo_id, skip)
 	if not model:
 		_create_fallback_mesh()
 		return
@@ -150,12 +157,15 @@ func _create_bedrock_model():
 	_bone_upper = _find_bone(model, bone_map.get("upperBody", ""))
 	_bone_tail = _find_bone(model, bone_map.get("tail", ""))
 
-	# Legs
+	# Legs — nudge up slightly to close visual gap with body
 	_bone_legs.clear()
 	_leg_bind_rots.clear()
+	var leg_nudge: float = data.get("leg_nudge", 0.0)
 	for key in ["leg0", "leg1", "leg2", "leg3"]:
 		var bname: String = bone_map.get(key, "")
 		var bone := _find_bone(model, bname)
+		if bone and leg_nudge != 0.0:
+			bone.position.y += leg_nudge
 		_bone_legs.append(bone)
 		_leg_bind_rots.append(bone.rotation_degrees if bone else Vector3.ZERO)
 
@@ -167,6 +177,11 @@ func _create_bedrock_model():
 			var bone := _find_bone(model, bname)
 			if bone:
 				_bone_wings.append(bone)
+
+	# Sheep: nudge head forward so it's not hidden inside the wool body
+	if mob_type == MobType.SHEEP and _bone_head:
+		_bone_head.position.z -= 0.15
+		_bone_head.position.y += 0.05
 
 	# Save bind rotations
 	if _bone_head:
@@ -249,7 +264,8 @@ func _physics_process(delta):
 		velocity.z = wander_direction.z * move_speed
 
 		if wander_direction.length_squared() > 0.01:
-			rotation.y = atan2(wander_direction.x, wander_direction.z)
+			# Bedrock models face -Z, so negate direction for correct facing
+			rotation.y = atan2(-wander_direction.x, -wander_direction.z)
 
 		var speed := Vector2(velocity.x, velocity.z).length()
 		_walk_distance += speed * delta
@@ -267,8 +283,8 @@ func _physics_process(delta):
 #  Formula: cos(distance * 38.17) * amplitude
 # ============================================================
 
-const LEG_FREQ := 38.17    # Bedrock walk frequency (rad per distance unit)
-const LEG_AMP := 40.0      # Leg swing amplitude (degrees) — 80 looks too much at this scale
+const LEG_FREQ := 8.0      # Walk frequency (rad per distance unit) — lower = slower swing
+const LEG_AMP := 30.0      # Leg swing amplitude (degrees)
 const WING_FREQ := 20.0    # Chicken wing flap frequency
 const WING_AMP := 30.0     # Wing flap amplitude
 const HEAD_BOB_AMP := 5.0  # Subtle head bob
