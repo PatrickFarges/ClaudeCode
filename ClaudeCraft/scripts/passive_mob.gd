@@ -258,17 +258,25 @@ func _physics_process(delta):
 			rotation.y = atan2(-wander_direction.x, -wander_direction.z)
 
 		var speed := Vector2(velocity.x, velocity.z).length()
-		# MC limbSwing: increments by distance traveled each frame
-		_limb_swing += speed * delta
-		# MC limbSwingAmount: smoothly approaches current speed ratio (0..1)
-		var target_swing := clampf(speed / move_speed, 0.0, 1.0)
-		_limb_swing_amount = lerpf(_limb_swing_amount, target_swing, delta * 10.0)
+		# MC EntityLivingBase.onLivingUpdate():
+		#   float f = sqrt(motionX² + motionZ²);
+		#   limbSwingAmount += (f * 4.0 - limbSwingAmount) * 0.4;  // per tick
+		#   limbSwing += limbSwingAmount;                           // per tick
+		# Conversion: speed (blocks/sec) / 20 = speed per tick
+		var speed_per_tick := speed / 20.0
+		var mc_target := clampf(speed_per_tick * 4.0, 0.0, 1.0)
+		# Smoothing: MC uses 0.4 per tick → frame-rate independent
+		var smooth := 1.0 - pow(0.6, delta * 20.0)  # 0.6 = 1 - 0.4, 20 ticks/sec
+		_limb_swing_amount = lerpf(_limb_swing_amount, mc_target, smooth)
+		# MC: limbSwing += limbSwingAmount per tick = limbSwingAmount * 20 per sec
+		_limb_swing += _limb_swing_amount * 20.0 * delta
 		_animate_walk(delta)
 	else:
 		velocity.x = move_toward(velocity.x, 0, move_speed * 2.0)
 		velocity.z = move_toward(velocity.z, 0, move_speed * 2.0)
-		# Smoothly decay limb swing amount to 0 when stopping
-		_limb_swing_amount = lerpf(_limb_swing_amount, 0.0, delta * 10.0)
+		# Smoothly decay limb swing amount to 0 (same MC smoothing)
+		var smooth_stop := 1.0 - pow(0.6, delta * 20.0)
+		_limb_swing_amount = lerpf(_limb_swing_amount, 0.0, smooth_stop)
 		_animate_idle(delta)
 
 	# Always tick age for time-based animations (chicken wings etc.)
@@ -279,17 +287,15 @@ func _physics_process(delta):
 # ============================================================
 #  SKELETAL ANIMATION — MC-authentic formulas (from MC 1.12 source)
 #
-#  Walk cycle (ModelQuadruped.setRotationAngles):
+#  MC EntityLivingBase.onLivingUpdate():
+#    limbSwingAmount += (sqrt(motionX²+motionZ²) * 4.0 - limbSwingAmount) * 0.4
+#    limbSwing += limbSwingAmount
+#
+#  ModelQuadruped.setRotationAngles():
 #    leg.rotateAngleX = cos(limbSwing * 0.6662) * 1.4 * limbSwingAmount
-#    Diagonal pairs: legs 0,3 together; legs 1,2 together (π phase shift)
-#    Frequency 0.6662 ≈ one full cycle every ~9.4 ticks (~0.47s)
-#    Amplitude 1.4 rad (≈80°) at full speed
-#
-#  Chicken wings (ModelChicken.setRotationAngles):
-#    wing.rotateAngleZ = ageInTicks  (time-based, not walk-based)
-#
-#  Wolf tail:
-#    tail.rotateAngleY = cos(limbSwing * 0.6662) * 1.4 * limbSwingAmount
+#    Diagonal pairs: legs 0,3 together; legs 1,2 opposite (π phase shift)
+#    At cow walk speed (~1.5 b/s): limbSwingAmount ≈ 0.3, amplitude ≈ 24°
+#    Walk cycle period ≈ 1.6 seconds
 # ============================================================
 
 # MC constants — from ModelQuadruped.setRotationAngles()
