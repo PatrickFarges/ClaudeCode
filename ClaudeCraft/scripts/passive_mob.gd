@@ -1,77 +1,74 @@
 extends CharacterBody3D
 class_name PassiveMob
 
+const BedrockEntity = preload("res://scripts/bedrock_entity.gd")
+
 enum MobType { SHEEP, COW, CHICKEN, PIG, WOLF, HORSE }
 
+# Bedrock model paths + textures — replaces old Sketchfab GLBs
+const BEDROCK_BASE := "res://assets/Mobs/Bedrock/"
 const MOB_DATA = {
 	MobType.SHEEP: {
 		"collision_size": Vector3(0.9, 1.3, 0.9),
-		"model_path": "res://assets/Mobs/Passive/minecraft_-_sheep.glb",
-		"model_scale": Vector3(0.065, 0.065, 0.065),
-		"model_y_offset": 0.98,  # raw min_y=-15 * 0.065
-		"health": 8,
-		"meat_name": "Mouton",
-		"meat_count": 2,
+		"geo_path": BEDROCK_BASE + "models/sheep.geo.json",
+		"geo_id": "geometry.sheep.sheared.v1.8",
+		"texture": BEDROCK_BASE + "textures/sheep.tga",
+		"health": 8, "meat_name": "Mouton", "meat_count": 2,
+		"bone_map": { "body": "body", "head": "head",
+			"leg0": "leg0", "leg1": "leg1", "leg2": "leg2", "leg3": "leg3" },
 	},
 	MobType.COW: {
 		"collision_size": Vector3(0.9, 1.4, 0.9),
-		"model_path": "res://assets/Mobs/Passive/minecraft_-_cow.glb",
-		"model_scale": Vector3(0.065, 0.065, 0.065),
-		"model_y_offset": 0.98,  # raw min_y=-15 * 0.065
-		"health": 10,
-		"meat_name": "Boeuf",
-		"meat_count": 3,
+		"geo_path": BEDROCK_BASE + "models/cow.geo.json",
+		"geo_id": "geometry.cow.v1.8",
+		"texture": BEDROCK_BASE + "textures/cow.png",
+		"health": 10, "meat_name": "Boeuf", "meat_count": 3,
+		"bone_map": { "body": "body", "head": "head",
+			"leg0": "leg0", "leg1": "leg1", "leg2": "leg2", "leg3": "leg3" },
 	},
 	MobType.CHICKEN: {
 		"collision_size": Vector3(0.5, 0.7, 0.5),
-		"model_path": "res://assets/Mobs/Passive/minecraft_-_chicken.glb",
-		"model_scale": Vector3(0.045, 0.045, 0.045),
-		"model_y_offset": 0.36,  # raw min_y=-8 * 0.045
-		"health": 4,
-		"meat_name": "Poulet",
-		"meat_count": 1,
+		"geo_path": BEDROCK_BASE + "models/chicken.geo.json",
+		"geo_id": "geometry.chicken",
+		"texture": BEDROCK_BASE + "textures/chicken.png",
+		"health": 4, "meat_name": "Poulet", "meat_count": 1,
+		"bone_map": { "body": "body", "head": "head",
+			"leg0": "leg0", "leg1": "leg1",
+			"wing0": "wing0", "wing1": "wing1" },
 	},
 	MobType.PIG: {
 		"collision_size": Vector3(0.9, 0.9, 0.9),
-		"model_path": "res://assets/Mobs/Passive/minecraft_pig.glb",
-		"model_scale": Vector3(0.9, 0.9, 0.9),  # Pig model is ~1 unit, not ~20
-		"model_y_offset": 0.34,  # raw min_y=-0.375 * 0.9
-		"health": 10,
-		"meat_name": "Porc",
-		"meat_count": 3,
+		"geo_path": BEDROCK_BASE + "models/pig.geo.json",
+		"geo_id": "geometry.pig.v1.8",
+		"texture": BEDROCK_BASE + "textures/pig.png",
+		"health": 10, "meat_name": "Porc", "meat_count": 3,
+		"bone_map": { "body": "body", "head": "head",
+			"leg0": "leg0", "leg1": "leg1", "leg2": "leg2", "leg3": "leg3" },
 	},
 	MobType.WOLF: {
 		"collision_size": Vector3(0.6, 0.85, 0.6),
-		"model_path": "res://assets/Mobs/Passive/minecraft_-_wolf.glb",
-		"model_scale": Vector3(0.04, 0.04, 0.04),
-		"model_y_offset": 0.66,  # raw min_y=-16.5 * 0.04
-		"health": 8,
-		"meat_name": "Loup",
-		"meat_count": 0,
+		"geo_path": BEDROCK_BASE + "models/wolf.geo.json",
+		"geo_id": "geometry.wolf",
+		"texture": BEDROCK_BASE + "textures/wolf.png",
+		"health": 8, "meat_name": "Loup", "meat_count": 0,
+		"bone_map": { "body": "body", "head": "head", "upperBody": "upperBody",
+			"leg0": "leg0", "leg1": "leg1", "leg2": "leg2", "leg3": "leg3",
+			"tail": "tail" },
 	},
 	MobType.HORSE: {
 		"collision_size": Vector3(1.4, 1.6, 1.4),
-		"model_path": "res://assets/Mobs/Passive/minecraft_-_horse.glb",
-		"model_scale": Vector3(0.055, 0.055, 0.055),
-		"model_y_offset": 0.88,  # raw min_y=-16 * 0.055
-		"health": 15,
-		"meat_name": "Cheval",
-		"meat_count": 0,
+		"geo_path": BEDROCK_BASE + "models/horse_v2.geo.json",
+		"geo_id": "geometry.horse.v2",
+		"texture": BEDROCK_BASE + "textures/horse.png",
+		"health": 15, "meat_name": "Cheval", "meat_count": 0,
+		"bone_map": { "body": "Body", "head": "Head", "neck": "Neck",
+			"leg0": "Leg1A", "leg1": "Leg2A", "leg2": "Leg3A", "leg3": "Leg4A",
+			"tail": "TailA" },
 	},
 }
 
-static var _model_scenes: Dictionary = {}
-
-static func _preload_models():
-	if _model_scenes.size() > 0:
-		return
-	for mob_type_key in MOB_DATA:
-		var path = MOB_DATA[mob_type_key]["model_path"]
-		var scene = load(path) as PackedScene
-		if scene:
-			_model_scenes[mob_type_key] = scene
-		else:
-			push_warning("[PassiveMob] Impossible de charger: " + path)
+# Texture cache: path → Texture2D
+static var _tex_cache: Dictionary = {}
 
 var mob_type: MobType = MobType.SHEEP
 var chunk_position: Vector3i = Vector3i.ZERO
@@ -84,10 +81,26 @@ var wander_direction: Vector3 = Vector3.ZERO
 var is_moving: bool = false
 var gravity_val: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var world_manager = null
-var _model_node: Node3D = null
+var _model_root: Node3D = null
 var _hurt_flash_timer: float = 0.0
-var _walk_time: float = 0.0  # Pour l'animation procédurale
-var _leg_nodes: Array = []    # Pattes séparées (pig uniquement)
+
+# Bone references for skeletal animation
+var _bone_body: Node3D = null
+var _bone_head: Node3D = null
+var _bone_neck: Node3D = null   # horse only
+var _bone_upper: Node3D = null  # wolf upperBody
+var _bone_tail: Node3D = null
+var _bone_legs: Array = []      # [leg0, leg1, leg2, leg3]
+var _bone_wings: Array = []     # chicken [wing0, wing1]
+
+# Animation state
+var _walk_distance: float = 0.0  # Distance-based anim (Bedrock style)
+var _idle_time: float = 0.0
+
+# Store bind-pose rotations for legs
+var _leg_bind_rots: Array = []
+var _head_bind_rot := Vector3.ZERO
+var _body_bind_rot := Vector3.ZERO
 
 func setup(type: MobType, pos: Vector3, chunk_pos: Vector3i):
 	mob_type = type
@@ -97,28 +110,91 @@ func setup(type: MobType, pos: Vector3, chunk_pos: Vector3i):
 
 func _ready():
 	position = _spawn_pos
-	_preload_models()
-	_create_model()
+	_create_bedrock_model()
 	_create_collision()
 	_pick_new_wander()
 	rotation.y = randf() * TAU
 	world_manager = get_tree().get_first_node_in_group("world_manager")
 	add_to_group("passive_mobs")
 
-func _create_model():
-	if not _model_scenes.has(mob_type):
+# ============================================================
+#  MODEL CREATION
+# ============================================================
+
+func _create_bedrock_model():
+	var data: Dictionary = MOB_DATA[mob_type]
+	var geo_path: String = data["geo_path"]
+	var geo_id: String = data["geo_id"]
+	var tex_path: String = data["texture"]
+
+	# Load texture (cached)
+	var texture: Texture2D = _load_texture(tex_path)
+	if not texture:
 		_create_fallback_mesh()
 		return
-	var model_instance = _model_scenes[mob_type].instantiate()
-	var data = MOB_DATA[mob_type]
-	model_instance.scale = data["model_scale"]
-	# Remonter le modèle pour que les pieds touchent le sol
-	model_instance.position.y = data["model_y_offset"]
-	_model_node = model_instance
-	add_child(model_instance)
-	# Chercher les pattes séparées (pig: Object_14, 17, 20, 23)
-	if mob_type == MobType.PIG:
-		_find_leg_nodes(model_instance)
+
+	# Build model from Bedrock geometry
+	var model := BedrockEntity.build_model(geo_path, texture, geo_id)
+	if not model:
+		_create_fallback_mesh()
+		return
+
+	_model_root = model
+	add_child(model)
+
+	# Grab bone references
+	var bone_map: Dictionary = data["bone_map"]
+	_bone_body = _find_bone(model, bone_map.get("body", ""))
+	_bone_head = _find_bone(model, bone_map.get("head", ""))
+	_bone_neck = _find_bone(model, bone_map.get("neck", ""))
+	_bone_upper = _find_bone(model, bone_map.get("upperBody", ""))
+	_bone_tail = _find_bone(model, bone_map.get("tail", ""))
+
+	# Legs
+	_bone_legs.clear()
+	_leg_bind_rots.clear()
+	for key in ["leg0", "leg1", "leg2", "leg3"]:
+		var bname: String = bone_map.get(key, "")
+		var bone := _find_bone(model, bname)
+		_bone_legs.append(bone)
+		_leg_bind_rots.append(bone.rotation_degrees if bone else Vector3.ZERO)
+
+	# Wings (chicken)
+	_bone_wings.clear()
+	for key in ["wing0", "wing1"]:
+		var bname: String = bone_map.get(key, "")
+		if bname != "":
+			var bone := _find_bone(model, bname)
+			if bone:
+				_bone_wings.append(bone)
+
+	# Save bind rotations
+	if _bone_head:
+		_head_bind_rot = _bone_head.rotation_degrees
+	if _bone_body:
+		_body_bind_rot = _bone_body.rotation_degrees
+
+static func _load_texture(path: String) -> Texture2D:
+	if _tex_cache.has(path):
+		return _tex_cache[path]
+	var tex = load(path) as Texture2D
+	if tex:
+		_tex_cache[path] = tex
+	else:
+		push_warning("[PassiveMob] Cannot load texture: " + path)
+	return tex
+
+func _find_bone(root: Node3D, bname: String) -> Node3D:
+	if bname == "":
+		return null
+	if root.name == bname:
+		return root
+	for child in root.get_children():
+		if child is Node3D:
+			var found := _find_bone(child as Node3D, bname)
+			if found:
+				return found
+	return null
 
 func _create_fallback_mesh():
 	var mesh_instance = MeshInstance3D.new()
@@ -131,7 +207,7 @@ func _create_fallback_mesh():
 	mat.roughness = 0.8
 	mesh_instance.material_override = mat
 	mesh_instance.position.y = data["collision_size"].y / 2.0
-	_model_node = mesh_instance
+	_model_root = mesh_instance
 	add_child(mesh_instance)
 
 func _create_collision():
@@ -143,24 +219,24 @@ func _create_collision():
 	col.position.y = data["collision_size"].y / 2.0
 	add_child(col)
 
+# ============================================================
+#  PHYSICS + AI
+# ============================================================
+
 func _physics_process(delta):
-	# Flash de dégâts
 	if _hurt_flash_timer > 0:
 		_hurt_flash_timer -= delta
 		if _hurt_flash_timer <= 0:
 			_reset_model_color()
 
-	# Gravité
 	if not is_on_floor():
 		velocity.y -= gravity_val * delta
 
-	# IA de déplacement
 	wander_timer -= delta
 	if wander_timer <= 0:
 		_pick_new_wander()
 
 	if is_moving and is_on_floor():
-		# Éviter l'eau et les falaises
 		if world_manager:
 			var ahead_pos = global_position + wander_direction * 1.0
 			var ahead_block = world_manager.get_block_at_position(ahead_pos.floor())
@@ -172,84 +248,95 @@ func _physics_process(delta):
 		velocity.x = wander_direction.x * move_speed
 		velocity.z = wander_direction.z * move_speed
 
-		# Rotation vers la direction de déplacement
 		if wander_direction.length_squared() > 0.01:
 			rotation.y = atan2(wander_direction.x, wander_direction.z)
 
-		# Animation procédurale de marche
-		_walk_time += delta
+		var speed := Vector2(velocity.x, velocity.z).length()
+		_walk_distance += speed * delta
 		_animate_walk(delta)
 	else:
 		velocity.x = move_toward(velocity.x, 0, move_speed * 2.0)
 		velocity.z = move_toward(velocity.z, 0, move_speed * 2.0)
-		# Retour à la position neutre
 		_animate_idle(delta)
 
 	move_and_slide()
 
 # ============================================================
-# ANIMATION PROCEDURALE (pas de skeleton dans ces GLB)
-# Les modèles Sketchfab sont des mesh statiques sans squelette.
-# Seul le cochon (pig) a des pattes séparées (4 mesh individuels).
-# Pour les autres : bobbing doux + léger balancement.
+#  SKELETAL ANIMATION — Bedrock quadruped.walk pattern
+#  Legs 0,3 swing together; legs 1,2 swing together (opposite)
+#  Formula: cos(distance * 38.17) * amplitude
 # ============================================================
 
-func _find_leg_nodes(root: Node):
-	var leg_names = ["Object_14", "Object_17", "Object_20", "Object_23"]
-	_leg_nodes.clear()
-	for lname in leg_names:
-		var node = _find_node_by_name(root, lname)
-		if node:
-			_leg_nodes.append(node)
+const LEG_FREQ := 38.17    # Bedrock walk frequency (rad per distance unit)
+const LEG_AMP := 40.0      # Leg swing amplitude (degrees) — 80 looks too much at this scale
+const WING_FREQ := 20.0    # Chicken wing flap frequency
+const WING_AMP := 30.0     # Wing flap amplitude
+const HEAD_BOB_AMP := 5.0  # Subtle head bob
+const TAIL_WAG_FREQ := 8.0
+const TAIL_WAG_AMP := 20.0
 
-func _find_node_by_name(root: Node, target_name: String) -> Node3D:
-	if root.name == target_name and root is Node3D:
-		return root as Node3D
-	for child in root.get_children():
-		var found = _find_node_by_name(child, target_name)
-		if found:
-			return found
-	return null
+func _animate_walk(_delta: float):
+	var t := _walk_distance
+	var leg_angle: float = cos(t * LEG_FREQ) * LEG_AMP
 
-func _animate_walk(delta: float):
-	if not _model_node:
-		return
-	var data = MOB_DATA[mob_type]
-	var base_y = data["model_y_offset"]
-	# Bobbing vertical doux
-	var bob = abs(sin(_walk_time * 8.0)) * 0.06
-	_model_node.position.y = base_y + bob
-	# Léger balancement latéral
-	var lean = sin(_walk_time * 8.0) * 3.0
-	_model_node.rotation_degrees.z = lean
-	# Légère inclinaison vers l'avant
-	_model_node.rotation_degrees.x = lerpf(_model_node.rotation_degrees.x, -5.0, delta * 4.0)
-	# Pattes du cochon (seul modèle avec mesh séparés)
-	if _leg_nodes.size() == 4:
-		var swing = sin(_walk_time * 8.0) * 25.0
-		_leg_nodes[0].rotation_degrees.x = swing
-		_leg_nodes[3].rotation_degrees.x = swing
-		_leg_nodes[1].rotation_degrees.x = -swing
-		_leg_nodes[2].rotation_degrees.x = -swing
+	# Legs: diagonal pairs
+	if _bone_legs.size() >= 4:
+		if _bone_legs[0]: _bone_legs[0].rotation_degrees.x = _leg_bind_rots[0].x + leg_angle
+		if _bone_legs[1]: _bone_legs[1].rotation_degrees.x = _leg_bind_rots[1].x - leg_angle
+		if _bone_legs[2]: _bone_legs[2].rotation_degrees.x = _leg_bind_rots[2].x - leg_angle
+		if _bone_legs[3]: _bone_legs[3].rotation_degrees.x = _leg_bind_rots[3].x + leg_angle
+	elif _bone_legs.size() >= 2:
+		# Chicken: 2 legs
+		if _bone_legs[0]: _bone_legs[0].rotation_degrees.x = _leg_bind_rots[0].x + leg_angle
+		if _bone_legs[1]: _bone_legs[1].rotation_degrees.x = _leg_bind_rots[1].x - leg_angle
+
+	# Wings (chicken)
+	if _bone_wings.size() >= 2:
+		var wing_angle := sin(t * WING_FREQ) * WING_AMP
+		_bone_wings[0].rotation_degrees.z = wing_angle
+		_bone_wings[1].rotation_degrees.z = -wing_angle
+
+	# Head bob
+	if _bone_head:
+		_bone_head.rotation_degrees.x = _head_bind_rot.x + sin(t * 4.0) * HEAD_BOB_AMP
+
+	# Tail wag (wolf, horse)
+	if _bone_tail:
+		_bone_tail.rotation_degrees.z = sin(t * TAIL_WAG_FREQ) * TAIL_WAG_AMP
 
 func _animate_idle(delta: float):
-	if not _model_node:
-		return
-	var data = MOB_DATA[mob_type]
-	var base_y = data["model_y_offset"]
-	# Respiration subtile
-	var breath = sin(Time.get_ticks_msec() * 0.002) * 0.01
-	_model_node.position.y = lerpf(_model_node.position.y, base_y + breath, delta * 4.0)
-	# Retour à plat
-	_model_node.rotation_degrees.x = lerpf(_model_node.rotation_degrees.x, 0.0, delta * 4.0)
-	_model_node.rotation_degrees.z = lerpf(_model_node.rotation_degrees.z, 0.0, delta * 4.0)
-	# Pattes au repos
-	for leg in _leg_nodes:
-		leg.rotation_degrees.x = lerpf(leg.rotation_degrees.x, 0.0, delta * 4.0)
-	_walk_time = 0.0
+	_idle_time += delta
+
+	# Smoothly return legs to bind pose
+	for i in range(_bone_legs.size()):
+		var leg = _bone_legs[i]
+		if leg:
+			var bind_x: float = _leg_bind_rots[i].x if i < _leg_bind_rots.size() else 0.0
+			leg.rotation_degrees.x = lerpf(leg.rotation_degrees.x, bind_x, delta * 5.0)
+
+	# Wings fold back
+	for wing in _bone_wings:
+		wing.rotation_degrees.z = lerpf(wing.rotation_degrees.z, 0.0, delta * 5.0)
+
+	# Head idle look-around
+	if _bone_head:
+		var look := sin(_idle_time * 0.5) * 10.0
+		_bone_head.rotation_degrees.y = lerpf(_bone_head.rotation_degrees.y, look, delta * 2.0)
+		_bone_head.rotation_degrees.x = lerpf(_bone_head.rotation_degrees.x, _head_bind_rot.x, delta * 3.0)
+
+	# Tail resting
+	if _bone_tail:
+		_bone_tail.rotation_degrees.z = lerpf(_bone_tail.rotation_degrees.z, 0.0, delta * 3.0)
+
+	# Subtle breathing via body scale
+	if _bone_body:
+		var breath := 1.0 + sin(_idle_time * 2.0) * 0.01
+		_bone_body.scale = Vector3(breath, breath, breath)
+
+	_walk_distance = 0.0
 
 # ============================================================
-# DÉGÂTS ET MORT
+#  DÉGÂTS ET MORT
 # ============================================================
 
 func take_hit(damage: int, knockback: Vector3 = Vector3.ZERO):
@@ -266,13 +353,10 @@ func _drop_loot():
 	var meat_count = data["meat_count"]
 	if meat_count <= 0:
 		return
-	# Donner la viande directement au joueur (pas de système de drop au sol encore)
 	var player_node = get_tree().get_first_node_in_group("player")
 	if player_node and player_node.has_method("heal"):
-		# Soigner le joueur (viande crue = 2 PV par morceau)
 		var heal_amount = meat_count * 2
 		player_node.heal(heal_amount)
-		# Afficher un label flottant de loot
 		_spawn_loot_label(data["meat_name"], meat_count)
 
 func _spawn_loot_label(item_name: String, count: int):
@@ -280,7 +364,7 @@ func _spawn_loot_label(item_name: String, count: int):
 	label.text = "+%d %s" % [count, item_name]
 	label.font_size = 36
 	label.outline_size = 6
-	label.modulate = Color(0.3, 1.0, 0.3)  # Vert
+	label.modulate = Color(0.3, 1.0, 0.3)
 	label.outline_modulate = Color(0, 0, 0)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.no_depth_test = true
@@ -299,24 +383,23 @@ func _spawn_loot_label(item_name: String, count: int):
 	)
 
 func _flash_model_red():
-	if _model_node:
-		_apply_tint_recursive(_model_node, Color(2.0, 0.5, 0.5))
+	if _model_root:
+		_apply_tint_recursive(_model_root, Color(2.0, 0.5, 0.5))
 
 func _reset_model_color():
-	if _model_node:
-		_apply_tint_recursive(_model_node, Color(1, 1, 1))
+	if _model_root:
+		_apply_tint_recursive(_model_root, Color(1, 1, 1))
 
 func _apply_tint_recursive(node: Node, color: Color):
 	if node is MeshInstance3D:
 		var mi = node as MeshInstance3D
-		# Créer un override qui teinte sans écraser la texture
-		if mi.get_surface_override_material_count() > 0:
-			for i in range(mi.get_surface_override_material_count()):
-				var mat = mi.get_surface_override_material(i)
+		if mi.material_override and mi.material_override is StandardMaterial3D:
+			mi.material_override.albedo_color = color
+		elif mi.mesh:
+			for i in range(mi.mesh.get_surface_count()):
+				var mat = mi.get_active_material(i)
 				if mat is StandardMaterial3D:
 					mat.albedo_color = color
-		elif mi.material_override and mi.material_override is StandardMaterial3D:
-			mi.material_override.albedo_color = color
 	for child in node.get_children():
 		_apply_tint_recursive(child, color)
 
