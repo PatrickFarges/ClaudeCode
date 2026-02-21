@@ -12,7 +12,7 @@ const MOB_DATA = {
 		"collision_size": Vector3(0.9, 1.3, 0.9),
 		"geo_path": BEDROCK_BASE + "models/sheep.geo.json",
 		"geo_id": "geometry.sheep.sheared.v1.8",
-		"texture": BEDROCK_BASE + "textures/sheep.tga",
+		"texture": "res://TexturesPack/Aurore Stone/assets/minecraft/textures/entity/sheep/sheep.png",
 		"health": 8, "meat_name": "Mouton", "meat_count": 2,
 		"bone_map": { "body": "body", "head": "head",
 			"leg0": "leg0", "leg1": "leg1", "leg2": "leg2", "leg3": "leg3" },
