@@ -21,6 +21,14 @@ Monorepo contenant plusieurs sous-projets indépendants liés aux outils RH/paie
 
 **Chaque projet a son propre `CLAUDE.md` avec la documentation détaillée.**
 
+## Convention CLAUDE.md
+
+- La documentation détaillée de chaque projet vit dans `<projet>/CLAUDE.md`, PAS dans ce fichier racine
+- Ce fichier racine ne contient que les règles globales, l'index des projets et les notes techniques communes
+- Quand tu modifies la doc d'un projet, édite le `CLAUDE.md` du sous-dossier concerné
+- Quand tu crées un nouveau projet : ajouter une ligne au tableau ci-dessous + créer un `CLAUDE.md` dans le dossier du projet
+- Ne JAMAIS remettre de la doc projet-spécifique dans ce fichier racine
+
 ## Projets
 
 | Projet | Dossier | Description |
