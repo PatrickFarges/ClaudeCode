@@ -48,7 +48,7 @@ static func build_model(geo_path: String, texture: Texture2D, geometry_id: Strin
 
 	# First pass: create bone Node3Ds and collect data
 	var bone_nodes: Dictionary = {}   # name → Node3D
-	var bone_pivots: Dictionary = {}  # name → Array[3] (world-space)
+	var bone_pivots: Dictionary = {}  # name → Array[3] (world-space, absolute)
 	var bone_parent: Dictionary = {}  # name → parent name
 	for bd in bones_data:
 		var bname: String = bd.get("name", "unnamed")
@@ -61,7 +61,7 @@ static func build_model(geo_path: String, texture: Texture2D, geometry_id: Strin
 		bone_pivots[bname] = pivot
 		bone_parent[bname] = bd.get("parent", "")
 
-	# Accumulated node rotation basis (from "rotation" field only — NOT bind_pose)
+	# Accumulated node rotation basis (from "rotation" field ONLY, not bind_pose)
 	var bone_node_basis: Dictionary = {}  # name → Basis
 
 	# Second pass: parent, position, rotation, mesh
@@ -73,40 +73,49 @@ static func build_model(geo_path: String, texture: Texture2D, geometry_id: Strin
 		var pivot: Array = bd.get("pivot", [0, 0, 0])
 		var pname: String = bone_parent[bname]
 
-		# KEY DISTINCTION:
-		# bind_pose_rotation → mesh-only visual rotation (baked into vertices)
-		# rotation → bone node rotation (DOES propagate to children)
+		# KEY DISTINCTION (Bedrock docs + Blockbench #990):
+		# bind_pose_rotation → baked into mesh vertices ONLY (visual rotation of cubes)
+		#   Does NOT affect the bone's coordinate system for children.
+		#   Children are positioned in the PRE-rotation (unrotated) coordinate space.
+		# rotation → applied as node rotation (propagates to children via scene tree)
 		var bind_rot_arr: Array = bd.get("bind_pose_rotation", [0, 0, 0])
 		var node_rot_arr: Array = bd.get("rotation", [0, 0, 0])
 		var bind_rot_deg := Vector3(bind_rot_arr[0], bind_rot_arr[1], bind_rot_arr[2])
 		var node_rot_deg := Vector3(node_rot_arr[0], node_rot_arr[1], node_rot_arr[2])
 
-		# Node rotation basis (only from "rotation" field — affects children)
+		# Node rotation basis (only "rotation" field — applied to the node)
 		var node_basis := Basis.IDENTITY
 		if node_rot_deg != Vector3.ZERO:
 			node_basis = Basis.from_euler(Vector3(
 				deg_to_rad(node_rot_deg.x), deg_to_rad(node_rot_deg.y), deg_to_rad(node_rot_deg.z)))
 
-		# Bind-pose basis (baked into mesh vertices, NOT set as node transform)
+		# Bind-pose basis (baked into mesh vertices ONLY — NOT propagated to children)
+		# Bedrock uses opposite rotation convention from Godot → negate angles.
+		# This ensures body bottom aligns exactly with leg tops (zero gap).
 		var bind_basis := Basis.IDENTITY
 		if bind_rot_deg != Vector3.ZERO:
 			bind_basis = Basis.from_euler(Vector3(
-				deg_to_rad(bind_rot_deg.x), deg_to_rad(bind_rot_deg.y), deg_to_rad(bind_rot_deg.z)))
+				deg_to_rad(-bind_rot_deg.x), deg_to_rad(-bind_rot_deg.y), deg_to_rad(-bind_rot_deg.z)))
 
-		# Position: child offsets need inverse of parent's accumulated NODE rotation
+		# Parenting: keep the parent-child relationship as declared in .geo.json.
+		# bind_pose_rotation does NOT affect the bone transform — only cube vertices.
+		# Children are positioned using absolute model-space pivots, offset from parent pivot.
 		if pname != "" and bone_nodes.has(pname):
 			bone_nodes[pname].add_child(node)
 			var pp: Array = bone_pivots[pname]
 			var world_offset := Vector3(pivot[0] - pp[0], pivot[1] - pp[1], pivot[2] - pp[2]) * SCALE
+			# Transform offset by inverse of accumulated parent node rotation
+			# (only "rotation" fields, NOT bind_pose_rotation)
 			var parent_accum: Basis = bone_node_basis.get(pname, Basis.IDENTITY)
 			node.position = parent_accum.inverse() * world_offset
 			bone_node_basis[bname] = parent_accum * node_basis
 		else:
+			# Root-level bone — position at world-space pivot
 			root.add_child(node)
 			node.position = Vector3(pivot[0], pivot[1], pivot[2]) * SCALE
 			bone_node_basis[bname] = node_basis
 
-		# Apply "rotation" to the bone node (propagates to children)
+		# Apply "rotation" to the bone node (NOT bind_pose)
 		if node_rot_deg != Vector3.ZERO:
 			node.rotation_degrees = node_rot_deg
 

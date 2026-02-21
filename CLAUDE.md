@@ -2,16 +2,6 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Règles de travail
-- Ne JAMAIS demander confirmation avant d'agir
-- Implémenter directement ce qui semble le plus logique
-- Ne poser une question QUE si l'ambiguïté est vraiment bloquante et/ou que tu as besoin d'avoir plus de détails
-- Préférer faire le choix qui te semble le plus sensé quitte à expliquer le pourquoi après coup (si jamais je demande)
-- Je ne suis pas là pour te dire si tu peux utiliser ceci ou cela. Tu utilises ce dont tu as besoin sans avoir à demander
-- Quand tu commit/sauvegarde, toujours faire les sauvegardes également sur le github privé https://github.com/PatrickFarges/
-- Quand je parle de toi je ne dis pas "Claude Code" mais "cloclo" donc "cloclo" se réfère toujours à toi
-- tu peut répondre/expliquer ou demander en anglais, ça ne me pose pas de problème, par contre 99% du temps je te parlerais en Français.
-
 ## Vue d'ensemble
 
 **GitHub :** `PatrickFarges/ClaudeCode` (anciennement ClaudeCraft, renommé le 2026-02-13)
@@ -20,6 +10,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Monorepo contenant plusieurs sous-projets indépendants liés aux outils RH/paie SAP et au développement de jeux. Langages : Python (outils RH) et GDScript (jeu Godot). Toutes les interfaces sont en français.
 
 **Chaque projet a son propre `CLAUDE.md` avec la documentation détaillée.**
+
+## Règles de travail
+
+- Ne JAMAIS demander confirmation avant d'agir
+- Implémenter directement ce qui semble le plus logique
+- Ne poser une question QUE si l'ambiguïté est vraiment bloquante et/ou que tu as besoin d'avoir plus de détails
+- Préférer faire le choix qui te semble le plus sensé quitte à expliquer le pourquoi après coup (si jamais je demande)
+- Je ne suis pas là pour te dire si tu peux utiliser ceci ou cela. Tu utilises ce dont tu as besoin sans avoir à demander
+- Quand tu commit/sauvegarde, toujours faire les sauvegardes également sur le github privé https://github.com/PatrickFarges/
+- Quand je parle de toi je ne dis pas "Claude Code" mais "cloclo" donc "cloclo" se réfère toujours à toi
+- tu peut répondre/expliquer ou demander en anglais, ça ne me pose pas de problème, par contre 99% du temps je te parlerais en Français.
 
 ## Convention CLAUDE.md
 

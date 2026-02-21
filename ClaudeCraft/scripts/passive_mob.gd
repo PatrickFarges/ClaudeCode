@@ -16,7 +16,6 @@ const MOB_DATA = {
 		"health": 8, "meat_name": "Mouton", "meat_count": 2,
 		"bone_map": { "body": "body", "head": "head",
 			"leg0": "leg0", "leg1": "leg1", "leg2": "leg2", "leg3": "leg3" },
-		"leg_nudge": 0.12,
 	},
 	MobType.COW: {
 		"collision_size": Vector3(0.9, 1.4, 0.9),
@@ -26,7 +25,6 @@ const MOB_DATA = {
 		"health": 10, "meat_name": "Boeuf", "meat_count": 3,
 		"bone_map": { "body": "body", "head": "head",
 			"leg0": "leg0", "leg1": "leg1", "leg2": "leg2", "leg3": "leg3" },
-		"leg_nudge": 0.10,
 	},
 	MobType.CHICKEN: {
 		"collision_size": Vector3(0.5, 0.7, 0.5),
@@ -46,7 +44,6 @@ const MOB_DATA = {
 		"health": 10, "meat_name": "Porc", "meat_count": 3,
 		"bone_map": { "body": "body", "head": "head",
 			"leg0": "leg0", "leg1": "leg1", "leg2": "leg2", "leg3": "leg3" },
-		"leg_nudge": 0.10,
 	},
 	MobType.WOLF: {
 		"collision_size": Vector3(0.6, 0.85, 0.6),
@@ -70,7 +67,6 @@ const MOB_DATA = {
 		"skip_bones": ["Saddle", "HeadSaddle", "SaddleMouthL", "SaddleMouthR",
 			"SaddleMouthLine", "SaddleMouthLineR", "Bag1", "Bag2",
 			"MuleEarL", "MuleEarR"],
-		"leg_nudge": 0.08,
 	},
 }
 
@@ -100,9 +96,11 @@ var _bone_tail: Node3D = null
 var _bone_legs: Array = []      # [leg0, leg1, leg2, leg3]
 var _bone_wings: Array = []     # chicken [wing0, wing1]
 
-# Animation state
-var _walk_distance: float = 0.0  # Distance-based anim (Bedrock style)
-var _idle_time: float = 0.0
+# Animation state — MC-authentic limbSwing system
+var _limb_swing: float = 0.0      # Continuous walk cycle counter (distance-based)
+var _limb_swing_amount: float = 0.0  # 0..1 speed factor (0=idle, 1=full run)
+var _idle_time: float = 0.0       # Time accumulator for idle animations
+var _age_ticks: float = 0.0       # Continuous time for time-based anims (chicken wings)
 
 # Store bind-pose rotations for legs
 var _leg_bind_rots: Array = []
@@ -157,15 +155,12 @@ func _create_bedrock_model():
 	_bone_upper = _find_bone(model, bone_map.get("upperBody", ""))
 	_bone_tail = _find_bone(model, bone_map.get("tail", ""))
 
-	# Legs — nudge up slightly to close visual gap with body
+	# Legs
 	_bone_legs.clear()
 	_leg_bind_rots.clear()
-	var leg_nudge: float = data.get("leg_nudge", 0.0)
 	for key in ["leg0", "leg1", "leg2", "leg3"]:
 		var bname: String = bone_map.get(key, "")
 		var bone := _find_bone(model, bname)
-		if bone and leg_nudge != 0.0:
-			bone.position.y += leg_nudge
 		_bone_legs.append(bone)
 		_leg_bind_rots.append(bone.rotation_degrees if bone else Vector3.ZERO)
 
@@ -177,11 +172,6 @@ func _create_bedrock_model():
 			var bone := _find_bone(model, bname)
 			if bone:
 				_bone_wings.append(bone)
-
-	# Sheep: nudge head forward so it's not hidden inside the wool body
-	if mob_type == MobType.SHEEP and _bone_head:
-		_bone_head.position.z -= 0.15
-		_bone_head.position.y += 0.05
 
 	# Save bind rotations
 	if _bone_head:
@@ -268,88 +258,129 @@ func _physics_process(delta):
 			rotation.y = atan2(-wander_direction.x, -wander_direction.z)
 
 		var speed := Vector2(velocity.x, velocity.z).length()
-		_walk_distance += speed * delta
+		# MC limbSwing: increments by distance traveled each frame
+		_limb_swing += speed * delta
+		# MC limbSwingAmount: smoothly approaches current speed ratio (0..1)
+		var target_swing := clampf(speed / move_speed, 0.0, 1.0)
+		_limb_swing_amount = lerpf(_limb_swing_amount, target_swing, delta * 10.0)
 		_animate_walk(delta)
 	else:
 		velocity.x = move_toward(velocity.x, 0, move_speed * 2.0)
 		velocity.z = move_toward(velocity.z, 0, move_speed * 2.0)
+		# Smoothly decay limb swing amount to 0 when stopping
+		_limb_swing_amount = lerpf(_limb_swing_amount, 0.0, delta * 10.0)
 		_animate_idle(delta)
+
+	# Always tick age for time-based animations (chicken wings etc.)
+	_age_ticks += delta * 20.0  # Convert to MC tick rate (20 ticks/sec)
 
 	move_and_slide()
 
 # ============================================================
-#  SKELETAL ANIMATION — Bedrock quadruped.walk pattern
-#  Legs 0,3 swing together; legs 1,2 swing together (opposite)
-#  Formula: cos(distance * 38.17) * amplitude
+#  SKELETAL ANIMATION — MC-authentic formulas (from MC 1.12 source)
+#
+#  Walk cycle (ModelQuadruped.setRotationAngles):
+#    leg.rotateAngleX = cos(limbSwing * 0.6662) * 1.4 * limbSwingAmount
+#    Diagonal pairs: legs 0,3 together; legs 1,2 together (π phase shift)
+#    Frequency 0.6662 ≈ one full cycle every ~9.4 ticks (~0.47s)
+#    Amplitude 1.4 rad (≈80°) at full speed
+#
+#  Chicken wings (ModelChicken.setRotationAngles):
+#    wing.rotateAngleZ = ageInTicks  (time-based, not walk-based)
+#
+#  Wolf tail:
+#    tail.rotateAngleY = cos(limbSwing * 0.6662) * 1.4 * limbSwingAmount
 # ============================================================
 
-const LEG_FREQ := 8.0      # Walk frequency (rad per distance unit) — lower = slower swing
-const LEG_AMP := 30.0      # Leg swing amplitude (degrees)
-const WING_FREQ := 20.0    # Chicken wing flap frequency
-const WING_AMP := 30.0     # Wing flap amplitude
-const HEAD_BOB_AMP := 5.0  # Subtle head bob
-const TAIL_WAG_FREQ := 8.0
-const TAIL_WAG_AMP := 20.0
+# MC constants — from ModelQuadruped.setRotationAngles()
+const MC_LEG_FREQ := 0.6662    # Walk cycle frequency (rad per limbSwing unit)
+const MC_LEG_AMP := 1.4        # Max leg swing amplitude in RADIANS (≈80°)
 
 func _animate_walk(_delta: float):
-	var t := _walk_distance
-	var leg_angle: float = cos(t * LEG_FREQ) * LEG_AMP
+	var swing := _limb_swing
+	var amount := _limb_swing_amount
 
-	# Legs: diagonal pairs
+	# --- Quadruped legs (MC diagonal pairs) ---
+	# MC formula: cos(limbSwing * 0.6662) * 1.4 * limbSwingAmount
+	var leg_rad: float = cos(swing * MC_LEG_FREQ) * MC_LEG_AMP * amount
+	var leg_deg: float = rad_to_deg(leg_rad)
+
 	if _bone_legs.size() >= 4:
-		if _bone_legs[0]: _bone_legs[0].rotation_degrees.x = _leg_bind_rots[0].x + leg_angle
-		if _bone_legs[1]: _bone_legs[1].rotation_degrees.x = _leg_bind_rots[1].x - leg_angle
-		if _bone_legs[2]: _bone_legs[2].rotation_degrees.x = _leg_bind_rots[2].x - leg_angle
-		if _bone_legs[3]: _bone_legs[3].rotation_degrees.x = _leg_bind_rots[3].x + leg_angle
+		# Legs 0,3 swing together; legs 1,2 swing opposite (π phase shift)
+		if _bone_legs[0]: _bone_legs[0].rotation_degrees.x = _leg_bind_rots[0].x + leg_deg
+		if _bone_legs[1]: _bone_legs[1].rotation_degrees.x = _leg_bind_rots[1].x - leg_deg
+		if _bone_legs[2]: _bone_legs[2].rotation_degrees.x = _leg_bind_rots[2].x - leg_deg
+		if _bone_legs[3]: _bone_legs[3].rotation_degrees.x = _leg_bind_rots[3].x + leg_deg
 	elif _bone_legs.size() >= 2:
-		# Chicken: 2 legs
-		if _bone_legs[0]: _bone_legs[0].rotation_degrees.x = _leg_bind_rots[0].x + leg_angle
-		if _bone_legs[1]: _bone_legs[1].rotation_degrees.x = _leg_bind_rots[1].x - leg_angle
+		# Chicken: 2 legs, same formula
+		if _bone_legs[0]: _bone_legs[0].rotation_degrees.x = _leg_bind_rots[0].x + leg_deg
+		if _bone_legs[1]: _bone_legs[1].rotation_degrees.x = _leg_bind_rots[1].x - leg_deg
 
-	# Wings (chicken)
+	# --- Chicken wings (time-based, not walk-based) ---
+	# MC: rightWing.rotateAngleZ = ageInTicks; leftWing.rotateAngleZ = -ageInTicks
+	# We use a sinusoidal variant since Bedrock wings are differently mounted
 	if _bone_wings.size() >= 2:
-		var wing_angle := sin(t * WING_FREQ) * WING_AMP
+		# Flap faster when moving, slower when idle
+		var wing_speed := 1.0 + amount * 3.0
+		var wing_amp := 20.0 + amount * 25.0  # 20° idle, up to 45° while running
+		var wing_angle := sin(_age_ticks * 0.4 * wing_speed) * wing_amp
 		_bone_wings[0].rotation_degrees.z = wing_angle
 		_bone_wings[1].rotation_degrees.z = -wing_angle
 
-	# Head bob
+	# --- Head: no bob during walk in MC (only yaw/pitch from look direction) ---
+	# Keep head at bind pose during walk
 	if _bone_head:
-		_bone_head.rotation_degrees.x = _head_bind_rot.x + sin(t * 4.0) * HEAD_BOB_AMP
+		_bone_head.rotation_degrees.x = _head_bind_rot.x
+		_bone_head.rotation_degrees.y = 0.0
 
-	# Tail wag (wolf, horse)
+	# --- Wolf/Horse tail wag (MC: same formula as legs but on Y axis) ---
 	if _bone_tail:
-		_bone_tail.rotation_degrees.z = sin(t * TAIL_WAG_FREQ) * TAIL_WAG_AMP
+		if mob_type == MobType.WOLF:
+			# MC wolf: tail.rotateAngleY = cos(limbSwing * 0.6662) * 1.4 * limbSwingAmount
+			var tail_rad := cos(swing * MC_LEG_FREQ) * MC_LEG_AMP * amount
+			_bone_tail.rotation_degrees.y = rad_to_deg(tail_rad)
+		else:
+			# Horse: gentle sway
+			var tail_sway := sin(_age_ticks * 0.07) * 15.0
+			_bone_tail.rotation_degrees.y = tail_sway
 
 func _animate_idle(delta: float):
 	_idle_time += delta
 
-	# Smoothly return legs to bind pose
+	# --- Smoothly return legs to bind pose ---
 	for i in range(_bone_legs.size()):
 		var leg = _bone_legs[i]
 		if leg:
 			var bind_x: float = _leg_bind_rots[i].x if i < _leg_bind_rots.size() else 0.0
 			leg.rotation_degrees.x = lerpf(leg.rotation_degrees.x, bind_x, delta * 5.0)
 
-	# Wings fold back
-	for wing in _bone_wings:
-		wing.rotation_degrees.z = lerpf(wing.rotation_degrees.z, 0.0, delta * 5.0)
+	# --- Chicken wings: gentle idle flap ---
+	if _bone_wings.size() >= 2:
+		var idle_wing := sin(_age_ticks * 0.4) * 5.0  # Very subtle idle flap
+		_bone_wings[0].rotation_degrees.z = lerpf(_bone_wings[0].rotation_degrees.z, idle_wing, delta * 5.0)
+		_bone_wings[1].rotation_degrees.z = lerpf(_bone_wings[1].rotation_degrees.z, -idle_wing, delta * 5.0)
 
-	# Head idle look-around
+	# --- Head: slow idle look-around ---
 	if _bone_head:
-		var look := sin(_idle_time * 0.5) * 10.0
-		_bone_head.rotation_degrees.y = lerpf(_bone_head.rotation_degrees.y, look, delta * 2.0)
-		_bone_head.rotation_degrees.x = lerpf(_bone_head.rotation_degrees.x, _head_bind_rot.x, delta * 3.0)
+		var look_yaw := sin(_idle_time * 0.5) * 15.0
+		var look_pitch := sin(_idle_time * 0.3) * 5.0
+		_bone_head.rotation_degrees.y = lerpf(_bone_head.rotation_degrees.y, look_yaw, delta * 2.0)
+		_bone_head.rotation_degrees.x = lerpf(_bone_head.rotation_degrees.x, _head_bind_rot.x + look_pitch, delta * 2.0)
 
-	# Tail resting
+	# --- Wolf tail: gentle resting wag ---
+	# MC: when not angry, tail.rotateAngleY = cos(limbSwing * 0.6662) * 1.4 * limbSwingAmount
+	# At idle limbSwingAmount ≈ 0, so tail is nearly still. Add a tiny happy wag.
 	if _bone_tail:
-		_bone_tail.rotation_degrees.z = lerpf(_bone_tail.rotation_degrees.z, 0.0, delta * 3.0)
+		if mob_type == MobType.WOLF:
+			var wag := sin(_idle_time * 3.0) * 8.0  # Gentle happy wag
+			_bone_tail.rotation_degrees.y = lerpf(_bone_tail.rotation_degrees.y, wag, delta * 3.0)
+		else:
+			_bone_tail.rotation_degrees.y = lerpf(_bone_tail.rotation_degrees.y, 0.0, delta * 3.0)
 
-	# Subtle breathing via body scale
+	# --- Subtle breathing via body scale ---
 	if _bone_body:
 		var breath := 1.0 + sin(_idle_time * 2.0) * 0.01
 		_bone_body.scale = Vector3(breath, breath, breath)
-
-	_walk_distance = 0.0
 
 # ============================================================
 #  DÉGÂTS ET MORT
