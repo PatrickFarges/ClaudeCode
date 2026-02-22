@@ -81,6 +81,11 @@ var _label_update_timer: float = 0.0
 var _search_cooldown: float = 0.0
 const SEARCH_COOLDOWN_DURATION = 5.0  # secondes avant de retenter une recherche
 
+# === Mine staircase ===
+var _mine_heading: Vector3i = Vector3i(1, 0, 0)  # direction horizontale du mineur
+var _mine_steps_h: int = 0  # pas horizontaux depuis le dernier descente
+const MINE_STEPS_BEFORE_DESCENT = 3  # creuser 3 blocs horizontaux, puis 1 vers le bas
+
 func setup(model_index: int, pos: Vector3, chunk_pos: Vector3i, prof: int = 0):
 	mob_type_index = model_index
 	_spawn_pos = pos
@@ -138,8 +143,8 @@ func _create_collision():
 
 func _create_head_label():
 	_head_label = Label3D.new()
-	_head_label.font_size = 24
-	_head_label.outline_size = 6
+	_head_label.font_size = 20
+	_head_label.outline_size = 5
 	_head_label.modulate = Color(1.0, 1.0, 1.0, 0.9)
 	_head_label.outline_modulate = Color(0, 0, 0, 0.8)
 	_head_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -151,21 +156,22 @@ func _create_head_label():
 func _update_head_label():
 	if not _head_label:
 		return
+	var prof_name = VProfession.get_profession_name(profession)
 	var text = ""
 	match current_activity:
 		VProfession.Activity.WORK:
 			if _task_status != "":
-				text = _task_status
+				text = prof_name + " - " + _task_status
 			else:
-				text = "Au travail"
+				text = prof_name + " - Au travail"
 		VProfession.Activity.SLEEP:
-			text = "Zzz..."
+			text = prof_name + " - Zzz..."
 		VProfession.Activity.GO_HOME:
-			text = "Rentre"
+			text = prof_name + " - Rentre"
 		VProfession.Activity.GATHER:
-			text = "Balade"
+			text = prof_name + " - Balade"
 		VProfession.Activity.WANDER:
-			text = "Explore"
+			text = prof_name + " - Explore"
 	_head_label.text = text
 
 	# Couleur selon l'activité
@@ -352,9 +358,9 @@ func _behavior_village_work(delta):
 		_behavior_wander(delta)
 		return
 
-	# Pas de tâche -> en demander une
+	# Pas de tâche -> en demander une correspondant à notre profession
 	if current_task.is_empty():
-		current_task = village_manager.get_next_task()
+		current_task = village_manager.get_next_task_for(profession)
 		if current_task.is_empty():
 			_task_status = "Attend"
 			_search_cooldown = 3.0  # attendre 3s avant de redemander
@@ -362,7 +368,8 @@ func _behavior_village_work(delta):
 			return
 		# Log la prise de tâche
 		var task_type = current_task.get("type", "?")
-		print("PNJ[%d]: prend tâche '%s'" % [profession, task_type])
+		var prof_name = VProfession.get_profession_name(profession)
+		print("%s: prend tâche '%s'" % [prof_name, task_type])
 		# Reset navigation
 		has_target = false
 		_arrived_at_target = false
@@ -383,6 +390,8 @@ func _behavior_village_work(delta):
 			_execute_place_workstation(delta)
 		"build":
 			_execute_build(delta)
+		"build_path":
+			_execute_build_path(delta)
 		_:
 			current_task = {}
 
@@ -513,13 +522,13 @@ func _execute_mine(delta):
 		current_task = {}
 
 func _execute_mine_gallery(delta):
-	# Minage DIRECT — le mineur creuse les blocs autour de lui, sans plan ni galerie
-	# Cherche le bloc solide le plus proche dans un rayon de 3 blocs
+	# Minage en ESCALIER — le mineur creuse un couloir 1x2 (pieds + tête)
+	# en alternant : 3 blocs horizontaux → 1 bloc vers le bas → 3 blocs → etc.
+	# Résultat : un escalier descendant praticable dans les deux sens
 	if _mine_target == INVALID_POS:
-		_mine_target = _find_minable_block_nearby()
+		_mine_target = _get_next_staircase_block()
 		if _mine_target == INVALID_POS:
 			_task_status = "[Pioche] Cherche..."
-			# Pas de bloc minable à proximité — marcher un peu et réessayer
 			_behavior_wander(delta)
 			_mine_timer += delta
 			if _mine_timer > 5.0:
@@ -528,18 +537,16 @@ func _execute_mine_gallery(delta):
 			return
 		village_manager.claim_position(_mine_target)
 		has_target = true
-		_arrived_at_target = true  # Le bloc est juste à côté, pas besoin de marcher
+		_arrived_at_target = true
 		_mine_timer = 0.0
 
 	var target_world = Vector3(_mine_target.x + 0.5, _mine_target.y, _mine_target.z + 0.5)
 	_task_status = "[Pioche] Mine"
 
-	# Vérifier qu'on est assez proche (le bloc est à max 3 blocs)
 	var dist = global_position.distance_to(target_world)
-	if dist > 4.0:
-		# Trop loin (on a bougé) — relâcher et chercher un nouveau bloc proche
-		village_manager.release_position(_mine_target)
-		_mine_target = INVALID_POS
+	if dist > 5.0:
+		# Se déplacer vers le bloc cible
+		_walk_toward(target_world, delta)
 		return
 
 	_face_target(target_world)
@@ -561,58 +568,124 @@ func _execute_mine_gallery(delta):
 		village_manager.add_resource(block_type)
 		village_manager.release_position(_mine_target)
 		_show_harvest_label("+1", _mine_target)
-		print("PNJ[%d]: miné bloc %d à %s" % [profession, block_type, str(_mine_target)])
+		var prof_name = VProfession.get_profession_name(profession)
+		print("%s: miné bloc %d à %s" % [prof_name, block_type, str(_mine_target)])
 		_mine_target = INVALID_POS
 		_mine_timer = 0.0
-		# Ne pas terminer la tâche — enchaîner avec le prochain bloc nearby
+		# Enchaîner avec le prochain bloc de l'escalier
 
-func _find_minable_block_nearby() -> Vector3i:
-	# Cherche un bloc solide minable dans un rayon de 3 blocs autour du PNJ
-	# Priorité : blocs au même niveau ou en dessous (creuser vers le bas)
+func _get_next_staircase_block() -> Vector3i:
+	# Calcule le prochain bloc à creuser dans le pattern escalier
+	# Creuse un couloir 1x2 (pieds + tête) dans la direction _mine_heading
+	# Tous les MINE_STEPS_BEFORE_DESCENT pas horizontaux, descend de 1 bloc
 	if not world_manager:
 		return INVALID_POS
+
 	var my_pos = Vector3i(int(round(global_position.x)), int(global_position.y), int(round(global_position.z)))
-	var best = INVALID_POS
-	var best_score = 999.0
-	# Blocs non-minables (on ne veut pas casser l'eau, l'air, le bois, les feuilles)
-	var skip_types = [0, 5, 6, 15, 32, 33, 34, 35, 36, 42, 44, 45, 46, 47, 48, 49]  # AIR, bois, feuilles, eau
-	for dx in range(-3, 4):
-		for dz in range(-3, 4):
-			for dy in range(-2, 2):  # 2 blocs en dessous, 1 au-dessus
+	var skip_types = [0, 15]  # AIR, WATER uniquement — on mine TOUT le reste
+
+	# Initialiser la direction de minage selon la position relative au village
+	if _mine_steps_h == 0 and _mine_heading == Vector3i(1, 0, 0):
+		# Miner en s'éloignant du centre du village
+		var to_center = Vector3(village_manager.village_center.x - global_position.x, 0,
+			village_manager.village_center.z - global_position.z)
+		if abs(to_center.x) > abs(to_center.z):
+			_mine_heading = Vector3i(-1 if to_center.x > 0 else 1, 0, 0)
+		else:
+			_mine_heading = Vector3i(0, 0, -1 if to_center.z > 0 else 1)
+
+	# Étape 1 : creuser le bloc aux PIEDS dans la direction courante
+	var feet_pos = Vector3i(my_pos.x + _mine_heading.x, my_pos.y, my_pos.z + _mine_heading.z)
+	var feet_bt = world_manager.get_block_at_position(Vector3(feet_pos.x, feet_pos.y, feet_pos.z))
+	if feet_bt != BlockRegistry.BlockType.AIR and feet_bt not in skip_types:
+		if not village_manager.claimed_positions.has(feet_pos):
+			return feet_pos
+
+	# Étape 2 : creuser le bloc à la TÊTE (y+1) dans la même direction
+	var head_pos = Vector3i(feet_pos.x, my_pos.y + 1, feet_pos.z)
+	var head_bt = world_manager.get_block_at_position(Vector3(head_pos.x, head_pos.y, head_pos.z))
+	if head_bt != BlockRegistry.BlockType.AIR and head_bt not in skip_types:
+		if not village_manager.claimed_positions.has(head_pos):
+			return head_pos
+
+	# Les deux blocs devant sont dégagés → avancer et compter les pas
+	_mine_steps_h += 1
+
+	# Descente ? Creuser le bloc SOUS les pieds
+	if _mine_steps_h >= MINE_STEPS_BEFORE_DESCENT:
+		_mine_steps_h = 0
+		var down_pos = Vector3i(my_pos.x, my_pos.y - 1, my_pos.z)
+		var down_bt = world_manager.get_block_at_position(Vector3(down_pos.x, down_pos.y, down_pos.z))
+		if down_bt != BlockRegistry.BlockType.AIR and down_bt not in skip_types:
+			if not village_manager.claimed_positions.has(down_pos):
+				return down_pos
+		# Si le bloc en dessous est déjà vide (grotte), on continue horizontalement
+		# mais on change de direction pour explorer un autre côté
+		var dirs = [Vector3i(1,0,0), Vector3i(-1,0,0), Vector3i(0,0,1), Vector3i(0,0,-1)]
+		dirs.shuffle()
+		for d in dirs:
+			if d != _mine_heading and d != -_mine_heading:
+				_mine_heading = d
+				break
+
+	# Chercher un bloc solide immédiat autour (fallback)
+	for dy in range(0, -3, -1):
+		for dx in range(-1, 2):
+			for dz in range(-1, 2):
 				var pos = Vector3i(my_pos.x + dx, my_pos.y + dy, my_pos.z + dz)
 				if village_manager.claimed_positions.has(pos):
 					continue
 				var bt = world_manager.get_block_at_position(Vector3(pos.x, pos.y, pos.z))
-				if bt == BlockRegistry.BlockType.AIR or bt in skip_types:
-					continue
-				# Score : préfère les blocs proches et en dessous
-				var dist = Vector3(dx, dy, dz).length()
-				var depth_bonus = -dy * 0.5  # bonus pour creuser vers le bas
-				var score = dist - depth_bonus
-				if score < best_score:
-					best_score = score
-					best = pos
-	return best
+				if bt != BlockRegistry.BlockType.AIR and bt not in skip_types:
+					return pos
+
+	return INVALID_POS
 
 func _execute_craft(delta):
-	var rname = current_task.get("recipe_name", "")
-	_task_status = "[Craft] %s" % rname
-	# Le craft est instantané (pas besoin de marcher)
 	var recipe_name = current_task.get("recipe_name", "")
 	if recipe_name == "":
 		current_task = {}
 		return
+	_task_status = "[Craft] %s" % recipe_name
 
-	# Animation brève de craft
+	# Si un workstation est placé (furnace ou crafting_table), marcher vers lui d'abord
+	if not _arrived_at_target:
+		var ws_pos = Vector3.ZERO
+		var found_ws = false
+		# Chercher la workstation du forgeron
+		for ws_type in [21, 12, 22, 23, 24]:  # FURNACE, CRAFTING_TABLE, STONE/IRON/GOLD
+			if village_manager.placed_workstations.has(ws_type):
+				var pos = village_manager.placed_workstations[ws_type]
+				ws_pos = Vector3(pos.x + 0.5, pos.y, pos.z + 0.5)
+				found_ws = true
+				break
+
+		if found_ws:
+			var dist = Vector3(global_position.x, 0, global_position.z).distance_to(
+				Vector3(ws_pos.x, 0, ws_pos.z))
+			if dist > 2.5:
+				_walk_toward(ws_pos, delta)
+				return
+		_arrived_at_target = true
+
+	# Arrivé au workstation → animation + craft
 	is_moving = false
 	_decelerate()
 	_play_anim("attack")
 
+	# Petit délai de craft (1s)
+	_mine_timer += delta
+	if _mine_timer < 1.0:
+		return
+	_mine_timer = 0.0
+
 	var success = village_manager.try_craft(recipe_name)
-	if not success:
-		# Pas assez de ressources, retourner la tâche
+	if success:
+		_show_harvest_label("[Craft] " + recipe_name, Vector3i(int(global_position.x), int(global_position.y) + 1, int(global_position.z)))
+	else:
 		village_manager.return_task(current_task)
 	current_task = {}
+	_arrived_at_target = false
 
 func _execute_place_workstation(delta):
 	var block_type = current_task.get("target_block", -1)
@@ -701,6 +774,54 @@ func _execute_build(delta):
 		village_manager.place_block(world_pos, block_data[3])
 		current_task["block_index"] = block_index + 1
 		_arrived_at_target = false  # Bouger vers le prochain bloc
+
+func _execute_build_path(delta):
+	_task_status = "[Chemin] Construction"
+
+	# Récupérer le prochain bloc du chemin à poser
+	if _mine_target == INVALID_POS:
+		_mine_target = village_manager.get_next_path_block()
+		if _mine_target == INVALID_POS:
+			# Chemin terminé
+			village_manager.mark_path_complete()
+			current_task = {}
+			return
+		has_target = true
+		_arrived_at_target = false
+		_build_timer = 0.0
+
+	var target_world = Vector3(_mine_target.x + 0.5, _mine_target.y, _mine_target.z + 0.5)
+
+	# Marcher vers la position
+	if not _arrived_at_target:
+		var dist = Vector3(global_position.x, 0, global_position.z).distance_to(
+			Vector3(target_world.x, 0, target_world.z))
+		if dist < 2.5:
+			_arrived_at_target = true
+		else:
+			_walk_toward(target_world, delta)
+			return
+
+	_face_target(target_world)
+	is_moving = false
+	_decelerate()
+	_play_anim("attack")
+
+	_build_timer += delta
+	if _build_timer >= 0.5:
+		_build_timer = 0.0
+		# Remplacer le bloc de surface par du cobblestone
+		var BT_COBBLE = 25
+		if village_manager.has_resources(BT_COBBLE, 1):
+			village_manager.consume_resources(BT_COBBLE, 1)
+			village_manager.place_block(_mine_target, BT_COBBLE)
+			_show_harvest_label("Chemin", _mine_target)
+		_mine_target = INVALID_POS
+		_arrived_at_target = false
+		# Vérifier s'il reste des blocs
+		if village_manager._path_index >= village_manager._path_blocks.size():
+			village_manager.mark_path_complete()
+			current_task = {}
 
 func _face_target(target: Vector3):
 	var dir = target - global_position

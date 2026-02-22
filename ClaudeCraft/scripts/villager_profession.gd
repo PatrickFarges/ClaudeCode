@@ -103,15 +103,14 @@ const PROFESSION_DATA = {
 
 # Emploi du temps : plages horaires -> activité
 # Utilise day_night_cycle.get_hour() qui retourne 0.0-24.0
-# 11h de travail total (6-12, 13-18) pour une progression village agréable
+# 14h de travail total (5-12, 13-20) pour une progression village agréable
 const SCHEDULE = [
-	{"start": 0.0, "end": 6.0, "activity": Activity.SLEEP},
-	{"start": 6.0, "end": 12.0, "activity": Activity.WORK},
+	{"start": 0.0, "end": 5.0, "activity": Activity.SLEEP},
+	{"start": 5.0, "end": 12.0, "activity": Activity.WORK},
 	{"start": 12.0, "end": 13.0, "activity": Activity.GATHER},
-	{"start": 13.0, "end": 18.0, "activity": Activity.WORK},
-	{"start": 18.0, "end": 19.0, "activity": Activity.GATHER},
-	{"start": 19.0, "end": 20.0, "activity": Activity.GO_HOME},
-	{"start": 20.0, "end": 24.0, "activity": Activity.SLEEP},
+	{"start": 13.0, "end": 20.0, "activity": Activity.WORK},
+	{"start": 20.0, "end": 21.0, "activity": Activity.GO_HOME},
+	{"start": 21.0, "end": 24.0, "activity": Activity.SLEEP},
 ]
 
 static func get_activity_for_hour(hour: float) -> Activity:

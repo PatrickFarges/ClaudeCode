@@ -394,7 +394,21 @@ func _try_spawn_village(chunk_pos: Vector3i, chunk_data: Dictionary):
 	# Supprime les blocs isolés au-dessus du sol pour faciliter la navigation
 	_flatten_village_area(chunk_pos, packed_blocks, center_x, center_z, center_surface_y)
 
-	# Spawn 6-8 villageois groupés (dans un rayon de 5 blocs du centre)
+	# Spawn 8 villageois groupés — professions FIXES et optimisées :
+	# 2 BUCHERON (récolte bois), 2 MINEUR (galerie souterraine),
+	# 1 FORGERON (craft outils/lingots), 1 BATISSEUR (chemins + cabanes),
+	# 1 MENUISIER (craft planches/meubles), 1 FERMIER (récolte diverse)
+	var VILLAGE_PROFESSIONS = [
+		VProfession.Profession.BUCHERON,   # PNJ 0
+		VProfession.Profession.BUCHERON,   # PNJ 1
+		VProfession.Profession.MINEUR,     # PNJ 2
+		VProfession.Profession.MINEUR,     # PNJ 3
+		VProfession.Profession.FORGERON,   # PNJ 4
+		VProfession.Profession.BATISSEUR,  # PNJ 5
+		VProfession.Profession.MENUISIER,  # PNJ 6
+		VProfession.Profession.FERMIER,    # PNJ 7
+	]
+
 	var spawned = 0
 	for i in range(VILLAGE_NPC_COUNT):
 		var offset_x = randi_range(-4, 4)
@@ -412,8 +426,8 @@ func _try_spawn_village(chunk_pos: Vector3i, chunk_data: Dictionary):
 		if surface_y < 0 or surface_y >= Chunk.CHUNK_HEIGHT - 2:
 			continue
 
-		# Assigner une profession (répartie sur les 9 valeurs)
-		var prof = i % 9
+		# Profession fixe selon l'index
+		var prof = VILLAGE_PROFESSIONS[i] if i < VILLAGE_PROFESSIONS.size() else 0
 		var model_index = VProfession.get_model_for_profession(prof, i)
 
 		var world_x = chunk_pos.x * Chunk.CHUNK_SIZE + lx + 0.5

@@ -4,6 +4,8 @@ extends Node
 # Gère le stockpile partagé, la file de tâches, la progression technologique
 # et les blueprints de bâtiments. Les villageois exécutent les tâches assignées.
 
+const VProfession = preload("res://scripts/villager_profession.gd")
+
 const CHUNK_SIZE = 16
 const CHUNK_HEIGHT = 256
 
@@ -72,6 +74,11 @@ var BLUEPRINTS: Array = []
 
 # === BÂTIMENTS CONSTRUITS ===
 var built_structures: Array = []  # Array de { "name": String, "origin": Vector3i }
+
+# === CHEMIN DU VILLAGE ===
+var _path_built: bool = false  # true quand le chemin en croix est posé
+var _path_blocks: Array = []   # blocs du chemin à poser [Vector3i, ...]
+var _path_index: int = 0       # progression dans la pose du chemin
 
 func _ready():
 	_init_blueprints()
@@ -185,19 +192,27 @@ func _evaluate_phase_0():
 	var total_wood = get_total_wood()
 	var total_planks = get_total_planks()
 
-	# Besoin de 10 bois pour démarrer
+	# Besoin de 10 bois pour démarrer — bûcherons ET fermier y participent
 	if total_wood < 10 and total_planks < 4:
 		if task_queue.size() == 0:
 			print("VillageManager: Phase 0 — bois=%d planches=%d → ajout tâches récolte" % [total_wood, total_planks])
-		_add_harvest_tasks(5, 6)  # WOOD + LEAVES — on vise les troncs (WOOD=5)
+		_add_harvest_tasks(5, 4)  # Bûcherons
+		# Le fermier aide aussi à récolter du bois au bootstrap
+		_add_task({
+			"type": "harvest",
+			"target_block": 5,
+			"priority": 20,
+			"required_profession": VProfession.Profession.FERMIER,
+		})
 		return
 
-	# Crafter des planches si on a du bois
+	# Crafter des planches si on a du bois (menuisier ou forgeron peut le faire)
 	if total_wood >= 1 and total_planks < 8:
 		_add_task({
 			"type": "craft",
 			"recipe_name": "Planches",
 			"priority": 10,
+			"required_profession": VProfession.Profession.MENUISIER,
 		})
 
 	# Crafter la crafting table si on a 4 planches
@@ -207,6 +222,7 @@ func _evaluate_phase_0():
 				"type": "craft",
 				"recipe_name": "Table de Craft",
 				"priority": 5,
+				"required_profession": VProfession.Profession.MENUISIER,
 			})
 
 	# Placer la crafting table si on en a une
@@ -215,6 +231,7 @@ func _evaluate_phase_0():
 			"type": "place_workstation",
 			"target_block": 12,  # CRAFTING_TABLE
 			"priority": 3,
+			"required_profession": VProfession.Profession.BATISSEUR,
 		})
 
 	# Si crafting table placée -> phase 1
@@ -226,6 +243,7 @@ func _evaluate_phase_0():
 func _evaluate_phase_1():
 	# Phase 1: Récolter plus de bois + pierre, crafter furnace, construire
 	var total_wood = get_total_wood()
+	var total_planks = get_total_planks()
 	var total_stone = get_resource_count(3)  # STONE
 	var total_cobble = get_resource_count(25)  # COBBLESTONE
 
@@ -233,17 +251,28 @@ func _evaluate_phase_1():
 	if total_wood < 20:
 		_add_harvest_tasks(5, 4)  # plus de bois
 
+	# Le menuisier transforme le bois en planches en continu
+	if total_wood >= 2 and total_planks < 30:
+		if not _has_task_of_type("craft", "Planches"):
+			_add_task({
+				"type": "craft",
+				"recipe_name": "Planches",
+				"priority": 15,
+				"required_profession": VProfession.Profession.MENUISIER,
+			})
+
 	# Commencer à miner (galerie souterraine)
 	if total_stone < 20:
 		_add_mine_gallery_tasks(2)
 
-	# Crafter le fourneau (8 stone, recette wood_table -> en réalité on simplifie)
+	# Crafter le fourneau (8 stone)
 	if total_stone >= 8 and not placed_workstations.has(21):  # FURNACE
 		if not _has_task_of_type("craft", "Fourneau"):
 			_add_task({
 				"type": "craft",
 				"recipe_name": "Fourneau",
 				"priority": 8,
+				"required_profession": VProfession.Profession.FORGERON,
 			})
 
 	# Placer le fourneau
@@ -252,10 +281,15 @@ func _evaluate_phase_1():
 			"type": "place_workstation",
 			"target_block": 21,  # FURNACE
 			"priority": 5,
+			"required_profession": VProfession.Profession.BATISSEUR,
 		})
 
+	# D'abord construire le chemin en croix autour du centre
+	if not _path_built and get_resource_count(25) >= 5:  # COBBLESTONE
+		_try_queue_path()
+
 	# Construire la première cabane si on a les matériaux
-	if placed_workstations.has(21) and built_structures.size() == 0:
+	if _path_built and placed_workstations.has(21) and built_structures.size() == 0:
 		_try_queue_build(0)  # Blueprint 0 = cabane
 
 	# Si furnace placée -> phase 2
@@ -287,15 +321,17 @@ func _evaluate_phase_2():
 				"type": "craft",
 				"recipe_name": "Lingot de fer",
 				"priority": 10,
+				"required_profession": VProfession.Profession.FORGERON,
 			})
 
-	# Crafter stone_table (4 stone + 4 planks, recette wood_table)
+	# Crafter stone_table (4 stone + 4 planks)
 	if total_iron >= 4 and total_stone >= 4 and not placed_workstations.has(22):
 		if not _has_task_of_type("craft", "Table en pierre"):
 			_add_task({
 				"type": "craft",
 				"recipe_name": "Table en pierre",
 				"priority": 8,
+				"required_profession": VProfession.Profession.FORGERON,
 			})
 
 	# Placer stone_table
@@ -304,10 +340,15 @@ func _evaluate_phase_2():
 			"type": "place_workstation",
 			"target_block": 22,  # STONE_TABLE
 			"priority": 5,
+			"required_profession": VProfession.Profession.BATISSEUR,
 		})
 
+	# Chemin si pas encore fait
+	if not _path_built and get_resource_count(25) >= 5:
+		_try_queue_path()
+
 	# Construire plus de bâtiments
-	if built_structures.size() < 2:
+	if _path_built and built_structures.size() < 2:
 		_try_queue_build(1)  # Blueprint 1 = atelier
 
 	# Si stone_table placée -> phase 3
@@ -361,6 +402,7 @@ func _add_harvest_tasks(block_type: int, count: int):
 			"type": "harvest",
 			"target_block": block_type,
 			"priority": 20,
+			"required_profession": VProfession.Profession.BUCHERON,
 		})
 
 func _add_mine_tasks(block_type: int, count: int):
@@ -376,7 +418,18 @@ func _add_mine_tasks(block_type: int, count: int):
 			"type": "mine",
 			"target_block": block_type,
 			"priority": 25,
+			"required_profession": VProfession.Profession.MINEUR,
 		})
+
+func get_next_task_for(prof: int) -> Dictionary:
+	# Cherche la première tâche compatible avec la profession du villageois
+	for i in range(task_queue.size()):
+		var task = task_queue[i]
+		var req = task.get("required_profession", -1)
+		if req == -1 or req == prof:
+			task_queue.remove_at(i)
+			return task
+	return {}
 
 func get_next_task() -> Dictionary:
 	if task_queue.size() == 0:
@@ -759,6 +812,7 @@ func _add_mine_gallery_tasks(count: int):
 		_add_task({
 			"type": "mine_gallery",
 			"priority": 22,
+			"required_profession": VProfession.Profession.MINEUR,
 		})
 
 # ============================================================
@@ -938,6 +992,7 @@ func _try_queue_build(blueprint_index: int):
 		"block_list": bp["block_list"].duplicate(true),
 		"block_index": 0,
 		"priority": 15,
+		"required_profession": VProfession.Profession.BATISSEUR,
 	})
 	print("VillageManager: construction de '%s' à %s" % [bp["name"], str(origin)])
 
@@ -991,6 +1046,58 @@ func register_built_structure(name: String, origin: Vector3i, size: Vector3i):
 	print("VillageManager: structure '%s' terminée à %s" % [name, str(origin)])
 
 # ============================================================
+# CHEMIN DU VILLAGE (croix de pavés autour du centre)
+# ============================================================
+
+func _try_queue_path():
+	if _path_built:
+		return
+	# Vérifier qu'il n'y a pas déjà une tâche de chemin
+	for t in task_queue:
+		if t["type"] == "build_path":
+			return
+	for v in villagers:
+		if v.current_task.get("type", "") == "build_path":
+			return
+
+	# Générer le plan du chemin : croix de 8 blocs dans chaque direction
+	if _path_blocks.size() == 0:
+		var cx = int(village_center.x)
+		var cz = int(village_center.z)
+		# Croix : 4 branches de 8 blocs depuis le centre
+		var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+		for dir in dirs:
+			for i in range(1, 9):
+				var wx = cx + dir[0] * i
+				var wz = cz + dir[1] * i
+				var sy = _find_surface_y(wx, wz)
+				if sy > 0:
+					_path_blocks.append(Vector3i(wx, sy, wz))
+		# Place centrale (2x2)
+		for dx in range(-1, 2):
+			for dz in range(-1, 2):
+				var sy = _find_surface_y(cx + dx, cz + dz)
+				if sy > 0:
+					_path_blocks.append(Vector3i(cx + dx, sy, cz + dz))
+		_path_index = 0
+		print("VillageManager: chemin planifié — %d blocs" % _path_blocks.size())
+
+	# Vérifier qu'on a assez de cobblestone
+	var remaining = _path_blocks.size() - _path_index
+	if remaining <= 0:
+		_path_built = true
+		return
+	var cobble_count = get_resource_count(25)
+	if cobble_count < 3:
+		return  # Pas assez, on attend
+
+	_add_task({
+		"type": "build_path",
+		"priority": 12,
+		"required_profession": VProfession.Profession.BATISSEUR,
+	})
+
+# ============================================================
 # MINAGE VILLAGEOIS
 # ============================================================
 
@@ -1008,6 +1115,22 @@ func break_block(pos: Vector3i):
 func place_block(pos: Vector3i, block_type: int):
 	if world_manager:
 		world_manager.place_block_at_position(Vector3(pos.x, pos.y, pos.z), block_type as BlockRegistry.BlockType)
+
+func get_next_path_block() -> Vector3i:
+	# Retourne le prochain bloc du chemin à poser
+	if _path_index >= _path_blocks.size():
+		_path_built = true
+		return INVALID_POS_CONST
+	var pos = _path_blocks[_path_index]
+	_path_index += 1
+	return pos
+
+func mark_path_complete():
+	if _path_index >= _path_blocks.size():
+		_path_built = true
+		print("VillageManager: chemin terminé !")
+
+const INVALID_POS_CONST = Vector3i(-9999, -9999, -9999)
 
 # ============================================================
 # ENREGISTREMENT DES VILLAGEOIS
