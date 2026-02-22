@@ -762,8 +762,9 @@ func _apply_movement(delta):
 			_pick_new_wander()
 			is_moving = false
 			return
-		# Éviter les falaises (2+ blocs de vide devant)
-		elif block_at_feet == BlockRegistry.BlockType.AIR and block_below_ahead == BlockRegistry.BlockType.AIR:
+		# Éviter les falaises (2+ blocs de vide devant) — SEULEMENT en mode errance
+		# En mode cible (travail), le villageois doit pouvoir descendre vers la mine/arbre
+		elif not has_target and block_at_feet == BlockRegistry.BlockType.AIR and block_below_ahead == BlockRegistry.BlockType.AIR:
 			_pick_new_wander()
 			is_moving = false
 			return

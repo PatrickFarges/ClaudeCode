@@ -546,56 +546,82 @@ func invalidate_scan_cache():
 # ============================================================
 
 func _init_mine():
-	# Trouver un spot d'entrée PROCHE du village center
+	# Trouver un spot d'entrée PROCHE du village center et à altitude similaire
 	if _mine_initialized:
 		return
 	if not world_manager:
 		return
 
-	var cx = int(village_center.x) + randi_range(4, 8)
-	var cz = int(village_center.z) + randi_range(4, 8)
-	var surface_y = _find_surface_y(cx, cz)
-	if surface_y < 0:
+	var center_y = int(village_center.y)
+	var best_pos = Vector3i(-9999, -9999, -9999)
+	var best_y_diff = 999
+
+	# Chercher un spot dont le surface_y est proche du centre du village
+	for attempt in range(15):
+		var dx = randi_range(4, 10) * (1 if randf() > 0.5 else -1)
+		var dz = randi_range(4, 10) * (1 if randf() > 0.5 else -1)
+		var cx = int(village_center.x) + dx
+		var cz = int(village_center.z) + dz
+		var surface_y = _find_surface_y(cx, cz)
+		if surface_y < 0:
+			continue
+		var y_diff = abs(surface_y - center_y)
+		if y_diff < best_y_diff:
+			best_y_diff = y_diff
+			best_pos = Vector3i(cx, surface_y, cz)
+
+	if best_pos == Vector3i(-9999, -9999, -9999):
 		return
 
-	mine_entrance = Vector3i(cx, surface_y, cz)
+	mine_entrance = best_pos
 	_mine_initialized = true
 
-	# Générer le plan de mine — escalier raide puis galerie en étoile
-	# Escalier : descend de 2 blocs par pas (1 avance horizontale = 2 descente)
-	# Cela réduit la distance horizontale de moitié
+	# Générer le plan de mine — escalier zigzag 1:1 puis galerie en étoile
+	# Zigzag : descend de 1 par pas, change de direction tous les 6 blocs
+	# → distance horizontale max = 6 blocs de l'entrée (au lieu de 47)
 	mine_plan.clear()
 	mine_plan_index = 0
 
 	var pos = mine_entrance
-	var target_y = 40  # première galerie à y=40 (pas trop profond)
+	var target_y = 45  # galerie à y=45 (pas trop profond, zone minerais)
 
-	# Phase 1: Escalier descendant raide (2 blocs de haut, descend de 2 par pas)
+	# Phase 1: Escalier zigzag — descend de 1/pas, alterne +X/-X tous les 6 pas
+	var dir_x = 1  # +1 = est, -1 = ouest
+	var steps_in_leg = 0
+	var leg_length = 6
 	while pos.y > target_y:
-		# Creuser 3 blocs de haut pour l'escalier raide (pieds, corps, tête)
+		# Pieds + tête (2 blocs de haut pour passer)
 		mine_plan.append(Vector3i(pos.x, pos.y, pos.z))
 		mine_plan.append(Vector3i(pos.x, pos.y + 1, pos.z))
-		mine_plan.append(Vector3i(pos.x, pos.y + 2, pos.z))
-		# Descendre de 2 et avancer de 1
-		pos = Vector3i(pos.x + 1, pos.y - 2, pos.z)
+		# Avancer de 1 en X, descendre de 1
+		pos = Vector3i(pos.x + dir_x, pos.y - 1, pos.z)
+		steps_in_leg += 1
+		if steps_in_leg >= leg_length:
+			# Demi-tour + décaler en Z de 2 pour ne pas chevaucher
+			dir_x = -dir_x
+			pos = Vector3i(pos.x, pos.y, pos.z + 2)
+			steps_in_leg = 0
+			# Creuser le virage (2 blocs de haut)
+			mine_plan.append(Vector3i(pos.x, pos.y, pos.z))
+			mine_plan.append(Vector3i(pos.x, pos.y + 1, pos.z))
 
-	# Phase 2: Galerie en étoile à target_y — 4 branches depuis un centre
+	# Phase 2: Galerie en étoile à target_y — 4 branches de 10 blocs
 	var gallery_center = Vector3i(pos.x, target_y, pos.z)
 
-	# Branche +X (est, 12 blocs)
-	for i in range(12):
+	# Branche +X (est)
+	for i in range(10):
 		mine_plan.append(Vector3i(gallery_center.x + i, target_y, gallery_center.z))
 		mine_plan.append(Vector3i(gallery_center.x + i, target_y + 1, gallery_center.z))
-	# Branche -X (ouest, 12 blocs)
-	for i in range(1, 12):
+	# Branche -X (ouest)
+	for i in range(1, 10):
 		mine_plan.append(Vector3i(gallery_center.x - i, target_y, gallery_center.z))
 		mine_plan.append(Vector3i(gallery_center.x - i, target_y + 1, gallery_center.z))
-	# Branche +Z (sud, 12 blocs)
-	for i in range(1, 12):
+	# Branche +Z (sud)
+	for i in range(1, 10):
 		mine_plan.append(Vector3i(gallery_center.x, target_y, gallery_center.z + i))
 		mine_plan.append(Vector3i(gallery_center.x, target_y + 1, gallery_center.z + i))
-	# Branche -Z (nord, 12 blocs)
-	for i in range(1, 12):
+	# Branche -Z (nord)
+	for i in range(1, 10):
 		mine_plan.append(Vector3i(gallery_center.x, target_y, gallery_center.z - i))
 		mine_plan.append(Vector3i(gallery_center.x, target_y + 1, gallery_center.z - i))
 
