@@ -173,6 +173,14 @@ func _create_bedrock_model():
 			if bone:
 				_bone_wings.append(bone)
 
+	# Wolf body/upperBody need 90° X rotation (MC applies this programmatically,
+	# not in .geo.json — source: ModelWolf.java wolfBody.rotateAngleX = PI/2)
+	if mob_type == MobType.WOLF:
+		if _bone_body:
+			_bone_body.rotation_degrees.x = 90.0
+		if _bone_upper:
+			_bone_upper.rotation_degrees.x = 90.0
+
 	# Save bind rotations
 	if _bone_head:
 		_head_bind_rot = _bone_head.rotation_degrees
