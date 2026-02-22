@@ -307,6 +307,8 @@ func _behavior_village_work(delta):
 			_execute_harvest(delta)
 		"mine":
 			_execute_mine(delta)
+		"mine_gallery":
+			_execute_mine_gallery(delta)
 		"craft":
 			_execute_craft(delta)
 		"place_workstation":
@@ -317,10 +319,10 @@ func _behavior_village_work(delta):
 			current_task = {}
 
 func _execute_harvest(delta):
-	# Trouver un arbre
+	# Trouver un arbre (avec zone d'exclusion pour disperser les villageois)
 	if _mine_target == INVALID_POS:
 		var block_type = current_task.get("target_block", 5)  # WOOD par défaut
-		_mine_target = village_manager.find_nearest_block(block_type, global_position, 40.0)
+		_mine_target = village_manager.find_nearest_block(block_type, global_position, 40.0, village_manager.HARVEST_EXCLUSION_RADIUS)
 		if _mine_target == INVALID_POS:
 			_task_status = "Cherche du bois..."
 			# Pas de bois trouvé, retourner la tâche
@@ -442,6 +444,67 @@ func _execute_mine(delta):
 		_mine_target = INVALID_POS
 		_mine_timer = 0.0
 		current_task = {}
+
+func _execute_mine_gallery(delta):
+	# Minage en galerie — creuser le prochain bloc du plan de mine
+	if _mine_target == INVALID_POS:
+		_mine_target = village_manager.get_next_mine_block()
+		if _mine_target == INVALID_POS:
+			_task_status = "Mine terminée"
+			current_task = {}
+			return
+		village_manager.claim_position(_mine_target)
+		has_target = true
+		_arrived_at_target = false
+		_mine_timer = 0.0
+
+	var target_world = Vector3(_mine_target.x + 0.5, _mine_target.y, _mine_target.z + 0.5)
+	_task_status = "Creuse la mine"
+
+	if not _arrived_at_target:
+		var dist = global_position.distance_to(target_world)
+		if dist < 3.0:
+			_arrived_at_target = true
+		else:
+			_walk_toward(target_world, delta)
+			return
+
+	_face_target(target_world)
+	is_moving = false
+	_decelerate()
+	_play_anim("attack")
+
+	var block_type = world_manager.get_block_at_position(Vector3(_mine_target.x, _mine_target.y, _mine_target.z))
+	if block_type == BlockRegistry.BlockType.AIR:
+		village_manager.release_position(_mine_target)
+		_mine_target = INVALID_POS
+		# Prendre le prochain bloc directement (pas besoin de reprendre une tâche)
+		_mine_target = village_manager.get_next_mine_block()
+		if _mine_target == INVALID_POS:
+			current_task = {}
+		else:
+			village_manager.claim_position(_mine_target)
+			_arrived_at_target = false
+			_mine_timer = 0.0
+		return
+
+	_mine_timer += delta
+	var mine_time = village_manager.get_mine_time(block_type)
+
+	if _mine_timer >= mine_time:
+		village_manager.break_block(_mine_target)
+		village_manager.add_resource(block_type)
+		village_manager.release_position(_mine_target)
+		_show_harvest_label("+1", _mine_target)
+
+		# Enchaîner avec le prochain bloc de la galerie
+		_mine_target = village_manager.get_next_mine_block()
+		if _mine_target == INVALID_POS:
+			current_task = {}
+		else:
+			village_manager.claim_position(_mine_target)
+			_arrived_at_target = false
+			_mine_timer = 0.0
 
 func _execute_craft(delta):
 	_task_status = "Craft"

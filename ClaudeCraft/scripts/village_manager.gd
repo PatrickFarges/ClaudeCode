@@ -40,6 +40,7 @@ var villagers: Array = []  # refs vers les NpcVillager
 # === POSITIONS CLAIMED ===
 # Dictionary { Vector3i -> true } — blocs réservés par un villageois
 var claimed_positions: Dictionary = {}
+const HARVEST_EXCLUSION_RADIUS = 6.0  # distance min entre arbres claimés
 
 # === WORKSTATIONS PLACÉES ===
 var placed_workstations: Dictionary = {}  # { BlockType -> Vector3i }
@@ -47,6 +48,12 @@ var placed_workstations: Dictionary = {}  # { BlockType -> Vector3i }
 # === CACHE DE SCAN ===
 var _scan_cache: Dictionary = {}  # { BlockType -> { "results": Array, "time": float } }
 const SCAN_CACHE_DURATION = 5.0
+
+# === MINE / GALERIE ===
+var mine_plan: Array = []          # Array de Vector3i — blocs à creuser dans l'ordre
+var mine_plan_index: int = 0       # prochain bloc à assigner
+var mine_entrance: Vector3i = Vector3i(-9999, -9999, -9999)
+var _mine_initialized: bool = false
 
 # === TIMER ===
 var _eval_timer: float = 0.0
@@ -221,9 +228,9 @@ func _evaluate_phase_1():
 	if total_wood < 20:
 		_add_harvest_tasks(5, 4)  # plus de bois
 
-	# Commencer à miner de la pierre
+	# Commencer à miner (galerie souterraine)
 	if total_stone < 20:
-		_add_mine_tasks(3, 4)  # STONE
+		_add_mine_gallery_tasks(4)
 
 	# Crafter le fourneau (8 stone, recette wood_table -> en réalité on simplifie)
 	if total_stone >= 8 and not placed_workstations.has(21):  # FURNACE
@@ -263,16 +270,10 @@ func _evaluate_phase_2():
 	# Maintenir le stock
 	if total_wood < 15:
 		_add_harvest_tasks(5, 3)
-	if total_stone < 15:
-		_add_mine_tasks(3, 3)
 
-	# Miner charbon
-	if total_coal < 8:
-		_add_mine_tasks(16, 3)  # COAL_ORE
-
-	# Miner fer
-	if total_iron_ore < 4 and total_iron < 4:
-		_add_mine_tasks(17, 3)  # IRON_ORE
+	# Miner en galerie (pierre + charbon + fer trouvés automatiquement)
+	if total_stone < 15 or total_coal < 8 or (total_iron_ore < 4 and total_iron < 4):
+		_add_mine_gallery_tasks(4)
 
 	# Fondre le fer (recette furnace: 1 iron_ore + 1 coal_ore -> 1 iron_ingot)
 	if total_iron_ore >= 1 and total_coal >= 1 and total_iron < 4:
@@ -318,7 +319,7 @@ func _evaluate_phase_3():
 	if total_wood < 20:
 		_add_harvest_tasks(5, 3)
 	if total_stone < 20:
-		_add_mine_tasks(3, 3)
+		_add_mine_gallery_tasks(4)
 
 	# Construire plus
 	if built_structures.size() < BLUEPRINTS.size():
@@ -385,7 +386,18 @@ func return_task(task: Dictionary):
 # SCAN DE BLOCS
 # ============================================================
 
-func find_nearest_block(block_type: int, from_pos: Vector3, radius: float = 32.0) -> Vector3i:
+func _is_too_close_to_claimed(pos: Vector3i, exclusion_radius: float) -> bool:
+	# Vérifie si une position est trop proche d'une position déjà claimée
+	if exclusion_radius <= 0:
+		return claimed_positions.has(pos)
+	var pos_v3 = Vector3(pos.x, pos.y, pos.z)
+	for claimed_pos in claimed_positions:
+		var d = pos_v3.distance_to(Vector3(claimed_pos.x, claimed_pos.y, claimed_pos.z))
+		if d < exclusion_radius:
+			return true
+	return false
+
+func find_nearest_block(block_type: int, from_pos: Vector3, radius: float = 32.0, exclusion_radius: float = 0.0) -> Vector3i:
 	if not world_manager:
 		return Vector3i(-9999, -9999, -9999)
 
@@ -399,7 +411,7 @@ func find_nearest_block(block_type: int, from_pos: Vector3, radius: float = 32.0
 			var best = Vector3i(-9999, -9999, -9999)
 			var best_dist = INF
 			for pos in cached["results"]:
-				if claimed_positions.has(pos):
+				if _is_too_close_to_claimed(pos, exclusion_radius):
 					continue
 				var d = from_pos.distance_to(Vector3(pos.x, pos.y, pos.z))
 				if d < best_dist:
@@ -454,11 +466,11 @@ func find_nearest_block(block_type: int, from_pos: Vector3, radius: float = 32.0
 	# Mettre en cache
 	_scan_cache[cache_key] = { "results": results, "time": now }
 
-	# Trouver le plus proche non-claimé
+	# Trouver le plus proche non-claimé (avec exclusion radius)
 	var best = Vector3i(-9999, -9999, -9999)
 	var best_dist = INF
 	for pos in results:
-		if claimed_positions.has(pos):
+		if _is_too_close_to_claimed(pos, exclusion_radius):
 			continue
 		var d = from_pos.distance_to(Vector3(pos.x, pos.y, pos.z))
 		if d < best_dist:
@@ -528,6 +540,123 @@ func release_position(pos: Vector3i):
 
 func invalidate_scan_cache():
 	_scan_cache.clear()
+
+# ============================================================
+# SYSTÈME DE MINE (galeries souterraines)
+# ============================================================
+
+func _init_mine():
+	# Trouver un spot d'entrée près du village center
+	if _mine_initialized:
+		return
+	if not world_manager:
+		return
+
+	var cx = int(village_center.x) + randi_range(8, 15)
+	var cz = int(village_center.z) + randi_range(8, 15)
+	var surface_y = _find_surface_y(cx, cz)
+	if surface_y < 0:
+		return
+
+	mine_entrance = Vector3i(cx, surface_y, cz)
+	_mine_initialized = true
+
+	# Générer le plan de mine
+	# Phase 1: Escalier descendant (2 blocs de haut, descend de 1 par pas)
+	# Direction: +X (arbitraire, on creuse vers l'est)
+	var stair_dir = Vector3i(1, 0, 0)
+	var pos = mine_entrance
+	mine_plan.clear()
+	mine_plan_index = 0
+
+	# Creuser l'escalier de la surface jusqu'à y=30 (zone des minerais)
+	var target_y = 30
+	var step = 0
+	while pos.y > target_y:
+		# Bloc au niveau des pieds
+		mine_plan.append(Vector3i(pos.x, pos.y, pos.z))
+		# Bloc au niveau de la tête
+		mine_plan.append(Vector3i(pos.x, pos.y + 1, pos.z))
+		# Descendre d'un cran
+		pos = Vector3i(pos.x + stair_dir.x, pos.y - 1, pos.z + stair_dir.z)
+		step += 1
+		# Tous les 3 pas, ajouter un palier (2 blocs plats pour que les PNJ ne tombent pas)
+		if step % 3 == 0:
+			mine_plan.append(Vector3i(pos.x, pos.y + 1, pos.z))
+			mine_plan.append(Vector3i(pos.x, pos.y + 2, pos.z))
+
+	# Phase 2: Galeries horizontales en branches à y=30, y=20, y=10
+	for gallery_y in [30, 20, 10]:
+		# Le couloir principal continue à cette profondeur
+		var gallery_start = Vector3i(pos.x, gallery_y, pos.z)
+		if gallery_y != 30:
+			# Escalier vers le prochain niveau
+			var descent_pos = mine_plan[mine_plan.size() - 1] if mine_plan.size() > 0 else pos
+			# On continue à descendre depuis la fin du plan actuel
+			var cur = Vector3i(descent_pos.x + 1, descent_pos.y, descent_pos.z)
+			while cur.y > gallery_y:
+				mine_plan.append(Vector3i(cur.x, cur.y, cur.z))
+				mine_plan.append(Vector3i(cur.x, cur.y + 1, cur.z))
+				cur = Vector3i(cur.x + 1, cur.y - 1, cur.z)
+			gallery_start = cur
+
+		# Galerie principale: 20 blocs tout droit
+		for i in range(20):
+			var gx = gallery_start.x + i
+			mine_plan.append(Vector3i(gx, gallery_y, gallery_start.z))
+			mine_plan.append(Vector3i(gx, gallery_y + 1, gallery_start.z))
+
+		# Branches perpendiculaires tous les 4 blocs
+		for branch_i in range(5):
+			var branch_x = gallery_start.x + branch_i * 4
+			# Branche sud (10 blocs)
+			for bz in range(1, 11):
+				mine_plan.append(Vector3i(branch_x, gallery_y, gallery_start.z + bz))
+				mine_plan.append(Vector3i(branch_x, gallery_y + 1, gallery_start.z + bz))
+			# Branche nord (10 blocs)
+			for bz in range(1, 11):
+				mine_plan.append(Vector3i(branch_x, gallery_y, gallery_start.z - bz))
+				mine_plan.append(Vector3i(branch_x, gallery_y + 1, gallery_start.z - bz))
+
+	print("VillageManager: mine planifiée — %d blocs à creuser depuis %s" % [mine_plan.size(), str(mine_entrance)])
+
+func get_next_mine_block() -> Vector3i:
+	# Retourne le prochain bloc à creuser dans la galerie
+	while mine_plan_index < mine_plan.size():
+		var pos = mine_plan[mine_plan_index]
+		mine_plan_index += 1
+		# Skip si déjà creusé ou claimé
+		if claimed_positions.has(pos):
+			continue
+		if world_manager:
+			var bt = world_manager.get_block_at_position(Vector3(pos.x, pos.y, pos.z))
+			if bt == BlockRegistry.BlockType.AIR:
+				continue
+			# Ne pas creuser l'eau
+			if bt == BlockRegistry.BlockType.WATER:
+				continue
+		return pos
+	return Vector3i(-9999, -9999, -9999)
+
+func _add_mine_gallery_tasks(count: int):
+	# Ajouter des tâches de minage en galerie
+	if not _mine_initialized:
+		_init_mine()
+	if not _mine_initialized:
+		return
+
+	var existing = 0
+	for t in task_queue:
+		if t["type"] == "mine_gallery":
+			existing += 1
+	if existing >= count:
+		return
+
+	for i in range(count - existing):
+		_add_task({
+			"type": "mine_gallery",
+			"priority": 22,
+		})
 
 # ============================================================
 # CRAFTING VILLAGEOIS
