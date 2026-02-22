@@ -6,15 +6,15 @@ const BedrockEntity = preload("res://scripts/bedrock_entity.gd")
 enum MobType { SHEEP, COW, CHICKEN, PIG, WOLF, HORSE }
 
 # Bedrock model paths + textures — replaces old Sketchfab GLBs
+# Bedrock geometry + Bedrock-format textures (Java Edition textures are incompatible
+# with Bedrock UV layout — different pixel arrangement for same mob)
 const BEDROCK_BASE := "res://assets/Mobs/Bedrock/"
-const GC = preload("res://scripts/game_config.gd")
-const ENTITY_BASE := "res://TexturesPack/" + GC.ACTIVE_PACK + "/assets/minecraft/textures/entity/"
 const MOB_DATA = {
 	MobType.SHEEP: {
 		"collision_size": Vector3(0.9, 1.3, 0.9),
 		"geo_path": BEDROCK_BASE + "models/sheep.geo.json",
 		"geo_id": "geometry.sheep.sheared.v1.8",
-		"texture": ENTITY_BASE + "sheep/sheep.png",
+		"texture": "res://TexturesPack/Aurore Stone/assets/minecraft/textures/entity/sheep/sheep.png",
 		"health": 8, "meat_name": "Mouton", "meat_count": 2,
 		"bone_map": { "body": "body", "head": "head",
 			"leg0": "leg0", "leg1": "leg1", "leg2": "leg2", "leg3": "leg3" },
@@ -23,7 +23,7 @@ const MOB_DATA = {
 		"collision_size": Vector3(0.9, 1.4, 0.9),
 		"geo_path": BEDROCK_BASE + "models/cow.geo.json",
 		"geo_id": "geometry.cow.v1.8",
-		"texture": ENTITY_BASE + "cow/temperate_cow.png",
+		"texture": BEDROCK_BASE + "textures/cow.png",
 		"health": 10, "meat_name": "Boeuf", "meat_count": 3,
 		"bone_map": { "body": "body", "head": "head",
 			"leg0": "leg0", "leg1": "leg1", "leg2": "leg2", "leg3": "leg3" },
@@ -32,7 +32,7 @@ const MOB_DATA = {
 		"collision_size": Vector3(0.5, 0.7, 0.5),
 		"geo_path": BEDROCK_BASE + "models/chicken.geo.json",
 		"geo_id": "geometry.chicken",
-		"texture": ENTITY_BASE + "chicken/temperate_chicken.png",
+		"texture": BEDROCK_BASE + "textures/chicken.png",
 		"health": 4, "meat_name": "Poulet", "meat_count": 1,
 		"bone_map": { "body": "body", "head": "head",
 			"leg0": "leg0", "leg1": "leg1",
@@ -42,7 +42,7 @@ const MOB_DATA = {
 		"collision_size": Vector3(0.9, 0.9, 0.9),
 		"geo_path": BEDROCK_BASE + "models/pig.geo.json",
 		"geo_id": "geometry.pig.v1.8",
-		"texture": ENTITY_BASE + "pig/temperate_pig.png",
+		"texture": BEDROCK_BASE + "textures/pig.png",
 		"health": 10, "meat_name": "Porc", "meat_count": 3,
 		"bone_map": { "body": "body", "head": "head",
 			"leg0": "leg0", "leg1": "leg1", "leg2": "leg2", "leg3": "leg3" },
@@ -51,7 +51,7 @@ const MOB_DATA = {
 		"collision_size": Vector3(0.6, 0.85, 0.6),
 		"geo_path": BEDROCK_BASE + "models/wolf.geo.json",
 		"geo_id": "geometry.wolf",
-		"texture": ENTITY_BASE + "wolf/wolf.png",
+		"texture": BEDROCK_BASE + "textures/wolf.png",
 		"health": 8, "meat_name": "Loup", "meat_count": 0,
 		"bone_map": { "body": "body", "head": "head", "upperBody": "upperBody",
 			"leg0": "leg0", "leg1": "leg1", "leg2": "leg2", "leg3": "leg3",
@@ -61,7 +61,7 @@ const MOB_DATA = {
 		"collision_size": Vector3(1.4, 1.6, 1.4),
 		"geo_path": BEDROCK_BASE + "models/horse_v2.geo.json",
 		"geo_id": "geometry.horse.v2",
-		"texture": ENTITY_BASE + "horse/horse_white.png",
+		"texture": BEDROCK_BASE + "textures/horse.png",
 		"health": 15, "meat_name": "Cheval", "meat_count": 0,
 		"bone_map": { "body": "Body", "head": "Head", "neck": "Neck",
 			"leg0": "Leg1A", "leg1": "Leg2A", "leg2": "Leg3A", "leg3": "Leg4A",
@@ -182,7 +182,13 @@ func _create_bedrock_model():
 static func _load_texture(path: String) -> Texture2D:
 	if _tex_cache.has(path):
 		return _tex_cache[path]
+	# Try Godot import first, then fallback to raw Image load (no .import needed)
 	var tex = load(path) as Texture2D
+	if not tex:
+		var abs_path := ProjectSettings.globalize_path(path)
+		var img := Image.new()
+		if img.load(abs_path) == OK:
+			tex = ImageTexture.create_from_image(img)
 	if tex:
 		_tex_cache[path] = tex
 	else:
