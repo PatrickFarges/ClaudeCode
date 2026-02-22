@@ -71,6 +71,11 @@ const DAMAGE_COOLDOWN_TIME = 0.5
 const FALL_DAMAGE_THRESHOLD = 4.0  # Blocs de chute avant dégâts
 const FALL_DAMAGE_MULTIPLIER = 1.0  # Dégâts par bloc au-delà du seuil
 const CACTUS_DAMAGE = 1
+const MELEE_RANGE = 3.5
+const MELEE_COOLDOWN_TIME = 0.5
+const MELEE_KNOCKBACK = 8.0
+const MELEE_LIFT = 3.0
+var melee_cooldown: float = 0.0
 var is_dead: bool = false
 var in_water: bool = false
 var respawn_timer: float = 0.0
@@ -469,6 +474,7 @@ func _physics_process(delta):
 	move_and_slide()
 	_update_damage(delta)
 	_handle_bow(delta)
+	_handle_melee(delta)
 	_handle_block_interaction(delta)
 	_handle_eating(delta)
 	_handle_footsteps(delta, direction)
@@ -827,11 +833,62 @@ func _get_selected_tool() -> ToolRegistry.ToolType:
 	return ToolRegistry.ToolType.NONE
 
 # ============================================================
+# COMBAT MÊLÉE
+# ============================================================
+func _handle_melee(delta: float):
+	if not Input.is_action_just_pressed("break_block") or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+		return
+	if melee_cooldown > 0 or is_drawing_bow or _is_any_ui_open():
+		return
+
+	# Chercher le mob le plus proche devant la caméra
+	var cam_pos = camera.global_position
+	var cam_dir = -camera.global_basis.z
+	var best_mob: Node3D = null
+	var best_dist = MELEE_RANGE + 1.0
+
+	for group_name in ["passive_mobs", "npc_villagers"]:
+		for mob in get_tree().get_nodes_in_group(group_name):
+			if not is_instance_valid(mob) or not mob is Node3D:
+				continue
+			var to_mob = mob.global_position + Vector3(0, 0.5, 0) - cam_pos
+			var dist = to_mob.length()
+			if dist > MELEE_RANGE:
+				continue
+			# Vérifier que le mob est devant la caméra (dot product > 0)
+			var dot = cam_dir.dot(to_mob.normalized())
+			if dot < 0.5:  # ~60° de chaque côté
+				continue
+			if dist < best_dist:
+				best_dist = dist
+				best_mob = mob
+
+	if best_mob == null:
+		return
+
+	# Appliquer les dégâts
+	var tool_type = _get_selected_tool()
+	var damage = ToolRegistry.get_attack_damage(tool_type)
+	var knockback_dir = (best_mob.global_position - global_position).normalized()
+	knockback_dir.y = 0
+	var kb = knockback_dir * MELEE_KNOCKBACK + Vector3(0, MELEE_LIFT, 0)
+
+	if best_mob.has_method("take_hit"):
+		best_mob.take_hit(damage, kb)
+
+	# Swing animation + cooldown
+	melee_cooldown = MELEE_COOLDOWN_TIME
+	if hand_renderer:
+		hand_renderer.play_swing()
+
+# ============================================================
 # GESTION DE LA VIE
 # ============================================================
 func _update_damage(delta: float):
 	if damage_cooldown > 0:
 		damage_cooldown -= delta
+	if melee_cooldown > 0:
+		melee_cooldown -= delta
 	_check_fall_damage()
 	_check_cactus_damage()
 

@@ -92,12 +92,17 @@ static func _make_speed(blocks: Dictionary, mult: float) -> Dictionary:
 		result[block_name] = mult
 	return result
 
+## Dégâts de mêlée par outil
+# Mains nues = 1, outils = tier-based, épées = bonus
+const FIST_DAMAGE := 1
+
 static var TOOL_DATA = {
 	ToolType.WOOD_AXE: {
 		"name": "Hache en bois",
 		"item_texture": "wooden_axe",
 		"mining_speed": {},  # rempli dans _init_tool_speeds()
 		"durability": 60,
+		"attack_damage": 3,
 		"_tier": "WOOD", "_type": "AXE",
 	},
 	ToolType.WOOD_PICKAXE: {
@@ -105,6 +110,7 @@ static var TOOL_DATA = {
 		"item_texture": "wooden_pickaxe",
 		"mining_speed": {},
 		"durability": 60,
+		"attack_damage": 2,
 		"_tier": "WOOD", "_type": "PICK",
 	},
 	ToolType.STONE_AXE: {
@@ -112,6 +118,7 @@ static var TOOL_DATA = {
 		"item_texture": "stone_axe",
 		"mining_speed": {},
 		"durability": 132,
+		"attack_damage": 4,
 		"_tier": "STONE", "_type": "AXE",
 	},
 	ToolType.STONE_PICKAXE: {
@@ -119,6 +126,7 @@ static var TOOL_DATA = {
 		"item_texture": "stone_pickaxe",
 		"mining_speed": {},
 		"durability": 132,
+		"attack_damage": 3,
 		"_tier": "STONE", "_type": "PICK",
 	},
 	ToolType.STONE_SHOVEL: {
@@ -126,6 +134,7 @@ static var TOOL_DATA = {
 		"item_texture": "stone_shovel",
 		"mining_speed": {},
 		"durability": 132,
+		"attack_damage": 2,
 		"_tier": "STONE", "_type": "SHOVEL",
 	},
 	ToolType.STONE_HOE: {
@@ -133,6 +142,7 @@ static var TOOL_DATA = {
 		"item_texture": "stone_hoe",
 		"mining_speed": {},
 		"durability": 132,
+		"attack_damage": 1,
 		"_tier": "STONE", "_type": "HOE",
 	},
 	ToolType.STONE_HAMMER: {
@@ -140,18 +150,21 @@ static var TOOL_DATA = {
 		"item_texture": "stone_pickaxe",
 		"mining_speed": {"STONE": 1.5, "BRICK": 1.5},
 		"durability": 132,
+		"attack_damage": 3,
 	},
 	ToolType.STONE_SWORD: {
 		"name": "Epee en pierre",
 		"item_texture": "stone_sword",
 		"mining_speed": {},
 		"durability": 132,
+		"attack_damage": 5,
 	},
 	ToolType.IRON_AXE: {
 		"name": "Hache en fer",
 		"item_texture": "iron_axe",
 		"mining_speed": {},
 		"durability": 250,
+		"attack_damage": 5,
 		"_tier": "IRON", "_type": "AXE",
 	},
 	ToolType.IRON_PICKAXE: {
@@ -159,6 +172,7 @@ static var TOOL_DATA = {
 		"item_texture": "iron_pickaxe",
 		"mining_speed": {},
 		"durability": 250,
+		"attack_damage": 4,
 		"_tier": "IRON", "_type": "PICK",
 	},
 	ToolType.IRON_SWORD: {
@@ -166,12 +180,14 @@ static var TOOL_DATA = {
 		"item_texture": "iron_sword",
 		"mining_speed": {},
 		"durability": 250,
+		"attack_damage": 6,
 	},
 	ToolType.DIAMOND_AXE: {
 		"name": "Hache en diamant",
 		"item_texture": "diamond_axe",
 		"mining_speed": {},
 		"durability": 1561,
+		"attack_damage": 6,
 		"_tier": "DIAMOND", "_type": "AXE",
 	},
 	ToolType.DIAMOND_PICKAXE: {
@@ -179,6 +195,7 @@ static var TOOL_DATA = {
 		"item_texture": "diamond_pickaxe",
 		"mining_speed": {},
 		"durability": 1561,
+		"attack_damage": 5,
 		"_tier": "DIAMOND", "_type": "PICK",
 	},
 	ToolType.DIAMOND_SWORD: {
@@ -186,18 +203,21 @@ static var TOOL_DATA = {
 		"item_texture": "diamond_sword",
 		"mining_speed": {},
 		"durability": 1561,
+		"attack_damage": 7,
 	},
 	ToolType.NETHERITE_SWORD: {
 		"name": "Epee en Netherite",
 		"item_texture": "netherite_sword",
 		"mining_speed": {},
 		"durability": 2031,
+		"attack_damage": 8,
 	},
 	ToolType.BOW: {
 		"name": "Arc",
 		"item_texture": "bow",
 		"mining_speed": {},
 		"durability": 384,
+		"attack_damage": 1,
 	},
 	ToolType.SHIELD: {
 		"name": "Bouclier",
@@ -205,6 +225,7 @@ static var TOOL_DATA = {
 		"item_texture_folder": "entity",
 		"mining_speed": {},
 		"durability": 336,
+		"attack_damage": 1,
 	},
 }
 
@@ -261,6 +282,13 @@ static func get_item_texture_path(tool_type: ToolType) -> String:
 		_:
 			base_path = GC.get_item_texture_path()
 	return base_path + data["item_texture"] + ".png"
+
+static func get_attack_damage(tool_type: ToolType) -> int:
+	if tool_type == ToolType.NONE:
+		return FIST_DAMAGE
+	if TOOL_DATA.has(tool_type):
+		return TOOL_DATA[tool_type].get("attack_damage", FIST_DAMAGE)
+	return FIST_DAMAGE
 
 static func get_mining_multiplier(tool_type: ToolType, block_type: BlockRegistry.BlockType) -> float:
 	_ensure_speeds()
