@@ -75,6 +75,10 @@ var _task_status: String = ""  # texte affiché
 var _head_label: Label3D = null
 var _label_update_timer: float = 0.0
 
+# === Cooldown pour éviter les scans coûteux en boucle ===
+var _search_cooldown: float = 0.0
+const SEARCH_COOLDOWN_DURATION = 5.0  # secondes avant de retenter une recherche
+
 func setup(model_index: int, pos: Vector3, chunk_pos: Vector3i, prof: int = 0):
 	mob_type_index = model_index
 	_spawn_pos = pos
@@ -340,11 +344,18 @@ func _behavior_work(delta):
 # ============================================================
 
 func _behavior_village_work(delta):
+	# Cooldown après un scan qui n'a rien trouvé (évite les scans coûteux en boucle)
+	if _search_cooldown > 0.0:
+		_search_cooldown -= delta
+		_behavior_wander(delta)
+		return
+
 	# Pas de tâche -> en demander une
 	if current_task.is_empty():
 		current_task = village_manager.get_next_task()
 		if current_task.is_empty():
 			_task_status = "Attend"
+			_search_cooldown = 3.0  # attendre 3s avant de redemander
 			_behavior_wander(delta)
 			return
 		# Reset navigation
@@ -377,9 +388,9 @@ func _execute_harvest(delta):
 		_mine_target = village_manager.find_nearest_block(block_type, global_position, 40.0, village_manager.HARVEST_EXCLUSION_RADIUS)
 		if _mine_target == INVALID_POS:
 			_task_status = "Cherche du bois..."
-			# Pas de bois trouvé, retourner la tâche
 			village_manager.return_task(current_task)
 			current_task = {}
+			_search_cooldown = SEARCH_COOLDOWN_DURATION
 			return
 		village_manager.claim_position(_mine_target)
 		has_target = true
@@ -454,6 +465,7 @@ func _execute_mine(delta):
 			_task_status = "Cherche des minerais..."
 			village_manager.return_task(current_task)
 			current_task = {}
+			_search_cooldown = SEARCH_COOLDOWN_DURATION
 			return
 		village_manager.claim_position(_mine_target)
 		has_target = true
@@ -502,6 +514,7 @@ func _execute_mine_gallery(delta):
 		if _mine_target == INVALID_POS:
 			_task_status = "Mine terminee"
 			current_task = {}
+			_search_cooldown = SEARCH_COOLDOWN_DURATION
 			return
 		village_manager.claim_position(_mine_target)
 		has_target = true

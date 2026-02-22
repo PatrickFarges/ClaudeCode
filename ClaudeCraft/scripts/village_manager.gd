@@ -47,7 +47,7 @@ var placed_workstations: Dictionary = {}  # { BlockType -> Vector3i }
 
 # === CACHE DE SCAN ===
 var _scan_cache: Dictionary = {}  # { BlockType -> { "results": Array, "time": float } }
-const SCAN_CACHE_DURATION = 5.0
+const SCAN_CACHE_DURATION = 8.0  # durée cache scan — plus long pour éviter les rescans coûteux
 
 # === MINE / GALERIE ===
 var mine_plan: Array = []          # Array de Vector3i — blocs à creuser dans l'ordre
@@ -57,7 +57,7 @@ var _mine_initialized: bool = false
 
 # === TIMER ===
 var _eval_timer: float = 0.0
-const EVAL_INTERVAL = 3.0
+const EVAL_INTERVAL = 5.0  # évaluation toutes les 5s (au lieu de 3)
 
 # === REFS ===
 var world_manager = null
@@ -906,7 +906,8 @@ func get_mine_time(block_type: int) -> float:
 func break_block(pos: Vector3i):
 	if world_manager:
 		world_manager.break_block_at_position(Vector3(pos.x, pos.y, pos.z))
-		invalidate_scan_cache()
+		# Ne PAS invalider le cache ici — le cache expire naturellement (SCAN_CACHE_DURATION)
+		# L'invalidation à chaque bloc causait des rescans de 2M+ itérations en continu
 
 func place_block(pos: Vector3i, block_type: int):
 	if world_manager:
