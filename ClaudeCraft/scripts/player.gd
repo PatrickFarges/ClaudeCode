@@ -42,8 +42,10 @@ var selected_block_type: BlockRegistry.BlockType = BlockRegistry.BlockType.DIRT
 # État des UIs
 var inventory_open: bool = false
 var crafting_open: bool = false
+var village_inv_open: bool = false
 var inventory_ui = null
 var crafting_ui = null
+var village_inventory_ui = null
 var pause_menu = null
 
 # ============================================================
@@ -146,6 +148,7 @@ func _ready():
 	await get_tree().process_frame
 	inventory_ui = get_tree().get_first_node_in_group("inventory_ui")
 	crafting_ui = get_tree().get_first_node_in_group("crafting_ui")
+	village_inventory_ui = get_tree().get_first_node_in_group("village_inventory_ui")
 	audio_manager = get_tree().get_first_node_in_group("audio_manager")
 	pause_menu = get_tree().get_first_node_in_group("pause_menu")
 
@@ -280,6 +283,8 @@ func _close_all_ui():
 		_toggle_inventory()
 	if crafting_open:
 		_toggle_crafting()
+	if village_inv_open:
+		_toggle_village_inventory()
 
 # ============================================================
 # INVENTAIRE TOGGLE
@@ -319,6 +324,25 @@ func _toggle_crafting(tier: int = 0, furnace: bool = false):
 			crafting_ui.visible = false
 			crafting_ui.close_crafting()
 
+# ============================================================
+# VILLAGE INVENTORY TOGGLE
+# ============================================================
+func _toggle_village_inventory():
+	if inventory_open:
+		_toggle_inventory()
+	if crafting_open:
+		_toggle_crafting()
+
+	village_inv_open = not village_inv_open
+	if village_inv_open:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		if village_inventory_ui:
+			village_inventory_ui.open_inventory()
+	else:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		if village_inventory_ui:
+			village_inventory_ui.close_inventory()
+
 func _get_interact_tier(block_type) -> int:
 	"""Retourne le tier de craft pour un bloc interactif, ou -1 si pas interactif"""
 	match block_type:
@@ -342,6 +366,10 @@ func _input(event):
 		if event.physical_keycode == KEY_C:
 			_toggle_crafting()
 			return
+		# Touche F1 — inventaire du village
+		if event.physical_keycode == KEY_F1:
+			_toggle_village_inventory()
+			return
 
 	# Gestion Escape : 3 cas
 	if event.is_action_pressed("ui_cancel"):
@@ -349,8 +377,8 @@ func _input(event):
 		if pause_open:
 			pause_menu.close_pause()
 			return
-		# Cas 2 : inventaire/craft ouvert -> fermer UI
-		if inventory_open or crafting_open:
+		# Cas 2 : inventaire/craft/village ouvert -> fermer UI
+		if inventory_open or crafting_open or village_inv_open:
 			_close_all_ui()
 			return
 		# Cas 3 : rien d'ouvert + souris capturée -> ouvrir pause

@@ -460,15 +460,13 @@ func _harvest_leaves_above(trunk_pos: Vector3i):
 			break
 
 func _execute_mine(delta):
-	# Miner de la pierre / minerais
+	# Miner un type de bloc spécifique (sable, pierre en surface, etc.)
+	# Utilise la même logique directe que mine_gallery
 	if _mine_target == INVALID_POS:
-		var block_type = current_task.get("target_block", 3)  # STONE par défaut
-		_mine_target = village_manager.find_nearest_surface_block(block_type, global_position, 40.0)
+		var block_type = current_task.get("target_block", 3)
+		_mine_target = village_manager.find_nearest_surface_block(block_type, global_position, 20.0)
 		if _mine_target == INVALID_POS:
-			# Essayer plus profond (pas seulement en surface)
-			_mine_target = village_manager.find_nearest_block(block_type, global_position, 40.0)
-		if _mine_target == INVALID_POS:
-			_task_status = "Cherche des minerais..."
+			_task_status = "Cherche..."
 			village_manager.return_task(current_task)
 			current_task = {}
 			_search_cooldown = SEARCH_COOLDOWN_DURATION
@@ -482,56 +480,6 @@ func _execute_mine(delta):
 	_task_status = "[Pioche] Mine"
 
 	if not _arrived_at_target:
-		var xz_dist = Vector2(global_position.x - target_world.x, global_position.z - target_world.z).length()
-		if xz_dist < 2.5:
-			_arrived_at_target = true
-		else:
-			_walk_toward(target_world, delta)
-			return
-
-	_face_target(target_world)
-	is_moving = false
-	_decelerate()
-	_play_anim("attack")
-
-	var block_type = world_manager.get_block_at_position(Vector3(_mine_target.x, _mine_target.y, _mine_target.z))
-	if block_type == BlockRegistry.BlockType.AIR:
-		village_manager.release_position(_mine_target)
-		_mine_target = INVALID_POS
-		current_task = {}
-		return
-
-	_mine_timer += delta
-	var mine_time = village_manager.get_mine_time(block_type)
-
-	if _mine_timer >= mine_time:
-		village_manager.break_block(_mine_target)
-		village_manager.add_resource(block_type)
-		village_manager.release_position(_mine_target)
-		_show_harvest_label("+1", _mine_target)
-		_mine_target = INVALID_POS
-		_mine_timer = 0.0
-		current_task = {}
-
-func _execute_mine_gallery(delta):
-	# Minage en galerie — creuser séquentiellement le plan de mine (top-down)
-	if _mine_target == INVALID_POS:
-		_mine_target = village_manager.get_next_mine_block()
-		if _mine_target == INVALID_POS:
-			_task_status = "[Pioche] Attend..."
-			current_task = {}
-			_search_cooldown = SEARCH_COOLDOWN_DURATION
-			return
-		village_manager.claim_position(_mine_target)
-		has_target = true
-		_arrived_at_target = false
-		_mine_timer = 0.0
-
-	var target_world = Vector3(_mine_target.x + 0.5, _mine_target.y, _mine_target.z + 0.5)
-	_task_status = "[Pioche] Mine"
-
-	if not _arrived_at_target:
-		# Distance 3D pour la mine (le mineur descend dans l'escalier)
 		var dist = global_position.distance_to(target_world)
 		if dist < 3.0:
 			_arrived_at_target = true
@@ -548,15 +496,61 @@ func _execute_mine_gallery(delta):
 	if block_type == BlockRegistry.BlockType.AIR:
 		village_manager.release_position(_mine_target)
 		_mine_target = INVALID_POS
-		# Enchaîner directement avec le prochain bloc
-		_mine_target = village_manager.get_next_mine_block()
+		current_task = {}
+		return
+
+	_mine_timer += delta
+	var mine_time = village_manager.get_mine_time(block_type)
+
+	if _mine_timer >= mine_time:
+		village_manager.break_block(_mine_target)
+		village_manager.add_resource(block_type)
+		village_manager.release_position(_mine_target)
+		_show_harvest_label("+1", _mine_target)
+		print("PNJ[%d]: miné surface bloc %d à %s" % [profession, block_type, str(_mine_target)])
+		_mine_target = INVALID_POS
+		_mine_timer = 0.0
+		current_task = {}
+
+func _execute_mine_gallery(delta):
+	# Minage DIRECT — le mineur creuse les blocs autour de lui, sans plan ni galerie
+	# Cherche le bloc solide le plus proche dans un rayon de 3 blocs
+	if _mine_target == INVALID_POS:
+		_mine_target = _find_minable_block_nearby()
 		if _mine_target == INVALID_POS:
-			_search_cooldown = SEARCH_COOLDOWN_DURATION
-			current_task = {}
-		else:
-			village_manager.claim_position(_mine_target)
-			_arrived_at_target = false
-			_mine_timer = 0.0
+			_task_status = "[Pioche] Cherche..."
+			# Pas de bloc minable à proximité — marcher un peu et réessayer
+			_behavior_wander(delta)
+			_mine_timer += delta
+			if _mine_timer > 5.0:
+				_mine_timer = 0.0
+				current_task = {}
+			return
+		village_manager.claim_position(_mine_target)
+		has_target = true
+		_arrived_at_target = true  # Le bloc est juste à côté, pas besoin de marcher
+		_mine_timer = 0.0
+
+	var target_world = Vector3(_mine_target.x + 0.5, _mine_target.y, _mine_target.z + 0.5)
+	_task_status = "[Pioche] Mine"
+
+	# Vérifier qu'on est assez proche (le bloc est à max 3 blocs)
+	var dist = global_position.distance_to(target_world)
+	if dist > 4.0:
+		# Trop loin (on a bougé) — relâcher et chercher un nouveau bloc proche
+		village_manager.release_position(_mine_target)
+		_mine_target = INVALID_POS
+		return
+
+	_face_target(target_world)
+	is_moving = false
+	_decelerate()
+	_play_anim("attack")
+
+	var block_type = world_manager.get_block_at_position(Vector3(_mine_target.x, _mine_target.y, _mine_target.z))
+	if block_type == BlockRegistry.BlockType.AIR:
+		village_manager.release_position(_mine_target)
+		_mine_target = INVALID_POS
 		return
 
 	_mine_timer += delta
@@ -568,15 +562,37 @@ func _execute_mine_gallery(delta):
 		village_manager.release_position(_mine_target)
 		_show_harvest_label("+1", _mine_target)
 		print("PNJ[%d]: miné bloc %d à %s" % [profession, block_type, str(_mine_target)])
+		_mine_target = INVALID_POS
+		_mine_timer = 0.0
+		# Ne pas terminer la tâche — enchaîner avec le prochain bloc nearby
 
-		# Enchaîner avec le prochain bloc de la galerie
-		_mine_target = village_manager.get_next_mine_block()
-		if _mine_target == INVALID_POS:
-			current_task = {}
-		else:
-			village_manager.claim_position(_mine_target)
-			_arrived_at_target = false
-			_mine_timer = 0.0
+func _find_minable_block_nearby() -> Vector3i:
+	# Cherche un bloc solide minable dans un rayon de 3 blocs autour du PNJ
+	# Priorité : blocs au même niveau ou en dessous (creuser vers le bas)
+	if not world_manager:
+		return INVALID_POS
+	var my_pos = Vector3i(int(round(global_position.x)), int(global_position.y), int(round(global_position.z)))
+	var best = INVALID_POS
+	var best_score = 999.0
+	# Blocs non-minables (on ne veut pas casser l'eau, l'air, le bois, les feuilles)
+	var skip_types = [0, 5, 6, 15, 32, 33, 34, 35, 36, 42, 44, 45, 46, 47, 48, 49]  # AIR, bois, feuilles, eau
+	for dx in range(-3, 4):
+		for dz in range(-3, 4):
+			for dy in range(-2, 2):  # 2 blocs en dessous, 1 au-dessus
+				var pos = Vector3i(my_pos.x + dx, my_pos.y + dy, my_pos.z + dz)
+				if village_manager.claimed_positions.has(pos):
+					continue
+				var bt = world_manager.get_block_at_position(Vector3(pos.x, pos.y, pos.z))
+				if bt == BlockRegistry.BlockType.AIR or bt in skip_types:
+					continue
+				# Score : préfère les blocs proches et en dessous
+				var dist = Vector3(dx, dy, dz).length()
+				var depth_bonus = -dy * 0.5  # bonus pour creuser vers le bas
+				var score = dist - depth_bonus
+				if score < best_score:
+					best_score = score
+					best = pos
+	return best
 
 func _execute_craft(delta):
 	var rname = current_task.get("recipe_name", "")
