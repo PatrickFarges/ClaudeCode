@@ -390,6 +390,10 @@ func _try_spawn_village(chunk_pos: Vector3i, chunk_data: Dictionary):
 	if village_mgr:
 		village_mgr.set_village_center(village_center)
 
+	# Aplatir le terrain autour du village (rayon 6 blocs)
+	# Supprime les blocs isolés au-dessus du sol pour faciliter la navigation
+	_flatten_village_area(chunk_pos, packed_blocks, center_x, center_z, center_surface_y)
+
 	# Spawn 6-8 villageois groupés (dans un rayon de 5 blocs du centre)
 	var spawned = 0
 	for i in range(VILLAGE_NPC_COUNT):
@@ -429,3 +433,34 @@ func _try_spawn_village(chunk_pos: Vector3i, chunk_data: Dictionary):
 		spawned += 1
 
 	print("WorldManager: village spawné avec %d villageois à %s" % [spawned, str(village_center)])
+
+func _flatten_village_area(chunk_pos: Vector3i, packed_blocks: PackedByteArray, cx: int, cz: int, ref_y: int):
+	# Supprimer les blocs gênants au-dessus du sol dans un rayon de 6 blocs
+	# Pour que les villageois puissent naviguer librement autour du village
+	var radius = 6
+	var cleared = 0
+	for dx in range(-radius, radius + 1):
+		for dz in range(-radius, radius + 1):
+			var lx = cx + dx
+			var lz = cz + dz
+			if lx < 0 or lx >= Chunk.CHUNK_SIZE or lz < 0 or lz >= Chunk.CHUNK_SIZE:
+				continue
+			# Trouver la surface locale
+			var local_surface_y = -1
+			for y in range(Chunk.CHUNK_HEIGHT - 1, 0, -1):
+				var bt = packed_blocks[lx * 4096 + lz * 256 + y]
+				if bt != 0 and bt != BlockRegistry.BlockType.WATER:
+					local_surface_y = y
+					break
+			if local_surface_y < 0:
+				continue
+			# Si la surface est 1-2 blocs PLUS HAUTE que le centre → casser les blocs en trop
+			var diff = local_surface_y - ref_y
+			if diff >= 1 and diff <= 3:
+				for remove_y in range(ref_y + 1, local_surface_y + 1):
+					var idx = lx * 4096 + lz * 256 + remove_y
+					if packed_blocks[idx] != 0:
+						packed_blocks[idx] = 0  # AIR
+						cleared += 1
+	if cleared > 0:
+		print("WorldManager: terrain aplati — %d blocs retirés autour du village" % cleared)

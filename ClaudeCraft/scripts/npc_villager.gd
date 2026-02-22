@@ -54,8 +54,10 @@ var target_position: Vector3 = Vector3.ZERO
 var has_target: bool = false
 var _arrived_at_target: bool = false
 var _target_stuck_timer: float = 0.0
+var _total_stuck_time: float = 0.0  # temps total bloqué (cumulé)
 var _detour_timer: float = 0.0
 var _detour_direction: Vector3 = Vector3.ZERO
+var _detour_count: int = 0  # nombre de détours effectués
 
 # === POI / Travail ===
 var claimed_poi: Vector3i = Vector3i(-9999, -9999, -9999)
@@ -358,6 +360,9 @@ func _behavior_village_work(delta):
 			_search_cooldown = 3.0  # attendre 3s avant de redemander
 			_behavior_wander(delta)
 			return
+		# Log la prise de tâche
+		var task_type = current_task.get("type", "?")
+		print("PNJ[%d]: prend tâche '%s'" % [profession, task_type])
 		# Reset navigation
 		has_target = false
 		_arrived_at_target = false
@@ -432,6 +437,7 @@ func _execute_harvest(delta):
 		village_manager.add_resource(block_type)
 		village_manager.release_position(_mine_target)
 		_show_harvest_label("+1", _mine_target)
+		print("PNJ[%d]: récolté bloc %d à %s" % [profession, block_type, str(_mine_target)])
 
 		# Aussi casser les feuilles au-dessus (décorer l'arbre)
 		_harvest_leaves_above(_mine_target)
@@ -561,6 +567,7 @@ func _execute_mine_gallery(delta):
 		village_manager.add_resource(block_type)
 		village_manager.release_position(_mine_target)
 		_show_harvest_label("+1", _mine_target)
+		print("PNJ[%d]: miné bloc %d à %s" % [profession, block_type, str(_mine_target)])
 
 		# Enchaîner avec le prochain bloc de la galerie
 		_mine_target = village_manager.get_next_mine_block()
@@ -711,6 +718,18 @@ func _walk_toward(target: Vector3, delta: float) -> bool:
 	# Arrivé
 	if dist < 1.5:
 		is_moving = false
+		_total_stuck_time = 0.0
+		_detour_count = 0
+		return true
+
+	# Téléportation de secours : bloqué depuis 12s+ → se téléporter près de la cible
+	if _total_stuck_time > 12.0:
+		var tp_pos = Vector3(target.x, target.y + 1, target.z)
+		global_position = tp_pos
+		_total_stuck_time = 0.0
+		_detour_count = 0
+		_detour_timer = 0.0
+		is_moving = false
 		return true
 
 	# En détour (contournement d'obstacle)
@@ -733,12 +752,17 @@ func _walk_toward(target: Vector3, delta: float) -> bool:
 	if _target_stuck_timer >= 2.0:
 		var moved_dist = global_position.distance_to(_last_pos)
 		if moved_dist < 0.5:
-			# Bloqué -> dévier perpendiculairement pendant 2s
+			_total_stuck_time += 2.0
+			_detour_count += 1
+			# Détour perpendiculaire — alterne gauche/droite à chaque détour
 			var perp = Vector3(-wander_direction.z, 0, wander_direction.x)
-			if randf() > 0.5:
+			if _detour_count % 2 == 0:
 				perp = -perp
 			_detour_direction = perp.normalized()
-			_detour_timer = 2.0
+			_detour_timer = 1.5
+		else:
+			# On bouge — réduire le stuck time
+			_total_stuck_time = maxf(0.0, _total_stuck_time - 1.0)
 		_last_pos = global_position
 		_target_stuck_timer = 0.0
 

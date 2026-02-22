@@ -187,6 +187,8 @@ func _evaluate_phase_0():
 
 	# Besoin de 10 bois pour démarrer
 	if total_wood < 10 and total_planks < 4:
+		if task_queue.size() == 0:
+			print("VillageManager: Phase 0 — bois=%d planches=%d → ajout tâches récolte" % [total_wood, total_planks])
 		_add_harvest_tasks(5, 6)  # WOOD + LEAVES — on vise les troncs (WOOD=5)
 		return
 
@@ -559,10 +561,10 @@ func _init_mine():
 	var best_pos = Vector3i(-9999, -9999, -9999)
 	var best_y_diff = 999
 
-	# Chercher un spot dont le surface_y est proche du centre du village
+	# Chercher un spot PROCHE (2-4 blocs) dont le surface_y est proche du centre
 	for attempt in range(15):
-		var dx = randi_range(4, 8) * (1 if randf() > 0.5 else -1)
-		var dz = randi_range(4, 8) * (1 if randf() > 0.5 else -1)
+		var dx = randi_range(2, 4) * (1 if randf() > 0.5 else -1)
+		var dz = randi_range(2, 4) * (1 if randf() > 0.5 else -1)
 		var cx = int(village_center.x) + dx
 		var cz = int(village_center.z) + dz
 		var surface_y = _find_surface_y(cx, cz)
