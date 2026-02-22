@@ -3,6 +3,8 @@ class_name NpcVillager
 
 const VProfession = preload("res://scripts/villager_profession.gd")
 
+const INVALID_POS = Vector3i(-9999, -9999, -9999)
+
 const MODEL_PATH = "res://BlockPNJ/Models/GLB format/"
 const MODEL_NAMES: Array[String] = [
 	"character-a", "character-b", "character-c", "character-d",
@@ -61,6 +63,14 @@ var poi_manager = null  # POIManager reference, passée par WorldManager
 
 const INVALID_POI = Vector3i(-9999, -9999, -9999)
 
+# === Village Manager ===
+var village_manager = null
+var current_task: Dictionary = {}
+var _mine_timer: float = 0.0
+var _mine_target: Vector3i = INVALID_POS
+var _build_timer: float = 0.0
+var _task_status: String = ""  # texte affiché
+
 func setup(model_index: int, pos: Vector3, chunk_pos: Vector3i, prof: int = 0):
 	mob_type_index = model_index
 	_spawn_pos = pos
@@ -77,6 +87,7 @@ func _ready():
 	rotation.y = randf() * TAU
 	world_manager = get_tree().get_first_node_in_group("world_manager")
 	_day_night = get_tree().get_first_node_in_group("day_night_cycle")
+	village_manager = get_node_or_null("/root/VillageManager")
 
 func _create_model():
 	if mob_type_index < 0 or mob_type_index >= _model_scenes.size():
@@ -165,12 +176,22 @@ func _on_activity_changed(old_activity: int, new_activity: int):
 		if poi_manager and claimed_poi != INVALID_POI:
 			poi_manager.release_poi(claimed_poi)
 			claimed_poi = INVALID_POI
+		# Retourner la tâche village non terminée
+		if village_manager and not current_task.is_empty():
+			if _mine_target != INVALID_POS:
+				village_manager.release_position(_mine_target)
+				_mine_target = INVALID_POS
+			village_manager.return_task(current_task)
+			current_task = {}
+		_task_status = ""
 
 	# Reset navigation
 	has_target = false
 	_arrived_at_target = false
 	_target_stuck_timer = 0.0
 	_detour_timer = 0.0
+	_mine_timer = 0.0
+	_build_timer = 0.0
 
 	# Reprendre le wander timer
 	if new_activity == VProfession.Activity.WANDER or new_activity == VProfession.Activity.GATHER:
@@ -228,7 +249,12 @@ func _behavior_go_home(delta):
 		_play_anim("idle")
 
 func _behavior_work(delta):
-	# 1. Pas de POI claimé -> en chercher un
+	# Si le VillageManager existe, utiliser le système de tâches village
+	if village_manager:
+		_behavior_village_work(delta)
+		return
+
+	# Fallback: ancien système POI
 	if claimed_poi == INVALID_POI:
 		if poi_manager:
 			var nearest = poi_manager.find_nearest_unclaimed(profession, global_position)
@@ -237,12 +263,10 @@ func _behavior_work(delta):
 					claimed_poi = nearest
 					has_target = false
 					_arrived_at_target = false
-		# Pas de POI trouvé -> fallback wander
 		if claimed_poi == INVALID_POI:
 			_behavior_wander(delta)
 			return
 
-	# 2. POI claimé mais pas arrivé -> marcher vers le POI
 	var poi_world = Vector3(claimed_poi.x + 0.5, claimed_poi.y, claimed_poi.z + 0.5)
 
 	if not _arrived_at_target:
@@ -250,8 +274,6 @@ func _behavior_work(delta):
 			_arrived_at_target = true
 		return
 
-	# 3. Arrivé au POI -> travailler
-	# Faire face au bloc
 	var dir_to_poi = poi_world - global_position
 	if dir_to_poi.length_squared() > 0.01:
 		rotation.y = atan2(dir_to_poi.x, dir_to_poi.z)
@@ -260,6 +282,294 @@ func _behavior_work(delta):
 	_decelerate()
 	var work_anim = VProfession.get_work_anim(profession)
 	_play_anim(work_anim)
+
+# ============================================================
+# VILLAGE WORK — exécution des tâches du VillageManager
+# ============================================================
+
+func _behavior_village_work(delta):
+	# Pas de tâche -> en demander une
+	if current_task.is_empty():
+		current_task = village_manager.get_next_task()
+		if current_task.is_empty():
+			_task_status = "Attend une tâche"
+			_behavior_wander(delta)
+			return
+		# Reset navigation
+		has_target = false
+		_arrived_at_target = false
+		_mine_timer = 0.0
+		_mine_target = INVALID_POS
+
+	# Dispatcher par type de tâche
+	match current_task.get("type", ""):
+		"harvest":
+			_execute_harvest(delta)
+		"mine":
+			_execute_mine(delta)
+		"craft":
+			_execute_craft(delta)
+		"place_workstation":
+			_execute_place_workstation(delta)
+		"build":
+			_execute_build(delta)
+		_:
+			current_task = {}
+
+func _execute_harvest(delta):
+	# Trouver un arbre
+	if _mine_target == INVALID_POS:
+		var block_type = current_task.get("target_block", 5)  # WOOD par défaut
+		_mine_target = village_manager.find_nearest_block(block_type, global_position, 40.0)
+		if _mine_target == INVALID_POS:
+			_task_status = "Cherche du bois..."
+			# Pas de bois trouvé, retourner la tâche
+			village_manager.return_task(current_task)
+			current_task = {}
+			return
+		village_manager.claim_position(_mine_target)
+		has_target = true
+		_arrived_at_target = false
+		_mine_timer = 0.0
+
+	# Marcher vers l'arbre
+	var target_world = Vector3(_mine_target.x + 0.5, _mine_target.y, _mine_target.z + 0.5)
+	_task_status = "Récolte du bois"
+
+	if not _arrived_at_target:
+		var dist = Vector3(global_position.x, 0, global_position.z).distance_to(
+			Vector3(target_world.x, 0, target_world.z))
+		if dist < 2.5:
+			_arrived_at_target = true
+		else:
+			_walk_toward(target_world, delta)
+			return
+
+	# Arrivé -> miner le bloc
+	_face_target(target_world)
+	is_moving = false
+	_decelerate()
+	_play_anim("attack")
+
+	var block_type = world_manager.get_block_at_position(Vector3(_mine_target.x, _mine_target.y, _mine_target.z))
+	if block_type == BlockRegistry.BlockType.AIR:
+		# Bloc déjà cassé
+		village_manager.release_position(_mine_target)
+		_mine_target = INVALID_POS
+		current_task = {}
+		return
+
+	_mine_timer += delta
+	var mine_time = village_manager.get_mine_time(block_type)
+
+	if _mine_timer >= mine_time:
+		# Casser le bloc
+		village_manager.break_block(_mine_target)
+		village_manager.add_resource(block_type)
+		village_manager.release_position(_mine_target)
+		_show_harvest_label("+1", _mine_target)
+
+		# Aussi casser les feuilles au-dessus (décorer l'arbre)
+		_harvest_leaves_above(_mine_target)
+
+		_mine_target = INVALID_POS
+		_mine_timer = 0.0
+		current_task = {}
+
+func _harvest_leaves_above(trunk_pos: Vector3i):
+	# Casser les feuilles connectées au tronc (simple: colonne au-dessus)
+	var leaf_types = [6, 44, 45, 46, 47, 48, 49]  # LEAVES + variantes
+	for dy in range(1, 8):
+		var check_pos = Vector3i(trunk_pos.x, trunk_pos.y + dy, trunk_pos.z)
+		var bt = world_manager.get_block_at_position(Vector3(check_pos.x, check_pos.y, check_pos.z))
+		if bt in leaf_types:
+			village_manager.break_block(check_pos)
+		elif bt == BlockRegistry.BlockType.AIR:
+			continue
+		else:
+			break
+
+func _execute_mine(delta):
+	# Miner de la pierre / minerais
+	if _mine_target == INVALID_POS:
+		var block_type = current_task.get("target_block", 3)  # STONE par défaut
+		_mine_target = village_manager.find_nearest_surface_block(block_type, global_position, 40.0)
+		if _mine_target == INVALID_POS:
+			# Essayer plus profond (pas seulement en surface)
+			_mine_target = village_manager.find_nearest_block(block_type, global_position, 40.0)
+		if _mine_target == INVALID_POS:
+			_task_status = "Cherche des minerais..."
+			village_manager.return_task(current_task)
+			current_task = {}
+			return
+		village_manager.claim_position(_mine_target)
+		has_target = true
+		_arrived_at_target = false
+		_mine_timer = 0.0
+
+	var target_world = Vector3(_mine_target.x + 0.5, _mine_target.y, _mine_target.z + 0.5)
+	_task_status = "Mine"
+
+	if not _arrived_at_target:
+		var dist = Vector3(global_position.x, 0, global_position.z).distance_to(
+			Vector3(target_world.x, 0, target_world.z))
+		if dist < 2.5:
+			_arrived_at_target = true
+		else:
+			_walk_toward(target_world, delta)
+			return
+
+	_face_target(target_world)
+	is_moving = false
+	_decelerate()
+	_play_anim("attack")
+
+	var block_type = world_manager.get_block_at_position(Vector3(_mine_target.x, _mine_target.y, _mine_target.z))
+	if block_type == BlockRegistry.BlockType.AIR:
+		village_manager.release_position(_mine_target)
+		_mine_target = INVALID_POS
+		current_task = {}
+		return
+
+	_mine_timer += delta
+	var mine_time = village_manager.get_mine_time(block_type)
+
+	if _mine_timer >= mine_time:
+		village_manager.break_block(_mine_target)
+		village_manager.add_resource(block_type)
+		village_manager.release_position(_mine_target)
+		_show_harvest_label("+1", _mine_target)
+		_mine_target = INVALID_POS
+		_mine_timer = 0.0
+		current_task = {}
+
+func _execute_craft(delta):
+	_task_status = "Craft"
+	# Le craft est instantané (pas besoin de marcher)
+	var recipe_name = current_task.get("recipe_name", "")
+	if recipe_name == "":
+		current_task = {}
+		return
+
+	# Animation brève de craft
+	is_moving = false
+	_decelerate()
+	_play_anim("attack")
+
+	var success = village_manager.try_craft(recipe_name)
+	if not success:
+		# Pas assez de ressources, retourner la tâche
+		village_manager.return_task(current_task)
+	current_task = {}
+
+func _execute_place_workstation(delta):
+	var block_type = current_task.get("target_block", -1)
+	if block_type < 0 or not village_manager.has_resources(block_type, 1):
+		current_task = {}
+		return
+
+	_task_status = "Place un atelier"
+
+	# Trouver un emplacement
+	if not current_task.has("place_pos"):
+		var spot = village_manager.find_flat_spot_near_center()
+		if spot == INVALID_POS:
+			village_manager.return_task(current_task)
+			current_task = {}
+			return
+		current_task["place_pos"] = spot
+
+	var place_pos = current_task["place_pos"]
+	var target_world = Vector3(place_pos.x + 0.5, place_pos.y, place_pos.z + 0.5)
+
+	# Marcher vers l'emplacement
+	if not _arrived_at_target:
+		var dist = Vector3(global_position.x, 0, global_position.z).distance_to(
+			Vector3(target_world.x, 0, target_world.z))
+		if dist < 2.5:
+			_arrived_at_target = true
+		else:
+			_walk_toward(target_world, delta)
+			return
+
+	# Placer le bloc
+	_face_target(target_world)
+	is_moving = false
+	_decelerate()
+	_play_anim("attack")
+
+	village_manager.consume_resources(block_type, 1)
+	village_manager.place_workstation_at(block_type, place_pos)
+	_show_harvest_label("Workstation!", place_pos)
+	current_task = {}
+
+func _execute_build(delta):
+	_task_status = "Construit"
+	var block_list = current_task.get("block_list", [])
+	var block_index = current_task.get("block_index", 0)
+	var origin = current_task.get("origin", Vector3i.ZERO)
+
+	if block_index >= block_list.size():
+		# Construction terminée
+		var bp_index = current_task.get("blueprint_index", 0)
+		if bp_index < village_manager.BLUEPRINTS.size():
+			var bp = village_manager.BLUEPRINTS[bp_index]
+			village_manager.register_built_structure(bp["name"], origin, bp["size"])
+		current_task = {}
+		return
+
+	# Bloc courant à placer
+	var block_data = block_list[block_index]
+	var world_pos = Vector3i(
+		origin.x + block_data[0],
+		origin.y + block_data[1],
+		origin.z + block_data[2]
+	)
+	var target_world = Vector3(world_pos.x + 0.5, world_pos.y, world_pos.z + 0.5)
+
+	# Marcher vers la position de construction
+	if not _arrived_at_target:
+		var dist = Vector3(global_position.x, 0, global_position.z).distance_to(
+			Vector3(target_world.x, 0, target_world.z))
+		if dist < 3.0:
+			_arrived_at_target = true
+		else:
+			_walk_toward(target_world, delta)
+			return
+
+	# Placer le bloc
+	_face_target(target_world)
+	is_moving = false
+	_decelerate()
+	_play_anim("attack")
+
+	_build_timer += delta
+	if _build_timer >= 0.8:
+		_build_timer = 0.0
+		village_manager.place_block(world_pos, block_data[3])
+		current_task["block_index"] = block_index + 1
+		_arrived_at_target = false  # Bouger vers le prochain bloc
+
+func _face_target(target: Vector3):
+	var dir = target - global_position
+	if dir.length_squared() > 0.01:
+		rotation.y = atan2(dir.x, dir.z)
+
+func _show_harvest_label(text: String, pos: Vector3i):
+	var label = Label3D.new()
+	label.text = text
+	label.font_size = 32
+	label.modulate = Color(0.2, 1.0, 0.3)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.position = Vector3(pos.x + 0.5, pos.y + 1.5, pos.z + 0.5)
+	get_tree().current_scene.add_child(label)
+
+	# Tween: monte et disparaît
+	var tween = get_tree().create_tween()
+	tween.tween_property(label, "position:y", label.position.y + 1.5, 1.0)
+	tween.parallel().tween_property(label, "modulate:a", 0.0, 1.0)
+	tween.tween_callback(label.queue_free)
 
 # ============================================================
 # NAVIGATION VERS UNE CIBLE
@@ -373,10 +683,19 @@ func take_hit(damage: int, knockback: Vector3 = Vector3.ZERO):
 	if health <= 0:
 		if claimed_poi != Vector3i(-9999, -9999, -9999) and poi_manager:
 			poi_manager.release_poi(claimed_poi)
+		if village_manager:
+			if _mine_target != INVALID_POS:
+				village_manager.release_position(_mine_target)
+			if not current_task.is_empty():
+				village_manager.return_task(current_task)
+			village_manager.unregister_villager(self)
 		queue_free()
 
 func get_info_text() -> String:
 	var prof_name = VProfession.get_profession_name(profession)
+	# Si en mode village work, afficher la tâche en cours
+	if village_manager and current_activity == VProfession.Activity.WORK and _task_status != "":
+		return "%s - %s" % [prof_name, _task_status]
 	var activity_names = {
 		VProfession.Activity.WANDER: "Se promène",
 		VProfession.Activity.WORK: "Au travail",

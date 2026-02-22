@@ -20,6 +20,7 @@ config/icon="res://icon.svg"
 
 TextureManager="*res://scripts/texture_manager.gd"
 StructureManager="*res://scripts/structure_manager.gd"
+VillageManager="*res://scripts/village_manager.gd"
 
 [display]
 

@@ -26,6 +26,10 @@ const MAX_NPCS = 20
 # POI Manager
 var poi_manager = null
 
+# Village
+var _village_spawned: bool = false
+const VILLAGE_NPC_COUNT = 8
+
 func _ready():
 	# Générer un seed aléatoire si non défini
 	if world_seed == 0:
@@ -147,8 +151,9 @@ func _on_chunk_data_ready(chunk_data: Dictionary):
 	# Tenter de spawn des mobs passifs
 	_try_spawn_mobs(chunk_pos, chunk_data)
 
-	# Tenter de spawn des PNJ villageois
-	_try_spawn_npcs(chunk_pos, chunk_data)
+	# Tenter de spawn le village (une seule fois, près du joueur)
+	if not _village_spawned and player:
+		_try_spawn_village(chunk_pos, chunk_data)
 
 func _unload_distant_chunks(player_chunk_pos: Vector3i):
 	var chunks_to_remove = []
@@ -180,6 +185,7 @@ func _unload_distant_chunks(player_chunk_pos: Vector3i):
 	mobs = remaining_mobs
 
 	# Supprimer les NPCs des chunks déchargés + libérer leurs POI
+	var village_mgr = get_node_or_null("/root/VillageManager")
 	var remaining_npcs = []
 	for npc_data in npcs:
 		if chunks_to_remove.has(npc_data["chunk_pos"]):
@@ -187,6 +193,8 @@ func _unload_distant_chunks(player_chunk_pos: Vector3i):
 				var npc = npc_data["npc"]
 				if poi_manager and npc.claimed_poi != Vector3i(-9999, -9999, -9999):
 					poi_manager.release_poi(npc.claimed_poi)
+				if village_mgr:
+					village_mgr.unregister_villager(npc)
 				npc.queue_free()
 		else:
 			remaining_npcs.append(npc_data)
@@ -343,52 +351,81 @@ func _try_spawn_mobs(chunk_pos: Vector3i, chunk_data: Dictionary):
 # PNJ VILLAGEOIS
 # ============================================================
 
-func _try_spawn_npcs(chunk_pos: Vector3i, chunk_data: Dictionary):
-	if npcs.size() >= MAX_NPCS:
+func _try_spawn_village(chunk_pos: Vector3i, chunk_data: Dictionary):
+	# Spawn le village seulement dans le chunk du joueur
+	var player_chunk = _world_to_chunk(player.global_position)
+	if chunk_pos != player_chunk:
 		return
 
-	# 5% de chance par chunk (hash avec offset pour éviter collision avec mobs)
-	var hash_val = abs((chunk_pos.x * 374761393 + chunk_pos.z * 668265263 + 999983) >> 13) % 100
-	if hash_val >= 5:
-		return
+	_village_spawned = true
 
 	var packed_blocks = chunk_data["blocks"]
+	var village_mgr = get_node_or_null("/root/VillageManager")
 
-	var lx = ((hash_val + 1) * 11) % 16
-	var lz = ((hash_val + 1) * 17) % 16
+	# Centre du village = position du joueur
+	var center_x = int(player.global_position.x) % Chunk.CHUNK_SIZE
+	var center_z = int(player.global_position.z) % Chunk.CHUNK_SIZE
+	if center_x < 0:
+		center_x += Chunk.CHUNK_SIZE
+	if center_z < 0:
+		center_z += Chunk.CHUNK_SIZE
 
-	# Trouver la surface
-	var surface_y = -1
-	var surface_block = 0
+	# Trouver la surface au centre
+	var center_surface_y = -1
 	for y in range(Chunk.CHUNK_HEIGHT - 1, 0, -1):
-		var bt = packed_blocks[lx * 4096 + lz * 256 + y]
+		var bt = packed_blocks[center_x * 4096 + center_z * 256 + y]
 		if bt != 0 and bt != BlockRegistry.BlockType.WATER:
-			surface_y = y + 1
-			surface_block = bt
+			center_surface_y = y + 1
 			break
 
-	if surface_y < 0 or surface_y >= Chunk.CHUNK_HEIGHT - 2:
+	if center_surface_y < 0:
 		return
 
-	# Seulement sur herbe (pas sable)
-	var valid_blocks = [
-		BlockRegistry.BlockType.GRASS,
-		BlockRegistry.BlockType.DARK_GRASS,
-	]
-	if surface_block not in valid_blocks:
-		return
+	var village_center = Vector3(
+		chunk_pos.x * Chunk.CHUNK_SIZE + center_x + 0.5,
+		center_surface_y,
+		chunk_pos.z * Chunk.CHUNK_SIZE + center_z + 0.5
+	)
 
-	# Assigner une profession déterministe via hash
-	var prof = (hash_val * 7 + 3) % 9  # 0-8, réparti sur les 9 valeurs de Profession
-	var model_index = VProfession.get_model_for_profession(prof, hash_val)
+	if village_mgr:
+		village_mgr.set_village_center(village_center)
 
-	var world_x = chunk_pos.x * Chunk.CHUNK_SIZE + lx + 0.5
-	var world_z = chunk_pos.z * Chunk.CHUNK_SIZE + lz + 0.5
-	var spawn_pos = Vector3(world_x, surface_y, world_z)
+	# Spawn 6-8 villageois groupés (dans un rayon de 5 blocs du centre)
+	var spawned = 0
+	for i in range(VILLAGE_NPC_COUNT):
+		var offset_x = randi_range(-4, 4)
+		var offset_z = randi_range(-4, 4)
+		var lx = clampi(center_x + offset_x, 0, Chunk.CHUNK_SIZE - 1)
+		var lz = clampi(center_z + offset_z, 0, Chunk.CHUNK_SIZE - 1)
 
-	var npc = NpcVillagerScene.new()
-	npc.setup(model_index, spawn_pos, chunk_pos, prof)
-	if poi_manager:
-		npc.poi_manager = poi_manager
-	get_parent().call_deferred("add_child", npc)
-	npcs.append({"npc": npc, "chunk_pos": chunk_pos})
+		var surface_y = -1
+		for y in range(Chunk.CHUNK_HEIGHT - 1, 0, -1):
+			var bt = packed_blocks[lx * 4096 + lz * 256 + y]
+			if bt != 0 and bt != BlockRegistry.BlockType.WATER:
+				surface_y = y + 1
+				break
+
+		if surface_y < 0 or surface_y >= Chunk.CHUNK_HEIGHT - 2:
+			continue
+
+		# Assigner une profession (répartie sur les 9 valeurs)
+		var prof = i % 9
+		var model_index = VProfession.get_model_for_profession(prof, i)
+
+		var world_x = chunk_pos.x * Chunk.CHUNK_SIZE + lx + 0.5
+		var world_z = chunk_pos.z * Chunk.CHUNK_SIZE + lz + 0.5
+		var spawn_pos = Vector3(world_x, surface_y, world_z)
+
+		var npc = NpcVillagerScene.new()
+		npc.setup(model_index, spawn_pos, chunk_pos, prof)
+		if poi_manager:
+			npc.poi_manager = poi_manager
+		get_parent().call_deferred("add_child", npc)
+		npcs.append({"npc": npc, "chunk_pos": chunk_pos})
+
+		if village_mgr:
+			village_mgr.register_villager(npc)
+
+		spawned += 1
+
+	print("WorldManager: village spawné avec %d villageois à %s" % [spawned, str(village_center)])
