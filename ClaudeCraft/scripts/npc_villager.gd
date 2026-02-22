@@ -508,13 +508,11 @@ func _execute_mine(delta):
 		current_task = {}
 
 func _execute_mine_gallery(delta):
-	# Minage en galerie — creuser le prochain bloc accessible du plan de mine
+	# Minage en galerie — creuser séquentiellement le plan de mine (top-down)
 	if _mine_target == INVALID_POS:
 		_mine_target = village_manager.get_next_mine_block()
 		if _mine_target == INVALID_POS:
-			# Ne devrait plus arriver (la mine s'étend automatiquement)
-			# Mais au cas où, réessayer dans quelques secondes
-			_task_status = "[Pioche] Cherche..."
+			_task_status = "[Pioche] Attend..."
 			current_task = {}
 			_search_cooldown = SEARCH_COOLDOWN_DURATION
 			return
@@ -527,9 +525,9 @@ func _execute_mine_gallery(delta):
 	_task_status = "[Pioche] Mine"
 
 	if not _arrived_at_target:
-		# Distance XZ seulement (le bloc peut être sous nos pieds)
-		var xz_dist = Vector2(global_position.x - target_world.x, global_position.z - target_world.z).length()
-		if xz_dist < 2.5:
+		# Distance 3D pour la mine (le mineur descend dans l'escalier)
+		var dist = global_position.distance_to(target_world)
+		if dist < 3.0:
 			_arrived_at_target = true
 		else:
 			_walk_toward(target_world, delta)
@@ -544,7 +542,7 @@ func _execute_mine_gallery(delta):
 	if block_type == BlockRegistry.BlockType.AIR:
 		village_manager.release_position(_mine_target)
 		_mine_target = INVALID_POS
-		# Prendre le prochain bloc directement (la mine s'étend automatiquement)
+		# Enchaîner directement avec le prochain bloc
 		_mine_target = village_manager.get_next_mine_block()
 		if _mine_target == INVALID_POS:
 			_search_cooldown = SEARCH_COOLDOWN_DURATION
