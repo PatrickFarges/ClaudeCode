@@ -6,7 +6,7 @@ var biome_label: Label
 var time_label: Label
 var target_label: Label
 
-const VERSION = "v8.0.0"
+const VERSION = "v8.1.0"
 
 var audio_manager = null
 var player = null

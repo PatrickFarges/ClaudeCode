@@ -512,7 +512,9 @@ func _execute_mine_gallery(delta):
 	if _mine_target == INVALID_POS:
 		_mine_target = village_manager.get_next_mine_block()
 		if _mine_target == INVALID_POS:
-			_task_status = "Mine terminee"
+			# Ne devrait plus arriver (la mine s'étend automatiquement)
+			# Mais au cas où, réessayer dans quelques secondes
+			_task_status = "[Pioche] Cherche..."
 			current_task = {}
 			_search_cooldown = SEARCH_COOLDOWN_DURATION
 			return
@@ -542,9 +544,10 @@ func _execute_mine_gallery(delta):
 	if block_type == BlockRegistry.BlockType.AIR:
 		village_manager.release_position(_mine_target)
 		_mine_target = INVALID_POS
-		# Prendre le prochain bloc directement
+		# Prendre le prochain bloc directement (la mine s'étend automatiquement)
 		_mine_target = village_manager.get_next_mine_block()
 		if _mine_target == INVALID_POS:
+			_search_cooldown = SEARCH_COOLDOWN_DURATION
 			current_task = {}
 		else:
 			village_manager.claim_position(_mine_target)

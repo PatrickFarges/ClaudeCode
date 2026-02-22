@@ -54,6 +54,9 @@ var mine_plan: Array = []          # Array de Vector3i — blocs à creuser dans
 var mine_plan_index: int = 0       # prochain bloc à assigner
 var mine_entrance: Vector3i = Vector3i(-9999, -9999, -9999)
 var _mine_initialized: bool = false
+var _mine_gallery_center: Vector3i = Vector3i.ZERO  # centre de la galerie actuelle
+var _mine_gallery_y: int = 45      # profondeur galerie actuelle
+var _mine_expansion_dir: int = 0   # direction de la prochaine expansion (0-3)
 
 # === TIMER ===
 var _eval_timer: float = 0.0
@@ -625,16 +628,28 @@ func _init_mine():
 		mine_plan.append(Vector3i(gallery_center.x, target_y, gallery_center.z - i))
 		mine_plan.append(Vector3i(gallery_center.x, target_y + 1, gallery_center.z - i))
 
+	_mine_gallery_center = gallery_center
+	_mine_gallery_y = target_y
+	_mine_expansion_dir = 0
 	print("VillageManager: mine planifiée — %d blocs à creuser depuis %s (galerie à y=%d)" % [mine_plan.size(), str(mine_entrance), target_y])
 
-const MINE_LOOKAHEAD = 16  # ne chercher que 16 blocs solides devant le front
+const MINE_LOOKAHEAD = 24  # chercher 24 blocs solides devant le front
 
 func get_next_mine_block() -> Vector3i:
 	# Retourne le prochain bloc ACCESSIBLE au FRONT de la mine
-	# Lookahead limité pour ne pas sauter vers des grottes lointaines
+	# Si le plan est épuisé, auto-expand avec de nouvelles galeries
 	if not world_manager:
 		return Vector3i(-9999, -9999, -9999)
 
+	var result = _scan_mine_plan()
+	if result != Vector3i(-9999, -9999, -9999):
+		return result
+
+	# Plan épuisé → étendre la mine avec de nouvelles galeries
+	_expand_mine()
+	return _scan_mine_plan()
+
+func _scan_mine_plan() -> Vector3i:
 	var solid_count = 0
 	for i in range(mine_plan.size()):
 		var pos = mine_plan[i]
@@ -643,13 +658,60 @@ func get_next_mine_block() -> Vector3i:
 		var bt = world_manager.get_block_at_position(Vector3(pos.x, pos.y, pos.z))
 		if bt == BlockRegistry.BlockType.AIR or bt == BlockRegistry.BlockType.WATER:
 			continue
-		# C'est un bloc solide à miner
 		solid_count += 1
 		if solid_count > MINE_LOOKAHEAD:
-			break  # Trop loin du front, arrêter
+			break
 		if _is_block_accessible(pos):
 			return pos
 	return Vector3i(-9999, -9999, -9999)
+
+func _expand_mine():
+	# Étendre la mine avec de nouvelles galeries — la mine ne s'arrête jamais
+	# Alterne entre : nouvelles branches au même niveau, puis descente d'un niveau
+	_mine_expansion_dir += 1
+	var branch_len = 12
+	var old_size = mine_plan.size()
+
+	if _mine_expansion_dir % 5 == 0:
+		# Tous les 5 expansions : descendre de 5 blocs et créer un nouveau niveau
+		var new_y = _mine_gallery_y - 5
+		if new_y < 10:
+			new_y = 10
+		# Escalier de descente depuis le centre actuel
+		var pos = _mine_gallery_center
+		while pos.y > new_y:
+			mine_plan.append(Vector3i(pos.x, pos.y, pos.z))
+			mine_plan.append(Vector3i(pos.x, pos.y + 1, pos.z))
+			pos = Vector3i(pos.x + 1, pos.y - 1, pos.z)
+		_mine_gallery_y = new_y
+		_mine_gallery_center = pos
+		# 4 branches depuis le nouveau centre
+		for dir in range(4):
+			var dx = [1, -1, 0, 0][dir]
+			var dz = [0, 0, 1, -1][dir]
+			for i in range(1, branch_len + 1):
+				mine_plan.append(Vector3i(pos.x + dx * i, new_y, pos.z + dz * i))
+				mine_plan.append(Vector3i(pos.x + dx * i, new_y + 1, pos.z + dz * i))
+	else:
+		# Extension latérale : nouvelle branche dans une direction décalée
+		var y = _mine_gallery_y
+		var cx = _mine_gallery_center.x
+		var cz = _mine_gallery_center.z
+		# Décaler le point de départ à chaque expansion pour explorer de nouvelles zones
+		var offset = _mine_expansion_dir * 3
+		var dir_idx = _mine_expansion_dir % 4
+		var dx = [1, -1, 0, 0][dir_idx]
+		var dz = [0, 0, 1, -1][dir_idx]
+		# Point de départ décalé perpendiculairement
+		var perp_dx = dz  # perpendiculaire
+		var perp_dz = -dx if dx != 0 else 1
+		var start_x = cx + perp_dx * offset
+		var start_z = cz + perp_dz * offset
+		for i in range(branch_len):
+			mine_plan.append(Vector3i(start_x + dx * i, y, start_z + dz * i))
+			mine_plan.append(Vector3i(start_x + dx * i, y + 1, start_z + dz * i))
+
+	print("VillageManager: mine étendue — +%d blocs (total %d, y=%d)" % [mine_plan.size() - old_size, mine_plan.size(), _mine_gallery_y])
 
 func _is_block_accessible(pos: Vector3i) -> bool:
 	# Un bloc est accessible s'il a au moins un voisin AIR (on peut l'atteindre)
