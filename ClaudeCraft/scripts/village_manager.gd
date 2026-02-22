@@ -230,7 +230,7 @@ func _evaluate_phase_1():
 
 	# Commencer à miner (galerie souterraine)
 	if total_stone < 20:
-		_add_mine_gallery_tasks(4)
+		_add_mine_gallery_tasks(2)
 
 	# Crafter le fourneau (8 stone, recette wood_table -> en réalité on simplifie)
 	if total_stone >= 8 and not placed_workstations.has(21):  # FURNACE
@@ -273,7 +273,7 @@ func _evaluate_phase_2():
 
 	# Miner en galerie (pierre + charbon + fer trouvés automatiquement)
 	if total_stone < 15 or total_coal < 8 or (total_iron_ore < 4 and total_iron < 4):
-		_add_mine_gallery_tasks(4)
+		_add_mine_gallery_tasks(2)
 
 	# Fondre le fer (recette furnace: 1 iron_ore + 1 coal_ore -> 1 iron_ingot)
 	if total_iron_ore >= 1 and total_coal >= 1 and total_iron < 4:
@@ -319,7 +319,7 @@ func _evaluate_phase_3():
 	if total_wood < 20:
 		_add_harvest_tasks(5, 3)
 	if total_stone < 20:
-		_add_mine_gallery_tasks(4)
+		_add_mine_gallery_tasks(2)
 
 	# Construire plus
 	if built_structures.size() < BLUEPRINTS.size():
@@ -546,14 +546,14 @@ func invalidate_scan_cache():
 # ============================================================
 
 func _init_mine():
-	# Trouver un spot d'entrée près du village center
+	# Trouver un spot d'entrée PROCHE du village center
 	if _mine_initialized:
 		return
 	if not world_manager:
 		return
 
-	var cx = int(village_center.x) + randi_range(8, 15)
-	var cz = int(village_center.z) + randi_range(8, 15)
+	var cx = int(village_center.x) + randi_range(4, 8)
+	var cz = int(village_center.z) + randi_range(4, 8)
 	var surface_y = _find_surface_y(cx, cz)
 	if surface_y < 0:
 		return
@@ -561,71 +561,55 @@ func _init_mine():
 	mine_entrance = Vector3i(cx, surface_y, cz)
 	_mine_initialized = true
 
-	# Générer le plan de mine
-	# Phase 1: Escalier descendant (2 blocs de haut, descend de 1 par pas)
-	# Direction: +X (arbitraire, on creuse vers l'est)
-	var stair_dir = Vector3i(1, 0, 0)
-	var pos = mine_entrance
+	# Générer le plan de mine — escalier raide puis galerie en étoile
+	# Escalier : descend de 2 blocs par pas (1 avance horizontale = 2 descente)
+	# Cela réduit la distance horizontale de moitié
 	mine_plan.clear()
 	mine_plan_index = 0
 
-	# Creuser l'escalier de la surface jusqu'à y=30 (zone des minerais)
-	var target_y = 30
-	var step = 0
+	var pos = mine_entrance
+	var target_y = 40  # première galerie à y=40 (pas trop profond)
+
+	# Phase 1: Escalier descendant raide (2 blocs de haut, descend de 2 par pas)
 	while pos.y > target_y:
-		# Bloc au niveau des pieds
+		# Creuser 3 blocs de haut pour l'escalier raide (pieds, corps, tête)
 		mine_plan.append(Vector3i(pos.x, pos.y, pos.z))
-		# Bloc au niveau de la tête
 		mine_plan.append(Vector3i(pos.x, pos.y + 1, pos.z))
-		# Descendre d'un cran
-		pos = Vector3i(pos.x + stair_dir.x, pos.y - 1, pos.z + stair_dir.z)
-		step += 1
-		# Tous les 3 pas, ajouter un palier (2 blocs plats pour que les PNJ ne tombent pas)
-		if step % 3 == 0:
-			mine_plan.append(Vector3i(pos.x, pos.y + 1, pos.z))
-			mine_plan.append(Vector3i(pos.x, pos.y + 2, pos.z))
+		mine_plan.append(Vector3i(pos.x, pos.y + 2, pos.z))
+		# Descendre de 2 et avancer de 1
+		pos = Vector3i(pos.x + 1, pos.y - 2, pos.z)
 
-	# Phase 2: Galeries horizontales en branches à y=30, y=20, y=10
-	for gallery_y in [30, 20, 10]:
-		# Le couloir principal continue à cette profondeur
-		var gallery_start = Vector3i(pos.x, gallery_y, pos.z)
-		if gallery_y != 30:
-			# Escalier vers le prochain niveau
-			var descent_pos = mine_plan[mine_plan.size() - 1] if mine_plan.size() > 0 else pos
-			# On continue à descendre depuis la fin du plan actuel
-			var cur = Vector3i(descent_pos.x + 1, descent_pos.y, descent_pos.z)
-			while cur.y > gallery_y:
-				mine_plan.append(Vector3i(cur.x, cur.y, cur.z))
-				mine_plan.append(Vector3i(cur.x, cur.y + 1, cur.z))
-				cur = Vector3i(cur.x + 1, cur.y - 1, cur.z)
-			gallery_start = cur
+	# Phase 2: Galerie en étoile à target_y — 4 branches depuis un centre
+	var gallery_center = Vector3i(pos.x, target_y, pos.z)
 
-		# Galerie principale: 20 blocs tout droit
-		for i in range(20):
-			var gx = gallery_start.x + i
-			mine_plan.append(Vector3i(gx, gallery_y, gallery_start.z))
-			mine_plan.append(Vector3i(gx, gallery_y + 1, gallery_start.z))
+	# Branche +X (est, 12 blocs)
+	for i in range(12):
+		mine_plan.append(Vector3i(gallery_center.x + i, target_y, gallery_center.z))
+		mine_plan.append(Vector3i(gallery_center.x + i, target_y + 1, gallery_center.z))
+	# Branche -X (ouest, 12 blocs)
+	for i in range(1, 12):
+		mine_plan.append(Vector3i(gallery_center.x - i, target_y, gallery_center.z))
+		mine_plan.append(Vector3i(gallery_center.x - i, target_y + 1, gallery_center.z))
+	# Branche +Z (sud, 12 blocs)
+	for i in range(1, 12):
+		mine_plan.append(Vector3i(gallery_center.x, target_y, gallery_center.z + i))
+		mine_plan.append(Vector3i(gallery_center.x, target_y + 1, gallery_center.z + i))
+	# Branche -Z (nord, 12 blocs)
+	for i in range(1, 12):
+		mine_plan.append(Vector3i(gallery_center.x, target_y, gallery_center.z - i))
+		mine_plan.append(Vector3i(gallery_center.x, target_y + 1, gallery_center.z - i))
 
-		# Branches perpendiculaires tous les 4 blocs
-		for branch_i in range(5):
-			var branch_x = gallery_start.x + branch_i * 4
-			# Branche sud (10 blocs)
-			for bz in range(1, 11):
-				mine_plan.append(Vector3i(branch_x, gallery_y, gallery_start.z + bz))
-				mine_plan.append(Vector3i(branch_x, gallery_y + 1, gallery_start.z + bz))
-			# Branche nord (10 blocs)
-			for bz in range(1, 11):
-				mine_plan.append(Vector3i(branch_x, gallery_y, gallery_start.z - bz))
-				mine_plan.append(Vector3i(branch_x, gallery_y + 1, gallery_start.z - bz))
+	print("VillageManager: mine planifiée — %d blocs à creuser depuis %s (galerie à y=%d)" % [mine_plan.size(), str(mine_entrance), target_y])
 
-	print("VillageManager: mine planifiée — %d blocs à creuser depuis %s" % [mine_plan.size(), str(mine_entrance)])
+const MINE_LOOKAHEAD = 16  # ne chercher que 16 blocs solides devant le front
 
 func get_next_mine_block() -> Vector3i:
-	# Retourne le prochain bloc ACCESSIBLE à creuser (doit avoir de l'air adjacent)
-	# Scan depuis le début pour trouver les blocs au front de la mine
+	# Retourne le prochain bloc ACCESSIBLE au FRONT de la mine
+	# Lookahead limité pour ne pas sauter vers des grottes lointaines
 	if not world_manager:
 		return Vector3i(-9999, -9999, -9999)
 
+	var solid_count = 0
 	for i in range(mine_plan.size()):
 		var pos = mine_plan[i]
 		if claimed_positions.has(pos):
@@ -633,7 +617,10 @@ func get_next_mine_block() -> Vector3i:
 		var bt = world_manager.get_block_at_position(Vector3(pos.x, pos.y, pos.z))
 		if bt == BlockRegistry.BlockType.AIR or bt == BlockRegistry.BlockType.WATER:
 			continue
-		# Vérifier que le bloc est accessible (au moins 1 face adjacente = AIR)
+		# C'est un bloc solide à miner
+		solid_count += 1
+		if solid_count > MINE_LOOKAHEAD:
+			break  # Trop loin du front, arrêter
 		if _is_block_accessible(pos):
 			return pos
 	return Vector3i(-9999, -9999, -9999)
@@ -651,21 +638,28 @@ func _is_block_accessible(pos: Vector3i) -> bool:
 			return true
 	return false
 
+const MAX_MINERS = 2  # max 2 mineurs simultanés (tunnel 2 blocs de large)
+
 func _add_mine_gallery_tasks(count: int):
-	# Ajouter des tâches de minage en galerie
+	# Ajouter des tâches de minage en galerie (limité à MAX_MINERS)
 	if not _mine_initialized:
 		_init_mine()
 	if not _mine_initialized:
 		return
 
+	var capped = mini(count, MAX_MINERS)
 	var existing = 0
 	for t in task_queue:
 		if t["type"] == "mine_gallery":
 			existing += 1
-	if existing >= count:
+	# Aussi compter les villageois déjà en train de miner
+	for v in villagers:
+		if v.current_task.get("type", "") == "mine_gallery":
+			existing += 1
+	if existing >= capped:
 		return
 
-	for i in range(count - existing):
+	for i in range(capped - existing):
 		_add_task({
 			"type": "mine_gallery",
 			"priority": 22,
