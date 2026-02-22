@@ -8,7 +8,8 @@ class_name GameConfig
 # Changer cette ligne pour switcher de pack
 # ========================================
 #const ACTIVE_PACK = "Aurore Stone"
-const ACTIVE_PACK = "Faithful64x64"
+#const ACTIVE_PACK = "Faithful64x64"
+const ACTIVE_PACK = "Faithful32"
 
 const PACK_BASE = "res://TexturesPack/"
 
