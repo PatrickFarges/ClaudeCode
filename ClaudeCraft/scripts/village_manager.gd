@@ -621,22 +621,35 @@ func _init_mine():
 	print("VillageManager: mine planifiée — %d blocs à creuser depuis %s" % [mine_plan.size(), str(mine_entrance)])
 
 func get_next_mine_block() -> Vector3i:
-	# Retourne le prochain bloc à creuser dans la galerie
-	while mine_plan_index < mine_plan.size():
-		var pos = mine_plan[mine_plan_index]
-		mine_plan_index += 1
-		# Skip si déjà creusé ou claimé
+	# Retourne le prochain bloc ACCESSIBLE à creuser (doit avoir de l'air adjacent)
+	# Scan depuis le début pour trouver les blocs au front de la mine
+	if not world_manager:
+		return Vector3i(-9999, -9999, -9999)
+
+	for i in range(mine_plan.size()):
+		var pos = mine_plan[i]
 		if claimed_positions.has(pos):
 			continue
-		if world_manager:
-			var bt = world_manager.get_block_at_position(Vector3(pos.x, pos.y, pos.z))
-			if bt == BlockRegistry.BlockType.AIR:
-				continue
-			# Ne pas creuser l'eau
-			if bt == BlockRegistry.BlockType.WATER:
-				continue
-		return pos
+		var bt = world_manager.get_block_at_position(Vector3(pos.x, pos.y, pos.z))
+		if bt == BlockRegistry.BlockType.AIR or bt == BlockRegistry.BlockType.WATER:
+			continue
+		# Vérifier que le bloc est accessible (au moins 1 face adjacente = AIR)
+		if _is_block_accessible(pos):
+			return pos
 	return Vector3i(-9999, -9999, -9999)
+
+func _is_block_accessible(pos: Vector3i) -> bool:
+	# Un bloc est accessible s'il a au moins un voisin AIR (on peut l'atteindre)
+	var neighbors = [
+		Vector3i(pos.x + 1, pos.y, pos.z), Vector3i(pos.x - 1, pos.y, pos.z),
+		Vector3i(pos.x, pos.y + 1, pos.z), Vector3i(pos.x, pos.y - 1, pos.z),
+		Vector3i(pos.x, pos.y, pos.z + 1), Vector3i(pos.x, pos.y, pos.z - 1),
+	]
+	for n in neighbors:
+		var bt = world_manager.get_block_at_position(Vector3(n.x, n.y, n.z))
+		if bt == BlockRegistry.BlockType.AIR:
+			return true
+	return false
 
 func _add_mine_gallery_tasks(count: int):
 	# Ajouter des tâches de minage en galerie

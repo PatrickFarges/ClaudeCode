@@ -71,6 +71,10 @@ var _mine_target: Vector3i = INVALID_POS
 var _build_timer: float = 0.0
 var _task_status: String = ""  # texte affiché
 
+# === Label3D au-dessus de la tête ===
+var _head_label: Label3D = null
+var _label_update_timer: float = 0.0
+
 func setup(model_index: int, pos: Vector3, chunk_pos: Vector3i, prof: int = 0):
 	mob_type_index = model_index
 	_spawn_pos = pos
@@ -83,6 +87,7 @@ func _ready():
 	_preload_models()
 	_create_model()
 	_create_collision()
+	_create_head_label()
 	_pick_new_wander()
 	rotation.y = randf() * TAU
 	world_manager = get_tree().get_first_node_in_group("world_manager")
@@ -125,6 +130,47 @@ func _create_collision():
 	col.position.y = 0.85
 	add_child(col)
 
+func _create_head_label():
+	_head_label = Label3D.new()
+	_head_label.font_size = 24
+	_head_label.outline_size = 6
+	_head_label.modulate = Color(1.0, 1.0, 1.0, 0.9)
+	_head_label.outline_modulate = Color(0, 0, 0, 0.8)
+	_head_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_head_label.no_depth_test = true
+	_head_label.position = Vector3(0, 2.3, 0)
+	_head_label.text = ""
+	add_child(_head_label)
+
+func _update_head_label():
+	if not _head_label:
+		return
+	var text = ""
+	match current_activity:
+		VProfession.Activity.WORK:
+			if _task_status != "":
+				text = _task_status
+			else:
+				text = "Au travail"
+		VProfession.Activity.SLEEP:
+			text = "Zzz..."
+		VProfession.Activity.GO_HOME:
+			text = "Rentre"
+		VProfession.Activity.GATHER:
+			text = "Balade"
+		VProfession.Activity.WANDER:
+			text = "Explore"
+	_head_label.text = text
+
+	# Couleur selon l'activité
+	match current_activity:
+		VProfession.Activity.WORK:
+			_head_label.modulate = Color(1.0, 0.9, 0.3, 0.9)  # jaune
+		VProfession.Activity.SLEEP:
+			_head_label.modulate = Color(0.5, 0.5, 1.0, 0.7)  # bleu
+		_:
+			_head_label.modulate = Color(1.0, 1.0, 1.0, 0.8)  # blanc
+
 # ============================================================
 # PHYSICS PROCESS — dispatch par activité
 # ============================================================
@@ -139,6 +185,12 @@ func _physics_process(delta):
 	if _schedule_timer >= 2.0:
 		_schedule_timer = 0.0
 		_update_schedule()
+
+	# Mettre à jour le label au-dessus de la tête (toutes les 0.5s)
+	_label_update_timer += delta
+	if _label_update_timer >= 0.5:
+		_label_update_timer = 0.0
+		_update_head_label()
 
 	# Dispatcher selon l'activité courante
 	match current_activity:
@@ -292,7 +344,7 @@ func _behavior_village_work(delta):
 	if current_task.is_empty():
 		current_task = village_manager.get_next_task()
 		if current_task.is_empty():
-			_task_status = "Attend une tâche"
+			_task_status = "Attend"
 			_behavior_wander(delta)
 			return
 		# Reset navigation
@@ -336,12 +388,11 @@ func _execute_harvest(delta):
 
 	# Marcher vers l'arbre
 	var target_world = Vector3(_mine_target.x + 0.5, _mine_target.y, _mine_target.z + 0.5)
-	_task_status = "Récolte du bois"
+	_task_status = "[Hache] Bois"
 
 	if not _arrived_at_target:
-		var dist = Vector3(global_position.x, 0, global_position.z).distance_to(
-			Vector3(target_world.x, 0, target_world.z))
-		if dist < 2.5:
+		var xz_dist = Vector2(global_position.x - target_world.x, global_position.z - target_world.z).length()
+		if xz_dist < 2.5:
 			_arrived_at_target = true
 		else:
 			_walk_toward(target_world, delta)
@@ -410,12 +461,11 @@ func _execute_mine(delta):
 		_mine_timer = 0.0
 
 	var target_world = Vector3(_mine_target.x + 0.5, _mine_target.y, _mine_target.z + 0.5)
-	_task_status = "Mine"
+	_task_status = "[Pioche] Mine"
 
 	if not _arrived_at_target:
-		var dist = Vector3(global_position.x, 0, global_position.z).distance_to(
-			Vector3(target_world.x, 0, target_world.z))
-		if dist < 2.5:
+		var xz_dist = Vector2(global_position.x - target_world.x, global_position.z - target_world.z).length()
+		if xz_dist < 2.5:
 			_arrived_at_target = true
 		else:
 			_walk_toward(target_world, delta)
@@ -446,11 +496,11 @@ func _execute_mine(delta):
 		current_task = {}
 
 func _execute_mine_gallery(delta):
-	# Minage en galerie — creuser le prochain bloc du plan de mine
+	# Minage en galerie — creuser le prochain bloc accessible du plan de mine
 	if _mine_target == INVALID_POS:
 		_mine_target = village_manager.get_next_mine_block()
 		if _mine_target == INVALID_POS:
-			_task_status = "Mine terminée"
+			_task_status = "Mine terminee"
 			current_task = {}
 			return
 		village_manager.claim_position(_mine_target)
@@ -459,11 +509,12 @@ func _execute_mine_gallery(delta):
 		_mine_timer = 0.0
 
 	var target_world = Vector3(_mine_target.x + 0.5, _mine_target.y, _mine_target.z + 0.5)
-	_task_status = "Creuse la mine"
+	_task_status = "[Pioche] Mine"
 
 	if not _arrived_at_target:
-		var dist = global_position.distance_to(target_world)
-		if dist < 3.0:
+		# Distance XZ seulement (le bloc peut être sous nos pieds)
+		var xz_dist = Vector2(global_position.x - target_world.x, global_position.z - target_world.z).length()
+		if xz_dist < 2.5:
 			_arrived_at_target = true
 		else:
 			_walk_toward(target_world, delta)
@@ -478,7 +529,7 @@ func _execute_mine_gallery(delta):
 	if block_type == BlockRegistry.BlockType.AIR:
 		village_manager.release_position(_mine_target)
 		_mine_target = INVALID_POS
-		# Prendre le prochain bloc directement (pas besoin de reprendre une tâche)
+		# Prendre le prochain bloc directement
 		_mine_target = village_manager.get_next_mine_block()
 		if _mine_target == INVALID_POS:
 			current_task = {}
@@ -507,7 +558,8 @@ func _execute_mine_gallery(delta):
 			_mine_timer = 0.0
 
 func _execute_craft(delta):
-	_task_status = "Craft"
+	var rname = current_task.get("recipe_name", "")
+	_task_status = "[Craft] %s" % rname
 	# Le craft est instantané (pas besoin de marcher)
 	var recipe_name = current_task.get("recipe_name", "")
 	if recipe_name == "":
@@ -531,7 +583,7 @@ func _execute_place_workstation(delta):
 		current_task = {}
 		return
 
-	_task_status = "Place un atelier"
+	_task_status = "[Place] Atelier"
 
 	# Trouver un emplacement
 	if not current_task.has("place_pos"):
@@ -567,7 +619,7 @@ func _execute_place_workstation(delta):
 	current_task = {}
 
 func _execute_build(delta):
-	_task_status = "Construit"
+	_task_status = "[Marteau] Construction"
 	var block_list = current_task.get("block_list", [])
 	var block_index = current_task.get("block_index", 0)
 	var origin = current_task.get("origin", Vector3i.ZERO)
