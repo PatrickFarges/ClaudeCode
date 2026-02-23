@@ -15,7 +15,7 @@ const MOB_DATA = {
 		"color": Color(0.92, 0.92, 0.88),
 		"health": 8, "meat_name": "Mouton", "meat_count": 2,
 		"glb_path": "res://assets/Animals/GLB/Sheep.glb",
-		"model_scale": Vector3(0.30, 0.30, 0.30),  # natif H=4.36 → cible ~1.3
+		"model_scale": Vector3(0.45, 0.45, 0.45),  # ×1.5
 		"anim_idle": "Armature|Idle", "anim_walk": "Armature|Jump",
 	},
 	MobType.COW: {
@@ -23,7 +23,7 @@ const MOB_DATA = {
 		"color": Color(0.55, 0.35, 0.2),
 		"health": 10, "meat_name": "Boeuf", "meat_count": 3,
 		"glb_path": "res://assets/Animals/GLB/Cow.glb",
-		"model_scale": Vector3(0.15, 0.15, 0.15),  # natif H=9.17 → cible ~1.4
+		"model_scale": Vector3(0.34, 0.34, 0.34),  # ×2.25
 		"anim_idle": "Armature|Idle", "anim_walk": "Armature|Walk",
 	},
 	MobType.CHICKEN: {
@@ -31,7 +31,7 @@ const MOB_DATA = {
 		"color": Color(0.95, 0.95, 0.85),
 		"health": 4, "meat_name": "Poulet", "meat_count": 1,
 		"glb_path": "res://assets/Animals/GLB/Chicken.glb",
-		"model_scale": Vector3(0.26, 0.26, 0.26),  # natif H=2.67 → cible ~0.7
+		"model_scale": Vector3(0.39, 0.39, 0.39),  # ×1.5
 		"model_tint": Color(0.95, 0.90, 0.75),  # blanc-crème poulet (modèle sans couleur)
 		"anim_idle": "", "anim_walk": "Armature|ArmatureAction.002",
 	},
@@ -40,7 +40,7 @@ const MOB_DATA = {
 		"color": Color(0.9, 0.7, 0.65),
 		"health": 10, "meat_name": "Porc", "meat_count": 3,
 		"glb_path": "res://assets/Animals/GLB/Pig.glb",
-		"model_scale": Vector3(0.09, 0.09, 0.09),  # natif H=9.78 → cible ~0.9
+		"model_scale": Vector3(0.20, 0.20, 0.20),  # ×2.25
 		"anim_idle": "Armature|Idle", "anim_walk": "Armature|Jump",
 	},
 	MobType.WOLF: {
@@ -48,7 +48,7 @@ const MOB_DATA = {
 		"color": Color(0.7, 0.7, 0.7),
 		"health": 8, "meat_name": "Loup", "meat_count": 0,
 		"glb_path": "res://assets/Animals/GLB/Wolf.glb",
-		"model_scale": Vector3(0.16, 0.16, 0.16),  # natif H=5.30 → cible ~0.85
+		"model_scale": Vector3(0.24, 0.24, 0.24),  # ×1.5
 		"model_tint": Color(0.55, 0.5, 0.45),  # gris-brun loup (modèle sans couleur)
 		"anim_idle": "WolfArmature|Idle", "anim_walk": "WolfArmature|Walking",
 	},
@@ -57,7 +57,7 @@ const MOB_DATA = {
 		"color": Color(0.6, 0.4, 0.25),
 		"health": 15, "meat_name": "Cheval", "meat_count": 0,
 		"glb_path": "res://assets/Animals/GLB/Horse.glb",
-		"model_scale": Vector3(0.24, 0.24, 0.24),  # natif H=9.24 → cible ~2.2 (cheval grand)
+		"model_scale": Vector3(0.54, 0.54, 0.54),  # ×2.25
 		"anim_idle": "Armature|Idle", "anim_walk": "Armature|Walk",
 	},
 }
