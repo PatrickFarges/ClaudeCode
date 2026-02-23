@@ -28,7 +28,7 @@ Jeu voxel type Minecraft en GDScript avec Godot 4.5+, style pastel. Évolue vers
 - **`village_inventory_ui.gd`** : UI inventaire village (F1) — phase, tier, ressources, liste villageois avec activité
 
 ### Mobs et combat
-- **`passive_mob.gd`** : 6 types (SHEEP, COW, CHICKEN, PIG, WOLF, HORSE). **GLB natif** + fallback box colorée. Navigation throttlée (0.2s). Combat : take_hit, flash, loot. Groupe "passive_mobs"
+- **`passive_mob.gd`** : 6 types (SHEEP, COW, CHICKEN, PIG, WOLF, HORSE). **GLB Quaternius low-poly animés** (CC0) depuis `assets/Animals/GLB/`, `model_scale` par type, mapping anim logique→réel (`anim_idle`/`anim_walk`), fallback box colorée si GLB absent. Flash dégâts par émission (GLB) ou albedo (box). Navigation throttlée (0.2s). Combat : take_hit, loot. Groupe "passive_mobs"
 - **`arrow_entity.gd`** : flèche arc — gravité 20m/s², drag, dégâts 6.0, critique, knockback, particules, Label3D dégâts
 
 ### Joueur et UI
@@ -74,12 +74,13 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 
 - `Audio/` : ~334 fichiers (dont `Forest/` 11 MP3 ambiance par heure)
 - `BlockPNJ/` : 18 modèles GLB Kenney.nl (PNJ villageois)
+- `assets/Animals/GLB/` : 6 GLB animés Quaternius (CC0, ~1.4 Mo total) — Sheep, Cow, Horse, Pig, Wolf, Chicken. Convertis depuis FBX via FBX2glTF (fork Godot). Animations : Idle+Walk (vache, cheval, loup), Idle+Jump (mouton, cochon), 1 action (poulet)
 - `assets/Deco/` : apple.glb (nourriture)
 - `assets/Lobbys/` : .schem Minecraft à convertir
 
 ## Direction du projet
 
-**Version actuelle : v11.0.0**
+**Version actuelle : v11.1.0**
 
 | Phase | Statut | Contenu |
 |-------|--------|---------|
@@ -88,10 +89,11 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 | 3a | Fait | 65 blocs, 80 textures, 61 recettes, outils 3D extrudés, arc/combat |
 | 3b | Fait | Village autonome (stockpile, mine, construction, professions fixes) |
 | 4 | Fait | Grand ménage v11.0.0 — suppression Bedrock, GLB natif, optimisations perf |
-| 5 | À venir | Import packs GLB animaux/PNJ, chaînes de production |
+| 4.1 | Fait | v11.1.0 — 6 GLB animaux Quaternius (CC0) téléchargés, convertis FBX→GLB, intégrés |
+| 5 | À venir | Chaînes de production, bâtiments fonctionnels |
 | 6 | À venir | Transport ressources, économie, UI gestion avancée |
 
-**Packs GLB recommandés (CC0)** : Quaternius Farm Animals, Quaternius Ultimate Animals, KayKit Adventurers
+**Packs GLB utilisés (CC0)** : Quaternius Farm Animals (mouton, vache, cheval, cochon), Animal Pack Vol.2 (loup), Animals Pack (poulet). **PNJ futurs** : KayKit Adventurers (161 anims travail)
 
 **Données MC disponibles :** 2390 blocs, 1283 items, 1396 recettes dans `minecraft_data/`
 
