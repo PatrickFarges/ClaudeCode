@@ -12,10 +12,6 @@ var chunk_generator: ChunkGenerator
 var world_seed: int = 0  # Seed du monde (0 = aléatoire)
 var saved_chunk_data: Dictionary = {}  # Vector3i -> PackedByteArray (chunks modifiés à restaurer)
 
-# Mobs passifs
-var mobs: Array = []
-const MAX_MOBS = 30  # réduit de 100 → 30 pour les performances
-
 # PNJ villageois
 const NpcVillagerScene = preload("res://scripts/npc_villager.gd")
 const VProfession = preload("res://scripts/villager_profession.gd")
@@ -148,9 +144,6 @@ func _on_chunk_data_ready(chunk_data: Dictionary):
 	if poi_manager:
 		poi_manager.scan_chunk(chunk_pos, blocks, p_y_min, p_y_max)
 
-	# Tenter de spawn des mobs passifs
-	_try_spawn_mobs(chunk_pos, chunk_data)
-
 	# Tenter de spawn le village (une seule fois, près du joueur)
 	if not _village_spawned and player:
 		_try_spawn_village(chunk_pos, chunk_data)
@@ -178,16 +171,6 @@ func _unload_distant_chunks(player_chunk_pos: Vector3i):
 	var remove_set: Dictionary = {}
 	for cp in chunks_to_remove:
 		remove_set[cp] = true
-
-	# Supprimer les mobs des chunks déchargés
-	var remaining_mobs = []
-	for mob_data in mobs:
-		if remove_set.has(mob_data["chunk_pos"]):
-			if is_instance_valid(mob_data["mob"]):
-				mob_data["mob"].queue_free()
-		else:
-			remaining_mobs.append(mob_data)
-	mobs = remaining_mobs
 
 	# Supprimer les NPCs des chunks déchargés + libérer leurs POI
 	var village_mgr = get_node_or_null("/root/VillageManager")
@@ -256,101 +239,6 @@ func break_block_at_position(world_pos: Vector3):
 
 func place_block_at_position(world_pos: Vector3, block_type: BlockRegistry.BlockType):
 	set_block_at_position(world_pos, block_type)
-
-# ============================================================
-# MOBS PASSIFS
-# ============================================================
-
-func _try_spawn_mobs(chunk_pos: Vector3i, chunk_data: Dictionary):
-	if mobs.size() >= MAX_MOBS:
-		return
-
-	# 30% de chance par chunk (réduit de 60% pour les perfs)
-	var hash_val = abs((chunk_pos.x * 374761393 + chunk_pos.z * 668265263) >> 13) % 100
-	if hash_val >= 30:
-		return
-
-	var packed_blocks = chunk_data["blocks"]
-	var num_mobs = 1 + (hash_val % 2)  # 1-2 mobs par spawn (réduit de 2-4)
-
-	for i in range(num_mobs):
-		if mobs.size() >= MAX_MOBS:
-			break
-
-		var lx = ((hash_val + 1) * (i + 3) * 7) % 16
-		var lz = ((hash_val + 1) * (i + 3) * 13) % 16
-
-		# Trouver la surface (premier bloc non-AIR/non-WATER depuis le haut)
-		var surface_y = -1
-		var surface_block = 0
-		for y in range(Chunk.CHUNK_HEIGHT - 1, 0, -1):
-			var bt = packed_blocks[lx * 4096 + lz * 256 + y]
-			if bt != 0 and bt != BlockRegistry.BlockType.WATER:
-				surface_y = y + 1
-				surface_block = bt
-				break
-
-		if surface_y < 0 or surface_y >= Chunk.CHUNK_HEIGHT - 2:
-			continue
-
-		# Seulement sur herbe, sable ou neige
-		var valid_blocks = [
-			BlockRegistry.BlockType.GRASS,
-			BlockRegistry.BlockType.DARK_GRASS,
-			BlockRegistry.BlockType.SAND,
-			BlockRegistry.BlockType.SNOW,
-		]
-		if surface_block not in valid_blocks:
-			continue
-
-		# Choisir le type de mob selon le biome
-		var mob_type: PassiveMob.MobType
-		if surface_block == BlockRegistry.BlockType.SAND:
-			# Désert : poulets et chevaux
-			var type_hash = (hash_val + i * 31) % 3
-			if type_hash == 0:
-				mob_type = PassiveMob.MobType.CHICKEN
-			elif type_hash == 1:
-				mob_type = PassiveMob.MobType.HORSE
-			else:
-				mob_type = PassiveMob.MobType.CHICKEN
-		elif surface_block == BlockRegistry.BlockType.SNOW:
-			# Montagne : loups
-			mob_type = PassiveMob.MobType.WOLF
-		elif surface_block == BlockRegistry.BlockType.DARK_GRASS:
-			# Forêt : cochons, loups, moutons
-			var type_hash = (hash_val + i * 31) % 4
-			if type_hash == 0:
-				mob_type = PassiveMob.MobType.PIG
-			elif type_hash == 1:
-				mob_type = PassiveMob.MobType.WOLF
-			elif type_hash == 2:
-				mob_type = PassiveMob.MobType.SHEEP
-			else:
-				mob_type = PassiveMob.MobType.COW
-		else:
-			# Plaines : moutons, vaches, cochons, chevaux
-			var type_hash = (hash_val + i * 31) % 6
-			if type_hash == 0:
-				mob_type = PassiveMob.MobType.SHEEP
-			elif type_hash == 1:
-				mob_type = PassiveMob.MobType.COW
-			elif type_hash == 2:
-				mob_type = PassiveMob.MobType.PIG
-			elif type_hash == 3:
-				mob_type = PassiveMob.MobType.HORSE
-			elif type_hash == 4:
-				mob_type = PassiveMob.MobType.CHICKEN
-			else:
-				mob_type = PassiveMob.MobType.SHEEP
-
-		var world_x = chunk_pos.x * Chunk.CHUNK_SIZE + lx + 0.5
-		var world_z = chunk_pos.z * Chunk.CHUNK_SIZE + lz + 0.5
-
-		var mob = PassiveMob.new()
-		mob.setup(mob_type, Vector3(world_x, surface_y, world_z), chunk_pos)
-		get_parent().call_deferred("add_child", mob)
-		mobs.append({"mob": mob, "chunk_pos": chunk_pos})
 
 # ============================================================
 # PNJ VILLAGEOIS
