@@ -7,44 +7,56 @@ class_name PassiveMob
 
 enum MobType { SHEEP, COW, CHICKEN, PIG, WOLF, HORSE }
 
-# Données par type de mob — GLB paths seront remplis quand les packs seront téléchargés
-# Pour l'instant : fallback box colorée
+# Données par type de mob — Quaternius low-poly GLB (CC0)
+# Animations FBX→GLB : préfixées "Armature|" ou "WolfArmature|"
 const MOB_DATA = {
 	MobType.SHEEP: {
 		"collision_size": Vector3(0.9, 1.3, 0.9),
-		"color": Color(0.92, 0.92, 0.88),  # blanc laineux
+		"color": Color(0.92, 0.92, 0.88),
 		"health": 8, "meat_name": "Mouton", "meat_count": 2,
-		"glb_path": "",  # TODO: assets/Animals/sheep.glb
+		"glb_path": "res://assets/Animals/GLB/Sheep.glb",
+		"model_scale": Vector3(0.8, 0.8, 0.8),
+		"anim_idle": "Armature|Idle", "anim_walk": "Armature|Jump",
 	},
 	MobType.COW: {
 		"collision_size": Vector3(0.9, 1.4, 0.9),
-		"color": Color(0.55, 0.35, 0.2),  # brun
+		"color": Color(0.55, 0.35, 0.2),
 		"health": 10, "meat_name": "Boeuf", "meat_count": 3,
-		"glb_path": "",
+		"glb_path": "res://assets/Animals/GLB/Cow.glb",
+		"model_scale": Vector3(0.7, 0.7, 0.7),
+		"anim_idle": "Armature|Idle", "anim_walk": "Armature|Walk",
 	},
 	MobType.CHICKEN: {
 		"collision_size": Vector3(0.5, 0.7, 0.5),
-		"color": Color(0.95, 0.95, 0.85),  # blanc crème
+		"color": Color(0.95, 0.95, 0.85),
 		"health": 4, "meat_name": "Poulet", "meat_count": 1,
-		"glb_path": "",
+		"glb_path": "res://assets/Animals/GLB/Chicken.glb",
+		"model_scale": Vector3(0.5, 0.5, 0.5),
+		"anim_idle": "", "anim_walk": "Armature|ArmatureAction.002",
 	},
 	MobType.PIG: {
 		"collision_size": Vector3(0.9, 0.9, 0.9),
-		"color": Color(0.9, 0.7, 0.65),  # rose
+		"color": Color(0.9, 0.7, 0.65),
 		"health": 10, "meat_name": "Porc", "meat_count": 3,
-		"glb_path": "",
+		"glb_path": "res://assets/Animals/GLB/Pig.glb",
+		"model_scale": Vector3(0.7, 0.7, 0.7),
+		"anim_idle": "Armature|Idle", "anim_walk": "Armature|Jump",
 	},
 	MobType.WOLF: {
 		"collision_size": Vector3(0.6, 0.85, 0.6),
-		"color": Color(0.7, 0.7, 0.7),  # gris
+		"color": Color(0.7, 0.7, 0.7),
 		"health": 8, "meat_name": "Loup", "meat_count": 0,
-		"glb_path": "",
+		"glb_path": "res://assets/Animals/GLB/Wolf.glb",
+		"model_scale": Vector3(0.7, 0.7, 0.7),
+		"anim_idle": "WolfArmature|Idle", "anim_walk": "WolfArmature|Walking",
 	},
 	MobType.HORSE: {
 		"collision_size": Vector3(1.4, 1.6, 1.4),
-		"color": Color(0.6, 0.4, 0.25),  # brun foncé
+		"color": Color(0.6, 0.4, 0.25),
 		"health": 15, "meat_name": "Cheval", "meat_count": 0,
-		"glb_path": "",
+		"glb_path": "res://assets/Animals/GLB/Horse.glb",
+		"model_scale": Vector3(0.9, 0.9, 0.9),
+		"anim_idle": "Armature|Idle", "anim_walk": "Armature|Walk",
 	},
 }
 
@@ -66,6 +78,7 @@ var _model_root: Node3D = null
 var _anim_player: AnimationPlayer = null
 var _current_anim: String = ""
 var _hurt_flash_timer: float = 0.0
+var _is_glb_model: bool = false
 
 # Throttle: les mobs ne vérifient pas les obstacles chaque frame
 var _nav_check_timer: float = 0.0
@@ -99,8 +112,12 @@ func _create_model():
 		var scene = _load_glb(glb_path)
 		if scene:
 			var instance = scene.instantiate()
+			# Appliquer l'échelle du modèle
+			var sc: Vector3 = data.get("model_scale", Vector3.ONE)
+			instance.scale = sc
 			add_child(instance)
 			_model_root = instance
+			_is_glb_model = true
 			_anim_player = _find_animation_player(instance)
 			if _anim_player:
 				_play_anim("idle")
@@ -126,14 +143,24 @@ func _find_animation_player(node: Node) -> AnimationPlayer:
 			return found
 	return null
 
-func _play_anim(anim_name: String):
-	if not _anim_player or _current_anim == anim_name:
+func _play_anim(logical_name: String):
+	if not _anim_player or _current_anim == logical_name:
 		return
-	if _anim_player.has_animation(anim_name):
-		var anim = _anim_player.get_animation(anim_name)
+	# Résoudre le nom logique ("idle"/"walk") vers le nom réel dans le GLB
+	var data: Dictionary = MOB_DATA[mob_type]
+	var real_name: String = ""
+	if logical_name == "idle":
+		real_name = data.get("anim_idle", "")
+	elif logical_name == "walk":
+		real_name = data.get("anim_walk", "")
+	if real_name == "":
+		# Pas d'animation pour cet état — essayer le nom brut en fallback
+		real_name = logical_name
+	if _anim_player.has_animation(real_name):
+		var anim = _anim_player.get_animation(real_name)
 		anim.loop_mode = Animation.LOOP_LINEAR
-		_anim_player.play(anim_name)
-		_current_anim = anim_name
+		_anim_player.play(real_name)
+		_current_anim = logical_name
 
 func _create_colored_box():
 	var data = MOB_DATA[mob_type]
@@ -270,15 +297,17 @@ func _spawn_loot_label(item_name: String, count: int):
 
 func _flash_model_red():
 	if _model_root:
-		_apply_tint_recursive(_model_root, Color(2.0, 0.5, 0.5))
+		if _is_glb_model:
+			_apply_glb_tint(_model_root, Color(3.0, 0.3, 0.3))
+		else:
+			_apply_tint_recursive(_model_root, Color(2.0, 0.5, 0.5))
 
 func _reset_model_color():
 	if _model_root:
-		var data = MOB_DATA[mob_type]
-		# Si on a un GLB, reset à blanc; sinon reset à la couleur du mob
-		if data.get("glb_path", "") != "" and _anim_player:
-			_apply_tint_recursive(_model_root, Color(1, 1, 1))
+		if _is_glb_model:
+			_apply_glb_tint(_model_root, Color(1, 1, 1))
 		else:
+			var data = MOB_DATA[mob_type]
 			_apply_tint_recursive(_model_root, data["color"])
 
 func _apply_tint_recursive(node: Node, color: Color):
@@ -288,6 +317,27 @@ func _apply_tint_recursive(node: Node, color: Color):
 			mi.material_override.albedo_color = color
 	for child in node.get_children():
 		_apply_tint_recursive(child, color)
+
+func _apply_glb_tint(node: Node, color: Color):
+	# Pour les GLB : on modifie l'émission pour le flash (pas les albedo du modèle)
+	if node is MeshInstance3D:
+		var mi = node as MeshInstance3D
+		for i in range(mi.get_surface_override_material_count()):
+			var mat = mi.get_surface_override_material(i)
+			if not mat:
+				mat = mi.mesh.surface_get_material(i)
+				if mat:
+					mat = mat.duplicate()
+					mi.set_surface_override_material(i, mat)
+			if mat and mat is StandardMaterial3D:
+				if color == Color(1, 1, 1):
+					mat.emission_enabled = false
+				else:
+					mat.emission_enabled = true
+					mat.emission = Color(1, 0, 0)
+					mat.emission_energy_multiplier = 2.0
+	for child in node.get_children():
+		_apply_glb_tint(child, color)
 
 func _pick_new_wander():
 	wander_timer = randf_range(2.0, 5.0)
