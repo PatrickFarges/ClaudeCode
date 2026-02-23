@@ -14,7 +14,7 @@ var saved_chunk_data: Dictionary = {}  # Vector3i -> PackedByteArray (chunks mod
 
 # Mobs passifs
 var mobs: Array = []
-const MAX_MOBS = 100
+const MAX_MOBS = 30  # réduit de 100 → 30 pour les performances
 
 # PNJ villageois
 const NpcVillagerScene = preload("res://scripts/npc_villager.gd")
@@ -174,10 +174,15 @@ func _unload_distant_chunks(player_chunk_pos: Vector3i):
 		chunk.queue_free()
 		chunks.erase(chunk_pos)
 
+	# Set pour lookup O(1) au lieu de Array.has() O(n)
+	var remove_set: Dictionary = {}
+	for cp in chunks_to_remove:
+		remove_set[cp] = true
+
 	# Supprimer les mobs des chunks déchargés
 	var remaining_mobs = []
 	for mob_data in mobs:
-		if chunks_to_remove.has(mob_data["chunk_pos"]):
+		if remove_set.has(mob_data["chunk_pos"]):
 			if is_instance_valid(mob_data["mob"]):
 				mob_data["mob"].queue_free()
 		else:
@@ -188,7 +193,7 @@ func _unload_distant_chunks(player_chunk_pos: Vector3i):
 	var village_mgr = get_node_or_null("/root/VillageManager")
 	var remaining_npcs = []
 	for npc_data in npcs:
-		if chunks_to_remove.has(npc_data["chunk_pos"]):
+		if remove_set.has(npc_data["chunk_pos"]):
 			if is_instance_valid(npc_data["npc"]):
 				var npc = npc_data["npc"]
 				if poi_manager and npc.claimed_poi != Vector3i(-9999, -9999, -9999):
@@ -260,13 +265,13 @@ func _try_spawn_mobs(chunk_pos: Vector3i, chunk_data: Dictionary):
 	if mobs.size() >= MAX_MOBS:
 		return
 
-	# 60% de chance par chunk (déterministe via hash)
+	# 30% de chance par chunk (réduit de 60% pour les perfs)
 	var hash_val = abs((chunk_pos.x * 374761393 + chunk_pos.z * 668265263) >> 13) % 100
-	if hash_val >= 60:
+	if hash_val >= 30:
 		return
 
 	var packed_blocks = chunk_data["blocks"]
-	var num_mobs = 2 + (hash_val % 3)  # 2-4 mobs par spawn
+	var num_mobs = 1 + (hash_val % 2)  # 1-2 mobs par spawn (réduit de 2-4)
 
 	for i in range(num_mobs):
 		if mobs.size() >= MAX_MOBS:

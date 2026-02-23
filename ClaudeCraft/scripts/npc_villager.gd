@@ -81,6 +81,13 @@ var _label_update_timer: float = 0.0
 var _search_cooldown: float = 0.0
 const SEARCH_COOLDOWN_DURATION = 5.0  # secondes avant de retenter une recherche
 
+# === Throttle navigation block lookups ===
+var _nav_check_timer: float = 0.0
+const NAV_CHECK_INTERVAL = 0.15  # vérif obstacles toutes les 0.15s au lieu de chaque frame
+var _cached_block_ahead: int = 0  # BlockType en cache
+var _cached_block_below: int = 0
+var _cached_block_above: int = 0
+
 # === Mine staircase ===
 var _mine_heading: Vector3i = Vector3i(1, 0, 0)  # direction horizontale du mineur
 var _mine_steps_h: int = 0  # pas horizontaux depuis le dernier descente
@@ -911,27 +918,27 @@ func _walk_toward(target: Vector3, delta: float) -> bool:
 
 func _apply_movement(delta):
 	if is_on_floor() and world_manager:
-		var feet_y = int(global_position.y)
-		var ahead_pos = global_position + wander_direction * 0.8
-		var ahead_feet = Vector3(ahead_pos.x, feet_y, ahead_pos.z)
+		# Throttle block lookups : toutes les 0.15s au lieu de chaque frame
+		_nav_check_timer += delta
+		if _nav_check_timer >= NAV_CHECK_INTERVAL:
+			_nav_check_timer = 0.0
+			var feet_y = int(global_position.y)
+			var ahead_pos = global_position + wander_direction * 0.8
+			var ahead_feet = Vector3(ahead_pos.x, feet_y, ahead_pos.z)
+			_cached_block_ahead = world_manager.get_block_at_position(ahead_feet.floor())
+			_cached_block_above = world_manager.get_block_at_position(Vector3(ahead_feet.x, feet_y + 1, ahead_feet.z).floor())
+			_cached_block_below = world_manager.get_block_at_position(Vector3(ahead_feet.x, feet_y - 1, ahead_feet.z).floor())
 
-		var block_at_feet = world_manager.get_block_at_position(ahead_feet.floor())
-		var block_above = world_manager.get_block_at_position(Vector3(ahead_feet.x, feet_y + 1, ahead_feet.z).floor())
-		var block_below_ahead = world_manager.get_block_at_position(Vector3(ahead_feet.x, feet_y - 1, ahead_feet.z).floor())
-
-		# Éviter l'eau
-		if block_at_feet == BlockRegistry.BlockType.WATER:
+		# Utiliser les valeurs en cache
+		if _cached_block_ahead == BlockRegistry.BlockType.WATER:
 			_pick_new_wander()
 			is_moving = false
 			return
-		# Éviter les falaises (2+ blocs de vide devant) — SEULEMENT en mode errance
-		# En mode cible (travail), le villageois doit pouvoir descendre vers la mine/arbre
-		elif not has_target and block_at_feet == BlockRegistry.BlockType.AIR and block_below_ahead == BlockRegistry.BlockType.AIR:
+		elif not has_target and _cached_block_ahead == BlockRegistry.BlockType.AIR and _cached_block_below == BlockRegistry.BlockType.AIR:
 			_pick_new_wander()
 			is_moving = false
 			return
-		# Auto-jump : bloc solide devant aux pieds + espace libre au-dessus
-		elif block_at_feet != BlockRegistry.BlockType.AIR and block_above == BlockRegistry.BlockType.AIR:
+		elif _cached_block_ahead != BlockRegistry.BlockType.AIR and _cached_block_above == BlockRegistry.BlockType.AIR:
 			velocity.y = _jump_velocity
 
 	# Mouvement horizontal

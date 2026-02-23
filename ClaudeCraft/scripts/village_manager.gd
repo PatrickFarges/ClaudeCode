@@ -49,7 +49,7 @@ var placed_workstations: Dictionary = {}  # { BlockType -> Vector3i }
 
 # === CACHE DE SCAN ===
 var _scan_cache: Dictionary = {}  # { BlockType -> { "results": Array, "time": float } }
-const SCAN_CACHE_DURATION = 8.0  # durée cache scan — plus long pour éviter les rescans coûteux
+const SCAN_CACHE_DURATION = 15.0  # durée cache scan — 15s pour éviter les rescans massifs
 
 # === MINE / GALERIE ===
 var mine_plan: Array = []          # Array de Vector3i — blocs à creuser dans l'ordre (du haut vers le bas)
@@ -62,7 +62,7 @@ var _mine_expansion_dir: int = 0   # direction de la prochaine expansion (0-3)
 
 # === TIMER ===
 var _eval_timer: float = 0.0
-const EVAL_INTERVAL = 5.0  # évaluation toutes les 5s (au lieu de 3)
+const EVAL_INTERVAL = 8.0  # évaluation toutes les 8s (réduit la charge de scan)
 
 # === REFS ===
 var world_manager = null
@@ -459,13 +459,12 @@ func find_nearest_block(block_type: int, from_pos: Vector3, radius: float = 32.0
 	if not world_manager:
 		return Vector3i(-9999, -9999, -9999)
 
-	# Check cache
+	# Check cache (durée augmentée pour réduire les rescans massifs)
 	var now = Time.get_ticks_msec() / 1000.0
 	var cache_key = block_type
 	if _scan_cache.has(cache_key):
 		var cached = _scan_cache[cache_key]
 		if now - cached["time"] < SCAN_CACHE_DURATION:
-			# Chercher le plus proche non-claimé dans le cache
 			var best = Vector3i(-9999, -9999, -9999)
 			var best_dist = INF
 			for pos in cached["results"]:
@@ -478,53 +477,70 @@ func find_nearest_block(block_type: int, from_pos: Vector3, radius: float = 32.0
 			if best != Vector3i(-9999, -9999, -9999):
 				return best
 
-	# Scan les chunks chargés
+	# === SCAN OPTIMISÉ ===
+	# Rayon de chunk réduit (max 2 chunks = 32 blocs) au lieu de radius/16
+	# + early exit dès qu'on trouve un résultat valide proche
 	var results: Array = []
 	var from_chunk = Vector3i(
 		floori(from_pos.x / CHUNK_SIZE),
 		0,
 		floori(from_pos.z / CHUNK_SIZE)
 	)
-	var chunk_radius = ceili(radius / CHUNK_SIZE) + 1
+	# Limiter à 2 chunks de rayon max (5x5 = 25 chunks max au lieu de potentiellement 81+)
+	var chunk_radius = mini(ceili(radius / CHUNK_SIZE) + 1, 2)
 
-	# Blocs bois acceptables pour les tâches harvest
-	var acceptable_types: Array = [block_type]
+	# Set pour lookup rapide des types acceptables
+	var acceptable_set: Dictionary = {}
 	if block_type == 5:  # WOOD -> accepter toutes les essences
-		acceptable_types = [5, 32, 33, 34, 35, 36, 42]
+		for bt in [5, 32, 33, 34, 35, 36, 42]:
+			acceptable_set[bt] = true
+	else:
+		acceptable_set[block_type] = true
 
+	# Scan spirale depuis le chunk du joueur (chunks les plus proches en premier)
+	var chunk_list: Array = []
 	for cx in range(from_chunk.x - chunk_radius, from_chunk.x + chunk_radius + 1):
 		for cz in range(from_chunk.z - chunk_radius, from_chunk.z + chunk_radius + 1):
-			var chunk_pos = Vector3i(cx, 0, cz)
-			if not world_manager.chunks.has(chunk_pos):
-				continue
+			var cp = Vector3i(cx, 0, cz)
+			if world_manager.chunks.has(cp):
+				chunk_list.append(cp)
+	# Trier par distance au joueur
+	chunk_list.sort_custom(func(a, b):
+		var da = abs(a.x - from_chunk.x) + abs(a.z - from_chunk.z)
+		var db = abs(b.x - from_chunk.x) + abs(b.z - from_chunk.z)
+		return da < db)
 
-			var chunk = world_manager.chunks[chunk_pos]
-			var blocks = chunk.blocks
+	for chunk_pos in chunk_list:
+		var chunk = world_manager.chunks[chunk_pos]
+		var blocks = chunk.blocks
+		var y_start = maxi(chunk.y_min, 1)
+		var y_end = mini(chunk.y_max + 1, CHUNK_HEIGHT)
 
-			# Scan du PackedByteArray
-			for lx in range(CHUNK_SIZE):
-				var x_off = lx * CHUNK_SIZE * CHUNK_HEIGHT
-				for lz in range(CHUNK_SIZE):
-					var xz_off = x_off + lz * CHUNK_HEIGHT
-					# Limiter le scan vertical au range utile
-					var y_start = maxi(chunk.y_min, 1)
-					var y_end = mini(chunk.y_max + 1, CHUNK_HEIGHT)
-					for ly in range(y_start, y_end):
-						var bt = blocks[xz_off + ly]
-						if bt in acceptable_types:
-							var world_pos = Vector3i(
-								cx * CHUNK_SIZE + lx,
-								ly,
-								cz * CHUNK_SIZE + lz
-							)
-							var d = from_pos.distance_to(Vector3(world_pos.x, world_pos.y, world_pos.z))
-							if d <= radius:
-								results.append(world_pos)
+		# Échantillonnage : scanner 1 colonne sur 2 pour diviser le coût par 4
+		for lx in range(0, CHUNK_SIZE, 2):
+			var x_off = lx * CHUNK_SIZE * CHUNK_HEIGHT
+			for lz in range(0, CHUNK_SIZE, 2):
+				var xz_off = x_off + lz * CHUNK_HEIGHT
+				for ly in range(y_start, y_end):
+					var bt = blocks[xz_off + ly]
+					if acceptable_set.has(bt):
+						var world_pos = Vector3i(
+							chunk_pos.x * CHUNK_SIZE + lx,
+							ly,
+							chunk_pos.z * CHUNK_SIZE + lz
+						)
+						var d = from_pos.distance_to(Vector3(world_pos.x, world_pos.y, world_pos.z))
+						if d <= radius:
+							results.append(world_pos)
+
+		# Early exit : si on a déjà trouvé assez de résultats dans les chunks proches
+		if results.size() >= 20:
+			break
 
 	# Mettre en cache
 	_scan_cache[cache_key] = { "results": results, "time": now }
 
-	# Trouver le plus proche non-claimé (avec exclusion radius)
+	# Trouver le plus proche non-claimé
 	var best = Vector3i(-9999, -9999, -9999)
 	var best_dist = INF
 	for pos in results:
@@ -538,8 +554,8 @@ func find_nearest_block(block_type: int, from_pos: Vector3, radius: float = 32.0
 	return best
 
 func find_nearest_surface_block(block_type: int, from_pos: Vector3, radius: float = 32.0) -> Vector3i:
-	# Comme find_nearest_block mais ne retourne que les blocs en surface
-	# (avec AIR au-dessus)
+	# Comme find_nearest_block mais ne retourne que les blocs en surface (avec AIR au-dessus)
+	# OPTIMISÉ : rayon de chunk limité + échantillonnage
 	if not world_manager:
 		return Vector3i(-9999, -9999, -9999)
 
@@ -548,13 +564,16 @@ func find_nearest_surface_block(block_type: int, from_pos: Vector3, radius: floa
 		0,
 		floori(from_pos.z / CHUNK_SIZE)
 	)
-	var chunk_radius = ceili(radius / CHUNK_SIZE) + 1
+	var chunk_radius = mini(ceili(radius / CHUNK_SIZE) + 1, 2)
 	var best = Vector3i(-9999, -9999, -9999)
 	var best_dist = INF
 
-	var acceptable_types: Array = [block_type]
+	var acceptable_set: Dictionary = {}
 	if block_type == 5:
-		acceptable_types = [5, 32, 33, 34, 35, 36, 42]
+		for bt in [5, 32, 33, 34, 35, 36, 42]:
+			acceptable_set[bt] = true
+	else:
+		acceptable_set[block_type] = true
 
 	for cx in range(from_chunk.x - chunk_radius, from_chunk.x + chunk_radius + 1):
 		for cz in range(from_chunk.z - chunk_radius, from_chunk.z + chunk_radius + 1):
@@ -564,18 +583,17 @@ func find_nearest_surface_block(block_type: int, from_pos: Vector3, radius: floa
 
 			var chunk = world_manager.chunks[chunk_pos]
 			var blocks_data = chunk.blocks
+			var y_start = maxi(chunk.y_min, 1)
+			var y_end = mini(chunk.y_max + 1, CHUNK_HEIGHT - 1)
 
-			for lx in range(CHUNK_SIZE):
+			for lx in range(0, CHUNK_SIZE, 2):
 				var x_off = lx * CHUNK_SIZE * CHUNK_HEIGHT
-				for lz in range(CHUNK_SIZE):
+				for lz in range(0, CHUNK_SIZE, 2):
 					var xz_off = x_off + lz * CHUNK_HEIGHT
-					var y_start = maxi(chunk.y_min, 1)
-					var y_end = mini(chunk.y_max + 1, CHUNK_HEIGHT - 1)
 					for ly in range(y_start, y_end):
 						var bt = blocks_data[xz_off + ly]
-						if bt in acceptable_types:
-							# Vérifier qu'il y a de l'air au-dessus
-							if blocks_data[xz_off + ly + 1] == 0:  # AIR
+						if acceptable_set.has(bt):
+							if blocks_data[xz_off + ly + 1] == 0:  # AIR au-dessus
 								var world_pos = Vector3i(
 									cx * CHUNK_SIZE + lx,
 									ly,
@@ -900,8 +918,12 @@ func find_flat_spot_near_center(radius: float = 8.0) -> Vector3i:
 	return Vector3i(-9999, -9999, -9999)
 
 func _find_surface_y(wx: int, wz: int) -> int:
-	# Trouver le Y de surface à une position monde
-	for y in range(CHUNK_HEIGHT - 1, 0, -1):
+	# Trouver le Y de surface à une position monde — optimisé : commence depuis y_max du chunk
+	var chunk_pos = Vector3i(floori(float(wx) / CHUNK_SIZE), 0, floori(float(wz) / CHUNK_SIZE))
+	var start_y = 120  # par défaut raisonnable
+	if world_manager.chunks.has(chunk_pos):
+		start_y = mini(world_manager.chunks[chunk_pos].y_max + 1, CHUNK_HEIGHT - 1)
+	for y in range(start_y, 0, -1):
 		var bt = world_manager.get_block_at_position(Vector3(wx, y, wz))
 		if bt != BlockRegistry.BlockType.AIR and bt != BlockRegistry.BlockType.WATER:
 			return y
