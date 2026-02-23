@@ -27,9 +27,9 @@ Jeu voxel type Minecraft en GDScript avec Godot 4.5+, style pastel. Évolue vers
 - **`poi_manager.gd`** : Points of Interest (workstations), claim/release, scan chunk, lookup O(1)
 - **`village_inventory_ui.gd`** : UI gestion village (F1) — phase, tier, **population X/Y**, **barre de faim** par villageois (vert/jaune/rouge), **section fermes**, **liste bâtiments**, **prochain objectif**, ressources, liste villageois avec activité
 
-### Mobs et combat
-- **`passive_mob.gd`** : 6 types (SHEEP, COW, CHICKEN, PIG, WOLF, HORSE). **GLB Quaternius low-poly animés** (CC0) depuis `assets/Animals/GLB/`, `model_scale` par type, mapping anim logique→réel (`anim_idle`/`anim_walk`), fallback box colorée si GLB absent. Flash dégâts par émission (GLB) ou albedo (box). Navigation throttlée (0.2s). Combat : take_hit, loot. Groupe "passive_mobs"
+### Combat
 - **`arrow_entity.gd`** : flèche arc — gravité 20m/s², drag, dégâts 6.0, critique, knockback, particules, Label3D dégâts
+- **`passive_mob.gd`** : *(inactif — plus de spawn)* code encore présent mais non utilisé. Les animaux ont été retirés pour se concentrer sur la gestion de village
 
 ### Joueur et UI
 - **`player.gd`** : FPS CharacterBody3D, minage progressif (`BASE_MINING_TIME=5.0` × dureté/outil), hotbar 9 slots + outils + nourriture, arc (charge MC), placement blocs
@@ -41,7 +41,7 @@ Jeu voxel type Minecraft en GDScript avec Godot 4.5+, style pastel. Évolue vers
 - **`locale.gd`** : traductions FR/EN
 
 ### Utilitaires
-- **`world_manager.gd`** : chunks render_distance=4, spawn mobs (30%/chunk, 1-2, max 30), village 8 PNJ (professions fixes : 2 bûcherons, 2 mineurs, 1 forgeron, 1 bâtisseur, 1 menuisier, 1 fermier), POI manager, déchargement Dictionary-set O(1)
+- **`world_manager.gd`** : chunks render_distance=4, village 8 PNJ (professions fixes : 2 bûcherons, 2 mineurs, 1 forgeron, 1 bâtisseur, 1 menuisier, 1 fermier), POI manager, déchargement Dictionary-set O(1). *(Pas de spawn animaux — retiré v12.0.0)*
 - **`day_night_cycle.gd`** / **`save_manager.gd`** / **`health_ui.gd`** : cycle jour/nuit, sauvegarde, UI santé
 
 ## Biomes
@@ -74,7 +74,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 
 - `Audio/` : ~334 fichiers (dont `Forest/` 11 MP3 ambiance par heure)
 - `BlockPNJ/` : 18 modèles GLB Kenney.nl (PNJ villageois)
-- `assets/Animals/GLB/` : 6 GLB animés Quaternius (CC0, ~1.4 Mo total) — Sheep, Cow, Horse, Pig, Wolf, Chicken. Convertis depuis FBX via FBX2glTF (fork Godot). Animations : Idle+Walk (vache, cheval, loup), Idle+Jump (mouton, cochon), 1 action (poulet)
+- `assets/Animals/GLB/` : 6 GLB animés Quaternius (CC0) — *(non utilisés depuis v12.0.0, conservés pour usage futur éventuel)*
 - `assets/Deco/` : apple.glb (nourriture)
 - `assets/Lobbys/` : .schem Minecraft à convertir
 
@@ -89,11 +89,11 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 | 3a | Fait | 65 blocs, 80 textures, 61 recettes, outils 3D extrudés, arc/combat |
 | 3b | Fait | Village autonome (stockpile, mine, construction, professions fixes) |
 | 4 | Fait | Grand ménage v11.0.0 — suppression Bedrock, GLB natif, optimisations perf |
-| 4.1 | Fait | v11.1.0 — 6 GLB animaux Quaternius (CC0) téléchargés, convertis FBX→GLB, intégrés |
+| 4.1 | Fait | v11.1.0 — 6 GLB animaux Quaternius (CC0) téléchargés, convertis FBX→GLB *(retirés du spawn en v12.0.0)* |
 | 5 | Fait | v12.0.0 — Gestion village The Settlers : farming (blé 5×5, 4 stages, récolte auto), faim villageois (drain/seuils/pause déjeuner), 5 nouveaux bâtiments (Ferme, Forge, Entrepôt, Maison, Entrée de mine), croissance village (pop cap dynamique + spawn villageois), UI enrichie (pop, faim, fermes, bâtiments, objectifs) |
 | 6 | À venir | Chaînes de production avancées, transport ressources, économie |
 
-**Packs GLB utilisés (CC0)** : Quaternius Farm Animals (mouton, vache, cheval, cochon), Animal Pack Vol.2 (loup), Animals Pack (poulet). **PNJ futurs** : KayKit Adventurers (161 anims travail)
+**Packs GLB utilisés (CC0)** : Kenney.nl (18 modèles PNJ villageois). **PNJ futurs** : KayKit Adventurers (161 anims travail)
 
 **Données MC disponibles :** 2390 blocs, 1283 items, 1396 recettes dans `minecraft_data/`
 
