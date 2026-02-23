@@ -15,7 +15,7 @@ const MOB_DATA = {
 		"color": Color(0.92, 0.92, 0.88),
 		"health": 8, "meat_name": "Mouton", "meat_count": 2,
 		"glb_path": "res://assets/Animals/GLB/Sheep.glb",
-		"model_scale": Vector3(0.8, 0.8, 0.8),
+		"model_scale": Vector3(0.30, 0.30, 0.30),  # natif H=4.36 → cible ~1.3
 		"anim_idle": "Armature|Idle", "anim_walk": "Armature|Jump",
 	},
 	MobType.COW: {
@@ -23,7 +23,7 @@ const MOB_DATA = {
 		"color": Color(0.55, 0.35, 0.2),
 		"health": 10, "meat_name": "Boeuf", "meat_count": 3,
 		"glb_path": "res://assets/Animals/GLB/Cow.glb",
-		"model_scale": Vector3(0.7, 0.7, 0.7),
+		"model_scale": Vector3(0.15, 0.15, 0.15),  # natif H=9.17 → cible ~1.4
 		"anim_idle": "Armature|Idle", "anim_walk": "Armature|Walk",
 	},
 	MobType.CHICKEN: {
@@ -31,7 +31,8 @@ const MOB_DATA = {
 		"color": Color(0.95, 0.95, 0.85),
 		"health": 4, "meat_name": "Poulet", "meat_count": 1,
 		"glb_path": "res://assets/Animals/GLB/Chicken.glb",
-		"model_scale": Vector3(0.5, 0.5, 0.5),
+		"model_scale": Vector3(0.26, 0.26, 0.26),  # natif H=2.67 → cible ~0.7
+		"model_tint": Color(0.95, 0.90, 0.75),  # blanc-crème poulet (modèle sans couleur)
 		"anim_idle": "", "anim_walk": "Armature|ArmatureAction.002",
 	},
 	MobType.PIG: {
@@ -39,7 +40,7 @@ const MOB_DATA = {
 		"color": Color(0.9, 0.7, 0.65),
 		"health": 10, "meat_name": "Porc", "meat_count": 3,
 		"glb_path": "res://assets/Animals/GLB/Pig.glb",
-		"model_scale": Vector3(0.7, 0.7, 0.7),
+		"model_scale": Vector3(0.09, 0.09, 0.09),  # natif H=9.78 → cible ~0.9
 		"anim_idle": "Armature|Idle", "anim_walk": "Armature|Jump",
 	},
 	MobType.WOLF: {
@@ -47,7 +48,8 @@ const MOB_DATA = {
 		"color": Color(0.7, 0.7, 0.7),
 		"health": 8, "meat_name": "Loup", "meat_count": 0,
 		"glb_path": "res://assets/Animals/GLB/Wolf.glb",
-		"model_scale": Vector3(0.7, 0.7, 0.7),
+		"model_scale": Vector3(0.16, 0.16, 0.16),  # natif H=5.30 → cible ~0.85
+		"model_tint": Color(0.55, 0.5, 0.45),  # gris-brun loup (modèle sans couleur)
 		"anim_idle": "WolfArmature|Idle", "anim_walk": "WolfArmature|Walking",
 	},
 	MobType.HORSE: {
@@ -55,7 +57,7 @@ const MOB_DATA = {
 		"color": Color(0.6, 0.4, 0.25),
 		"health": 15, "meat_name": "Cheval", "meat_count": 0,
 		"glb_path": "res://assets/Animals/GLB/Horse.glb",
-		"model_scale": Vector3(0.9, 0.9, 0.9),
+		"model_scale": Vector3(0.24, 0.24, 0.24),  # natif H=9.24 → cible ~2.2 (cheval grand)
 		"anim_idle": "Armature|Idle", "anim_walk": "Armature|Walk",
 	},
 }
@@ -112,12 +114,17 @@ func _create_model():
 		var scene = _load_glb(glb_path)
 		if scene:
 			var instance = scene.instantiate()
-			# Appliquer l'échelle du modèle
+			# Appliquer l'échelle du modèle + rotation 180° (modèles Quaternius orientés à l'envers)
 			var sc: Vector3 = data.get("model_scale", Vector3.ONE)
 			instance.scale = sc
+			instance.rotation.y = PI
 			add_child(instance)
 			_model_root = instance
 			_is_glb_model = true
+			# Appliquer un tint si le modèle n'a pas de couleurs propres
+			var tint: Color = data.get("model_tint", Color(-1, -1, -1))
+			if tint.r >= 0:
+				_apply_model_tint(instance, tint)
 			_anim_player = _find_animation_player(instance)
 			if _anim_player:
 				_play_anim("idle")
@@ -133,6 +140,19 @@ static func _load_glb(path: String) -> PackedScene:
 	if scene:
 		_glb_cache[path] = scene
 	return scene
+
+func _apply_model_tint(node: Node, tint: Color):
+	# Colore les modèles GLB qui n'ont pas de couleurs propres (Wolf, Chicken)
+	if node is MeshInstance3D:
+		var mi = node as MeshInstance3D
+		for i in range(mi.get_surface_override_material_count()):
+			var base_mat = mi.mesh.surface_get_material(i)
+			if base_mat and base_mat is StandardMaterial3D:
+				var mat = base_mat.duplicate()
+				mat.albedo_color = tint
+				mi.set_surface_override_material(i, mat)
+	for child in node.get_children():
+		_apply_model_tint(child, tint)
 
 func _find_animation_player(node: Node) -> AnimationPlayer:
 	if node is AnimationPlayer:

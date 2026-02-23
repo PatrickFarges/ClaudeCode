@@ -45,13 +45,13 @@ func _update_sun_transform():
 func _update_sun_light(sun_height: float):
 	if sun_height > 0.2:
 		# Jour
-		sun.light_energy = 0.8
+		sun.light_energy = 0.7
 		sun.light_color = SUN_DAY
 		sun.shadow_enabled = true
 	elif sun_height > -0.1:
 		# Aube / Crépuscule
 		var t: float = (sun_height + 0.1) / 0.3
-		sun.light_energy = lerpf(0.05, 0.8, t)
+		sun.light_energy = lerpf(0.05, 0.7, t)
 		sun.light_color = SUN_DAWN.lerp(SUN_DAY, t)
 		sun.shadow_enabled = true
 	else:
@@ -75,17 +75,17 @@ func _update_sky(sun_height: float):
 
 func _update_ambient(sun_height: float):
 	if sun_height > 0.1:
-		# Jour
-		env.ambient_light_energy = 0.8
-		env.ambient_light_color = Color.WHITE
+		# Jour — ambient modéré pour éviter la surexposition
+		env.ambient_light_energy = 0.5
+		env.ambient_light_color = Color(0.9, 0.92, 0.95)
 	elif sun_height > -0.1:
 		# Transition
 		var t: float = (sun_height + 0.1) / 0.2
-		env.ambient_light_energy = lerpf(0.2, 0.8, t)
-		env.ambient_light_color = Color(0.4, 0.45, 0.7).lerp(Color.WHITE, t)
+		env.ambient_light_energy = lerpf(0.15, 0.5, t)
+		env.ambient_light_color = Color(0.4, 0.45, 0.7).lerp(Color(0.9, 0.92, 0.95), t)
 	else:
 		# Nuit — lumière bleutée type clair de lune
-		env.ambient_light_energy = 0.2
+		env.ambient_light_energy = 0.15
 		env.ambient_light_color = Color(0.4, 0.45, 0.7)
 
 func get_time_string() -> String:
