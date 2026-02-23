@@ -14,18 +14,18 @@ Jeu voxel type Minecraft en GDScript avec Godot 4.5+, style pastel. Évolue vers
 
 ### Monde et rendu
 - **`game_config.gd`** : config centrale (`const GC = preload()` partout). `ACTIVE_PACK` = "Faithful32". Fonctions `get_block_texture_path()`, `get_item_texture_path()`. Système d'aliases textures (8 aliases cross-pack)
-- **`block_registry.gd`** : 65 types de blocs (enum 0-64), couleurs pastel, dureté, textures par face, `is_workstation()`, `get_block_tint()`
+- **`block_registry.gd`** : 72 types de blocs (enum 0-71), couleurs pastel, dureté, textures par face, `is_workstation()`, `get_block_tint()`. Inclut agriculture (FARMLAND, WHEAT_STAGE_0→3, WHEAT_ITEM, BREAD)
 - **`chunk.gd`** : 16×16×256 blocs, greedy meshing, AO, collision ConcavePolygon, UV corrigés
 - **`chunk_generator.gd`** : génération procédurale threadée (4 workers, Mutex), 6 noises, arbres par biome, minerais souterrains, structures passe 4
-- **`texture_manager.gd`** : Texture2DArray (80 layers), auto-détection résolution, fallback aliases, `_force_opaque()`
+- **`texture_manager.gd`** : Texture2DArray (85 layers), auto-détection résolution, fallback aliases, `_force_opaque()`
 - **`structure_manager.gd`** : Autoload — structures JSON depuis `res://structures/`, RLE, thread-safe
 
 ### Village autonome (The Settlers)
-- **`village_manager.gd`** : Autoload singleton — stockpile partagé, progression 4 phases (bois→pierre→fer→expansion), tool tier collectif, file de tâches par profession. **Scan optimisé** : rayon 2 chunks, échantillonnage 1/2, cache 15s, early exit 20 résultats, évaluation 8s. Mine escalier, chemin croix cobblestone, 3 blueprints bâtiments
-- **`npc_villager.gd`** : PNJ avec professions et emploi du temps (14h travail/jour). 18 modèles GLB Kenney.nl. Navigation throttlée (block lookups 0.15s, valeurs cachées). Tâches : harvest, mine, mine_gallery, craft, place_workstation, build, build_path. Anti-stuck + téléport secours. Label3D profession+tâche
+- **`village_manager.gd`** : Autoload singleton — stockpile partagé, progression 4 phases (bois→pierre→fer→expansion), tool tier collectif, file de tâches par profession. **Scan optimisé** : rayon 2 chunks, échantillonnage 1/2, cache 15s, early exit 20 résultats, évaluation 8s. Mine escalier, chemin croix cobblestone, **8 blueprints bâtiments** (Cabane, Atelier, Tour de guet, Ferme, Forge, Entrepôt, Maison, Entrée de mine). **Agriculture** : ferme 5×5, croissance blé 30s/stage×4, récolte auto, recette Pain. **Croissance village** : pop cap = 8 + 2×maisons, spawn villageois si 5+ pain
+- **`npc_villager.gd`** : PNJ avec professions et emploi du temps (14h travail/jour). 18 modèles GLB Kenney.nl. Navigation throttlée (block lookups 0.15s, valeurs cachées). Tâches : harvest, mine, mine_gallery, craft, place_workstation, build, build_path, **farm_create, farm_harvest**. Anti-stuck + téléport secours. Label3D profession+tâche. **Système de faim** : `hunger` 100→0, drain 1/s travail 0.2/s repos, seuil manger 40, ralenti sous 20, arrêt à 0, pause déjeuner 12h-13h
 - **`villager_profession.gd`** : 9 professions (BUCHERON, MENUISIER, FORGERON, BATISSEUR, FERMIER, BOULANGER, CHAMAN, MINEUR, NONE), schedule 6 plages, workstation mapping
 - **`poi_manager.gd`** : Points of Interest (workstations), claim/release, scan chunk, lookup O(1)
-- **`village_inventory_ui.gd`** : UI inventaire village (F1) — phase, tier, ressources, liste villageois avec activité
+- **`village_inventory_ui.gd`** : UI gestion village (F1) — phase, tier, **population X/Y**, **barre de faim** par villageois (vert/jaune/rouge), **section fermes**, **liste bâtiments**, **prochain objectif**, ressources, liste villageois avec activité
 
 ### Mobs et combat
 - **`passive_mob.gd`** : 6 types (SHEEP, COW, CHICKEN, PIG, WOLF, HORSE). **GLB Quaternius low-poly animés** (CC0) depuis `assets/Animals/GLB/`, `model_scale` par type, mapping anim logique→réel (`anim_idle`/`anim_walk`), fallback box colorée si GLB absent. Flash dégâts par émission (GLB) ou albedo (box). Navigation throttlée (0.2s). Combat : take_hit, loot. Groupe "passive_mobs"
@@ -80,7 +80,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 
 ## Direction du projet
 
-**Version actuelle : v11.1.0**
+**Version actuelle : v12.0.0**
 
 | Phase | Statut | Contenu |
 |-------|--------|---------|
@@ -90,8 +90,8 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 | 3b | Fait | Village autonome (stockpile, mine, construction, professions fixes) |
 | 4 | Fait | Grand ménage v11.0.0 — suppression Bedrock, GLB natif, optimisations perf |
 | 4.1 | Fait | v11.1.0 — 6 GLB animaux Quaternius (CC0) téléchargés, convertis FBX→GLB, intégrés |
-| 5 | À venir | Chaînes de production, bâtiments fonctionnels |
-| 6 | À venir | Transport ressources, économie, UI gestion avancée |
+| 5 | Fait | v12.0.0 — Gestion village The Settlers : farming (blé 5×5, 4 stages, récolte auto), faim villageois (drain/seuils/pause déjeuner), 5 nouveaux bâtiments (Ferme, Forge, Entrepôt, Maison, Entrée de mine), croissance village (pop cap dynamique + spawn villageois), UI enrichie (pop, faim, fermes, bâtiments, objectifs) |
+| 6 | À venir | Chaînes de production avancées, transport ressources, économie |
 
 **Packs GLB utilisés (CC0)** : Quaternius Farm Animals (mouton, vache, cheval, cochon), Animal Pack Vol.2 (loup), Animals Pack (poulet). **PNJ futurs** : KayKit Adventurers (161 anims travail)
 

@@ -77,6 +77,18 @@ var _task_status: String = ""  # texte affiché
 var _head_label: Label3D = null
 var _label_update_timer: float = 0.0
 
+# === Faim ===
+var hunger: float = 100.0
+const HUNGER_MAX = 100.0
+const HUNGER_DRAIN_WORK = 1.0    # par seconde au travail
+const HUNGER_DRAIN_REST = 0.2    # par seconde au repos
+const HUNGER_THRESHOLD_EAT = 40.0
+const HUNGER_THRESHOLD_SLOW = 20.0
+const HUNGER_BREAD_RESTORE = 50.0
+const HUNGER_WHEAT_RESTORE = 20.0
+var _is_starving: bool = false  # à 0 de faim
+var _base_move_speed: float = 2.0
+
 # === Cooldown pour éviter les scans coûteux en boucle ===
 var _search_cooldown: float = 0.0
 const SEARCH_COOLDOWN_DURATION = 5.0  # secondes avant de retenter une recherche
@@ -179,16 +191,28 @@ func _update_head_label():
 			text = prof_name + " - Balade"
 		VProfession.Activity.WANDER:
 			text = prof_name + " - Explore"
+
+	# Afficher la faim si critique
+	if _is_starving:
+		text = prof_name + " - Faim!"
+	elif hunger < HUNGER_THRESHOLD_EAT:
+		text += " (faim)"
+
 	_head_label.text = text
 
-	# Couleur selon l'activité
-	match current_activity:
-		VProfession.Activity.WORK:
-			_head_label.modulate = Color(1.0, 0.9, 0.3, 0.9)  # jaune
-		VProfession.Activity.SLEEP:
-			_head_label.modulate = Color(0.5, 0.5, 1.0, 0.7)  # bleu
-		_:
-			_head_label.modulate = Color(1.0, 1.0, 1.0, 0.8)  # blanc
+	# Couleur selon l'activité + faim
+	if _is_starving:
+		_head_label.modulate = Color(1.0, 0.2, 0.2, 0.9)  # rouge
+	elif hunger < HUNGER_THRESHOLD_EAT:
+		_head_label.modulate = Color(1.0, 0.6, 0.2, 0.9)  # orange
+	else:
+		match current_activity:
+			VProfession.Activity.WORK:
+				_head_label.modulate = Color(1.0, 0.9, 0.3, 0.9)  # jaune
+			VProfession.Activity.SLEEP:
+				_head_label.modulate = Color(0.5, 0.5, 1.0, 0.7)  # bleu
+			_:
+				_head_label.modulate = Color(1.0, 1.0, 1.0, 0.8)  # blanc
 
 # ============================================================
 # PHYSICS PROCESS — dispatch par activité
@@ -211,6 +235,9 @@ func _physics_process(delta):
 		_label_update_timer = 0.0
 		_update_head_label()
 
+	# === Faim ===
+	_update_hunger(delta)
+
 	# Dispatcher selon l'activité courante
 	match current_activity:
 		VProfession.Activity.WANDER:
@@ -227,6 +254,45 @@ func _physics_process(delta):
 			_behavior_wander(delta)
 
 	move_and_slide()
+
+# ============================================================
+# FAIM
+# ============================================================
+
+func _update_hunger(delta):
+	# Drain de faim
+	var drain = HUNGER_DRAIN_REST
+	if current_activity == VProfession.Activity.WORK:
+		drain = HUNGER_DRAIN_WORK
+	hunger = maxf(0.0, hunger - drain * delta)
+
+	# Ralentissement si très affamé
+	if hunger < HUNGER_THRESHOLD_SLOW:
+		move_speed = _base_move_speed * 0.5
+	else:
+		move_speed = _base_move_speed
+
+	# Famine totale
+	_is_starving = hunger <= 0.0
+
+	# Tentative de manger pendant GATHER (12h-13h) ou quand la faim est basse
+	if hunger < HUNGER_THRESHOLD_EAT and village_manager:
+		_try_eat()
+
+func _try_eat():
+	if not village_manager:
+		return
+	# Essayer de manger du pain d'abord
+	if village_manager.has_resources(BlockRegistry.BlockType.BREAD, 1):
+		village_manager.consume_resources(BlockRegistry.BlockType.BREAD, 1)
+		hunger = minf(HUNGER_MAX, hunger + HUNGER_BREAD_RESTORE)
+		_show_harvest_label("Miam! +Pain", Vector3i(int(global_position.x), int(global_position.y) + 1, int(global_position.z)))
+		return
+	# Sinon manger du blé brut
+	if village_manager.has_resources(BlockRegistry.BlockType.WHEAT_ITEM, 1):
+		village_manager.consume_resources(BlockRegistry.BlockType.WHEAT_ITEM, 1)
+		hunger = minf(HUNGER_MAX, hunger + HUNGER_WHEAT_RESTORE)
+		_show_harvest_label("Miam! +Blé", Vector3i(int(global_position.x), int(global_position.y) + 1, int(global_position.z)))
 
 # ============================================================
 # SCHEDULE
@@ -291,6 +357,10 @@ func _behavior_sleep(_delta):
 	_play_anim("idle")
 
 func _behavior_gather(delta):
+	# Pause déjeuner (12h-13h) — essayer de manger
+	if hunger < HUNGER_MAX and village_manager:
+		_try_eat()
+
 	# Errer mais rester dans un rayon de 15 blocs autour de home
 	var dist_to_home = Vector3(global_position.x, 0, global_position.z).distance_to(
 		Vector3(home_position.x, 0, home_position.z))
@@ -359,6 +429,14 @@ func _behavior_work(delta):
 # ============================================================
 
 func _behavior_village_work(delta):
+	# Si famine totale → arrêter de travailler
+	if _is_starving:
+		_task_status = "Faim!"
+		is_moving = false
+		_decelerate()
+		_play_anim("idle")
+		return
+
 	# Cooldown après un scan qui n'a rien trouvé (évite les scans coûteux en boucle)
 	if _search_cooldown > 0.0:
 		_search_cooldown -= delta
@@ -399,6 +477,10 @@ func _behavior_village_work(delta):
 			_execute_build(delta)
 		"build_path":
 			_execute_build_path(delta)
+		"farm_create":
+			_execute_farm_create(delta)
+		"farm_harvest":
+			_execute_farm_harvest(delta)
 		_:
 			current_task = {}
 
@@ -828,6 +910,97 @@ func _execute_build_path(delta):
 		# Vérifier s'il reste des blocs
 		if village_manager._path_index >= village_manager._path_blocks.size():
 			village_manager.mark_path_complete()
+			current_task = {}
+
+func _execute_farm_create(delta):
+	_task_status = "[Houe] Laboure"
+
+	# Trouver la prochaine parcelle à créer
+	if _mine_target == INVALID_POS:
+		_mine_target = village_manager.get_next_farm_plot_to_create()
+		if _mine_target == INVALID_POS:
+			# Ferme complète
+			current_task = {}
+			return
+		village_manager.claim_position(_mine_target)
+		has_target = true
+		_arrived_at_target = false
+		_build_timer = 0.0
+
+	var target_world = Vector3(_mine_target.x + 0.5, _mine_target.y, _mine_target.z + 0.5)
+
+	if not _arrived_at_target:
+		var dist = Vector3(global_position.x, 0, global_position.z).distance_to(
+			Vector3(target_world.x, 0, target_world.z))
+		if dist < 2.5:
+			_arrived_at_target = true
+		else:
+			_walk_toward(target_world, delta)
+			return
+
+	_face_target(target_world)
+	is_moving = false
+	_decelerate()
+	_play_anim("attack")
+
+	_build_timer += delta
+	if _build_timer >= 1.0:
+		_build_timer = 0.0
+		village_manager.create_farm_plot(_mine_target)
+		village_manager.release_position(_mine_target)
+		_show_harvest_label("Labouré", _mine_target)
+		_mine_target = INVALID_POS
+		_arrived_at_target = false
+		# Enchaîner avec la parcelle suivante
+		var next = village_manager.get_next_farm_plot_to_create()
+		if next == INVALID_POS:
+			current_task = {}
+
+func _execute_farm_harvest(delta):
+	_task_status = "[Faucille] Récolte"
+
+	if _mine_target == INVALID_POS:
+		var plot = village_manager.get_mature_wheat_plot()
+		if plot.is_empty():
+			current_task = {}
+			return
+		_mine_target = plot["pos"]
+		village_manager.claim_position(_mine_target)
+		has_target = true
+		_arrived_at_target = false
+		_build_timer = 0.0
+
+	var target_world = Vector3(_mine_target.x + 0.5, _mine_target.y, _mine_target.z + 0.5)
+
+	if not _arrived_at_target:
+		var dist = Vector3(global_position.x, 0, global_position.z).distance_to(
+			Vector3(target_world.x, 0, target_world.z))
+		if dist < 2.5:
+			_arrived_at_target = true
+		else:
+			_walk_toward(target_world, delta)
+			return
+
+	_face_target(target_world)
+	is_moving = false
+	_decelerate()
+	_play_anim("attack")
+
+	_build_timer += delta
+	if _build_timer >= 0.8:
+		_build_timer = 0.0
+		# Trouver le plot correspondant et le récolter
+		for plot in village_manager.farm_plots:
+			if plot["pos"] == _mine_target and plot["stage"] >= village_manager.WHEAT_MAX_STAGE:
+				village_manager.harvest_wheat(plot)
+				_show_harvest_label("+1 Blé", _mine_target)
+				break
+		village_manager.release_position(_mine_target)
+		_mine_target = INVALID_POS
+		_arrived_at_target = false
+		# Chercher un autre blé mature
+		var next_plot = village_manager.get_mature_wheat_plot()
+		if next_plot.is_empty():
 			current_task = {}
 
 func _face_target(target: Vector3):

@@ -46,6 +46,14 @@ static func get_all_recipes() -> Array:
 			"output_count": 1,
 			"station": "hand"
 		},
+		# --- Agriculture ---
+		{
+			"name": "Pain",
+			"inputs": [[BlockRegistry.BlockType.WHEAT_ITEM, 3]],
+			"output_type": BlockRegistry.BlockType.BREAD,
+			"output_count": 1,
+			"station": "hand"
+		},
 		# --- Nouvelles planches par essence ---
 		{
 			"name": "Planches de sapin",

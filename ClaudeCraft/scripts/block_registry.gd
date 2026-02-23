@@ -78,6 +78,14 @@ enum BlockType {
 	BOOKSHELF,
 	HAY_BLOCK,
 	BARREL,
+	# === AGRICULTURE (65-71) ===
+	FARMLAND,
+	WHEAT_STAGE_0,
+	WHEAT_STAGE_1,
+	WHEAT_STAGE_2,
+	WHEAT_STAGE_3,
+	WHEAT_ITEM,
+	BREAD,
 }
 
 const BLOCK_DATA = {
@@ -547,6 +555,56 @@ const BLOCK_DATA = {
 		"color": Color(0.6, 0.45, 0.3, 1.0),
 		"hardness": 1.0,
 		"faces": { "top": "barrel_top", "bottom": "barrel_bottom", "side": "barrel_side" }
+	},
+	# === AGRICULTURE ===
+	BlockType.FARMLAND: {
+		"name": "Farmland",
+		"solid": true,
+		"color": Color(0.55, 0.35, 0.2, 1.0),
+		"hardness": 0.5,
+		"faces": { "top": "farmland_moist", "side": "dirt", "bottom": "dirt" }
+	},
+	BlockType.WHEAT_STAGE_0: {
+		"name": "Wheat (sprout)",
+		"solid": false,
+		"color": Color(0.4, 0.6, 0.2, 1.0),
+		"hardness": 0.0,
+		"faces": { "all": "wheat_stage0" }
+	},
+	BlockType.WHEAT_STAGE_1: {
+		"name": "Wheat (growing)",
+		"solid": false,
+		"color": Color(0.5, 0.7, 0.25, 1.0),
+		"hardness": 0.0,
+		"faces": { "all": "wheat_stage2" }
+	},
+	BlockType.WHEAT_STAGE_2: {
+		"name": "Wheat (tall)",
+		"solid": false,
+		"color": Color(0.7, 0.75, 0.3, 1.0),
+		"hardness": 0.0,
+		"faces": { "all": "wheat_stage5" }
+	},
+	BlockType.WHEAT_STAGE_3: {
+		"name": "Wheat (mature)",
+		"solid": false,
+		"color": Color(0.85, 0.8, 0.3, 1.0),
+		"hardness": 0.0,
+		"faces": { "all": "wheat_stage7" }
+	},
+	BlockType.WHEAT_ITEM: {
+		"name": "Wheat",
+		"solid": true,
+		"color": Color(0.85, 0.75, 0.3, 1.0),
+		"hardness": 0.0,
+		"faces": { "all": "wheat_stage7" }
+	},
+	BlockType.BREAD: {
+		"name": "Bread",
+		"solid": true,
+		"color": Color(0.8, 0.6, 0.3, 1.0),
+		"hardness": 0.0,
+		"faces": { "all": "wheat_stage7" }
 	},
 }
 

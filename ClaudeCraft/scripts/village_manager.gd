@@ -60,6 +60,19 @@ var _mine_gallery_center: Vector3i = Vector3i.ZERO  # centre de la galerie actue
 var _mine_gallery_y: int = 45      # profondeur galerie actuelle
 var _mine_expansion_dir: int = 0   # direction de la prochaine expansion (0-3)
 
+# === AGRICULTURE ===
+var farm_plots: Array = []  # Array de { "pos": Vector3i, "stage": int, "timer": float }
+var _farm_initialized: bool = false
+var _farm_center: Vector3i = Vector3i.ZERO
+const WHEAT_GROWTH_TIME = 30.0  # secondes par stage
+const WHEAT_MAX_STAGE = 3  # 0→3 = 4 stages
+const FARM_SIZE = 5  # 5x5
+
+# === CROISSANCE DU VILLAGE ===
+var _growth_timer: float = 0.0
+const GROWTH_CHECK_INTERVAL = 30.0
+const BREAD_PER_VILLAGER = 5
+
 # === TIMER ===
 var _eval_timer: float = 0.0
 const EVAL_INTERVAL = 8.0  # évaluation toutes les 8s (réduit la charge de scan)
@@ -93,6 +106,15 @@ func _process(delta):
 	if _eval_timer >= EVAL_INTERVAL:
 		_eval_timer = 0.0
 		_evaluate_needs()
+
+	# Croissance du blé
+	_update_wheat_growth(delta)
+
+	# Croissance du village (nouveaux villageois)
+	_growth_timer += delta
+	if _growth_timer >= GROWTH_CHECK_INTERVAL:
+		_growth_timer = 0.0
+		_try_grow_village()
 
 # ============================================================
 # CENTRE DU VILLAGE
@@ -247,6 +269,20 @@ func _evaluate_phase_1():
 	var total_stone = get_resource_count(3)  # STONE
 	var total_cobble = get_resource_count(25)  # COBBLESTONE
 
+	# === AGRICULTURE — le fermier commence dès la phase 1 ===
+	_add_farming_tasks()
+
+	# Crafter du pain si on a du blé
+	var wheat_count = get_resource_count(BlockRegistry.BlockType.WHEAT_ITEM)
+	if wheat_count >= 3:
+		if not _has_task_of_type("craft", "Pain"):
+			_add_task({
+				"type": "craft",
+				"recipe_name": "Pain",
+				"priority": 12,
+				"required_profession": VProfession.Profession.FERMIER,
+			})
+
 	# Toujours maintenir du bois en stock
 	if total_wood < 20:
 		_add_harvest_tasks(5, 4)  # plus de bois
@@ -288,9 +324,9 @@ func _evaluate_phase_1():
 	if not _path_built and get_resource_count(25) >= 5:  # COBBLESTONE
 		_try_queue_path()
 
-	# Construire la première cabane si on a les matériaux
-	if _path_built and placed_workstations.has(21) and built_structures.size() == 0:
-		_try_queue_build(0)  # Blueprint 0 = cabane
+	# Construire les bâtiments de phase 1
+	if _path_built:
+		_try_queue_builds_for_phase(1)
 
 	# Si furnace placée -> phase 2
 	if placed_workstations.has(21):
@@ -305,6 +341,18 @@ func _evaluate_phase_2():
 	var total_coal = get_resource_count(16)   # COAL_ORE
 	var total_iron_ore = get_resource_count(17)  # IRON_ORE
 	var total_iron = get_resource_count(19)   # IRON_INGOT
+
+	# Agriculture
+	_add_farming_tasks()
+	var wheat_count = get_resource_count(BlockRegistry.BlockType.WHEAT_ITEM)
+	if wheat_count >= 3:
+		if not _has_task_of_type("craft", "Pain"):
+			_add_task({
+				"type": "craft",
+				"recipe_name": "Pain",
+				"priority": 12,
+				"required_profession": VProfession.Profession.FERMIER,
+			})
 
 	# Maintenir le stock
 	if total_wood < 15:
@@ -347,9 +395,9 @@ func _evaluate_phase_2():
 	if not _path_built and get_resource_count(25) >= 5:
 		_try_queue_path()
 
-	# Construire plus de bâtiments
-	if _path_built and built_structures.size() < 2:
-		_try_queue_build(1)  # Blueprint 1 = atelier
+	# Construire les bâtiments de phase 1 et 2
+	if _path_built:
+		_try_queue_builds_for_phase(2)
 
 	# Si stone_table placée -> phase 3
 	if placed_workstations.has(22):
@@ -362,14 +410,25 @@ func _evaluate_phase_3():
 	var total_wood = get_total_wood()
 	var total_stone = get_resource_count(3)
 
+	# Agriculture
+	_add_farming_tasks()
+	var wheat_count = get_resource_count(BlockRegistry.BlockType.WHEAT_ITEM)
+	if wheat_count >= 3:
+		if not _has_task_of_type("craft", "Pain"):
+			_add_task({
+				"type": "craft",
+				"recipe_name": "Pain",
+				"priority": 12,
+				"required_profession": VProfession.Profession.FERMIER,
+			})
+
 	if total_wood < 20:
 		_add_harvest_tasks(5, 3)
 	if total_stone < 20:
 		_add_mine_gallery_tasks(2)
 
-	# Construire plus
-	if built_structures.size() < BLUEPRINTS.size():
-		_try_queue_build(built_structures.size())
+	# Construire tous les bâtiments
+	_try_queue_builds_for_phase(3)
 
 # ============================================================
 # GESTION DES TÂCHES
@@ -419,6 +478,36 @@ func _add_mine_tasks(block_type: int, count: int):
 			"target_block": block_type,
 			"priority": 25,
 			"required_profession": VProfession.Profession.MINEUR,
+		})
+
+func _add_farming_tasks():
+	# Le fermier crée les parcelles et récolte le blé
+	var existing_farm = 0
+	for t in task_queue:
+		if t["type"] in ["farm_create", "farm_harvest"]:
+			existing_farm += 1
+	for v in villagers:
+		if is_instance_valid(v) and v.current_task.get("type", "") in ["farm_create", "farm_harvest"]:
+			existing_farm += 1
+	if existing_farm >= 2:
+		return
+
+	# Priorité 1 : récolter le blé mature
+	var mature_plot = get_mature_wheat_plot()
+	if not mature_plot.is_empty():
+		_add_task({
+			"type": "farm_harvest",
+			"priority": 10,
+			"required_profession": VProfession.Profession.FERMIER,
+		})
+		return
+
+	# Priorité 2 : créer de nouvelles parcelles
+	if farm_plots.size() < FARM_SIZE * FARM_SIZE:
+		_add_task({
+			"type": "farm_create",
+			"priority": 18,
+			"required_profession": VProfession.Profession.FERMIER,
 		})
 
 func get_next_task_for(prof: int) -> Dictionary:
@@ -951,6 +1040,21 @@ func place_workstation_at(block_type: int, pos: Vector3i):
 # CONSTRUCTION
 # ============================================================
 
+func _try_queue_builds_for_phase(max_phase: int):
+	# Construire tous les blueprints dont la phase est <= max_phase et pas encore construits
+	var built_names: Dictionary = {}
+	for built in built_structures:
+		built_names[built["name"]] = true
+
+	for i in range(BLUEPRINTS.size()):
+		var bp = BLUEPRINTS[i]
+		if built_names.has(bp["name"]):
+			continue
+		var bp_phase = bp.get("phase", 0)
+		if bp_phase <= max_phase:
+			_try_queue_build(i)
+			return  # Un seul bâtiment à la fois
+
 func _try_queue_build(blueprint_index: int):
 	if blueprint_index >= BLUEPRINTS.size():
 		return
@@ -1020,11 +1124,15 @@ func _try_queue_build(blueprint_index: int):
 
 func _find_build_site(blueprint: Dictionary) -> Vector3i:
 	# Trouver un terrain plat assez grand pour le bâtiment
+	# Préfère les emplacements proches du chemin cobblestone
 	var size = blueprint["size"]
 	var cx = int(village_center.x)
 	var cz = int(village_center.z)
 
-	for attempt in range(30):
+	var best_site = Vector3i(-9999, -9999, -9999)
+	var best_path_dist = INF
+
+	for attempt in range(40):
 		var tx = cx + randi_range(-20, 20)
 		var tz = cz + randi_range(-20, 20)
 
@@ -1059,9 +1167,18 @@ func _find_build_site(blueprint: Dictionary) -> Vector3i:
 		if overlap:
 			continue
 
-		return Vector3i(tx, first_y + 1, tz)
+		# Calculer la distance au chemin le plus proche
+		var site = Vector3i(tx, first_y + 1, tz)
+		var path_dist = INF
+		for pb in _path_blocks:
+			var d = abs(tx - pb.x) + abs(tz - pb.z)
+			if d < path_dist:
+				path_dist = d
+		if path_dist < best_path_dist:
+			best_path_dist = path_dist
+			best_site = site
 
-	return Vector3i(-9999, -9999, -9999)
+	return best_site
 
 func register_built_structure(name: String, origin: Vector3i, size: Vector3i):
 	built_structures.append({ "name": name, "origin": origin, "size": size })
@@ -1205,6 +1322,7 @@ func _init_blueprints():
 		"size": Vector3i(5, 5, 5),
 		"materials": { BT_PLANKS: 68, BT_GLASS: 3 },
 		"block_list": cabin_blocks,
+		"phase": 1,
 	})
 
 	# Atelier 7x5x5
@@ -1238,6 +1356,7 @@ func _init_blueprints():
 		"size": Vector3i(7, 5, 5),
 		"materials": { BT_PLANKS: 62, BT_COBBLE: 35, BT_GLASS: 4 },
 		"block_list": workshop_blocks,
+		"phase": 2,
 	})
 
 	# Tour de guet 3x8x3
@@ -1265,7 +1384,377 @@ func _init_blueprints():
 		"size": Vector3i(3, 8, 3),
 		"materials": { BT_COBBLE: 33, BT_PLANKS: 9 },
 		"block_list": tower_blocks,
+		"phase": 3,
 	})
+
+	# === Ferme 6x4x6 (Phase 1) ===
+	var farm_blocks = []
+	var BT_HAY = 63  # HAY_BLOCK
+	# Sol planches
+	for x in range(6):
+		for z in range(6):
+			farm_blocks.append([x, 0, z, BT_PLANKS])
+	# Murs bas (y=1-2) — cobblestone, porte au centre x=0
+	for y in range(1, 3):
+		for x in range(6):
+			for z in range(6):
+				if x == 0 or x == 5 or z == 0 or z == 5:
+					if x == 0 and z == 3 and y <= 2:
+						continue  # Porte
+					farm_blocks.append([x, y, z, BT_COBBLE])
+	# Toit planches (y=3)
+	for x in range(6):
+		for z in range(6):
+			farm_blocks.append([x, 3, z, BT_PLANKS])
+	BLUEPRINTS.append({
+		"name": "Ferme",
+		"size": Vector3i(6, 4, 6),
+		"materials": { BT_PLANKS: 42, BT_COBBLE: 36 },
+		"block_list": farm_blocks,
+		"phase": 1,
+	})
+
+	# === Forge 5x5x5 (Phase 2) ===
+	var forge_blocks = []
+	var BT_STONE = 3
+	# Sol cobblestone
+	for x in range(5):
+		for z in range(5):
+			forge_blocks.append([x, 0, z, BT_COBBLE])
+	# Murs (y=1-3) — stone + cobblestone, cheminée
+	for y in range(1, 4):
+		for x in range(5):
+			for z in range(5):
+				if x == 0 or x == 4 or z == 0 or z == 4:
+					if x == 0 and z == 2 and y <= 2:
+						continue  # Porte
+					if y == 2 and ((x == 2 and z == 0) or (x == 2 and z == 4)):
+						forge_blocks.append([x, y, z, BT_GLASS])
+					else:
+						forge_blocks.append([x, y, z, BT_STONE if y >= 2 else BT_COBBLE])
+	# Toit (y=4)
+	for x in range(5):
+		for z in range(5):
+			forge_blocks.append([x, 4, z, BT_COBBLE])
+	BLUEPRINTS.append({
+		"name": "Forge",
+		"size": Vector3i(5, 5, 5),
+		"materials": { BT_COBBLE: 45, BT_STONE: 16, BT_GLASS: 2 },
+		"block_list": forge_blocks,
+		"phase": 2,
+	})
+
+	# === Entrepôt 7x4x7 (Phase 2) ===
+	var storage_blocks = []
+	# Sol planches
+	for x in range(7):
+		for z in range(7):
+			storage_blocks.append([x, 0, z, BT_PLANKS])
+	# Murs (y=1-2)
+	for y in range(1, 3):
+		for x in range(7):
+			for z in range(7):
+				if x == 0 or x == 6 or z == 0 or z == 6:
+					if x == 3 and z == 0 and y <= 2:
+						continue  # Porte large
+					if x == 4 and z == 0 and y <= 2:
+						continue
+					storage_blocks.append([x, y, z, BT_PLANKS])
+	# Toit (y=3)
+	for x in range(7):
+		for z in range(7):
+			storage_blocks.append([x, 3, z, BT_PLANKS])
+	BLUEPRINTS.append({
+		"name": "Entrepôt",
+		"size": Vector3i(7, 4, 7),
+		"materials": { BT_PLANKS: 98 },
+		"block_list": storage_blocks,
+		"phase": 2,
+	})
+
+	# === Maison 5x4x5 (Phase 2) ===
+	var house_blocks = []
+	# Sol planches
+	for x in range(5):
+		for z in range(5):
+			house_blocks.append([x, 0, z, BT_PLANKS])
+	# Murs (y=1-2) — planches, fenêtres verre
+	for y in range(1, 3):
+		for x in range(5):
+			for z in range(5):
+				if x == 0 or x == 4 or z == 0 or z == 4:
+					if x == 0 and z == 2 and y <= 2:
+						continue  # Porte
+					if y == 2 and ((x == 2 and (z == 0 or z == 4)) or (z == 2 and x == 4)):
+						house_blocks.append([x, y, z, BT_GLASS])
+					else:
+						house_blocks.append([x, y, z, BT_PLANKS])
+	# Toit (y=3)
+	for x in range(5):
+		for z in range(5):
+			house_blocks.append([x, 3, z, BT_PLANKS])
+	BLUEPRINTS.append({
+		"name": "Maison",
+		"size": Vector3i(5, 4, 5),
+		"materials": { BT_PLANKS: 56, BT_GLASS: 3 },
+		"block_list": house_blocks,
+		"phase": 2,
+	})
+
+	# === Entrée de mine 3x3x3 (Phase 1) ===
+	var mine_entry_blocks = []
+	# Portique en cobblestone
+	# Piliers (y=0-2) aux 4 coins
+	for y in range(3):
+		mine_entry_blocks.append([0, y, 0, BT_COBBLE])
+		mine_entry_blocks.append([2, y, 0, BT_COBBLE])
+		mine_entry_blocks.append([0, y, 2, BT_COBBLE])
+		mine_entry_blocks.append([2, y, 2, BT_COBBLE])
+	# Linteau (y=2, milieu)
+	mine_entry_blocks.append([1, 2, 0, BT_COBBLE])
+	mine_entry_blocks.append([1, 2, 2, BT_COBBLE])
+	mine_entry_blocks.append([0, 2, 1, BT_COBBLE])
+	mine_entry_blocks.append([2, 2, 1, BT_COBBLE])
+	mine_entry_blocks.append([1, 2, 1, BT_COBBLE])
+	BLUEPRINTS.append({
+		"name": "Entrée de mine",
+		"size": Vector3i(3, 3, 3),
+		"materials": { BT_COBBLE: 21 },
+		"block_list": mine_entry_blocks,
+		"phase": 1,
+	})
+
+# ============================================================
+# AGRICULTURE (Farming)
+# ============================================================
+
+func _update_wheat_growth(delta):
+	if farm_plots.size() == 0:
+		return
+	for plot in farm_plots:
+		if plot["stage"] >= WHEAT_MAX_STAGE:
+			continue
+		plot["timer"] += delta
+		if plot["timer"] >= WHEAT_GROWTH_TIME:
+			plot["timer"] = 0.0
+			plot["stage"] += 1
+			# Mettre à jour le bloc dans le monde
+			var wheat_pos = Vector3i(plot["pos"].x, plot["pos"].y + 1, plot["pos"].z)
+			var new_block = _wheat_stage_to_block(plot["stage"])
+			place_block(wheat_pos, new_block)
+
+func _wheat_stage_to_block(stage: int) -> int:
+	match stage:
+		0: return BlockRegistry.BlockType.WHEAT_STAGE_0
+		1: return BlockRegistry.BlockType.WHEAT_STAGE_1
+		2: return BlockRegistry.BlockType.WHEAT_STAGE_2
+		3: return BlockRegistry.BlockType.WHEAT_STAGE_3
+		_: return BlockRegistry.BlockType.WHEAT_STAGE_0
+
+func init_farm():
+	# Trouver un spot plat 5x5 près du centre du village
+	if _farm_initialized:
+		return
+	if not world_manager:
+		return
+
+	var cx = int(village_center.x)
+	var cz = int(village_center.z)
+
+	# Chercher un terrain plat 5x5 autour du centre
+	for attempt in range(20):
+		var tx = cx + randi_range(-12, 12)
+		var tz = cz + randi_range(-12, 12)
+
+		var first_y = _find_surface_y(tx, tz)
+		if first_y < 0:
+			continue
+
+		var flat = true
+		for fx in range(FARM_SIZE):
+			for fz in range(FARM_SIZE):
+				var sy = _find_surface_y(tx + fx, tz + fz)
+				if abs(sy - first_y) > 1:
+					flat = false
+					break
+			if not flat:
+				break
+
+		if not flat:
+			continue
+
+		# Pas de chevauchement avec les constructions
+		var overlap = false
+		for built in built_structures:
+			var bo = built["origin"]
+			var bs = built["size"]
+			if tx < bo.x + bs.x + 2 and tx + FARM_SIZE > bo.x - 2 \
+				and tz < bo.z + bs.z + 2 and tz + FARM_SIZE > bo.z - 2:
+				overlap = true
+				break
+		if overlap:
+			continue
+
+		_farm_center = Vector3i(tx, first_y, tz)
+		_farm_initialized = true
+		print("VillageManager: ferme planifiée à %s" % str(_farm_center))
+		return
+
+func create_farm_plot(pos: Vector3i):
+	# Convertir GRASS/DIRT en FARMLAND et planter du blé dessus
+	place_block(pos, BlockRegistry.BlockType.FARMLAND)
+	var wheat_pos = Vector3i(pos.x, pos.y + 1, pos.z)
+	place_block(wheat_pos, BlockRegistry.BlockType.WHEAT_STAGE_0)
+	farm_plots.append({
+		"pos": pos,
+		"stage": 0,
+		"timer": 0.0,
+	})
+
+func get_next_farm_plot_to_create() -> Vector3i:
+	# Retourne la prochaine position de la ferme à labourer
+	if not _farm_initialized:
+		init_farm()
+	if not _farm_initialized:
+		return INVALID_POS_CONST
+
+	var created_set: Dictionary = {}
+	for plot in farm_plots:
+		created_set[plot["pos"]] = true
+
+	for fx in range(FARM_SIZE):
+		for fz in range(FARM_SIZE):
+			var pos = Vector3i(_farm_center.x + fx, _farm_center.y, _farm_center.z + fz)
+			if not created_set.has(pos):
+				return pos
+
+	return INVALID_POS_CONST  # Ferme complète
+
+func get_mature_wheat_plot() -> Dictionary:
+	# Retourne un plot de blé mature à récolter
+	for plot in farm_plots:
+		if plot["stage"] >= WHEAT_MAX_STAGE:
+			var pos = plot["pos"]
+			if not claimed_positions.has(pos):
+				return plot
+	return {}
+
+func harvest_wheat(plot: Dictionary):
+	# Récolter le blé mature : supprimer le bloc, ajouter WHEAT_ITEM, replanter
+	var wheat_pos = Vector3i(plot["pos"].x, plot["pos"].y + 1, plot["pos"].z)
+	place_block(wheat_pos, BlockRegistry.BlockType.WHEAT_STAGE_0)
+	plot["stage"] = 0
+	plot["timer"] = 0.0
+	add_resource(BlockRegistry.BlockType.WHEAT_ITEM, 1)
+	print("VillageManager: blé récolté à %s" % str(plot["pos"]))
+
+func get_farm_stats() -> Dictionary:
+	var total = farm_plots.size()
+	var mature = 0
+	for plot in farm_plots:
+		if plot["stage"] >= WHEAT_MAX_STAGE:
+			mature += 1
+	return { "total": total, "mature": mature, "max": FARM_SIZE * FARM_SIZE }
+
+# ============================================================
+# CROISSANCE DU VILLAGE
+# ============================================================
+
+func _try_grow_village():
+	var pop = villagers.size()
+	var cap = get_population_cap()
+	if pop >= cap:
+		return
+	if not has_resources(BlockRegistry.BlockType.BREAD, BREAD_PER_VILLAGER):
+		return
+
+	# Consommer le pain
+	consume_resources(BlockRegistry.BlockType.BREAD, BREAD_PER_VILLAGER)
+
+	# Choisir une profession selon les besoins
+	var prof = _pick_needed_profession()
+
+	# Trouver un spot de spawn
+	var spawn_pos = _find_villager_spawn_pos()
+	if spawn_pos == Vector3.ZERO:
+		# Rembourser le pain si pas de spot
+		add_resource(BlockRegistry.BlockType.BREAD, BREAD_PER_VILLAGER)
+		return
+
+	# Spawn le nouveau villageois
+	_spawn_new_villager(spawn_pos, prof)
+	print("VillageManager: nouveau villageois %s ! Population %d/%d" % [
+		VProfession.get_profession_name(prof), pop + 1, cap])
+
+func get_population_cap() -> int:
+	var houses = 0
+	for built in built_structures:
+		if built["name"] in ["Cabane", "Maison"]:
+			houses += 1
+	return 8 + (2 * houses)
+
+func _pick_needed_profession() -> int:
+	# Compter les professions existantes
+	var counts: Dictionary = {}
+	for v in villagers:
+		if is_instance_valid(v):
+			counts[v.profession] = counts.get(v.profession, 0) + 1
+
+	# Priorités : un fermier de plus si peu de nourriture, bûcheron si peu de bois, etc.
+	var needs: Array = [
+		[VProfession.Profession.FERMIER, 1],
+		[VProfession.Profession.BUCHERON, 2],
+		[VProfession.Profession.MINEUR, 2],
+		[VProfession.Profession.BATISSEUR, 1],
+		[VProfession.Profession.MENUISIER, 1],
+		[VProfession.Profession.FORGERON, 1],
+	]
+
+	for need in needs:
+		var prof = need[0]
+		var min_count = need[1]
+		if counts.get(prof, 0) < min_count:
+			return prof
+
+	# Sinon, la profession la moins représentée
+	var min_prof = VProfession.Profession.BUCHERON
+	var min_val = 999
+	for need in needs:
+		var prof = need[0]
+		var c = counts.get(prof, 0)
+		if c < min_val:
+			min_val = c
+			min_prof = prof
+	return min_prof
+
+func _find_villager_spawn_pos() -> Vector3:
+	var cx = int(village_center.x)
+	var cz = int(village_center.z)
+	for attempt in range(15):
+		var tx = cx + randi_range(-6, 6)
+		var tz = cz + randi_range(-6, 6)
+		var sy = _find_surface_y(tx, tz)
+		if sy > 0:
+			return Vector3(tx + 0.5, sy + 1, tz + 0.5)
+	return Vector3.ZERO
+
+func _spawn_new_villager(spawn_pos: Vector3, prof: int):
+	if not world_manager:
+		return
+	var model_index = VProfession.get_model_for_profession(prof, villagers.size())
+	var chunk_pos = Vector3i(
+		floori(spawn_pos.x / CHUNK_SIZE),
+		0,
+		floori(spawn_pos.z / CHUNK_SIZE)
+	)
+	var NpcVillagerScript = preload("res://scripts/npc_villager.gd")
+	var npc = NpcVillagerScript.new()
+	npc.setup(model_index, spawn_pos, chunk_pos, prof)
+	if world_manager.poi_manager:
+		npc.poi_manager = world_manager.poi_manager
+	world_manager.get_parent().call_deferred("add_child", npc)
+	world_manager.npcs.append({"npc": npc, "chunk_pos": chunk_pos})
+	register_villager(npc)
 
 # ============================================================
 # DEBUG
@@ -1275,8 +1764,12 @@ func get_status_text() -> String:
 	var phase_names = ["Bootstrap", "Âge du Bois", "Âge de la Pierre", "Âge du Fer"]
 	var status = "Village: %s (Phase %d)\n" % [phase_names[village_phase], village_phase]
 	status += "Outils: tier %d (x%.1f)\n" % [village_tool_tier, TOOL_TIER_MULTIPLIER.get(village_tool_tier, 1.0)]
+	status += "Population: %d/%d\n" % [villagers.size(), get_population_cap()]
 	status += "Tâches: %d en attente\n" % task_queue.size()
-	status += "Villageois: %d\n" % villagers.size()
+	var fs = get_farm_stats()
+	if fs["total"] > 0:
+		status += "Ferme: %d parcelles (%d matures)\n" % [fs["total"], fs["mature"]]
+	status += "Bâtiments: %d\n" % built_structures.size()
 	status += "Stockpile:\n"
 	for bt in stockpile:
 		if stockpile[bt] > 0:

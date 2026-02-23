@@ -89,6 +89,12 @@ const TEXTURE_LIST: Array[String] = [
 	"barrel_top",        # 77
 	"barrel_side",       # 78
 	"barrel_bottom",     # 79
+	# === AGRICULTURE ===
+	"farmland_moist",    # 80
+	"wheat_stage0",      # 81
+	"wheat_stage2",      # 82
+	"wheat_stage5",      # 83
+	"wheat_stage7",      # 84
 ]
 
 var _texture_array: Texture2DArray

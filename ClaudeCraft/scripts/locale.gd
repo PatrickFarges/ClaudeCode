@@ -75,6 +75,14 @@ const BLOCK_NAMES = {
 	"Bookshelf":         {"fr": "Bibliotheque",            "en": "Bookshelf"},
 	"Hay Block":         {"fr": "Botte de foin",           "en": "Hay Block"},
 	"Barrel":            {"fr": "Tonneau",                 "en": "Barrel"},
+	# === AGRICULTURE ===
+	"Farmland":          {"fr": "Terre cultivee",           "en": "Farmland"},
+	"Wheat (sprout)":    {"fr": "Ble (pousse)",             "en": "Wheat (sprout)"},
+	"Wheat (growing)":   {"fr": "Ble (croissance)",         "en": "Wheat (growing)"},
+	"Wheat (tall)":      {"fr": "Ble (grand)",              "en": "Wheat (tall)"},
+	"Wheat (mature)":    {"fr": "Ble (mature)",             "en": "Wheat (mature)"},
+	"Wheat":             {"fr": "Ble",                      "en": "Wheat"},
+	"Bread":             {"fr": "Pain",                     "en": "Bread"},
 }
 
 # ============================================================
@@ -137,6 +145,8 @@ const RECIPE_NAMES = {
 	"Verre (max)":             {"fr": "Verre (max)",             "en": "Glass (max)"},
 	"Pave (max)":              {"fr": "Pave (max)",              "en": "Cobblestone (max)"},
 	"Botte de foin (max)":     {"fr": "Botte de foin (max)",     "en": "Hay Block (max)"},
+	# === AGRICULTURE ===
+	"Pain":                    {"fr": "Pain",                    "en": "Bread"},
 }
 
 # ============================================================
