@@ -514,10 +514,15 @@ func _behavior_village_work(delta):
 			current_task = {}
 
 func _execute_harvest(delta):
-	# Trouver un arbre (avec zone d'exclusion pour disperser les villageois)
+	# Trouver un tronc d'arbre à couper
 	if _mine_target == INVALID_POS:
-		var block_type = current_task.get("target_block", 5)  # WOOD par défaut
-		_mine_target = village_manager.find_nearest_block(block_type, global_position, 40.0, village_manager.HARVEST_EXCLUSION_RADIUS)
+		# D'abord chercher un tronc PROCHE (rayon 5 blocs, sans exclusion)
+		var nearby = _find_nearest_trunk_around(global_position, 5.0)
+		if nearby != INVALID_POS:
+			_mine_target = nearby
+		else:
+			# Rien de proche — chercher plus loin avec le scan village
+			_mine_target = village_manager.find_nearest_block(5, global_position, 40.0, 0.0)
 		if _mine_target == INVALID_POS:
 			_task_status = "Cherche du bois..."
 			village_manager.return_task(current_task)
@@ -549,16 +554,14 @@ func _execute_harvest(delta):
 
 	var block_type = world_manager.get_block_at_position(Vector3(_mine_target.x, _mine_target.y, _mine_target.z))
 	if block_type == BlockRegistry.BlockType.AIR:
-		# Bloc déjà cassé — chercher le prochain tronc au-dessus ou un nouvel arbre
+		# Bloc déjà cassé — chercher un autre tronc à proximité immédiate
 		village_manager.release_position(_mine_target)
-		var next_trunk = _find_next_trunk_above(_mine_target)
+		var next_trunk = _find_nearest_trunk_around(Vector3(_mine_target.x, _mine_target.y, _mine_target.z), 3.0)
 		if next_trunk != INVALID_POS:
-			# Continuer à monter le long du tronc
 			_mine_target = next_trunk
 			village_manager.claim_position(_mine_target)
 			_mine_timer = 0.0
 		else:
-			# Tronc fini — chercher immédiatement un autre arbre (pas de current_task = {})
 			_mine_target = INVALID_POS
 			_arrived_at_target = false
 			_mine_timer = 0.0
@@ -569,53 +572,63 @@ func _execute_harvest(delta):
 
 	if _mine_timer >= mine_time:
 		# Casser le bloc
+		var last_pos = _mine_target
 		village_manager.break_block(_mine_target)
 		village_manager.add_resource(block_type)
 		village_manager.release_position(_mine_target)
 		_show_harvest_label("+1", _mine_target)
-		print("PNJ[%d]: récolté bloc %d à %s" % [profession, block_type, str(_mine_target)])
 
-		# Chercher le prochain tronc au-dessus
-		var next_trunk = _find_next_trunk_above(_mine_target)
+		# Chercher le prochain tronc à proximité (même arbre ou arbre voisin)
+		var next_trunk = _find_nearest_trunk_around(Vector3(last_pos.x, last_pos.y, last_pos.z), 3.0)
 		if next_trunk != INVALID_POS:
-			# Continuer à monter le long du tronc
 			_mine_target = next_trunk
 			village_manager.claim_position(_mine_target)
+			_arrived_at_target = false  # remarcher vers le nouveau tronc
 			_mine_timer = 0.0
 		else:
-			# Arbre entièrement abattu — casser les feuilles restantes
-			_harvest_leaves_above(_mine_target)
-			# Chercher immédiatement un autre arbre
+			# Plus aucun tronc autour — casser les feuilles et chercher plus loin
+			_harvest_leaves_around(last_pos)
 			_mine_target = INVALID_POS
 			_arrived_at_target = false
 			_mine_timer = 0.0
 
-func _harvest_leaves_above(trunk_pos: Vector3i):
-	# Casser les feuilles connectées au tronc (simple: colonne au-dessus)
+func _harvest_leaves_around(center_pos: Vector3i):
+	# Casser toutes les feuilles dans un rayon 3 autour de la position (nettoyage arbre)
 	var leaf_types = [6, 44, 45, 46, 47, 48, 49]  # LEAVES + variantes
-	for dy in range(1, 8):
-		var check_pos = Vector3i(trunk_pos.x, trunk_pos.y + dy, trunk_pos.z)
-		var bt = world_manager.get_block_at_position(Vector3(check_pos.x, check_pos.y, check_pos.z))
-		if bt in leaf_types:
-			village_manager.break_block(check_pos)
-		elif bt == BlockRegistry.BlockType.AIR:
-			continue
-		else:
-			break
+	for dy in range(-1, 10):
+		for dx in range(-3, 4):
+			for dz in range(-3, 4):
+				var check_pos = Vector3i(center_pos.x + dx, center_pos.y + dy, center_pos.z + dz)
+				var bt = world_manager.get_block_at_position(Vector3(check_pos.x, check_pos.y, check_pos.z))
+				if bt in leaf_types:
+					village_manager.break_block(check_pos)
 
-func _find_next_trunk_above(trunk_pos: Vector3i) -> Vector3i:
-	# Cherche le prochain bloc de tronc au-dessus de la position donnée
+func _find_nearest_trunk_around(from: Vector3, radius: float) -> Vector3i:
+	# Cherche le tronc d'arbre le plus proche dans un rayon 3D
+	# Scan EXHAUSTIF (pas d'échantillonnage) — utilisé pour petits rayons uniquement
+	if not world_manager:
+		return INVALID_POS
 	var wood_types = [5, 32, 33, 34, 35, 36, 42]  # WOOD + toutes essences
-	for dy in range(1, 12):  # chercher jusqu'à 12 blocs de haut
-		var check_pos = Vector3i(trunk_pos.x, trunk_pos.y + dy, trunk_pos.z)
-		var bt = world_manager.get_block_at_position(Vector3(check_pos.x, check_pos.y, check_pos.z))
-		if bt in wood_types:
-			return check_pos
-		elif bt == BlockRegistry.BlockType.AIR:
-			continue  # trou dans le tronc, continuer à chercher
-		else:
-			break  # feuilles ou autre — fin du tronc
-	return INVALID_POS
+	var r = int(ceil(radius))
+	var center = Vector3i(int(round(from.x)), int(from.y), int(round(from.z)))
+	var best = INVALID_POS
+	var best_dist = INF
+
+	for dy in range(-2, 15):  # chercher de 2 blocs sous les pieds à 15 au-dessus
+		for dx in range(-r, r + 1):
+			for dz in range(-r, r + 1):
+				var pos = Vector3i(center.x + dx, center.y + dy, center.z + dz)
+				var bt = world_manager.get_block_at_position(Vector3(pos.x, pos.y, pos.z))
+				if bt in wood_types:
+					# Ne pas cibler un tronc déjà claimé par un autre PNJ
+					if village_manager and village_manager.claimed_positions.has(pos):
+						continue
+					var d = from.distance_to(Vector3(pos.x, pos.y, pos.z))
+					if d < best_dist:
+						best_dist = d
+						best = pos
+
+	return best
 
 func _execute_mine(delta):
 	# Miner un type de bloc spécifique (sable, pierre en surface, etc.)
