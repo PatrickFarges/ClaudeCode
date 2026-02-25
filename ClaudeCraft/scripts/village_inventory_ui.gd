@@ -45,11 +45,17 @@ func _build_ui():
 	background.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(background)
 
-	# Panneau plus grand, centré
+	# Panneau centré à l'écran
 	panel = PanelContainer.new()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.position = Vector2(300, 10)
-	panel.size = Vector2(700, 900)
+	panel.anchor_left = 0.5
+	panel.anchor_top = 0.5
+	panel.anchor_right = 0.5
+	panel.anchor_bottom = 0.5
+	panel.offset_left = -330
+	panel.offset_top = -420
+	panel.offset_right = 330
+	panel.offset_bottom = 420
 	var style = StyleBoxFlat.new()
 	style.bg_color = Color(0.12, 0.12, 0.18, 0.95)
 	style.corner_radius_top_left = 8

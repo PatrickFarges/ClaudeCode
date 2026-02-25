@@ -358,6 +358,7 @@ func _on_activity_changed(old_activity: int, new_activity: int):
 	_wall_impassable = false
 	_mine_timer = 0.0
 	_build_timer = 0.0
+	_at_mine_entrance = false
 
 	# Reprendre le wander timer
 	if new_activity == VProfession.Activity.WANDER or new_activity == VProfession.Activity.GATHER:
@@ -708,20 +709,35 @@ func _execute_mine(delta):
 		_mine_timer = 0.0
 		current_task = {}
 
+var _at_mine_entrance: bool = false  # le mineur est arrivé à l'entrée de mine
+
 func _execute_mine_gallery(delta):
 	# Minage en ESCALIER — suit le plan pré-calculé du village_manager
-	# Le mineur marche d'abord vers l'entrée de mine (30+ blocs du village)
-	# puis creuse séquentiellement selon mine_plan
+	# Phase 1: marcher vers l'entrée de mine (surface, 15+ blocs du village)
+	# Phase 2: descendre dans l'escalier vers le bloc cible
+	# L'escalier déjà creusé fournit le chemin vers les blocs souterrains
 
 	# Enregistrer la position d'entrée de mine
 	if _mine_entry_pos == Vector3.ZERO:
 		if village_manager.mine_entrance != INVALID_POS:
-			_mine_entry_pos = Vector3(village_manager.mine_entrance.x, village_manager.mine_entrance.y + 1, village_manager.mine_entrance.z)
+			_mine_entry_pos = Vector3(village_manager.mine_entrance.x + 0.5, village_manager.mine_entrance.y + 1, village_manager.mine_entrance.z + 0.5)
 		else:
 			_mine_entry_pos = global_position
 
+	_task_status = "[%s] Mine" % village_manager.get_tool_tier_label("Pioche")
+
+	# Phase 1: Se rendre à l'entrée de mine si on est loin
+	if not _at_mine_entrance:
+		var dist_to_entrance = global_position.distance_to(_mine_entry_pos)
+		if dist_to_entrance < 5.0:
+			_at_mine_entrance = true
+		else:
+			_task_status = "[%s] Vers mine..." % village_manager.get_tool_tier_label("Pioche")
+			_walk_toward(_mine_entry_pos, delta)
+			return
+
+	# Phase 2: Obtenir un bloc cible du plan de mine
 	if _mine_target == INVALID_POS:
-		# Utiliser le plan de mine du village_manager (pas le staircase local)
 		_mine_target = village_manager.get_next_mine_block()
 		if _mine_target == INVALID_POS:
 			_task_status = "[%s] Cherche..." % village_manager.get_tool_tier_label("Pioche")
@@ -736,22 +752,18 @@ func _execute_mine_gallery(delta):
 		_arrived_at_target = false
 		_mine_timer = 0.0
 
-	var target_world = Vector3(_mine_target.x + 0.5, _mine_target.y, _mine_target.z + 0.5)
-	# Point d'approche : au-dessus du bloc cible pour ne pas se coller au mur
-	var approach_pos = Vector3(_mine_target.x + 0.5, _mine_target.y + 2, _mine_target.z + 0.5)
-	_task_status = "[%s] Mine" % village_manager.get_tool_tier_label("Pioche")
+	# Marcher VERS le bloc cible directement (l'escalier creusé = le chemin)
+	var target_world = Vector3(_mine_target.x + 0.5, _mine_target.y + 1.0, _mine_target.z + 0.5)
 
 	if not _arrived_at_target:
-		# Distance XZ au bloc + vérif proximité verticale
-		var xz_dist = Vector2(global_position.x - target_world.x, global_position.z - target_world.z).length()
-		var y_diff = abs(global_position.y - _mine_target.y)
-		if xz_dist < 3.0 and y_diff < 5.0:
+		var dist = global_position.distance_to(target_world)
+		if dist < 4.0:
 			_arrived_at_target = true
 		else:
-			# Marcher vers le point d'approche (au-dessus, pas dans le bloc)
-			_walk_toward(approach_pos, delta)
+			_walk_toward(target_world, delta)
 			return
 
+	# Phase 3: Miner le bloc
 	_face_target(target_world)
 	is_moving = false
 	_decelerate()
