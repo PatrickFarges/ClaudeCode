@@ -201,9 +201,10 @@ func consume_any_planks(count: int) -> bool:
 # ============================================================
 
 func _evaluate_needs():
-	# Ne pas empiler les tâches s'il y en a déjà beaucoup
-	if task_queue.size() > 15:
-		return
+	# Nettoyer les tâches en excès : supprimer les doublons harvest/mine
+	# pour laisser de la place aux tâches critiques (craft, build, farm)
+	if task_queue.size() > 20:
+		_trim_excess_tasks()
 
 	match village_phase:
 		0:
@@ -214,6 +215,32 @@ func _evaluate_needs():
 			_evaluate_phase_2()
 		3:
 			_evaluate_phase_3()
+
+func _trim_excess_tasks():
+	# Supprimer les tâches de récolte/mine en surplus pour ne pas bloquer
+	# les tâches critiques (craft, build, place_workstation, farm)
+	var to_remove: Array = []
+	var harvest_count = 0
+	var mine_count = 0
+	for i in range(task_queue.size()):
+		var t = task_queue[i]
+		match t["type"]:
+			"harvest":
+				harvest_count += 1
+				if harvest_count > 4:
+					to_remove.append(i)
+			"mine_gallery":
+				mine_count += 1
+				if mine_count > 2:
+					to_remove.append(i)
+			"mine":
+				mine_count += 1
+				if mine_count > 3:
+					to_remove.append(i)
+	# Supprimer en ordre inverse pour ne pas décaler les index
+	to_remove.reverse()
+	for idx in to_remove:
+		task_queue.remove_at(idx)
 
 func _evaluate_phase_0():
 	# Phase 0: Bootstrap — récolter bois, crafter planches, crafter crafting_table

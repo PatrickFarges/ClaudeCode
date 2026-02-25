@@ -730,7 +730,10 @@ func _execute_mine_gallery(delta):
 	# Phase 1: Se rendre à l'entrée de mine si on est loin
 	if not _at_mine_entrance:
 		var dist_to_entrance = Vector2(global_position.x - _mine_entry_pos.x, global_position.z - _mine_entry_pos.z).length()
-		if dist_to_entrance < 5.0:
+		# Considérer qu'on est à l'entrée si :
+		# - On est à moins de 5 blocs horizontalement, OU
+		# - On est SOUS la surface (déjà dans la mine)
+		if dist_to_entrance < 5.0 or global_position.y < _mine_entry_pos.y - 1:
 			_at_mine_entrance = true
 		else:
 			_task_status = "[%s] Vers mine..." % village_manager.get_tool_tier_label("Pioche")
