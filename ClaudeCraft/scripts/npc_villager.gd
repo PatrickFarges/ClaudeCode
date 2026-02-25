@@ -105,6 +105,11 @@ var _mine_heading: Vector3i = Vector3i(1, 0, 0)  # direction horizontale du mine
 var _mine_steps_h: int = 0  # pas horizontaux depuis le dernier descente
 const MINE_STEPS_BEFORE_DESCENT = 3  # creuser 3 blocs horizontaux, puis 1 vers le bas
 
+# === Retour surface mineur ===
+var _mine_entry_pos: Vector3 = Vector3.ZERO
+var _returning_to_surface: bool = false
+var _return_stuck_timer: float = 0.0
+
 func setup(model_index: int, pos: Vector3, chunk_pos: Vector3i, prof: int = 0):
 	mob_type_index = model_index
 	_spawn_pos = pos
@@ -235,6 +240,12 @@ func _physics_process(delta):
 		_label_update_timer = 0.0
 		_update_head_label()
 
+	# === Retour surface mineur ===
+	if _returning_to_surface:
+		_behavior_return_to_surface(delta)
+		move_and_slide()
+		return
+
 	# === Faim ===
 	_update_hunger(delta)
 
@@ -313,8 +324,22 @@ func _on_activity_changed(old_activity: int, new_activity: int):
 		if poi_manager and claimed_poi != INVALID_POI:
 			poi_manager.release_poi(claimed_poi)
 			claimed_poi = INVALID_POI
-		# Retourner la tâche village non terminée
+		# Mineur souterrain : remonter à la surface au lieu de téléporter
 		if village_manager and not current_task.is_empty():
+			var task_type = current_task.get("type", "")
+			if task_type == "mine_gallery" and _mine_entry_pos != Vector3.ZERO:
+				# Rendre la tâche et les positions
+				if _mine_target != INVALID_POS:
+					village_manager.release_position(_mine_target)
+					_mine_target = INVALID_POS
+				village_manager.return_task(current_task)
+				current_task = {}
+				_returning_to_surface = true
+				_return_stuck_timer = 0.0
+				_task_status = "Remonte..."
+				# Ne pas reset la navigation — on va marcher vers _mine_entry_pos
+				return
+			# Retourner la tâche village non terminée (cas normal)
 			if _mine_target != INVALID_POS:
 				village_manager.release_position(_mine_target)
 				_mine_target = INVALID_POS
@@ -502,7 +527,7 @@ func _execute_harvest(delta):
 
 	# Marcher vers l'arbre
 	var target_world = Vector3(_mine_target.x + 0.5, _mine_target.y, _mine_target.z + 0.5)
-	_task_status = "[Hache] Bois"
+	_task_status = "[%s] Bois" % village_manager.get_tool_tier_label("Hache")
 
 	if not _arrived_at_target:
 		var xz_dist = Vector2(global_position.x - target_world.x, global_position.z - target_world.z).length()
@@ -575,7 +600,7 @@ func _execute_mine(delta):
 		_mine_timer = 0.0
 
 	var target_world = Vector3(_mine_target.x + 0.5, _mine_target.y, _mine_target.z + 0.5)
-	_task_status = "[Pioche] Mine"
+	_task_status = "[%s] Mine" % village_manager.get_tool_tier_label("Pioche")
 
 	if not _arrived_at_target:
 		var dist = global_position.distance_to(target_world)
@@ -614,10 +639,15 @@ func _execute_mine_gallery(delta):
 	# Minage en ESCALIER — le mineur creuse un couloir 1x2 (pieds + tête)
 	# en alternant : 3 blocs horizontaux → 1 bloc vers le bas → 3 blocs → etc.
 	# Résultat : un escalier descendant praticable dans les deux sens
+
+	# Enregistrer la position d'entrée (première fois en surface)
+	if _mine_entry_pos == Vector3.ZERO:
+		_mine_entry_pos = global_position
+
 	if _mine_target == INVALID_POS:
 		_mine_target = _get_next_staircase_block()
 		if _mine_target == INVALID_POS:
-			_task_status = "[Pioche] Cherche..."
+			_task_status = "[%s] Cherche..." % village_manager.get_tool_tier_label("Pioche")
 			_behavior_wander(delta)
 			_mine_timer += delta
 			if _mine_timer > 5.0:
@@ -630,7 +660,7 @@ func _execute_mine_gallery(delta):
 		_mine_timer = 0.0
 
 	var target_world = Vector3(_mine_target.x + 0.5, _mine_target.y, _mine_target.z + 0.5)
-	_task_status = "[Pioche] Mine"
+	_task_status = "[%s] Mine" % village_manager.get_tool_tier_label("Pioche")
 
 	var dist = global_position.distance_to(target_world)
 	if dist > 5.0:
@@ -818,7 +848,7 @@ func _execute_place_workstation(delta):
 	current_task = {}
 
 func _execute_build(delta):
-	_task_status = "[Marteau] Construction"
+	_task_status = "[%s] Construction" % village_manager.get_tool_tier_label("Marteau")
 	var block_list = current_task.get("block_list", [])
 	var block_index = current_task.get("block_index", 0)
 	var origin = current_task.get("origin", Vector3i.ZERO)
@@ -865,7 +895,7 @@ func _execute_build(delta):
 		_arrived_at_target = false  # Bouger vers le prochain bloc
 
 func _execute_build_path(delta):
-	_task_status = "[Chemin] Construction"
+	_task_status = "[%s] Construction" % village_manager.get_tool_tier_label("Marteau")
 
 	# Récupérer le prochain bloc du chemin à poser
 	if _mine_target == INVALID_POS:
@@ -913,7 +943,7 @@ func _execute_build_path(delta):
 			current_task = {}
 
 func _execute_farm_create(delta):
-	_task_status = "[Houe] Laboure"
+	_task_status = "[%s] Laboure" % village_manager.get_tool_tier_label("Houe")
 
 	# Trouver la prochaine parcelle à créer
 	if _mine_target == INVALID_POS:
@@ -1002,6 +1032,41 @@ func _execute_farm_harvest(delta):
 		var next_plot = village_manager.get_mature_wheat_plot()
 		if next_plot.is_empty():
 			current_task = {}
+
+func _behavior_return_to_surface(delta):
+	_task_status = "Remonte..."
+	_label_update_timer += delta
+	if _label_update_timer >= 0.5:
+		_label_update_timer = 0.0
+		_update_head_label()
+
+	# Marcher vers l'entrée de la mine
+	if _walk_toward(_mine_entry_pos, delta):
+		# Arrivé en surface
+		_returning_to_surface = false
+		_mine_entry_pos = Vector3.ZERO
+		_return_stuck_timer = 0.0
+		_task_status = ""
+		has_target = false
+		_arrived_at_target = false
+		_target_stuck_timer = 0.0
+		_total_stuck_time = 0.0
+		_detour_count = 0
+		_pick_new_wander()
+		return
+
+	# Safety timeout : si bloqué > 8s → téléporter en surface
+	_return_stuck_timer += delta
+	if _return_stuck_timer > 8.0:
+		global_position = _mine_entry_pos + Vector3(0, 1, 0)
+		_returning_to_surface = false
+		_mine_entry_pos = Vector3.ZERO
+		_return_stuck_timer = 0.0
+		_task_status = ""
+		has_target = false
+		_total_stuck_time = 0.0
+		_detour_count = 0
+		_pick_new_wander()
 
 func _face_target(target: Vector3):
 	var dir = target - global_position

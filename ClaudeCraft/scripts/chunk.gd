@@ -20,6 +20,11 @@ var static_body: StaticBody3D
 var is_mesh_built: bool = false
 var is_modified: bool = false
 
+# Torch lights
+var _torch_lights: Array = []  # Array de Node3D (OmniLight3D + mesh)
+const TORCH_TYPE: int = 72  # BlockRegistry.BlockType.TORCH
+const MAX_TORCHES_PER_CHUNK: int = 16
+
 # Thread mesh build
 var _mesh_thread: Thread = null
 var _vertices: PackedVector3Array = PackedVector3Array()
@@ -172,6 +177,9 @@ func _apply_mesh_data():
 		water_mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(water_mesh_instance)
 
+	# Torches : scanner et spawner les lumières
+	_spawn_torch_lights()
+
 	is_mesh_built = true
 
 	# Libérer les tableaux temporaires
@@ -201,6 +209,7 @@ func _rebuild_mesh():
 	if static_body:
 		static_body.queue_free()
 		static_body = null
+	_clear_torch_lights()
 	is_mesh_built = false
 	call_deferred("_deferred_rebuild")
 
@@ -279,9 +288,9 @@ func _greedy_mesh_y_faces():
 			for z in range(CHUNK_SIZE):
 				var idx: int = x_off + z * 256 + y
 				var bt: int = blocks[idx]
-				if bt != 0 and bt != WATER_TYPE:
+				if bt != 0 and bt != WATER_TYPE and bt != TORCH_TYPE:
 					var nb: int = blocks[idx + 1] if y + 1 < CHUNK_HEIGHT else 0
-					if nb == 0 or nb == WATER_TYPE:
+					if nb == 0 or nb == WATER_TYPE or nb == TORCH_TYPE:
 						mask[x][z] = bt
 						has_faces = true
 					else:
@@ -312,9 +321,9 @@ func _greedy_mesh_y_faces():
 			for z in range(CHUNK_SIZE):
 				var idx: int = x_off + z * 256 + y
 				var bt: int = blocks[idx]
-				if bt != 0 and bt != WATER_TYPE:
+				if bt != 0 and bt != WATER_TYPE and bt != TORCH_TYPE:
 					var nb: int = blocks[idx - 1] if y - 1 >= 0 else 0
-					if nb == 0 or nb == WATER_TYPE:
+					if nb == 0 or nb == WATER_TYPE or nb == TORCH_TYPE:
 						mask[x][z] = bt
 						has_faces = true
 					else:
@@ -362,9 +371,9 @@ func _greedy_mesh_z_faces():
 			for iy in range(y_range):
 				var y: int = y_min + iy
 				var bt: int = blocks[xz_off + y]
-				if bt != 0 and bt != WATER_TYPE:
+				if bt != 0 and bt != WATER_TYPE and bt != TORCH_TYPE:
 					var nb: int = blocks[xzp_off + y] if z + 1 < CHUNK_SIZE else 0
-					if nb == 0 or nb == WATER_TYPE:
+					if nb == 0 or nb == WATER_TYPE or nb == TORCH_TYPE:
 						mask[x][iy] = bt
 						has_faces = true
 					else:
@@ -397,9 +406,9 @@ func _greedy_mesh_z_faces():
 			for iy in range(y_range):
 				var y: int = y_min + iy
 				var bt: int = blocks[xz_off + y]
-				if bt != 0 and bt != WATER_TYPE:
+				if bt != 0 and bt != WATER_TYPE and bt != TORCH_TYPE:
 					var nb: int = blocks[xzm_off + y] if z - 1 >= 0 else 0
-					if nb == 0 or nb == WATER_TYPE:
+					if nb == 0 or nb == WATER_TYPE or nb == TORCH_TYPE:
 						mask[x][iy] = bt
 						has_faces = true
 					else:
@@ -449,9 +458,9 @@ func _greedy_mesh_x_faces():
 			for iy in range(y_range):
 				var y: int = y_min + iy
 				var bt: int = blocks[x_off + z_off + y]
-				if bt != 0 and bt != WATER_TYPE:
+				if bt != 0 and bt != WATER_TYPE and bt != TORCH_TYPE:
 					var nb: int = blocks[xp_off + z_off + y] if x + 1 < CHUNK_SIZE else 0
-					if nb == 0 or nb == WATER_TYPE:
+					if nb == 0 or nb == WATER_TYPE or nb == TORCH_TYPE:
 						mask[z][iy] = bt
 						has_faces = true
 					else:
@@ -482,9 +491,9 @@ func _greedy_mesh_x_faces():
 			for iy in range(y_range):
 				var y: int = y_min + iy
 				var bt: int = blocks[x_off + z_off + y]
-				if bt != 0 and bt != WATER_TYPE:
+				if bt != 0 and bt != WATER_TYPE and bt != TORCH_TYPE:
 					var nb: int = blocks[xm_off + z_off + y] if x - 1 >= 0 else 0
-					if nb == 0 or nb == WATER_TYPE:
+					if nb == 0 or nb == WATER_TYPE or nb == TORCH_TYPE:
 						mask[z][iy] = bt
 						has_faces = true
 					else:
@@ -613,6 +622,83 @@ func _emit_water_quad(v0: Vector3, v1: Vector3, v2: Vector3, v3: Vector3, normal
 	_water_indices.append(base)
 
 # ============================================================
+# TORCHES — rendu visuel + lumière
+# ============================================================
+
+func _clear_torch_lights():
+	for node in _torch_lights:
+		if is_instance_valid(node):
+			node.queue_free()
+	_torch_lights.clear()
+
+func _spawn_torch_lights():
+	_clear_torch_lights()
+	if y_min > y_max:
+		return
+
+	var count = 0
+	for x in range(CHUNK_SIZE):
+		if count >= MAX_TORCHES_PER_CHUNK:
+			break
+		var x_off = x * 4096
+		for z in range(CHUNK_SIZE):
+			if count >= MAX_TORCHES_PER_CHUNK:
+				break
+			var xz_off = x_off + z * 256
+			for y in range(y_min, y_max + 1):
+				if blocks[xz_off + y] == TORCH_TYPE:
+					_create_torch_at(x, y, z)
+					count += 1
+					if count >= MAX_TORCHES_PER_CHUNK:
+						break
+
+func _create_torch_at(lx: int, ly: int, lz: int):
+	# Conteneur pour la torche
+	var torch_node = Node3D.new()
+	torch_node.position = Vector3(lx + 0.5, ly, lz + 0.5)
+
+	# Visuel : petit cube doré
+	var mesh_inst = MeshInstance3D.new()
+	var box = BoxMesh.new()
+	box.size = Vector3(0.15, 0.5, 0.15)
+	mesh_inst.mesh = box
+	mesh_inst.position = Vector3(0, 0.25, 0)
+	var mat = StandardMaterial3D.new()
+	mat.albedo_color = Color(0.6, 0.4, 0.2, 1.0)
+	mat.emission_enabled = true
+	mat.emission = Color(1.0, 0.85, 0.5, 1.0)
+	mat.emission_energy_multiplier = 2.0
+	mesh_inst.material_override = mat
+	torch_node.add_child(mesh_inst)
+
+	# Flamme : petit cube émissif au sommet
+	var flame_inst = MeshInstance3D.new()
+	var flame_box = BoxMesh.new()
+	flame_box.size = Vector3(0.1, 0.15, 0.1)
+	flame_inst.mesh = flame_box
+	flame_inst.position = Vector3(0, 0.55, 0)
+	var flame_mat = StandardMaterial3D.new()
+	flame_mat.albedo_color = Color(1.0, 0.7, 0.1, 1.0)
+	flame_mat.emission_enabled = true
+	flame_mat.emission = Color(1.0, 0.85, 0.4, 1.0)
+	flame_mat.emission_energy_multiplier = 4.0
+	flame_inst.material_override = flame_mat
+	torch_node.add_child(flame_inst)
+
+	# Lumière omnidirectionnelle
+	var light = OmniLight3D.new()
+	light.light_color = Color(1.0, 0.85, 0.5)
+	light.light_energy = 1.0
+	light.omni_range = 8.0
+	light.omni_attenuation = 1.5
+	light.shadow_enabled = false
+	light.position = Vector3(0, 0.6, 0)
+	torch_node.add_child(light)
+
+	add_child(torch_node)
+	_torch_lights.append(torch_node)
+
+# ============================================================
 # AMBIENT OCCLUSION
 # ============================================================
 
@@ -620,7 +706,7 @@ func _is_block_solid(x: int, y: int, z: int) -> bool:
 	if x < 0 or x >= CHUNK_SIZE or y < 0 or y >= CHUNK_HEIGHT or z < 0 or z >= CHUNK_SIZE:
 		return false
 	var bt: int = blocks[x * 4096 + z * 256 + y]
-	return bt != 0 and bt != WATER_TYPE
+	return bt != 0 and bt != WATER_TYPE and bt != TORCH_TYPE
 
 func _calculate_ao_for_face(direction: Vector3, x: int, y: int, z: int) -> Array:
 	var ao = [1.0, 1.0, 1.0, 1.0]

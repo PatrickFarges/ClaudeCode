@@ -54,6 +54,23 @@ static func get_all_recipes() -> Array:
 			"output_count": 1,
 			"station": "hand"
 		},
+		# --- Torches ---
+		{
+			"name": "Torche",
+			"inputs": [[BlockRegistry.BlockType.COAL_ORE, 1], [BlockRegistry.BlockType.PLANKS, 1]],
+			"output_type": BlockRegistry.BlockType.TORCH,
+			"output_count": 4,
+			"station": "hand"
+		},
+		# --- Forge (upgrade outils village) ---
+		{
+			"name": "Outils en bois",
+			"inputs": [[BlockRegistry.BlockType.PLANKS, 6]],
+			"output_type": BlockRegistry.BlockType.PLANKS,
+			"output_count": 0,
+			"station": "hand",
+			"_tool_tier": 1,
+		},
 		# --- Nouvelles planches par essence ---
 		{
 			"name": "Planches de sapin",
@@ -197,6 +214,15 @@ static func get_all_recipes() -> Array:
 			"output_count": 1,
 			"station": "wood_table"
 		},
+		# --- Forge tier 2 ---
+		{
+			"name": "Outils en pierre",
+			"inputs": [[BlockRegistry.BlockType.COBBLESTONE, 4], [BlockRegistry.BlockType.PLANKS, 4]],
+			"output_type": BlockRegistry.BlockType.COBBLESTONE,
+			"output_count": 0,
+			"station": "wood_table",
+			"_tool_tier": 2,
+		},
 		{
 			"name": "Table en pierre",
 			"inputs": [[BlockRegistry.BlockType.STONE, 4], [BlockRegistry.BlockType.PLANKS, 4]],
@@ -271,6 +297,15 @@ static func get_all_recipes() -> Array:
 			"output_type": BlockRegistry.BlockType.IRON_TABLE,
 			"output_count": 1,
 			"station": "stone_table"
+		},
+		# --- Forge tier 3 ---
+		{
+			"name": "Outils en fer",
+			"inputs": [[BlockRegistry.BlockType.IRON_INGOT, 3], [BlockRegistry.BlockType.PLANKS, 3]],
+			"output_type": BlockRegistry.BlockType.IRON_INGOT,
+			"output_count": 0,
+			"station": "stone_table",
+			"_tool_tier": 3,
 		},
 		{
 			"name": "Briques (batch)",

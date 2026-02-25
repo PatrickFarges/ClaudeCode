@@ -83,6 +83,7 @@ const BLOCK_NAMES = {
 	"Wheat (mature)":    {"fr": "Ble (mature)",             "en": "Wheat (mature)"},
 	"Wheat":             {"fr": "Ble",                      "en": "Wheat"},
 	"Bread":             {"fr": "Pain",                     "en": "Bread"},
+	"Torch":             {"fr": "Torche",                   "en": "Torch"},
 }
 
 # ============================================================
@@ -147,6 +148,12 @@ const RECIPE_NAMES = {
 	"Botte de foin (max)":     {"fr": "Botte de foin (max)",     "en": "Hay Block (max)"},
 	# === AGRICULTURE ===
 	"Pain":                    {"fr": "Pain",                    "en": "Bread"},
+	# === TORCHES ===
+	"Torche":                  {"fr": "Torche",                  "en": "Torch"},
+	# === FORGE (outils village) ===
+	"Outils en bois":          {"fr": "Outils en bois",          "en": "Wood Tools"},
+	"Outils en pierre":        {"fr": "Outils en pierre",        "en": "Stone Tools"},
+	"Outils en fer":           {"fr": "Outils en fer",           "en": "Iron Tools"},
 }
 
 # ============================================================

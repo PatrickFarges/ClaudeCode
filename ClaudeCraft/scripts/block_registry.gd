@@ -86,6 +86,8 @@ enum BlockType {
 	WHEAT_STAGE_3,
 	WHEAT_ITEM,
 	BREAD,
+	# === ECLAIRAGE (72) ===
+	TORCH,
 }
 
 const BLOCK_DATA = {
@@ -605,6 +607,14 @@ const BLOCK_DATA = {
 		"color": Color(0.8, 0.6, 0.3, 1.0),
 		"hardness": 0.0,
 		"faces": { "all": "wheat_stage7" }
+	},
+	# === ECLAIRAGE ===
+	BlockType.TORCH: {
+		"name": "Torch",
+		"solid": false,
+		"color": Color(1.0, 0.85, 0.5, 1.0),
+		"hardness": 0.0,
+		"faces": { "all": "torch" }
 	},
 }
 

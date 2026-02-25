@@ -14,15 +14,15 @@ Jeu voxel type Minecraft en GDScript avec Godot 4.5+, style pastel. Évolue vers
 
 ### Monde et rendu
 - **`game_config.gd`** : config centrale (`const GC = preload()` partout). `ACTIVE_PACK` = "Faithful32". Fonctions `get_block_texture_path()`, `get_item_texture_path()`. Système d'aliases textures (8 aliases cross-pack)
-- **`block_registry.gd`** : 72 types de blocs (enum 0-71), couleurs pastel, dureté, textures par face, `is_workstation()`, `get_block_tint()`. Inclut agriculture (FARMLAND, WHEAT_STAGE_0→3, WHEAT_ITEM, BREAD)
-- **`chunk.gd`** : 16×16×256 blocs, greedy meshing, AO, collision ConcavePolygon, UV corrigés
+- **`block_registry.gd`** : 73 types de blocs (enum 0-72), couleurs pastel, dureté, textures par face, `is_workstation()`, `get_block_tint()`. Inclut agriculture (FARMLAND, WHEAT_STAGE_0→3, WHEAT_ITEM, BREAD) et éclairage (TORCH)
+- **`chunk.gd`** : 16×16×256 blocs, greedy meshing, AO, collision ConcavePolygon, UV corrigés, rendu torches (OmniLight3D, max 16/chunk)
 - **`chunk_generator.gd`** : génération procédurale threadée (4 workers, Mutex), 6 noises, arbres par biome, minerais souterrains, structures passe 4
-- **`texture_manager.gd`** : Texture2DArray (85 layers), auto-détection résolution, fallback aliases, `_force_opaque()`
+- **`texture_manager.gd`** : Texture2DArray (86 layers), auto-détection résolution, fallback aliases, `_force_opaque()`
 - **`structure_manager.gd`** : Autoload — structures JSON depuis `res://structures/`, RLE, thread-safe
 
 ### Village autonome (The Settlers)
-- **`village_manager.gd`** : Autoload singleton — stockpile partagé, progression 4 phases (bois→pierre→fer→expansion), tool tier collectif, file de tâches par profession. **Scan optimisé** : rayon 2 chunks, échantillonnage 1/2, cache 15s, early exit 20 résultats, évaluation 8s. Mine escalier, chemin croix cobblestone, **8 blueprints bâtiments** (Cabane, Atelier, Tour de guet, Ferme, Forge, Entrepôt, Maison, Entrée de mine). **Agriculture** : ferme 5×5, croissance blé 30s/stage×4, récolte auto, recette Pain. **Croissance village** : pop cap = 8 + 2×maisons, spawn villageois si 5+ pain
-- **`npc_villager.gd`** : PNJ avec professions et emploi du temps (14h travail/jour). 18 modèles GLB Kenney.nl. Navigation throttlée (block lookups 0.15s, valeurs cachées). Tâches : harvest, mine, mine_gallery, craft, place_workstation, build, build_path, **farm_create, farm_harvest**. Anti-stuck + téléport secours. Label3D profession+tâche. **Système de faim** : `hunger` 100→0, drain 1/s travail 0.2/s repos, seuil manger 40, ralenti sous 20, arrêt à 0, pause déjeuner 12h-13h
+- **`village_manager.gd`** : Autoload singleton — stockpile partagé, progression 4 phases (bois→pierre→fer→expansion), tool tier collectif, file de tâches par profession. **Scan optimisé** : rayon 2 chunks, échantillonnage 1/2, cache 15s, early exit 20 résultats, évaluation 8s. Mine escalier, chemin croix cobblestone, **8 blueprints bâtiments** (Cabane, Atelier, Tour de guet, Ferme, Forge, Entrepôt, Maison, Entrée de mine). **Agriculture** : ferme 5×5, croissance blé 30s/stage×4, récolte auto, recette Pain. **Croissance village** : pop cap = 8 + 2×maisons, spawn villageois si 5+ pain. **Forge** : 3 recettes d'upgrade outils (`_tool_tier`), `get_tool_tier_label()` pour labels PNJ
+- **`npc_villager.gd`** : PNJ avec professions et emploi du temps (14h travail/jour). 18 modèles GLB Kenney.nl. Navigation throttlée (block lookups 0.15s, valeurs cachées). Tâches : harvest, mine, mine_gallery, craft, place_workstation, build, build_path, **farm_create, farm_harvest**. Anti-stuck + téléport secours. Label3D profession+tâche avec **tier matériau** (ex: "Hache Pierre"). **Système de faim** : `hunger` 100→0, drain 1/s travail 0.2/s repos, seuil manger 40, ralenti sous 20, arrêt à 0, pause déjeuner 12h-13h. **Retour surface mineur** : `_mine_entry_pos` + `_returning_to_surface` — remonte l'escalier au lieu de téléporter
 - **`villager_profession.gd`** : 9 professions (BUCHERON, MENUISIER, FORGERON, BATISSEUR, FERMIER, BOULANGER, CHAMAN, MINEUR, NONE), schedule 6 plages, workstation mapping
 - **`poi_manager.gd`** : Points of Interest (workstations), claim/release, scan chunk, lookup O(1)
 - **`village_inventory_ui.gd`** : UI gestion village (F1) — phase, tier, **population X/Y**, **barre de faim** par villageois (vert/jaune/rouge), **section fermes**, **liste bâtiments**, **prochain objectif**, ressources, liste villageois avec activité
@@ -35,7 +35,7 @@ Jeu voxel type Minecraft en GDScript avec Godot 4.5+, style pastel. Évolue vers
 - **`player.gd`** : FPS CharacterBody3D, minage progressif (`BASE_MINING_TIME=5.0` × dureté/outil), hotbar 9 slots + outils + nourriture, arc (charge MC), placement blocs
 - **`hand_item_renderer.gd`** : bras FPS — 3 rendus (bloc texturé, outil extrudé 3D pixel par pixel, modèle GLB). Swing sinusoïdal MC, bobbing, rendu arc
 - **`tool_registry.gd`** : 18 outils, 5 tiers (bois→netherite), PICK_BOOST=2.0, CROSS_TOOL_MULT=1.3, listes blocs par type
-- **`craft_registry.gd`** : ~61 recettes, 6 catégories (Hand, Furnace, Wood/Stone/Iron/Gold Table)
+- **`craft_registry.gd`** : ~65 recettes, 6 catégories (Hand, Furnace, Wood/Stone/Iron/Gold Table). **Forge** : 3 recettes `_tool_tier` (bois/pierre/fer). **Torche** : 1 coal + 1 planks → 4 torches
 - **`hotbar_ui.gd`** / **`inventory_ui.gd`** : hotbar 9 slots + inventaire 7 onglets, textures réelles
 - **`audio_manager.gd`** : pool audio, sons 65 blocs, ambiance forêt par heure, chargement null-safe
 - **`locale.gd`** : traductions FR/EN
@@ -80,7 +80,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 
 ## Direction du projet
 
-**Version actuelle : v12.0.0**
+**Version actuelle : v12.1.0**
 
 | Phase | Statut | Contenu |
 |-------|--------|---------|
@@ -91,6 +91,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 | 4 | Fait | Grand ménage v11.0.0 — suppression Bedrock, GLB natif, optimisations perf |
 | 4.1 | Fait | v11.1.0 — 6 GLB animaux Quaternius (CC0) téléchargés, convertis FBX→GLB *(retirés du spawn en v12.0.0)* |
 | 5 | Fait | v12.0.0 — Gestion village The Settlers : farming (blé 5×5, 4 stages, récolte auto), faim villageois (drain/seuils/pause déjeuner), 5 nouveaux bâtiments (Ferme, Forge, Entrepôt, Maison, Entrée de mine), croissance village (pop cap dynamique + spawn villageois), UI enrichie (pop, faim, fermes, bâtiments, objectifs) |
+| 5.1 | Fait | v12.1.0 — Forge (3 recettes upgrade outils, forgeron actif), Torches (bloc TORCH + OmniLight3D, max 16/chunk), Labels outils avec tier matériau (Hache Bois, Pioche Fer...), Retour surface mineurs (remonte l'escalier au lieu de téléporter) |
 | 6 | À venir | Chaînes de production avancées, transport ressources, économie |
 
 **Packs GLB utilisés (CC0)** : Kenney.nl (18 modèles PNJ villageois). **PNJ futurs** : KayKit Adventurers (161 anims travail)

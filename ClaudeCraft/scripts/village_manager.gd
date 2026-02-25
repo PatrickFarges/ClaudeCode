@@ -28,6 +28,12 @@ const TOOL_TIER_MULTIPLIER = {
 	3: 2.5,
 }
 
+const TOOL_TIER_NAMES = { 0: "", 1: "Bois", 2: "Pierre", 3: "Fer" }
+
+func get_tool_tier_label(base: String) -> String:
+	var mat = TOOL_TIER_NAMES.get(village_tool_tier, "")
+	return base if mat == "" else "%s %s" % [base, mat]
+
 # === CENTRE DU VILLAGE ===
 var village_center: Vector3 = Vector3.ZERO
 var _center_set: bool = false
@@ -256,10 +262,21 @@ func _evaluate_phase_0():
 			"required_profession": VProfession.Profession.BATISSEUR,
 		})
 
+	# Forge : outils en bois si on a assez de planches
+	if get_total_planks() >= 6 and village_tool_tier < 1:
+		if not _has_task_of_type("craft", "Outils en bois"):
+			_add_task({
+				"type": "craft",
+				"recipe_name": "Outils en bois",
+				"priority": 7,
+				"required_profession": VProfession.Profession.FORGERON,
+			})
+
 	# Si crafting table placée -> phase 1
 	if placed_workstations.has(12):
 		village_phase = 1
-		village_tool_tier = 1
+		if village_tool_tier < 1:
+			village_tool_tier = 1
 		print("VillageManager: === PHASE 1 — ÂGE DU BOIS ===  (tier %s)" % village_tool_tier)
 
 func _evaluate_phase_1():
@@ -328,10 +345,21 @@ func _evaluate_phase_1():
 	if _path_built:
 		_try_queue_builds_for_phase(1)
 
+	# Forge : outils en pierre
+	if get_resource_count(25) >= 4 and get_total_planks() >= 4 and village_tool_tier < 2:
+		if not _has_task_of_type("craft", "Outils en pierre"):
+			_add_task({
+				"type": "craft",
+				"recipe_name": "Outils en pierre",
+				"priority": 7,
+				"required_profession": VProfession.Profession.FORGERON,
+			})
+
 	# Si furnace placée -> phase 2
 	if placed_workstations.has(21):
 		village_phase = 2
-		village_tool_tier = 2
+		if village_tool_tier < 2:
+			village_tool_tier = 2
 		print("VillageManager: === PHASE 2 — ÂGE DE LA PIERRE === (tier %s)" % village_tool_tier)
 
 func _evaluate_phase_2():
@@ -399,10 +427,21 @@ func _evaluate_phase_2():
 	if _path_built:
 		_try_queue_builds_for_phase(2)
 
+	# Forge : outils en fer
+	if get_resource_count(19) >= 3 and get_total_planks() >= 3 and village_tool_tier < 3:
+		if not _has_task_of_type("craft", "Outils en fer"):
+			_add_task({
+				"type": "craft",
+				"recipe_name": "Outils en fer",
+				"priority": 7,
+				"required_profession": VProfession.Profession.FORGERON,
+			})
+
 	# Si stone_table placée -> phase 3
 	if placed_workstations.has(22):
 		village_phase = 3
-		village_tool_tier = 3
+		if village_tool_tier < 3:
+			village_tool_tier = 3
 		print("VillageManager: === PHASE 3 — ÂGE DU FER === (tier %s)" % village_tool_tier)
 
 func _evaluate_phase_3():
@@ -962,6 +1001,16 @@ func try_craft(recipe_name: String) -> bool:
 					consume_any_wood(needed)
 				else:
 					consume_resources(bt, needed)
+
+			# Forge : upgrade tool tier au lieu de produire un output
+			if recipe.has("_tool_tier"):
+				var new_tier = recipe["_tool_tier"]
+				if new_tier > village_tool_tier:
+					village_tool_tier = new_tier
+					print("VillageManager: outils améliorés au tier %d (%s)" % [new_tier, TOOL_TIER_NAMES.get(new_tier, "?")])
+				else:
+					print("VillageManager: entretien outils tier %d (ressources consommées)" % new_tier)
+				return true
 
 			# Produire l'output
 			add_resource(recipe["output_type"], recipe["output_count"])
