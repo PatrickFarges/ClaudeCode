@@ -709,16 +709,20 @@ func _execute_mine(delta):
 		current_task = {}
 
 func _execute_mine_gallery(delta):
-	# Minage en ESCALIER — le mineur creuse un couloir 1x2 (pieds + tête)
-	# en alternant : 3 blocs horizontaux → 1 bloc vers le bas → 3 blocs → etc.
-	# Résultat : un escalier descendant praticable dans les deux sens
+	# Minage en ESCALIER — suit le plan pré-calculé du village_manager
+	# Le mineur marche d'abord vers l'entrée de mine (30+ blocs du village)
+	# puis creuse séquentiellement selon mine_plan
 
-	# Enregistrer la position d'entrée (première fois en surface)
+	# Enregistrer la position d'entrée de mine
 	if _mine_entry_pos == Vector3.ZERO:
-		_mine_entry_pos = global_position
+		if village_manager.mine_entrance != INVALID_POS:
+			_mine_entry_pos = Vector3(village_manager.mine_entrance.x, village_manager.mine_entrance.y + 1, village_manager.mine_entrance.z)
+		else:
+			_mine_entry_pos = global_position
 
 	if _mine_target == INVALID_POS:
-		_mine_target = _get_next_staircase_block()
+		# Utiliser le plan de mine du village_manager (pas le staircase local)
+		_mine_target = village_manager.get_next_mine_block()
 		if _mine_target == INVALID_POS:
 			_task_status = "[%s] Cherche..." % village_manager.get_tool_tier_label("Pioche")
 			_behavior_wander(delta)
@@ -729,17 +733,19 @@ func _execute_mine_gallery(delta):
 			return
 		village_manager.claim_position(_mine_target)
 		has_target = true
-		_arrived_at_target = true
+		_arrived_at_target = false
 		_mine_timer = 0.0
 
 	var target_world = Vector3(_mine_target.x + 0.5, _mine_target.y, _mine_target.z + 0.5)
 	_task_status = "[%s] Mine" % village_manager.get_tool_tier_label("Pioche")
 
-	var dist = global_position.distance_to(target_world)
-	if dist > 5.0:
-		# Se déplacer vers le bloc cible
-		_walk_toward(target_world, delta)
-		return
+	if not _arrived_at_target:
+		var dist = global_position.distance_to(target_world)
+		if dist < 3.0:
+			_arrived_at_target = true
+		else:
+			_walk_toward(target_world, delta)
+			return
 
 	_face_target(target_world)
 	is_moving = false
@@ -763,8 +769,9 @@ func _execute_mine_gallery(delta):
 		var prof_name = VProfession.get_profession_name(profession)
 		print("%s: miné bloc %d à %s" % [prof_name, block_type, str(_mine_target)])
 		_mine_target = INVALID_POS
+		_arrived_at_target = false
 		_mine_timer = 0.0
-		# Enchaîner avec le prochain bloc de l'escalier
+		# Enchaîner avec le prochain bloc du plan de mine
 
 func _get_next_staircase_block() -> Vector3i:
 	# Calcule le prochain bloc à creuser dans le pattern escalier
