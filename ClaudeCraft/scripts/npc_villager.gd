@@ -712,10 +712,11 @@ func _execute_mine(delta):
 var _at_mine_entrance: bool = false  # le mineur est arrivé à l'entrée de mine
 
 func _execute_mine_gallery(delta):
-	# Minage en ESCALIER — suit le plan pré-calculé du village_manager
-	# Phase 1: marcher vers l'entrée de mine (surface, 15+ blocs du village)
-	# Phase 2: descendre dans l'escalier vers le bloc cible
-	# L'escalier déjà creusé fournit le chemin vers les blocs souterrains
+	# Minage en ESCALIER — le mineur creuse AUTOUR DE LUI
+	# Phase 1: Marcher vers l'entrée de mine (surface, 15+ blocs du village)
+	# Phase 2: Creuser les blocs adjacents avec _get_next_staircase_block()
+	#          Le mineur mine devant lui (pieds+tête), puis descend en creusant
+	#          sous ses pieds. La gravité le fait tomber naturellement.
 
 	# Enregistrer la position d'entrée de mine
 	if _mine_entry_pos == Vector3.ZERO:
@@ -728,7 +729,7 @@ func _execute_mine_gallery(delta):
 
 	# Phase 1: Se rendre à l'entrée de mine si on est loin
 	if not _at_mine_entrance:
-		var dist_to_entrance = global_position.distance_to(_mine_entry_pos)
+		var dist_to_entrance = Vector2(global_position.x - _mine_entry_pos.x, global_position.z - _mine_entry_pos.z).length()
 		if dist_to_entrance < 5.0:
 			_at_mine_entrance = true
 		else:
@@ -736,12 +737,12 @@ func _execute_mine_gallery(delta):
 			_walk_toward(_mine_entry_pos, delta)
 			return
 
-	# Phase 2: Obtenir un bloc cible du plan de mine
+	# Phase 2: Trouver le prochain bloc à miner AUTOUR DU MINEUR
 	if _mine_target == INVALID_POS:
-		_mine_target = village_manager.get_next_mine_block()
+		_mine_target = _get_next_staircase_block()
 		if _mine_target == INVALID_POS:
+			# Rien à miner autour — wander un peu et réessayer
 			_task_status = "[%s] Cherche..." % village_manager.get_tool_tier_label("Pioche")
-			_behavior_wander(delta)
 			_mine_timer += delta
 			if _mine_timer > 5.0:
 				_mine_timer = 0.0
@@ -752,16 +753,14 @@ func _execute_mine_gallery(delta):
 		_arrived_at_target = false
 		_mine_timer = 0.0
 
-	# Marcher VERS le bloc cible directement (l'escalier creusé = le chemin)
-	var target_world = Vector3(_mine_target.x + 0.5, _mine_target.y + 1.0, _mine_target.z + 0.5)
+	# Le bloc est adjacent — pas besoin de marcher loin, juste se tourner
+	var target_world = Vector3(_mine_target.x + 0.5, _mine_target.y, _mine_target.z + 0.5)
+	var dist = global_position.distance_to(target_world)
 
-	if not _arrived_at_target:
-		var dist = global_position.distance_to(target_world)
-		if dist < 4.0:
-			_arrived_at_target = true
-		else:
-			_walk_toward(target_world, delta)
-			return
+	if dist > 4.0:
+		# Le bloc trouvé est un peu loin (rare), marcher vers lui
+		_walk_toward(target_world, delta)
+		return
 
 	# Phase 3: Miner le bloc
 	_face_target(target_world)
@@ -786,9 +785,8 @@ func _execute_mine_gallery(delta):
 		var prof_name = VProfession.get_profession_name(profession)
 		print("%s: miné bloc %d à %s" % [prof_name, block_type, str(_mine_target)])
 		_mine_target = INVALID_POS
-		_arrived_at_target = false
 		_mine_timer = 0.0
-		# Enchaîner avec le prochain bloc du plan de mine
+		# Enchaîner immédiatement avec le prochain bloc adjacent
 
 func _get_next_staircase_block() -> Vector3i:
 	# Calcule le prochain bloc à creuser dans le pattern escalier
