@@ -3,10 +3,11 @@ extends CanvasLayer
 # Inventaire du village — ouvert avec F1
 # Affiche le stockpile partagé du village, la phase actuelle, le tier d'outils,
 # la population, la faim, les fermes, les bâtiments et le prochain objectif.
+# Clic sur un villageois = téléportation du joueur à côté de lui.
 
 var is_open: bool = false
 var village_manager = null
-var village_id: int = 0  # Pour supporter plusieurs villages à l'avenir
+var village_id: int = 0
 
 var background: ColorRect
 var panel: PanelContainer
@@ -44,11 +45,11 @@ func _build_ui():
 	background.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(background)
 
-	# Panneau à droite, occupant toute la hauteur utile
+	# Panneau plus grand, centré
 	panel = PanelContainer.new()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.position = Vector2(420, 20)
-	panel.size = Vector2(560, 760)
+	panel.position = Vector2(300, 10)
+	panel.size = Vector2(700, 900)
 	var style = StyleBoxFlat.new()
 	style.bg_color = Color(0.12, 0.12, 0.18, 0.95)
 	style.corner_radius_top_left = 8
@@ -64,18 +65,17 @@ func _build_ui():
 	add_child(panel)
 
 	var vbox = VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 6)
+	vbox.add_theme_constant_override("separation", 5)
 	panel.add_child(vbox)
 
 	# Titre
 	title_label = Label.new()
 	title_label.text = "Gestion du Village"
-	title_label.add_theme_font_size_override("font_size", 22)
+	title_label.add_theme_font_size_override("font_size", 24)
 	title_label.add_theme_color_override("font_color", Color(0.9, 0.85, 0.5))
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(title_label)
 
-	# Séparateur
 	vbox.add_child(_make_separator())
 
 	# Phase
@@ -133,7 +133,7 @@ func _build_ui():
 
 	# Scroll pour la liste des ressources
 	scroll = ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(0, 160)
+	scroll.custom_minimum_size = Vector2(0, 180)
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vbox.add_child(scroll)
 
@@ -143,21 +143,29 @@ func _build_ui():
 
 	vbox.add_child(_make_separator())
 
-	# Label "Villageois"
+	# Label "Villageois" + instruction
+	var vill_header = HBoxContainer.new()
 	var vill_label = Label.new()
 	vill_label.text = "Villageois"
 	vill_label.add_theme_font_size_override("font_size", 17)
 	vill_label.add_theme_color_override("font_color", Color(0.9, 0.9, 0.7))
-	vbox.add_child(vill_label)
+	vill_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vill_header.add_child(vill_label)
+	var tp_hint = Label.new()
+	tp_hint.text = "(clic = teleport)"
+	tp_hint.add_theme_font_size_override("font_size", 12)
+	tp_hint.add_theme_color_override("font_color", Color(0.5, 0.6, 0.8))
+	vill_header.add_child(tp_hint)
+	vbox.add_child(vill_header)
 
 	# Scroll pour la liste des villageois
 	scroll_villagers = ScrollContainer.new()
-	scroll_villagers.custom_minimum_size = Vector2(0, 200)
+	scroll_villagers.custom_minimum_size = Vector2(0, 280)
 	scroll_villagers.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vbox.add_child(scroll_villagers)
 
 	villager_container = VBoxContainer.new()
-	villager_container.add_theme_constant_override("separation", 3)
+	villager_container.add_theme_constant_override("separation", 4)
 	scroll_villagers.add_child(villager_container)
 
 	# Hint
@@ -205,7 +213,10 @@ func _refresh_contents():
 	if farm_stats["total"] > 0:
 		farm_label.text = "Ferme : %d parcelles (%d matures / %d max)" % [farm_stats["total"], farm_stats["mature"], farm_stats["max"]]
 	else:
-		farm_label.text = "Ferme : non construite"
+		if village_manager._farm_initialized:
+			farm_label.text = "Ferme : planifiée (en attente de construction)"
+		else:
+			farm_label.text = "Ferme : non construite"
 
 	# Bâtiments
 	if village_manager.built_structures.size() > 0:
@@ -216,8 +227,13 @@ func _refresh_contents():
 	else:
 		buildings_label.text = "Bâtiments : aucun"
 
-	# Prochain objectif
-	objective_label.text = _get_next_objective()
+	# Mine
+	if village_manager._mine_initialized:
+		var mined = village_manager.mine_front_index
+		var total = village_manager.mine_plan.size()
+		objective_label.text = _get_next_objective() + "\nMine : %d/%d blocs creusés" % [mined, total]
+	else:
+		objective_label.text = _get_next_objective()
 
 	# Nettoyer les entrées précédentes
 	for child in stockpile_container.get_children():
@@ -275,15 +291,57 @@ func _refresh_contents():
 		child.queue_free()
 
 	var VProfession = preload("res://scripts/villager_profession.gd")
+
+	# Compter les professions pour numéroter (Mineur 1, Mineur 2, etc.)
+	var prof_counts: Dictionary = {}
+	var prof_numbers: Array = []
 	for npc in village_manager.villagers:
 		if not is_instance_valid(npc):
+			prof_numbers.append(0)
 			continue
+		var p = npc.profession
+		prof_counts[p] = prof_counts.get(p, 0) + 1
+		prof_numbers.append(prof_counts[p])
+
+	# Compter le nombre total par profession pour savoir si on doit numéroter
+	var prof_totals: Dictionary = {}
+	for npc in village_manager.villagers:
+		if is_instance_valid(npc):
+			prof_totals[npc.profession] = prof_totals.get(npc.profession, 0) + 1
+
+	for i in range(village_manager.villagers.size()):
+		var npc = village_manager.villagers[i]
+		if not is_instance_valid(npc):
+			continue
+
+		# Bouton cliquable pour téléportation
+		var btn = Button.new()
+		btn.flat = true
+		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+
+		# Style du bouton
+		var btn_style_normal = StyleBoxFlat.new()
+		btn_style_normal.bg_color = Color(0.15, 0.15, 0.22, 0.3)
+		btn_style_normal.corner_radius_top_left = 4
+		btn_style_normal.corner_radius_top_right = 4
+		btn_style_normal.corner_radius_bottom_left = 4
+		btn_style_normal.corner_radius_bottom_right = 4
+		btn.add_theme_stylebox_override("normal", btn_style_normal)
+		var btn_style_hover = StyleBoxFlat.new()
+		btn_style_hover.bg_color = Color(0.25, 0.3, 0.45, 0.6)
+		btn_style_hover.corner_radius_top_left = 4
+		btn_style_hover.corner_radius_top_right = 4
+		btn_style_hover.corner_radius_bottom_left = 4
+		btn_style_hover.corner_radius_bottom_right = 4
+		btn.add_theme_stylebox_override("hover", btn_style_hover)
+
 		var row = HBoxContainer.new()
-		row.add_theme_constant_override("separation", 6)
+		row.add_theme_constant_override("separation", 8)
 
 		# Pastille couleur selon activité
 		var dot = ColorRect.new()
-		dot.custom_minimum_size = Vector2(10, 10)
+		dot.custom_minimum_size = Vector2(12, 12)
 		match npc.current_activity:
 			VProfession.Activity.WORK:
 				dot.color = Color(1.0, 0.9, 0.3)  # jaune
@@ -295,44 +353,95 @@ func _refresh_contents():
 				dot.color = Color(0.6, 0.8, 0.6)  # vert
 		row.add_child(dot)
 
-		# Nom de la profession
+		# Nom : Profession + numéro
+		var prof_name = VProfession.get_profession_name(npc.profession)
+		if prof_totals.get(npc.profession, 1) > 1:
+			prof_name += " %d" % prof_numbers[i]
+
 		var prof_label = Label.new()
-		prof_label.text = VProfession.get_profession_name(npc.profession)
-		prof_label.add_theme_font_size_override("font_size", 13)
-		prof_label.add_theme_color_override("font_color", Color(0.9, 0.9, 0.9))
-		prof_label.custom_minimum_size = Vector2(90, 0)
+		prof_label.text = prof_name
+		prof_label.add_theme_font_size_override("font_size", 14)
+		prof_label.add_theme_color_override("font_color", Color(1.0, 0.95, 0.7))
+		prof_label.custom_minimum_size = Vector2(110, 0)
 		row.add_child(prof_label)
 
 		# Barre de faim
 		var hunger_bar = ProgressBar.new()
-		hunger_bar.custom_minimum_size = Vector2(60, 12)
+		hunger_bar.custom_minimum_size = Vector2(50, 12)
 		hunger_bar.max_value = npc.HUNGER_MAX
 		hunger_bar.value = npc.hunger
 		hunger_bar.show_percentage = false
-		# Couleur de la barre selon le niveau
 		var bar_style = StyleBoxFlat.new()
 		if npc.hunger > 60:
-			bar_style.bg_color = Color(0.3, 0.8, 0.3)  # vert
+			bar_style.bg_color = Color(0.3, 0.8, 0.3)
 		elif npc.hunger > 30:
-			bar_style.bg_color = Color(0.9, 0.8, 0.2)  # jaune
+			bar_style.bg_color = Color(0.9, 0.8, 0.2)
 		else:
-			bar_style.bg_color = Color(0.9, 0.2, 0.2)  # rouge
+			bar_style.bg_color = Color(0.9, 0.2, 0.2)
 		hunger_bar.add_theme_stylebox_override("fill", bar_style)
 		var bar_bg = StyleBoxFlat.new()
 		bar_bg.bg_color = Color(0.2, 0.2, 0.2)
 		hunger_bar.add_theme_stylebox_override("background", bar_bg)
 		row.add_child(hunger_bar)
 
-		# Tâche en cours
+		# Tâche en cours (activité temps réel)
 		var task_label = Label.new()
-		var task_text = npc._task_status if npc._task_status != "" else npc.get_info_text().split(" - ")[-1]
+		var task_text = ""
+		if npc._is_starving:
+			task_text = "[Faim!]"
+		elif npc._task_status != "":
+			task_text = npc._task_status
+		else:
+			match npc.current_activity:
+				VProfession.Activity.WANDER:
+					task_text = "Se promène"
+				VProfession.Activity.WORK:
+					if npc.current_task.is_empty():
+						task_text = "Cherche tâche..."
+					else:
+						task_text = "Travaille"
+				VProfession.Activity.GATHER:
+					task_text = "Socialise"
+				VProfession.Activity.GO_HOME:
+					task_text = "Rentre"
+				VProfession.Activity.SLEEP:
+					task_text = "Dort"
+				_:
+					task_text = "Idle"
 		task_label.text = task_text
-		task_label.add_theme_font_size_override("font_size", 12)
-		task_label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+		task_label.add_theme_font_size_override("font_size", 13)
+		task_label.add_theme_color_override("font_color", Color(0.75, 0.75, 0.75))
 		task_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(task_label)
 
-		villager_container.add_child(row)
+		# Icône téléport
+		var tp_label = Label.new()
+		tp_label.text = ">"
+		tp_label.add_theme_font_size_override("font_size", 14)
+		tp_label.add_theme_color_override("font_color", Color(0.5, 0.6, 0.9))
+		row.add_child(tp_label)
+
+		btn.add_child(row)
+		btn.custom_minimum_size = Vector2(650, 28)
+
+		# Connecter le clic au téléport
+		var npc_ref = npc
+		btn.pressed.connect(func(): _teleport_to_villager(npc_ref))
+
+		villager_container.add_child(btn)
+
+func _teleport_to_villager(npc):
+	if not is_instance_valid(npc):
+		return
+	var player = get_tree().get_first_node_in_group("player")
+	if not player:
+		return
+	# Téléporter le joueur à 3 blocs du PNJ, face à lui
+	var npc_pos = npc.global_position
+	var offset = Vector3(3, 2, 0)
+	player.global_position = npc_pos + offset
+	# Fermer l'UI après téléport
+	close_inventory()
 
 func _get_next_objective() -> String:
 	if not village_manager:
@@ -363,7 +472,6 @@ func _get_next_objective() -> String:
 			if pop < cap:
 				var bread = village_manager.get_resource_count(BlockRegistry.BlockType.BREAD)
 				return "Prochain villageois : %d pain nécessaire (a %d)" % [village_manager.BREAD_PER_VILLAGER, bread]
-			# Chercher le prochain bâtiment non construit
 			var built_names: Dictionary = {}
 			for built in village_manager.built_structures:
 				built_names[built["name"]] = true

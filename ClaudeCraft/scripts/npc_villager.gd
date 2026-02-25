@@ -80,8 +80,8 @@ var _label_update_timer: float = 0.0
 # === Faim ===
 var hunger: float = 100.0
 const HUNGER_MAX = 100.0
-const HUNGER_DRAIN_WORK = 0.06   # par seconde au travail (~2 jours in-game avant famine)
-const HUNGER_DRAIN_REST = 0.01   # par seconde au repos
+const HUNGER_DRAIN_WORK = 0.0    # DÉSACTIVÉ — réactiver quand la ferme fonctionne (ancien: 0.06)
+const HUNGER_DRAIN_REST = 0.0    # DÉSACTIVÉ — réactiver quand la ferme fonctionne (ancien: 0.01)
 const HUNGER_THRESHOLD_EAT = 40.0
 const HUNGER_THRESHOLD_SLOW = 20.0
 const HUNGER_BREAD_RESTORE = 50.0

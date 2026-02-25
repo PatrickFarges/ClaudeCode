@@ -337,13 +337,12 @@ func _evaluate_phase_1():
 			"required_profession": VProfession.Profession.BATISSEUR,
 		})
 
-	# D'abord construire le chemin en croix autour du centre
+	# Construire le chemin en croix si on a du cobblestone
 	if not _path_built and get_resource_count(25) >= 5:  # COBBLESTONE
 		_try_queue_path()
 
-	# Construire les bâtiments de phase 1
-	if _path_built:
-		_try_queue_builds_for_phase(1)
+	# Construire les bâtiments de phase 1 (pas besoin du chemin pour commencer)
+	_try_queue_builds_for_phase(1)
 
 	# Forge : outils en pierre
 	if get_resource_count(25) >= 4 and get_total_planks() >= 4 and village_tool_tier < 2:
@@ -424,8 +423,7 @@ func _evaluate_phase_2():
 		_try_queue_path()
 
 	# Construire les bâtiments de phase 1 et 2
-	if _path_built:
-		_try_queue_builds_for_phase(2)
+	_try_queue_builds_for_phase(2)
 
 	# Forge : outils en fer
 	if get_resource_count(19) >= 3 and get_total_planks() >= 3 and village_tool_tier < 3:
@@ -754,7 +752,7 @@ func invalidate_scan_cache():
 # ============================================================
 
 func _init_mine():
-	# Trouver un spot d'entrée ÉLOIGNÉ du village center (30-40 blocs)
+	# Trouver un spot d'entrée ÉLOIGNÉ du village center
 	if _mine_initialized:
 		return
 	if not world_manager:
@@ -762,35 +760,57 @@ func _init_mine():
 
 	var center_y = int(village_center.y)
 	var best_pos = Vector3i(-9999, -9999, -9999)
-	var best_y_diff = 999
+	var best_score = 999.0  # plus bas = meilleur
 
-	# Chercher un spot ÉLOIGNÉ (30-40 blocs) sur terrain PLAT (pas de falaise)
-	for attempt in range(30):
-		var dx = randi_range(30, 40) * (1 if randf() > 0.5 else -1)
-		var dz = randi_range(30, 40) * (1 if randf() > 0.5 else -1)
-		var cx = int(village_center.x) + dx
-		var cz = int(village_center.z) + dz
-		var surface_y = _find_surface_y(cx, cz)
-		if surface_y < 0:
-			continue
-		# Vérifier que le terrain est plat autour (pas de falaise)
-		var flat = true
-		for check_dx in range(-1, 2):
-			for check_dz in range(-1, 2):
-				var ny = _find_surface_y(cx + check_dx, cz + check_dz)
-				if ny < 0 or abs(ny - surface_y) > 2:
-					flat = false
-					break
-			if not flat:
-				break
-		if not flat:
-			continue
-		var y_diff = abs(surface_y - center_y)
-		if y_diff < best_y_diff:
-			best_y_diff = y_diff
-			best_pos = Vector3i(cx, surface_y, cz)
+	# Passe 1: terrain plat, 15-45 blocs (tolérance 3 blocs de diff)
+	# Passe 2: sans check plat, 10-50 blocs (fallback)
+	for pass_num in range(2):
+		for attempt in range(60):
+			var dist = randi_range(15, 45) if pass_num == 0 else randi_range(10, 50)
+			var angle = randf() * TAU
+			var dx = int(cos(angle) * dist)
+			var dz = int(sin(angle) * dist)
+			var cx = int(village_center.x) + dx
+			var cz = int(village_center.z) + dz
+			var surface_y = _find_surface_y(cx, cz)
+			if surface_y < 0:
+				continue
+
+			if pass_num == 0:
+				# Vérifier terrain ~plat (tolérance 3 blocs)
+				var flat = true
+				for check_dx in range(-1, 2):
+					for check_dz in range(-1, 2):
+						var ny = _find_surface_y(cx + check_dx, cz + check_dz)
+						if ny < 0 or abs(ny - surface_y) > 3:
+							flat = false
+							break
+					if not flat:
+						break
+				if not flat:
+					continue
+
+			var y_diff = abs(surface_y - center_y)
+			var score = y_diff + abs(dist - 30) * 0.1  # préfère ~30 blocs et même altitude
+			if score < best_score:
+				best_score = score
+				best_pos = Vector3i(cx, surface_y, cz)
+
+		if best_pos != Vector3i(-9999, -9999, -9999):
+			break  # Trouvé en passe 1, pas besoin de fallback
 
 	if best_pos == Vector3i(-9999, -9999, -9999):
+		# Fallback ultime : juste à 15 blocs dans une direction cardinale
+		for dir in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var cx = int(village_center.x) + dir.x * 15
+			var cz = int(village_center.z) + dir.y * 15
+			var sy = _find_surface_y(cx, cz)
+			if sy >= 0:
+				best_pos = Vector3i(cx, sy, cz)
+				break
+
+	if best_pos == Vector3i(-9999, -9999, -9999):
+		print("VillageManager: ERREUR — impossible de trouver un spot de mine !")
 		return
 
 	mine_entrance = best_pos
@@ -1371,9 +1391,9 @@ func _init_blueprints():
 					# Porte : ouverture 1 bloc large à y=1-2, z=2, x=0
 					if x == 0 and z == 2 and y <= 2:
 						continue
-					# Fenêtres : verre à y=2 sur les côtés
+					# Fenêtres ouvertes à y=2 sur les côtés (pas de verre en phase 1)
 					if y == 2 and ((x == 2 and (z == 0 or z == 4)) or (z == 2 and x == 4)):
-						cabin_blocks.append([x, y, z, BT_GLASS])
+						continue  # Ouvertures pour les fenêtres
 					else:
 						cabin_blocks.append([x, y, z, BT_PLANKS])
 
@@ -1385,7 +1405,7 @@ func _init_blueprints():
 	BLUEPRINTS.append({
 		"name": "Cabane",
 		"size": Vector3i(5, 5, 5),
-		"materials": { BT_PLANKS: 68, BT_GLASS: 3 },
+		"materials": { BT_PLANKS: 65 },
 		"block_list": cabin_blocks,
 		"phase": 1,
 	})
@@ -1452,21 +1472,20 @@ func _init_blueprints():
 		"phase": 3,
 	})
 
-	# === Ferme 6x4x6 (Phase 1) ===
+	# === Ferme 6x4x6 (Phase 1) — tout en planches (pas besoin de pierre) ===
 	var farm_blocks = []
-	var BT_HAY = 63  # HAY_BLOCK
 	# Sol planches
 	for x in range(6):
 		for z in range(6):
 			farm_blocks.append([x, 0, z, BT_PLANKS])
-	# Murs bas (y=1-2) — cobblestone, porte au centre x=0
+	# Murs bas (y=1-2) — planches, porte au centre x=0
 	for y in range(1, 3):
 		for x in range(6):
 			for z in range(6):
 				if x == 0 or x == 5 or z == 0 or z == 5:
 					if x == 0 and z == 3 and y <= 2:
 						continue  # Porte
-					farm_blocks.append([x, y, z, BT_COBBLE])
+					farm_blocks.append([x, y, z, BT_PLANKS])
 	# Toit planches (y=3)
 	for x in range(6):
 		for z in range(6):
@@ -1474,7 +1493,7 @@ func _init_blueprints():
 	BLUEPRINTS.append({
 		"name": "Ferme",
 		"size": Vector3i(6, 4, 6),
-		"materials": { BT_PLANKS: 42, BT_COBBLE: 36 },
+		"materials": { BT_PLANKS: 78 },
 		"block_list": farm_blocks,
 		"phase": 1,
 	})
@@ -1566,25 +1585,24 @@ func _init_blueprints():
 		"phase": 2,
 	})
 
-	# === Entrée de mine 3x3x3 (Phase 1) ===
+	# === Entrée de mine 3x3x3 (Phase 1) — planches (pas besoin de pierre) ===
 	var mine_entry_blocks = []
-	# Portique en cobblestone
 	# Piliers (y=0-2) aux 4 coins
 	for y in range(3):
-		mine_entry_blocks.append([0, y, 0, BT_COBBLE])
-		mine_entry_blocks.append([2, y, 0, BT_COBBLE])
-		mine_entry_blocks.append([0, y, 2, BT_COBBLE])
-		mine_entry_blocks.append([2, y, 2, BT_COBBLE])
+		mine_entry_blocks.append([0, y, 0, BT_PLANKS])
+		mine_entry_blocks.append([2, y, 0, BT_PLANKS])
+		mine_entry_blocks.append([0, y, 2, BT_PLANKS])
+		mine_entry_blocks.append([2, y, 2, BT_PLANKS])
 	# Linteau (y=2, milieu)
-	mine_entry_blocks.append([1, 2, 0, BT_COBBLE])
-	mine_entry_blocks.append([1, 2, 2, BT_COBBLE])
-	mine_entry_blocks.append([0, 2, 1, BT_COBBLE])
-	mine_entry_blocks.append([2, 2, 1, BT_COBBLE])
-	mine_entry_blocks.append([1, 2, 1, BT_COBBLE])
+	mine_entry_blocks.append([1, 2, 0, BT_PLANKS])
+	mine_entry_blocks.append([1, 2, 2, BT_PLANKS])
+	mine_entry_blocks.append([0, 2, 1, BT_PLANKS])
+	mine_entry_blocks.append([2, 2, 1, BT_PLANKS])
+	mine_entry_blocks.append([1, 2, 1, BT_PLANKS])
 	BLUEPRINTS.append({
 		"name": "Entrée de mine",
 		"size": Vector3i(3, 3, 3),
-		"materials": { BT_COBBLE: 21 },
+		"materials": { BT_PLANKS: 21 },
 		"block_list": mine_entry_blocks,
 		"phase": 1,
 	})
@@ -1617,7 +1635,7 @@ func _wheat_stage_to_block(stage: int) -> int:
 		_: return BlockRegistry.BlockType.WHEAT_STAGE_0
 
 func init_farm():
-	# Trouver un spot plat 5x5 près du centre du village
+	# Trouver un spot plat 5x5 pour la ferme
 	if _farm_initialized:
 		return
 	if not world_manager:
@@ -1626,46 +1644,55 @@ func init_farm():
 	var cx = int(village_center.x)
 	var cz = int(village_center.z)
 
-	# Chercher un terrain plat 5x5 ÉLOIGNÉ du centre (20-30 blocs)
-	for attempt in range(30):
-		var sign_x = 1 if randf() > 0.5 else -1
-		var sign_z = 1 if randf() > 0.5 else -1
-		var tx = cx + randi_range(20, 30) * sign_x
-		var tz = cz + randi_range(20, 30) * sign_z
+	# Passe 1: 15-35 blocs, terrain plat (tolérance 1)
+	# Passe 2: 8-45 blocs, terrain plat (tolérance 2)
+	# Passe 3: 5-50 blocs, pas de check plat (fallback)
+	for pass_num in range(3):
+		var tolerance = [1, 2, 999][pass_num]
+		var min_dist = [15, 8, 5][pass_num]
+		var max_dist = [35, 45, 50][pass_num]
 
-		var first_y = _find_surface_y(tx, tz)
-		if first_y < 0:
-			continue
+		for attempt in range(60):
+			var dist = randi_range(min_dist, max_dist)
+			var angle = randf() * TAU
+			var tx = cx + int(cos(angle) * dist)
+			var tz = cz + int(sin(angle) * dist)
 
-		var flat = true
-		for fx in range(FARM_SIZE):
-			for fz in range(FARM_SIZE):
-				var sy = _find_surface_y(tx + fx, tz + fz)
-				if abs(sy - first_y) > 1:
-					flat = false
+			var first_y = _find_surface_y(tx, tz)
+			if first_y < 0:
+				continue
+
+			if tolerance < 999:
+				var flat = true
+				for fx in range(FARM_SIZE):
+					for fz in range(FARM_SIZE):
+						var sy = _find_surface_y(tx + fx, tz + fz)
+						if sy < 0 or abs(sy - first_y) > tolerance:
+							flat = false
+							break
+					if not flat:
+						break
+				if not flat:
+					continue
+
+			# Pas de chevauchement avec les constructions
+			var overlap = false
+			for built in built_structures:
+				var bo = built["origin"]
+				var bs = built["size"]
+				if tx < bo.x + bs.x + 2 and tx + FARM_SIZE > bo.x - 2 \
+					and tz < bo.z + bs.z + 2 and tz + FARM_SIZE > bo.z - 2:
+					overlap = true
 					break
-			if not flat:
-				break
+			if overlap:
+				continue
 
-		if not flat:
-			continue
+			_farm_center = Vector3i(tx, first_y, tz)
+			_farm_initialized = true
+			print("VillageManager: ferme planifiée à %s (passe %d)" % [str(_farm_center), pass_num + 1])
+			return
 
-		# Pas de chevauchement avec les constructions
-		var overlap = false
-		for built in built_structures:
-			var bo = built["origin"]
-			var bs = built["size"]
-			if tx < bo.x + bs.x + 2 and tx + FARM_SIZE > bo.x - 2 \
-				and tz < bo.z + bs.z + 2 and tz + FARM_SIZE > bo.z - 2:
-				overlap = true
-				break
-		if overlap:
-			continue
-
-		_farm_center = Vector3i(tx, first_y, tz)
-		_farm_initialized = true
-		print("VillageManager: ferme planifiée à %s" % str(_farm_center))
-		return
+	print("VillageManager: ERREUR — impossible de trouver un spot de ferme !")
 
 func create_farm_plot(pos: Vector3i):
 	# Convertir GRASS/DIRT en FARMLAND et planter du blé dessus
