@@ -516,8 +516,14 @@ func _behavior_village_work(delta):
 func _execute_harvest(delta):
 	# Trouver un tronc d'arbre à couper
 	if _mine_target == INVALID_POS:
-		# D'abord chercher un tronc PROCHE (rayon 5 blocs, sans exclusion)
-		var nearby = _find_nearest_trunk_around(global_position, 5.0)
+		# Cooldown pour éviter les scans coûteux chaque frame
+		if _search_cooldown > 0.0:
+			_search_cooldown -= delta
+			_task_status = "Cherche du bois..."
+			_behavior_wander(delta)
+			return
+		# D'abord chercher un tronc PROCHE (rayon 4 blocs, sans exclusion)
+		var nearby = _find_nearest_trunk_around(global_position, 4.0)
 		if nearby != INVALID_POS:
 			_mine_target = nearby
 		else:
@@ -593,40 +599,47 @@ func _execute_harvest(delta):
 			_mine_timer = 0.0
 
 func _harvest_leaves_around(center_pos: Vector3i):
-	# Casser toutes les feuilles dans un rayon 3 autour de la position (nettoyage arbre)
-	var leaf_types = [6, 44, 45, 46, 47, 48, 49]  # LEAVES + variantes
-	for dy in range(-1, 10):
-		for dx in range(-3, 4):
-			for dz in range(-3, 4):
+	# Casser les feuilles proches du tronc abattu (rayon 2, hauteur 8)
+	# Limité pour éviter les freezes — max 50 blocs cassés par appel
+	var leaf_set = { 6: true, 44: true, 45: true, 46: true, 47: true, 48: true, 49: true }
+	var broken = 0
+	for dy in range(0, 8):
+		for dx in range(-2, 3):
+			for dz in range(-2, 3):
+				if broken >= 50:
+					return
 				var check_pos = Vector3i(center_pos.x + dx, center_pos.y + dy, center_pos.z + dz)
 				var bt = world_manager.get_block_at_position(Vector3(check_pos.x, check_pos.y, check_pos.z))
-				if bt in leaf_types:
+				if leaf_set.has(bt):
 					village_manager.break_block(check_pos)
+					broken += 1
 
 func _find_nearest_trunk_around(from: Vector3, radius: float) -> Vector3i:
 	# Cherche le tronc d'arbre le plus proche dans un rayon 3D
-	# Scan EXHAUSTIF (pas d'échantillonnage) — utilisé pour petits rayons uniquement
+	# Optimisé : Dict lookup pour les types, early exit si trouvé à dist <= 1
 	if not world_manager:
 		return INVALID_POS
-	var wood_types = [5, 32, 33, 34, 35, 36, 42]  # WOOD + toutes essences
+	var wood_set = { 5: true, 32: true, 33: true, 34: true, 35: true, 36: true, 42: true }
 	var r = int(ceil(radius))
 	var center = Vector3i(int(round(from.x)), int(from.y), int(round(from.z)))
 	var best = INVALID_POS
 	var best_dist = INF
 
-	for dy in range(-2, 15):  # chercher de 2 blocs sous les pieds à 15 au-dessus
+	# Scan en spirale : d'abord les blocs proches (dy=0 d'abord, puis vers le haut)
+	for dy in range(-1, 10):
 		for dx in range(-r, r + 1):
 			for dz in range(-r, r + 1):
 				var pos = Vector3i(center.x + dx, center.y + dy, center.z + dz)
 				var bt = world_manager.get_block_at_position(Vector3(pos.x, pos.y, pos.z))
-				if bt in wood_types:
-					# Ne pas cibler un tronc déjà claimé par un autre PNJ
+				if wood_set.has(bt):
 					if village_manager and village_manager.claimed_positions.has(pos):
 						continue
 					var d = from.distance_to(Vector3(pos.x, pos.y, pos.z))
 					if d < best_dist:
 						best_dist = d
 						best = pos
+						if d <= 1.5:
+							return best  # early exit — tronc juste à côté
 
 	return best
 
