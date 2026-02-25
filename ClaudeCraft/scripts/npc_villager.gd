@@ -1264,6 +1264,8 @@ func _abandon_current_target():
 	print("%s: abandonne la cible (trop de détours)" % prof_name)
 
 func _try_break_path_block(toward: Vector3) -> bool:
+	# Casse les blocs devant le PNJ pour se frayer un passage
+	# Ne casse PAS les blocs dans le périmètre des structures du village
 	if not world_manager or not village_manager:
 		return false
 
@@ -1274,19 +1276,21 @@ func _try_break_path_block(toward: Vector3) -> bool:
 
 	var broke_any = false
 
-	# Casser le bloc aux pieds
+	# Casser le bloc aux pieds (si pas protégé)
 	var bt_feet = world_manager.get_block_at_position(Vector3(block_pos_feet.x, block_pos_feet.y, block_pos_feet.z))
 	if bt_feet != BlockRegistry.BlockType.AIR and bt_feet != BlockRegistry.BlockType.WATER:
-		village_manager.break_block(block_pos_feet)
-		village_manager.add_resource(bt_feet)
-		broke_any = true
+		if not _is_in_village_structure(block_pos_feet):
+			village_manager.break_block(block_pos_feet)
+			village_manager.add_resource(bt_feet)
+			broke_any = true
 
-	# Casser le bloc à la tête
+	# Casser le bloc à la tête (si pas protégé)
 	var bt_head = world_manager.get_block_at_position(Vector3(block_pos_head.x, block_pos_head.y, block_pos_head.z))
 	if bt_head != BlockRegistry.BlockType.AIR and bt_head != BlockRegistry.BlockType.WATER:
-		village_manager.break_block(block_pos_head)
-		village_manager.add_resource(bt_head)
-		broke_any = true
+		if not _is_in_village_structure(block_pos_head):
+			village_manager.break_block(block_pos_head)
+			village_manager.add_resource(bt_head)
+			broke_any = true
 
 	if broke_any:
 		_show_harvest_label("+Passage!", block_pos_feet)
@@ -1294,6 +1298,60 @@ func _try_break_path_block(toward: Vector3) -> bool:
 		print("%s: casse des blocs pour passer à %s" % [prof_name, str(block_pos_feet)])
 
 	return broke_any
+
+const SOFT_BLOCK_HARDNESS = 0.5  # seuil : casser immédiatement les blocs <= cette dureté
+
+func _try_break_soft_blocks_ahead() -> bool:
+	# Casse les blocs mous (feuilles, herbe, neige...) directement devant le PNJ
+	# pour éviter des détours inutiles. Ne casse PAS les structures du village.
+	if not world_manager or not village_manager:
+		return false
+
+	var feet_y = int(global_position.y)
+	var ahead_pos = global_position + wander_direction * 0.8
+	var block_pos_feet = Vector3i(int(round(ahead_pos.x)), feet_y, int(round(ahead_pos.z)))
+	var block_pos_head = Vector3i(block_pos_feet.x, feet_y + 1, block_pos_feet.z)
+
+	var broke_any = false
+
+	# Bloc aux pieds
+	var bt_feet = world_manager.get_block_at_position(Vector3(block_pos_feet.x, block_pos_feet.y, block_pos_feet.z))
+	if bt_feet != BlockRegistry.BlockType.AIR and bt_feet != BlockRegistry.BlockType.WATER:
+		var hardness = BlockRegistry.get_block_hardness(bt_feet as BlockRegistry.BlockType)
+		if hardness <= SOFT_BLOCK_HARDNESS and not _is_in_village_structure(block_pos_feet):
+			village_manager.break_block(block_pos_feet)
+			village_manager.add_resource(bt_feet)
+			broke_any = true
+
+	# Bloc à la tête
+	var bt_head = world_manager.get_block_at_position(Vector3(block_pos_head.x, block_pos_head.y, block_pos_head.z))
+	if bt_head != BlockRegistry.BlockType.AIR and bt_head != BlockRegistry.BlockType.WATER:
+		var hardness = BlockRegistry.get_block_hardness(bt_head as BlockRegistry.BlockType)
+		if hardness <= SOFT_BLOCK_HARDNESS and not _is_in_village_structure(block_pos_head):
+			village_manager.break_block(block_pos_head)
+			village_manager.add_resource(bt_head)
+			broke_any = true
+
+	return broke_any
+
+func _is_in_village_structure(pos: Vector3i) -> bool:
+	# Vérifie si une position est dans le périmètre d'une structure construite
+	if not village_manager:
+		return false
+	for built in village_manager.built_structures:
+		var bo = built["origin"]
+		var bs = built["size"]
+		# Marge de 1 bloc autour des structures
+		if pos.x >= bo.x - 1 and pos.x < bo.x + bs.x + 1 \
+			and pos.y >= bo.y - 1 and pos.y < bo.y + bs.y + 1 \
+			and pos.z >= bo.z - 1 and pos.z < bo.z + bs.z + 1:
+			return true
+	# Aussi protéger les workstations placées
+	for ws_type in village_manager.placed_workstations:
+		var ws_pos = village_manager.placed_workstations[ws_type]
+		if pos == ws_pos or pos == Vector3i(ws_pos.x, ws_pos.y + 1, ws_pos.z):
+			return true
+	return false
 
 # ============================================================
 # MOUVEMENT COMMUN (auto-jump, évitement eau/falaises, stuck)
@@ -1324,11 +1382,19 @@ func _apply_movement(delta):
 			return
 		elif _cached_block_ahead != BlockRegistry.BlockType.AIR:
 			if _cached_block_above == BlockRegistry.BlockType.AIR:
-				velocity.y = _jump_velocity
-				_wall_impassable = false
+				# Bloc simple devant — casser si mou, sinon sauter
+				var hardness_ahead = BlockRegistry.get_block_hardness(_cached_block_ahead as BlockRegistry.BlockType)
+				if has_target and hardness_ahead <= SOFT_BLOCK_HARDNESS and _try_break_soft_blocks_ahead():
+					_wall_impassable = false  # cassé, on passe
+				else:
+					velocity.y = _jump_velocity
+					_wall_impassable = false
 			else:
-				# Mur de 2+ blocs — ne pas pousser contre
-				_wall_impassable = true
+				# Mur de 2+ blocs — essayer de casser si blocs mous (feuilles, etc.)
+				if has_target and _try_break_soft_blocks_ahead():
+					_wall_impassable = false  # passage dégagé
+				else:
+					_wall_impassable = true
 
 	# Mouvement horizontal — arrêter si mur infranchissable
 	if _wall_impassable:
