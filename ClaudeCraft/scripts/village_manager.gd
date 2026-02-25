@@ -300,9 +300,9 @@ func _evaluate_phase_1():
 				"required_profession": VProfession.Profession.FERMIER,
 			})
 
-	# Toujours maintenir du bois en stock
-	if total_wood < 20:
-		_add_harvest_tasks(5, 4)  # plus de bois
+	# Toujours maintenir du bois en stock — les bûcherons ne s'arrêtent jamais
+	if total_wood < 50:
+		_add_harvest_tasks(5, 4)  # un par bûcheron
 
 	# Le menuisier transforme le bois en planches en continu
 	if total_wood >= 2 and total_planks < 30:
@@ -314,8 +314,8 @@ func _evaluate_phase_1():
 				"required_profession": VProfession.Profession.MENUISIER,
 			})
 
-	# Commencer à miner (galerie souterraine)
-	if total_stone < 20:
+	# Commencer à miner — mineurs travaillent en continu
+	if total_stone < 40:
 		_add_mine_gallery_tasks(2)
 
 	# Crafter le fourneau (8 stone)
@@ -382,12 +382,12 @@ func _evaluate_phase_2():
 				"required_profession": VProfession.Profession.FERMIER,
 			})
 
-	# Maintenir le stock
-	if total_wood < 15:
-		_add_harvest_tasks(5, 3)
+	# Maintenir le stock — bûcherons travaillent en continu
+	if total_wood < 50:
+		_add_harvest_tasks(5, 4)
 
-	# Miner en galerie (pierre + charbon + fer trouvés automatiquement)
-	if total_stone < 15 or total_coal < 8 or (total_iron_ore < 4 and total_iron < 4):
+	# Miner en galerie — mineurs travaillent en continu
+	if total_stone < 40 or total_coal < 15 or (total_iron_ore < 8 and total_iron < 8):
 		_add_mine_gallery_tasks(2)
 
 	# Fondre le fer (recette furnace: 1 iron_ore + 1 coal_ore -> 1 iron_ingot)
@@ -461,9 +461,9 @@ func _evaluate_phase_3():
 				"required_profession": VProfession.Profession.FERMIER,
 			})
 
-	if total_wood < 20:
-		_add_harvest_tasks(5, 3)
-	if total_stone < 20:
+	if total_wood < 50:
+		_add_harvest_tasks(5, 4)
+	if total_stone < 40:
 		_add_mine_gallery_tasks(2)
 
 	# Construire tous les bâtiments
@@ -760,10 +760,10 @@ func _init_mine():
 	var best_pos = Vector3i(-9999, -9999, -9999)
 	var best_y_diff = 999
 
-	# Chercher un spot PROCHE (2-4 blocs) dont le surface_y est proche du centre
-	for attempt in range(15):
-		var dx = randi_range(2, 4) * (1 if randf() > 0.5 else -1)
-		var dz = randi_range(2, 4) * (1 if randf() > 0.5 else -1)
+	# Chercher un spot ÉLOIGNÉ (25-35 blocs) pour ne pas creuser au spawn
+	for attempt in range(20):
+		var dx = randi_range(25, 35) * (1 if randf() > 0.5 else -1)
+		var dz = randi_range(25, 35) * (1 if randf() > 0.5 else -1)
 		var cx = int(village_center.x) + dx
 		var cz = int(village_center.z) + dz
 		var surface_y = _find_surface_y(cx, cz)
@@ -1610,10 +1610,12 @@ func init_farm():
 	var cx = int(village_center.x)
 	var cz = int(village_center.z)
 
-	# Chercher un terrain plat 5x5 autour du centre
-	for attempt in range(20):
-		var tx = cx + randi_range(-12, 12)
-		var tz = cz + randi_range(-12, 12)
+	# Chercher un terrain plat 5x5 ÉLOIGNÉ du centre (20-30 blocs)
+	for attempt in range(30):
+		var sign_x = 1 if randf() > 0.5 else -1
+		var sign_z = 1 if randf() > 0.5 else -1
+		var tx = cx + randi_range(20, 30) * sign_x
+		var tz = cz + randi_range(20, 30) * sign_z
 
 		var first_y = _find_surface_y(tx, tz)
 		if first_y < 0:

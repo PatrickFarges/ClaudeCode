@@ -549,10 +549,19 @@ func _execute_harvest(delta):
 
 	var block_type = world_manager.get_block_at_position(Vector3(_mine_target.x, _mine_target.y, _mine_target.z))
 	if block_type == BlockRegistry.BlockType.AIR:
-		# Bloc déjà cassé
+		# Bloc déjà cassé — chercher le prochain tronc au-dessus ou un nouvel arbre
 		village_manager.release_position(_mine_target)
-		_mine_target = INVALID_POS
-		current_task = {}
+		var next_trunk = _find_next_trunk_above(_mine_target)
+		if next_trunk != INVALID_POS:
+			# Continuer à monter le long du tronc
+			_mine_target = next_trunk
+			village_manager.claim_position(_mine_target)
+			_mine_timer = 0.0
+		else:
+			# Tronc fini — chercher immédiatement un autre arbre (pas de current_task = {})
+			_mine_target = INVALID_POS
+			_arrived_at_target = false
+			_mine_timer = 0.0
 		return
 
 	_mine_timer += delta
@@ -566,12 +575,20 @@ func _execute_harvest(delta):
 		_show_harvest_label("+1", _mine_target)
 		print("PNJ[%d]: récolté bloc %d à %s" % [profession, block_type, str(_mine_target)])
 
-		# Aussi casser les feuilles au-dessus (décorer l'arbre)
-		_harvest_leaves_above(_mine_target)
-
-		_mine_target = INVALID_POS
-		_mine_timer = 0.0
-		current_task = {}
+		# Chercher le prochain tronc au-dessus
+		var next_trunk = _find_next_trunk_above(_mine_target)
+		if next_trunk != INVALID_POS:
+			# Continuer à monter le long du tronc
+			_mine_target = next_trunk
+			village_manager.claim_position(_mine_target)
+			_mine_timer = 0.0
+		else:
+			# Arbre entièrement abattu — casser les feuilles restantes
+			_harvest_leaves_above(_mine_target)
+			# Chercher immédiatement un autre arbre
+			_mine_target = INVALID_POS
+			_arrived_at_target = false
+			_mine_timer = 0.0
 
 func _harvest_leaves_above(trunk_pos: Vector3i):
 	# Casser les feuilles connectées au tronc (simple: colonne au-dessus)
@@ -585,6 +602,20 @@ func _harvest_leaves_above(trunk_pos: Vector3i):
 			continue
 		else:
 			break
+
+func _find_next_trunk_above(trunk_pos: Vector3i) -> Vector3i:
+	# Cherche le prochain bloc de tronc au-dessus de la position donnée
+	var wood_types = [5, 32, 33, 34, 35, 36, 42]  # WOOD + toutes essences
+	for dy in range(1, 12):  # chercher jusqu'à 12 blocs de haut
+		var check_pos = Vector3i(trunk_pos.x, trunk_pos.y + dy, trunk_pos.z)
+		var bt = world_manager.get_block_at_position(Vector3(check_pos.x, check_pos.y, check_pos.z))
+		if bt in wood_types:
+			return check_pos
+		elif bt == BlockRegistry.BlockType.AIR:
+			continue  # trou dans le tronc, continuer à chercher
+		else:
+			break  # feuilles ou autre — fin du tronc
+	return INVALID_POS
 
 func _execute_mine(delta):
 	# Miner un type de bloc spécifique (sable, pierre en surface, etc.)
