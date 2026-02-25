@@ -99,6 +99,7 @@ const NAV_CHECK_INTERVAL = 0.15  # vérif obstacles toutes les 0.15s au lieu de 
 var _cached_block_ahead: int = 0  # BlockType en cache
 var _cached_block_below: int = 0
 var _cached_block_above: int = 0
+var _wall_impassable: bool = false  # mur 2+ blocs détecté devant
 
 # === Mine staircase ===
 var _mine_heading: Vector3i = Vector3i(1, 0, 0)  # direction horizontale du mineur
@@ -351,7 +352,10 @@ func _on_activity_changed(old_activity: int, new_activity: int):
 	has_target = false
 	_arrived_at_target = false
 	_target_stuck_timer = 0.0
+	_total_stuck_time = 0.0
 	_detour_timer = 0.0
+	_detour_count = 0
+	_wall_impassable = false
 	_mine_timer = 0.0
 	_build_timer = 0.0
 
@@ -1102,17 +1106,32 @@ func _walk_toward(target: Vector3, delta: float) -> bool:
 		is_moving = false
 		_total_stuck_time = 0.0
 		_detour_count = 0
+		_wall_impassable = false
 		return true
 
-	# Téléportation de secours : bloqué depuis 12s+ → se téléporter près de la cible
-	if _total_stuck_time > 12.0:
+	# Téléportation de secours : seuil relevé à 25s (dernier recours)
+	if _total_stuck_time > 25.0:
 		var tp_pos = Vector3(target.x, target.y + 1, target.z)
 		global_position = tp_pos
 		_total_stuck_time = 0.0
 		_detour_count = 0
 		_detour_timer = 0.0
+		_wall_impassable = false
 		is_moving = false
 		return true
+
+	# Après 7 détours sur harvest/mine : abandonner la cible
+	if _detour_count >= 7 and not current_task.is_empty():
+		var task_type = current_task.get("type", "")
+		if task_type in ["harvest", "mine"]:
+			_abandon_current_target()
+			return false
+
+	# Après 10 détours : essayer de casser le bloc devant
+	if _detour_count >= 10 and _detour_timer <= 0.0:
+		if _try_break_path_block(diff.normalized()):
+			_detour_count -= 3  # récupérer du crédit après avoir cassé
+			_wall_impassable = false
 
 	# En détour (contournement d'obstacle)
 	if _detour_timer > 0.0:
@@ -1129,26 +1148,121 @@ func _walk_toward(target: Vector3, delta: float) -> bool:
 	_apply_movement(delta)
 	_play_anim("walk")
 
+	# Détection immédiate de mur infranchissable → détour sans attendre
+	if _wall_impassable:
+		_total_stuck_time += delta * 3.0  # compte plus vite quand bloqué par un mur
+		_start_smart_detour(diff.normalized())
+		return false
+
 	# Détection de blocage en mode cible
 	_target_stuck_timer += delta
 	if _target_stuck_timer >= 2.0:
 		var moved_dist = global_position.distance_to(_last_pos)
 		if moved_dist < 0.5:
 			_total_stuck_time += 2.0
-			_detour_count += 1
-			# Détour perpendiculaire — alterne gauche/droite à chaque détour
-			var perp = Vector3(-wander_direction.z, 0, wander_direction.x)
-			if _detour_count % 2 == 0:
-				perp = -perp
-			_detour_direction = perp.normalized()
-			_detour_timer = 1.5
+			_start_smart_detour(diff.normalized())
 		else:
-			# On bouge — réduire le stuck time
+			# On bouge — réduire le stuck time et redonner du crédit
 			_total_stuck_time = maxf(0.0, _total_stuck_time - 1.0)
+			if moved_dist >= 0.5:
+				_detour_count = maxi(0, _detour_count - 1)
 		_last_pos = global_position
 		_target_stuck_timer = 0.0
 
 	return false
+
+# ============================================================
+# SMART DETOUR — contournement intelligent d'obstacles
+# ============================================================
+
+func _start_smart_detour(toward_target: Vector3):
+	_wall_impassable = false
+	_detour_count += 1
+	var forward = toward_target.normalized()
+	var perp_left = Vector3(-forward.z, 0, forward.x)
+	var perp_right = Vector3(forward.z, 0, -forward.x)
+	var back = -forward
+
+	match _detour_count:
+		1:
+			_detour_direction = perp_left
+			_detour_timer = 2.0
+		2:
+			_detour_direction = perp_right
+			_detour_timer = 2.5
+		3:
+			_detour_direction = (perp_left + back).normalized()
+			_detour_timer = 3.0
+		4:
+			_detour_direction = (perp_right + back).normalized()
+			_detour_timer = 3.0
+		5:
+			_detour_direction = back
+			_detour_timer = 3.5
+		_:
+			# Détour 6+ : direction aléatoire
+			var angle = randf() * TAU
+			_detour_direction = Vector3(cos(angle), 0, sin(angle))
+			_detour_timer = 3.0
+
+func _abandon_current_target():
+	# Libérer la cible claimée
+	if _mine_target != INVALID_POS and village_manager:
+		village_manager.release_position(_mine_target)
+		_mine_target = INVALID_POS
+
+	# Retourner la tâche dans la queue
+	if not current_task.is_empty() and village_manager:
+		village_manager.return_task(current_task)
+		current_task = {}
+
+	# Reset navigation
+	has_target = false
+	_arrived_at_target = false
+	_target_stuck_timer = 0.0
+	_total_stuck_time = 0.0
+	_detour_timer = 0.0
+	_detour_count = 0
+	_wall_impassable = false
+	_mine_timer = 0.0
+
+	# Cooldown pour éviter de reprendre la même cible
+	_search_cooldown = SEARCH_COOLDOWN_DURATION
+
+	var prof_name = VProfession.get_profession_name(profession)
+	print("%s: abandonne la cible (trop de détours)" % prof_name)
+
+func _try_break_path_block(toward: Vector3) -> bool:
+	if not world_manager or not village_manager:
+		return false
+
+	var feet_y = int(global_position.y)
+	var ahead_pos = global_position + toward * 1.0
+	var block_pos_feet = Vector3i(int(round(ahead_pos.x)), feet_y, int(round(ahead_pos.z)))
+	var block_pos_head = Vector3i(block_pos_feet.x, feet_y + 1, block_pos_feet.z)
+
+	var broke_any = false
+
+	# Casser le bloc aux pieds
+	var bt_feet = world_manager.get_block_at_position(Vector3(block_pos_feet.x, block_pos_feet.y, block_pos_feet.z))
+	if bt_feet != BlockRegistry.BlockType.AIR and bt_feet != BlockRegistry.BlockType.WATER:
+		village_manager.break_block(block_pos_feet)
+		village_manager.add_resource(bt_feet)
+		broke_any = true
+
+	# Casser le bloc à la tête
+	var bt_head = world_manager.get_block_at_position(Vector3(block_pos_head.x, block_pos_head.y, block_pos_head.z))
+	if bt_head != BlockRegistry.BlockType.AIR and bt_head != BlockRegistry.BlockType.WATER:
+		village_manager.break_block(block_pos_head)
+		village_manager.add_resource(bt_head)
+		broke_any = true
+
+	if broke_any:
+		_show_harvest_label("+Passage!", block_pos_feet)
+		var prof_name = VProfession.get_profession_name(profession)
+		print("%s: casse des blocs pour passer à %s" % [prof_name, str(block_pos_feet)])
+
+	return broke_any
 
 # ============================================================
 # MOUVEMENT COMMUN (auto-jump, évitement eau/falaises, stuck)
@@ -1160,6 +1274,7 @@ func _apply_movement(delta):
 		_nav_check_timer += delta
 		if _nav_check_timer >= NAV_CHECK_INTERVAL:
 			_nav_check_timer = 0.0
+			_wall_impassable = false  # reset avant re-check
 			var feet_y = int(global_position.y)
 			var ahead_pos = global_position + wander_direction * 0.8
 			var ahead_feet = Vector3(ahead_pos.x, feet_y, ahead_pos.z)
@@ -1176,12 +1291,21 @@ func _apply_movement(delta):
 			_pick_new_wander()
 			is_moving = false
 			return
-		elif _cached_block_ahead != BlockRegistry.BlockType.AIR and _cached_block_above == BlockRegistry.BlockType.AIR:
-			velocity.y = _jump_velocity
+		elif _cached_block_ahead != BlockRegistry.BlockType.AIR:
+			if _cached_block_above == BlockRegistry.BlockType.AIR:
+				velocity.y = _jump_velocity
+				_wall_impassable = false
+			else:
+				# Mur de 2+ blocs — ne pas pousser contre
+				_wall_impassable = true
 
-	# Mouvement horizontal
-	velocity.x = wander_direction.x * move_speed
-	velocity.z = wander_direction.z * move_speed
+	# Mouvement horizontal — arrêter si mur infranchissable
+	if _wall_impassable:
+		velocity.x = 0
+		velocity.z = 0
+	else:
+		velocity.x = wander_direction.x * move_speed
+		velocity.z = wander_direction.z * move_speed
 
 	# Rotation vers la direction de déplacement
 	if wander_direction.length_squared() > 0.01:
