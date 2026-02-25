@@ -21,11 +21,11 @@ Jeu voxel type Minecraft en GDScript avec Godot 4.5+, style pastel. Évolue vers
 - **`structure_manager.gd`** : Autoload — structures JSON depuis `res://structures/`, RLE, thread-safe
 
 ### Village autonome (The Settlers)
-- **`village_manager.gd`** : Autoload singleton — stockpile partagé, progression 4 phases (bois→pierre→fer→expansion), tool tier collectif, file de tâches par profession. **Scan optimisé** : rayon 2 chunks, échantillonnage 1/2, cache 15s, early exit 20 résultats, évaluation 8s. **Mine** : entrée à 30-40 blocs du centre, escalier descendant, `find_nearest_surface_block` filtre < 30 blocs. Chemin croix cobblestone, **8 blueprints bâtiments**. **Agriculture** : ferme 5×5 à 20-30 blocs du centre, croissance blé 30s/stage×4, récolte auto, recette Pain. **Croissance village** : pop cap = 8 + 2×maisons, spawn villageois si 5+ pain. **Forge** : 3 recettes d'upgrade outils (`_tool_tier`), `get_tool_tier_label()` pour labels PNJ. **Travail continu** : seuils stock bois 50, pierre 40 — tâches toujours disponibles
-- **`npc_villager.gd`** : PNJ avec professions et emploi du temps (14h travail/jour). 18 modèles GLB Kenney.nl. **Pathfinding** : détection murs 2+ blocs (`_wall_impassable`), détours intelligents progressifs (perp→diag→arrière→aléatoire), abandon cible après 7 détours, cassage blocs mous (dureté ≤ 0.5) immédiat, casse blocs durs après 10 détours, téléport secours 25s. Protection structures village (`_is_in_village_structure`). **Bûcherons** : `_find_nearest_trunk_around()` scan 3D exhaustif (rayon 4, early exit), dépouillent l'arbre entier puis enchaînent le plus proche. `_harvest_leaves_around()` nettoyage 3D (max 50 blocs/appel). **Mineurs** : distance min 30 blocs du village (`MIN_MINE_DISTANCE_FROM_VILLAGE`). Label3D profession+tâche avec **tier matériau**. **Système de faim** : `hunger` 100→0, drain 0.06/s travail 0.01/s repos (~2 jours in-game), seuil manger 40, ralenti sous 20, arrêt à 0, pause déjeuner 12h-13h. **Retour surface mineur** : `_mine_entry_pos` + `_returning_to_surface` — remonte l'escalier au lieu de téléporter
+- **`village_manager.gd`** : Autoload singleton — stockpile partagé, progression 4 phases (bois→pierre→fer→expansion), tool tier collectif, file de tâches par profession. **Scan optimisé** : rayon 2 chunks, échantillonnage 1/2, cache 15s, early exit 20 résultats, évaluation 8s. **Mine** : recherche robuste 2 passes (plat puis fallback) avec angle aléatoire 360°, tolérance terrain 3 blocs, 60 tentatives/passe, fallback cardinal. **Agriculture** : ferme 5×5, recherche 3 passes progressives (15-35→8-45→5-50 blocs), angle aléatoire. Chemin croix cobblestone, **8 blueprints** (phase 1 tout en planches, pas besoin de pierre). Construction autorisée sans chemin. **Croissance village** : pop cap = 8 + 2×maisons, spawn villageois si 5+ pain. **Forge** : 3 recettes d'upgrade outils. **Travail continu** : seuils stock bois 50, pierre 40
+- **`npc_villager.gd`** : PNJ avec professions et emploi du temps (14h travail/jour). 18 modèles GLB Kenney.nl. **Pathfinding** : détection murs 2+ blocs, détours intelligents progressifs, abandon cible après 7 détours, cassage blocs mous (dureté ≤ 0.5), casse blocs durs après 10, téléport secours 25s, protection structures village. **Bûcherons** : scan 3D exhaustif (rayon 4, early exit), dépouillent l'arbre entier. **Mineurs** : suit `mine_plan` pré-calculé, approche par dessus (y+2), distance min 30 blocs. **Système de faim** : DÉSACTIVÉ (drain 0.0) — en attente ferme fiable. Mécanisme prêt : drain 0.06/0.01, seuils 40/20, pause déjeuner 12h-13h. **Retour surface mineur** : remonte l'escalier
 - **`villager_profession.gd`** : 9 professions (BUCHERON, MENUISIER, FORGERON, BATISSEUR, FERMIER, BOULANGER, CHAMAN, MINEUR, NONE), schedule 6 plages, workstation mapping
 - **`poi_manager.gd`** : Points of Interest (workstations), claim/release, scan chunk, lookup O(1)
-- **`village_inventory_ui.gd`** : UI gestion village (F1) — phase, tier, **population X/Y**, **barre de faim** par villageois (vert/jaune/rouge), **section fermes**, **liste bâtiments**, **prochain objectif**, ressources, liste villageois avec activité
+- **`village_inventory_ui.gd`** : UI gestion village (F1) — panel 700×900, phase, tier, **population X/Y**, **barre de faim** par villageois, **section fermes**, **liste bâtiments**, **prochain objectif + statut mine**, ressources, **villageois numérotés** (Mineur 1, Mineur 2...) avec **activité temps réel**, **clic = téléport joueur**
 
 ### Combat
 - **`arrow_entity.gd`** : flèche arc — gravité 20m/s², drag, dégâts 6.0, critique, knockback, particules, Label3D dégâts
@@ -80,7 +80,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 
 ## Direction du projet
 
-**Version actuelle : v12.1.0**
+**Version actuelle : v12.2.0**
 
 | Phase | Statut | Contenu |
 |-------|--------|---------|
@@ -92,6 +92,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 | 4.1 | Fait | v11.1.0 — 6 GLB animaux Quaternius (CC0) téléchargés, convertis FBX→GLB *(retirés du spawn en v12.0.0)* |
 | 5 | Fait | v12.0.0 — Gestion village The Settlers : farming (blé 5×5, 4 stages, récolte auto), faim villageois (drain/seuils/pause déjeuner), 5 nouveaux bâtiments (Ferme, Forge, Entrepôt, Maison, Entrée de mine), croissance village (pop cap dynamique + spawn villageois), UI enrichie (pop, faim, fermes, bâtiments, objectifs) |
 | 5.1 | Fait | v12.1.0 — Forge (3 recettes upgrade outils, forgeron actif), Torches (bloc TORCH + OmniLight3D, max 16/chunk), Labels outils avec tier matériau (Hache Bois, Pioche Fer...), Retour surface mineurs (remonte l'escalier au lieu de téléporter) |
+| 5.2 | Fait | v12.2.0 — Fix mine/ferme bloqués (recherche robuste multi-passes, fallback), faim désactivée, bâtiments phase 1 tout planches, construction sans chemin, UI village agrandie (700×900, villageois numérotés, activité temps réel, téléport clic) |
 | 6 | À venir | Chaînes de production avancées, transport ressources, économie |
 
 **Packs GLB utilisés (CC0)** : Kenney.nl (18 modèles PNJ villageois). **PNJ futurs** : KayKit Adventurers (161 anims travail)
