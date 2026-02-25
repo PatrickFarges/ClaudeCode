@@ -630,12 +630,24 @@ func _find_nearest_trunk_around(from: Vector3, radius: float) -> Vector3i:
 
 	return best
 
+const MIN_MINE_DISTANCE_FROM_VILLAGE = 30.0  # ne pas miner à moins de 30 blocs du village
+
 func _execute_mine(delta):
 	# Miner un type de bloc spécifique (sable, pierre en surface, etc.)
-	# Utilise la même logique directe que mine_gallery
 	if _mine_target == INVALID_POS:
 		var block_type = current_task.get("target_block", 3)
-		_mine_target = village_manager.find_nearest_surface_block(block_type, global_position, 20.0)
+		# Chercher à partir d'un point éloigné du village center
+		var search_from = global_position
+		if village_manager:
+			var to_center = Vector3(global_position.x - village_manager.village_center.x, 0,
+				global_position.z - village_manager.village_center.z)
+			var dist_to_center = to_center.length()
+			if dist_to_center < MIN_MINE_DISTANCE_FROM_VILLAGE:
+				# Trop près du village — se projeter à 30 blocs du centre
+				var dir_away = to_center.normalized() if to_center.length() > 0.1 else Vector3(1, 0, 0)
+				search_from = village_manager.village_center + dir_away * MIN_MINE_DISTANCE_FROM_VILLAGE
+				search_from.y = global_position.y
+		_mine_target = village_manager.find_nearest_surface_block(block_type, search_from, 20.0)
 		if _mine_target == INVALID_POS:
 			_task_status = "Cherche..."
 			village_manager.return_task(current_task)

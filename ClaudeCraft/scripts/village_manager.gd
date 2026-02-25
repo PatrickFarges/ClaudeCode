@@ -729,6 +729,10 @@ func find_nearest_surface_block(block_type: int, from_pos: Vector3, radius: floa
 								)
 								if claimed_positions.has(world_pos):
 									continue
+								# Ne pas miner trop près du village center
+								var dist_to_village = Vector2(world_pos.x - village_center.x, world_pos.z - village_center.z).length()
+								if dist_to_village < 30.0:
+									continue
 								var d = from_pos.distance_to(Vector3(world_pos.x, world_pos.y, world_pos.z))
 								if d <= radius and d < best_dist:
 									best_dist = d
@@ -750,7 +754,7 @@ func invalidate_scan_cache():
 # ============================================================
 
 func _init_mine():
-	# Trouver un spot d'entrée PROCHE du village center et à altitude similaire
+	# Trouver un spot d'entrée ÉLOIGNÉ du village center (30-40 blocs)
 	if _mine_initialized:
 		return
 	if not world_manager:
@@ -760,10 +764,10 @@ func _init_mine():
 	var best_pos = Vector3i(-9999, -9999, -9999)
 	var best_y_diff = 999
 
-	# Chercher un spot ÉLOIGNÉ (25-35 blocs) pour ne pas creuser au spawn
+	# Chercher un spot ÉLOIGNÉ (30-40 blocs) pour ne pas creuser au spawn
 	for attempt in range(20):
-		var dx = randi_range(25, 35) * (1 if randf() > 0.5 else -1)
-		var dz = randi_range(25, 35) * (1 if randf() > 0.5 else -1)
+		var dx = randi_range(30, 40) * (1 if randf() > 0.5 else -1)
+		var dz = randi_range(30, 40) * (1 if randf() > 0.5 else -1)
 		var cx = int(village_center.x) + dx
 		var cz = int(village_center.z) + dz
 		var surface_y = _find_surface_y(cx, cz)
