@@ -764,14 +764,26 @@ func _init_mine():
 	var best_pos = Vector3i(-9999, -9999, -9999)
 	var best_y_diff = 999
 
-	# Chercher un spot ÉLOIGNÉ (30-40 blocs) pour ne pas creuser au spawn
-	for attempt in range(20):
+	# Chercher un spot ÉLOIGNÉ (30-40 blocs) sur terrain PLAT (pas de falaise)
+	for attempt in range(30):
 		var dx = randi_range(30, 40) * (1 if randf() > 0.5 else -1)
 		var dz = randi_range(30, 40) * (1 if randf() > 0.5 else -1)
 		var cx = int(village_center.x) + dx
 		var cz = int(village_center.z) + dz
 		var surface_y = _find_surface_y(cx, cz)
 		if surface_y < 0:
+			continue
+		# Vérifier que le terrain est plat autour (pas de falaise)
+		var flat = true
+		for check_dx in range(-1, 2):
+			for check_dz in range(-1, 2):
+				var ny = _find_surface_y(cx + check_dx, cz + check_dz)
+				if ny < 0 or abs(ny - surface_y) > 2:
+					flat = false
+					break
+			if not flat:
+				break
+		if not flat:
 			continue
 		var y_diff = abs(surface_y - center_y)
 		if y_diff < best_y_diff:

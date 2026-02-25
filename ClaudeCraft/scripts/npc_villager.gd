@@ -737,14 +737,19 @@ func _execute_mine_gallery(delta):
 		_mine_timer = 0.0
 
 	var target_world = Vector3(_mine_target.x + 0.5, _mine_target.y, _mine_target.z + 0.5)
+	# Point d'approche : au-dessus du bloc cible pour ne pas se coller au mur
+	var approach_pos = Vector3(_mine_target.x + 0.5, _mine_target.y + 2, _mine_target.z + 0.5)
 	_task_status = "[%s] Mine" % village_manager.get_tool_tier_label("Pioche")
 
 	if not _arrived_at_target:
-		var dist = global_position.distance_to(target_world)
-		if dist < 3.0:
+		# Distance XZ au bloc + vérif proximité verticale
+		var xz_dist = Vector2(global_position.x - target_world.x, global_position.z - target_world.z).length()
+		var y_diff = abs(global_position.y - _mine_target.y)
+		if xz_dist < 3.0 and y_diff < 5.0:
 			_arrived_at_target = true
 		else:
-			_walk_toward(target_world, delta)
+			# Marcher vers le point d'approche (au-dessus, pas dans le bloc)
+			_walk_toward(approach_pos, delta)
 			return
 
 	_face_target(target_world)
