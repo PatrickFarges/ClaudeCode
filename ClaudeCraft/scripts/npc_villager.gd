@@ -103,8 +103,13 @@ var _wall_impassable: bool = false  # mur 2+ blocs détecté devant
 
 # === Mine staircase ===
 var _mine_heading: Vector3i = Vector3i(1, 0, 0)  # direction horizontale du mineur
-var _mine_steps_h: int = 0  # pas horizontaux depuis le dernier descente
-const MINE_STEPS_BEFORE_DESCENT = 3  # creuser 3 blocs horizontaux, puis 1 vers le bas
+var _mine_steps_total: int = 0  # nombre de marches descendues (pour zigzag)
+const MINE_ZIGZAG_STEPS = 5  # changer de direction tous les 5 descentes
+
+# Séquence de blocs à miner pour la marche en cours
+var _stair_queue: Array = []  # Array de Vector3i — blocs à miner dans l'ordre
+var _stair_walk_pos: Vector3 = Vector3.ZERO  # position où marcher entre deux phases
+var _stair_needs_walk: bool = false  # doit marcher avant de continuer à miner
 
 # === Retour surface mineur ===
 var _mine_entry_pos: Vector3 = Vector3.ZERO
@@ -712,11 +717,16 @@ func _execute_mine(delta):
 var _at_mine_entrance: bool = false  # le mineur est arrivé à l'entrée de mine
 
 func _execute_mine_gallery(delta):
-	# Minage en ESCALIER — le mineur creuse AUTOUR DE LUI
-	# Phase 1: Marcher vers l'entrée de mine (surface, 15+ blocs du village)
-	# Phase 2: Creuser les blocs adjacents avec _get_next_staircase_block()
-	#          Le mineur mine devant lui (pieds+tête), puis descend en creusant
-	#          sous ses pieds. La gravité le fait tomber naturellement.
+	# MINAGE EN ESCALIER — marche de 2 blocs large × 2 blocs haut, descente de 1
+	#
+	# Chaque "marche" de l'escalier :
+	#   1. Miner 4 blocs : (pieds1, tête1, pieds2, tête2) devant le mineur
+	#   2. Marcher 2 blocs en avant dans le couloir creusé
+	#   3. Miner 1 bloc sous les pieds (descente)
+	#   4. Tomber d'1 bloc (gravité)
+	#   → Répéter depuis la nouvelle position
+	#
+	# Tous les MINE_ZIGZAG_STEPS descentes → changer de direction (zigzag)
 
 	# Enregistrer la position d'entrée de mine
 	if _mine_entry_pos == Vector3.ZERO:
@@ -730,42 +740,63 @@ func _execute_mine_gallery(delta):
 	# Phase 1: Se rendre à l'entrée de mine si on est loin
 	if not _at_mine_entrance:
 		var dist_to_entrance = Vector2(global_position.x - _mine_entry_pos.x, global_position.z - _mine_entry_pos.z).length()
-		# Considérer qu'on est à l'entrée si :
-		# - On est à moins de 5 blocs horizontalement, OU
-		# - On est SOUS la surface (déjà dans la mine)
 		if dist_to_entrance < 5.0 or global_position.y < _mine_entry_pos.y - 1:
 			_at_mine_entrance = true
+			# Initialiser la direction de minage en s'éloignant du village
+			if village_manager:
+				var away = Vector3(global_position.x - village_manager.village_center.x, 0,
+					global_position.z - village_manager.village_center.z)
+				if abs(away.x) > abs(away.z):
+					_mine_heading = Vector3i(1 if away.x > 0 else -1, 0, 0)
+				else:
+					_mine_heading = Vector3i(0, 0, 1 if away.z > 0 else -1)
 		else:
 			_task_status = "[%s] Vers mine..." % village_manager.get_tool_tier_label("Pioche")
 			_walk_toward(_mine_entry_pos, delta)
 			return
 
-	# Phase 2: Trouver le prochain bloc à miner AUTOUR DU MINEUR
+	# Phase 2a: Marcher vers un point intermédiaire (entre deux phases de minage)
+	if _stair_needs_walk:
+		var walk_dist = Vector2(global_position.x - _stair_walk_pos.x, global_position.z - _stair_walk_pos.z).length()
+		if walk_dist < 1.0 or not is_on_floor():
+			_stair_needs_walk = false
+		else:
+			_walk_toward(_stair_walk_pos, delta)
+			return
+
+	# Phase 2b: Calculer la séquence de blocs si vide
+	if _stair_queue.is_empty():
+		_compute_stair_step()
+
+	# Phase 2c: Prendre le prochain bloc de la séquence
 	if _mine_target == INVALID_POS:
-		_mine_target = _get_next_staircase_block()
+		while not _stair_queue.is_empty():
+			var next_block = _stair_queue.pop_front() as Vector3i
+			# Vérifier si le bloc est déjà air (grotte naturelle)
+			var bt = world_manager.get_block_at_position(Vector3(next_block.x, next_block.y, next_block.z))
+			if bt != BlockRegistry.BlockType.AIR and bt != BlockRegistry.BlockType.WATER:
+				_mine_target = next_block
+				village_manager.claim_position(_mine_target)
+				_mine_timer = 0.0
+				break
 		if _mine_target == INVALID_POS:
-			# Rien à miner autour — wander un peu et réessayer
-			_task_status = "[%s] Cherche..." % village_manager.get_tool_tier_label("Pioche")
+			# Tous les blocs étaient déjà air — passer au walk ou recomputer
+			if _stair_queue.is_empty():
+				# Séquence terminée, marcher et recomputer
+				return
 			_mine_timer += delta
-			if _mine_timer > 5.0:
+			if _mine_timer > 3.0:
 				_mine_timer = 0.0
 				current_task = {}
 			return
-		village_manager.claim_position(_mine_target)
-		has_target = true
-		_arrived_at_target = false
-		_mine_timer = 0.0
 
-	# Le bloc est adjacent — pas besoin de marcher loin, juste se tourner
+	# Phase 3: Miner le bloc ciblé
 	var target_world = Vector3(_mine_target.x + 0.5, _mine_target.y, _mine_target.z + 0.5)
 	var dist = global_position.distance_to(target_world)
-
-	if dist > 4.0:
-		# Le bloc trouvé est un peu loin (rare), marcher vers lui
+	if dist > 5.0:
 		_walk_toward(target_world, delta)
 		return
 
-	# Phase 3: Miner le bloc
 	_face_target(target_world)
 	is_moving = false
 	_decelerate()
@@ -789,7 +820,52 @@ func _execute_mine_gallery(delta):
 		print("%s: miné bloc %d à %s" % [prof_name, block_type, str(_mine_target)])
 		_mine_target = INVALID_POS
 		_mine_timer = 0.0
-		# Enchaîner immédiatement avec le prochain bloc adjacent
+
+func _compute_stair_step():
+	# Calcule la séquence de blocs pour UNE marche d'escalier
+	# depuis la position actuelle du mineur + sa direction (_mine_heading)
+	#
+	# Géométrie d'une marche (vue de côté, → = heading) :
+	#   Position du mineur: M
+	#   Blocs à miner: 1,2,3,4 (couloir) puis 5 (descente)
+	#
+	#   [M]  [2][4]          ← y+1 (tête)
+	#   [M]  [1][3]          ← y   (pieds)
+	#             [5]        ← y-1 (descente)
+	#
+	#   Après minage de 1-4, le mineur marche en avant (2 blocs)
+	#   Après minage de 5, le mineur tombe d'1 bloc
+
+	_stair_queue.clear()
+
+	var my = Vector3i(int(round(global_position.x)), int(global_position.y), int(round(global_position.z)))
+	var h = _mine_heading
+
+	# Bloc 1: pieds, 1 bloc devant
+	_stair_queue.append(Vector3i(my.x + h.x, my.y, my.z + h.z))
+	# Bloc 2: tête, 1 bloc devant
+	_stair_queue.append(Vector3i(my.x + h.x, my.y + 1, my.z + h.z))
+	# Bloc 3: pieds, 2 blocs devant
+	_stair_queue.append(Vector3i(my.x + h.x * 2, my.y, my.z + h.z * 2))
+	# Bloc 4: tête, 2 blocs devant
+	_stair_queue.append(Vector3i(my.x + h.x * 2, my.y + 1, my.z + h.z * 2))
+
+	# Après les 4 blocs du couloir → marcher 2 blocs en avant
+	_stair_walk_pos = Vector3(my.x + h.x * 2 + 0.5, my.y, my.z + h.z * 2 + 0.5)
+	_stair_needs_walk = true
+
+	# Bloc 5: descente (sous les pieds de la nouvelle position)
+	_stair_queue.append(Vector3i(my.x + h.x * 2, my.y - 1, my.z + h.z * 2))
+
+	# Compter les descentes pour le zigzag
+	_mine_steps_total += 1
+	if _mine_steps_total >= MINE_ZIGZAG_STEPS:
+		_mine_steps_total = 0
+		# Tourner de 90° — perpendiculaire à la direction actuelle
+		if _mine_heading.x != 0:
+			_mine_heading = Vector3i(0, 0, 1 if randf() > 0.5 else -1)
+		else:
+			_mine_heading = Vector3i(1 if randf() > 0.5 else -1, 0, 0)
 
 func _get_next_staircase_block() -> Vector3i:
 	# Calcule le prochain bloc à creuser dans le pattern escalier
