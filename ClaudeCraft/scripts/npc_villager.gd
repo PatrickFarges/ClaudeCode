@@ -339,11 +339,14 @@ func _on_activity_changed(old_activity: int, new_activity: int):
 				# Ne pas reset la navigation — on va marcher vers _mine_entry_pos
 				return
 			# Retourner la tâche village non terminée (cas normal)
+			# SAUF les tâches build — on les garde pour reprendre après
 			if _mine_target != INVALID_POS:
 				village_manager.release_position(_mine_target)
 				_mine_target = INVALID_POS
-			village_manager.return_task(current_task)
-			current_task = {}
+			if current_task.get("type", "") != "build":
+				village_manager.return_task(current_task)
+				current_task = {}
+			# Les tâches build restent dans current_task pour reprendre demain
 		_task_status = ""
 
 	# Reset navigation
@@ -883,15 +886,23 @@ func _execute_craft(delta):
 	_decelerate()
 	_play_anim("attack")
 
-	# Petit délai de craft (1s)
+	# Petit délai de craft (0.8s)
 	_mine_timer += delta
-	if _mine_timer < 1.0:
+	if _mine_timer < 0.8:
 		return
 	_mine_timer = 0.0
 
 	var success = village_manager.try_craft(recipe_name)
 	if success:
 		_show_harvest_label("[Craft] " + recipe_name, Vector3i(int(global_position.x), int(global_position.y) + 1, int(global_position.z)))
+		# Répéter le craft pour les recettes batch (Planches, Pain) — max 8 fois
+		var repeatable = recipe_name == "Planches" or recipe_name == "Pain"
+		if repeatable:
+			var repeats = current_task.get("_repeats", 0) + 1
+			current_task["_repeats"] = repeats
+			_task_status = "[Craft] %s (x%d)" % [recipe_name, repeats]
+			if repeats < 8:
+				return  # Reste sur la tâche, re-boucle avec nouveau timer
 	else:
 		village_manager.return_task(current_task)
 	current_task = {}

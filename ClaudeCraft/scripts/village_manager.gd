@@ -332,7 +332,7 @@ func _evaluate_phase_1():
 		_add_harvest_tasks(5, 4)  # un par bûcheron
 
 	# Le menuisier transforme le bois en planches en continu
-	if total_wood >= 2 and total_planks < 80:
+	if total_wood >= 2 and total_planks < 200:
 		if not _has_task_of_type("craft", "Planches"):
 			_add_task({
 				"type": "craft",
@@ -415,7 +415,7 @@ func _evaluate_phase_2():
 
 	# Le menuisier transforme le bois en planches en continu
 	var total_planks = get_total_planks()
-	if total_wood >= 2 and total_planks < 80:
+	if total_wood >= 2 and total_planks < 200:
 		if not _has_task_of_type("craft", "Planches"):
 			_add_task({
 				"type": "craft",
@@ -504,7 +504,7 @@ func _evaluate_phase_3():
 
 	# Le menuisier transforme le bois en planches en continu
 	var total_planks = get_total_planks()
-	if total_wood >= 2 and total_planks < 80:
+	if total_wood >= 2 and total_planks < 200:
 		if not _has_task_of_type("craft", "Planches"):
 			_add_task({
 				"type": "craft",
@@ -1127,6 +1127,12 @@ func try_craft(recipe_name: String) -> bool:
 	var recipes = CraftRegistry.get_all_recipes()
 	for recipe in recipes:
 		if recipe["name"] == recipe_name:
+			# Forge : vérifier le tier AVANT de consommer les ressources
+			if recipe.has("_tool_tier"):
+				var new_tier = recipe["_tool_tier"]
+				if new_tier <= village_tool_tier:
+					return false  # Déjà au bon tier, ne pas gaspiller
+
 			# Vérifier qu'on a les inputs dans le stockpile
 			var can = true
 			for input_item in recipe["inputs"]:
@@ -1159,14 +1165,10 @@ func try_craft(recipe_name: String) -> bool:
 				else:
 					consume_resources(bt, needed)
 
-			# Forge : upgrade tool tier au lieu de produire un output
+			# Forge : upgrade tool tier
 			if recipe.has("_tool_tier"):
-				var new_tier = recipe["_tool_tier"]
-				if new_tier > village_tool_tier:
-					village_tool_tier = new_tier
-					print("VillageManager: outils améliorés au tier %d (%s)" % [new_tier, TOOL_TIER_NAMES.get(new_tier, "?")])
-				else:
-					print("VillageManager: entretien outils tier %d (ressources consommées)" % new_tier)
+				village_tool_tier = recipe["_tool_tier"]
+				print("VillageManager: outils améliorés au tier %d (%s)" % [village_tool_tier, TOOL_TIER_NAMES.get(village_tool_tier, "?")])
 				return true
 
 			# Produire l'output
@@ -1270,23 +1272,33 @@ func _try_queue_build(blueprint_index: int):
 		if t["type"] == "build" and t.get("blueprint_index", -1) == blueprint_index:
 			return
 
+	# Vérifier qu'un villageois ne construit pas déjà ce blueprint
+	for npc in villagers:
+		if is_instance_valid(npc) and npc.current_task.get("type", "") == "build" \
+			and npc.current_task.get("blueprint_index", -1) == blueprint_index:
+			return
+
 	var bp = BLUEPRINTS[blueprint_index]
 
 	# Vérifier si on a assez de matériaux
 	var can_build = true
+	var missing_info = []
 	for bt in bp["materials"]:
 		var needed = bp["materials"][bt]
+		var have = 0
 		if bt == 11:  # PLANKS
-			if get_total_planks() < needed:
+			have = get_total_planks()
+			if have < needed:
 				can_build = false
-				break
+				missing_info.append("planches %d/%d" % [have, needed])
 		else:
-			if not has_resources(bt, needed):
+			have = get_resource_count(bt)
+			if have < needed:
 				can_build = false
-				break
+				missing_info.append("bt%d %d/%d" % [bt, have, needed])
 
 	if not can_build:
-		# Ajouter des tâches de récolte pour les matériaux manquants
+		# Ajouter des tâches de récolte pour les matériaux manquants (max 4 par type)
 		for bt in bp["materials"]:
 			var needed = bp["materials"][bt]
 			var have = 0
@@ -1296,17 +1308,18 @@ func _try_queue_build(blueprint_index: int):
 				have = get_resource_count(bt)
 			if have < needed:
 				var deficit = needed - have
-				if bt == 11:  # Planks -> récolter du bois
-					_add_harvest_tasks(5, ceili(float(deficit) / 4.0))
-				elif bt == 3 or bt == 25:  # Stone/Cobble -> mine en galerie (pas en surface)
+				if bt == 11:  # Planks -> récolter du bois (le menuisier craft en continu)
+					_add_harvest_tasks(5, mini(ceili(float(deficit) / 4.0), 4))
+				elif bt == 3 or bt == 25:  # Stone/Cobble -> mine en galerie
 					_add_mine_gallery_tasks(2)
 				elif bt == 61:  # Glass -> miner du sable en surface
-					_add_mine_tasks(4, mini(deficit, 4))  # SAND max 4 tasks
+					_add_mine_tasks(4, mini(deficit, 4))
 		return
 
 	# Trouver un emplacement
 	var origin = _find_build_site(bp)
 	if origin == Vector3i(-9999, -9999, -9999):
+		print("VillageManager: '%s' — pas de site valide trouvé" % bp["name"])
 		return
 
 	# Consommer les matériaux
@@ -1329,8 +1342,8 @@ func _try_queue_build(blueprint_index: int):
 	print("VillageManager: construction de '%s' à %s" % [bp["name"], str(origin)])
 
 func _find_build_site(blueprint: Dictionary) -> Vector3i:
-	# Trouver un terrain plat assez grand pour le bâtiment
-	# Préfère les emplacements proches du chemin cobblestone
+	# Trouver un terrain assez plat pour le bâtiment
+	# Tolère un dénivelé de 2 blocs, et aplatit le terrain lors de la construction
 	var size = blueprint["size"]
 	var cx = int(village_center.x)
 	var cz = int(village_center.z)
@@ -1338,9 +1351,9 @@ func _find_build_site(blueprint: Dictionary) -> Vector3i:
 	var best_site = Vector3i(-9999, -9999, -9999)
 	var best_path_dist = INF
 
-	for attempt in range(40):
-		var tx = cx + randi_range(-20, 20)
-		var tz = cz + randi_range(-20, 20)
+	for attempt in range(60):
+		var tx = cx + randi_range(-16, 16)
+		var tz = cz + randi_range(-16, 16)
 
 		# Vérifier que le terrain est ~plat sur toute la surface
 		var first_y = _find_surface_y(tx, tz)
@@ -1348,10 +1361,17 @@ func _find_build_site(blueprint: Dictionary) -> Vector3i:
 			continue
 
 		var flat = true
+		var max_y = first_y
+		var min_y = first_y
 		for bx in range(size.x):
 			for bz in range(size.z):
 				var sy = _find_surface_y(tx + bx, tz + bz)
-				if abs(sy - first_y) > 1:
+				if sy < 0:
+					flat = false
+					break
+				max_y = maxi(max_y, sy)
+				min_y = mini(min_y, sy)
+				if max_y - min_y > 3:
 					flat = false
 					break
 			if not flat:
@@ -1365,21 +1385,24 @@ func _find_build_site(blueprint: Dictionary) -> Vector3i:
 		for built in built_structures:
 			var bo = built["origin"]
 			var bs = built["size"]
-			if tx < bo.x + bs.x and tx + size.x > bo.x \
-				and tz < bo.z + bs.z and tz + size.z > bo.z:
+			if tx < bo.x + bs.x + 2 and tx + size.x > bo.x - 2 \
+				and tz < bo.z + bs.z + 2 and tz + size.z > bo.z - 2:
 				overlap = true
 				break
 
 		if overlap:
 			continue
 
-		# Calculer la distance au chemin le plus proche
-		var site = Vector3i(tx, first_y + 1, tz)
+		# Utiliser le y le plus haut comme référence (les blocs en dessous seront comblés)
+		var site = Vector3i(tx, max_y + 1, tz)
 		var path_dist = INF
 		for pb in _path_blocks:
 			var d = abs(tx - pb.x) + abs(tz - pb.z)
 			if d < path_dist:
 				path_dist = d
+		# Sans chemin, utiliser la distance au centre
+		if path_dist == INF:
+			path_dist = abs(tx - cx) + abs(tz - cz)
 		if path_dist < best_path_dist:
 			best_path_dist = path_dist
 			best_site = site

@@ -224,14 +224,43 @@ func _refresh_contents():
 		else:
 			farm_label.text = "Ferme : non construite"
 
-	# Bâtiments
-	if village_manager.built_structures.size() > 0:
-		var names = []
+	# Bâtiments — comptés par type + en construction
+	var built_count = village_manager.built_structures.size()
+	var total_blueprints = village_manager.BLUEPRINTS.size()
+	if built_count > 0:
+		# Compter par type
+		var name_counts: Dictionary = {}
 		for built in village_manager.built_structures:
-			names.append(built["name"])
-		buildings_label.text = "Bâtiments : " + ", ".join(names)
+			var n = built["name"]
+			name_counts[n] = name_counts.get(n, 0) + 1
+		var parts = []
+		for n in name_counts:
+			if name_counts[n] > 1:
+				parts.append("%s x%d" % [n, name_counts[n]])
+			else:
+				parts.append(n)
+		buildings_label.text = "Bâtiments (%d/%d) : %s" % [built_count, total_blueprints, ", ".join(parts)]
 	else:
-		buildings_label.text = "Bâtiments : aucun"
+		# Vérifier si un bâtiment est en construction
+		var building_in_progress = ""
+		for npc in village_manager.villagers:
+			if is_instance_valid(npc) and npc.current_task.get("type", "") == "build":
+				var bp_idx = npc.current_task.get("blueprint_index", -1)
+				if bp_idx >= 0 and bp_idx < total_blueprints:
+					var bp = village_manager.BLUEPRINTS[bp_idx]
+					var progress = npc.current_task.get("block_index", 0)
+					var total = npc.current_task.get("block_list", []).size()
+					building_in_progress = "%s (%d/%d blocs)" % [bp["name"], progress, total]
+					break
+		if building_in_progress != "":
+			buildings_label.text = "Bâtiments (0/%d) : en construction — %s" % [total_blueprints, building_in_progress]
+		else:
+			# Montrer ce qui manque pour le prochain bâtiment
+			var next_bp = _get_next_building_info()
+			if next_bp != "":
+				buildings_label.text = "Bâtiments (0/%d) : %s" % [total_blueprints, next_bp]
+			else:
+				buildings_label.text = "Bâtiments (0/%d) : aucun" % total_blueprints
 
 	# Mine
 	if village_manager._mine_initialized:
@@ -448,6 +477,35 @@ func _teleport_to_villager(npc):
 	player.global_position = npc_pos + offset
 	# Fermer l'UI après téléport
 	close_inventory()
+
+func _get_next_building_info() -> String:
+	if not village_manager:
+		return ""
+	# Trouver le prochain bâtiment à construire et montrer les matériaux manquants
+	var built_names: Dictionary = {}
+	for built in village_manager.built_structures:
+		built_names[built["name"]] = true
+	for bp in village_manager.BLUEPRINTS:
+		if built_names.has(bp["name"]):
+			continue
+		if bp.get("phase", 0) <= village_manager.village_phase:
+			# Ce blueprint est le prochain — vérifier les matériaux
+			var missing = []
+			for bt in bp["materials"]:
+				var needed = bp["materials"][bt]
+				var have = 0
+				if bt == 11:  # PLANKS
+					have = village_manager.get_total_planks()
+				else:
+					have = village_manager.get_resource_count(bt)
+				if have < needed:
+					var name = BlockRegistry.get_block_name(bt as BlockRegistry.BlockType)
+					missing.append("%s %d/%d" % [name, have, needed])
+			if missing.size() > 0:
+				return "prochain: %s (manque %s)" % [bp["name"], ", ".join(missing)]
+			else:
+				return "prochain: %s (prêt!)" % bp["name"]
+	return ""
 
 func _get_next_objective() -> String:
 	if not village_manager:
