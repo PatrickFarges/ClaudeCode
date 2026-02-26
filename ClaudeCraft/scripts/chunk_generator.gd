@@ -195,7 +195,7 @@ func _generate_chunk_data(chunk_pos: Vector3i) -> Dictionary:
 				if y < height:
 					block = _get_block(y, height, biome)
 
-					if y >= 2 and y < SEA_LEVEL - 2 and _is_cave(wx, y, wz, cave1, cave2, cave3):
+					if y >= 8 and y < SEA_LEVEL - 2 and _is_cave(wx, y, wz, cave1, cave2, cave3):
 						block = BlockRegistry.BlockType.AIR
 
 				blocks[x][z][y] = block
@@ -670,13 +670,19 @@ func _get_biome(temp: float, humid: float) -> int:
 		return 3  # PLAINS
 
 func _is_cave(x: int, y: int, z: int, n1: FastNoiseLite, n2: FastNoiseLite, n3: FastNoiseLite) -> bool:
+	# Grottes de type "spaghetti" — deux noises multipliés créent des tunnels fins
+	# quand les deux sont proches de zéro simultanément.
 	var v1 = n1.get_noise_3d(x, y, z)
 	var v2 = n2.get_noise_3d(x, y, z)
+	var combined = abs(v1) + abs(v2)  # addition au lieu de multiplication → tunnels plus fins
+	# Seuil fixe et bas — ~5% du sous-sol sera creusé (petites grottes/tunnels)
+	var threshold = 0.15
+	# Légèrement plus de grottes en profondeur (y < 40)
+	if y < 40:
+		threshold = 0.18
+	# Grandes salles très rares — seulement quand v3 est très proche de zéro
 	var v3 = n3.get_noise_3d(x, y, z)
-	var combined = abs(v1) * abs(v2)
-	var large_cave = abs(v3) < 0.12
-	var depth = 1.0 - (float(y) / SEA_LEVEL)
-	var threshold = 0.02 + depth * 0.04
+	var large_cave = abs(v3) < 0.03  # ~6% chance au lieu de 24%
 	return combined < threshold or large_cave
 
 func _get_block(y: int, surface: int, biome: int) -> int:

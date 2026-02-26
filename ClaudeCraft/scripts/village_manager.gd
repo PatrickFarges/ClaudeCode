@@ -345,8 +345,8 @@ func _evaluate_phase_1():
 	if total_stone < 40:
 		_add_mine_gallery_tasks(2)
 
-	# Crafter le fourneau (8 stone)
-	if total_stone >= 8 and not placed_workstations.has(21):  # FURNACE
+	# Crafter le fourneau (8 stone) — seulement si on n'en a pas déjà un dans le stockpile
+	if total_stone >= 8 and not placed_workstations.has(21) and get_resource_count(21) == 0:
 		if not _has_task_of_type("craft", "Fourneau"):
 			_add_task({
 				"type": "craft",
@@ -355,14 +355,15 @@ func _evaluate_phase_1():
 				"required_profession": VProfession.Profession.FORGERON,
 			})
 
-	# Placer le fourneau
+	# Placer le fourneau — avec garde anti-doublon
 	if get_resource_count(21) >= 1 and not placed_workstations.has(21):
-		_add_task({
-			"type": "place_workstation",
-			"target_block": 21,  # FURNACE
-			"priority": 5,
-			"required_profession": VProfession.Profession.BATISSEUR,
-		})
+		if not _has_task_of_type("place_workstation"):
+			_add_task({
+				"type": "place_workstation",
+				"target_block": 21,  # FURNACE
+				"priority": 5,
+				"required_profession": VProfession.Profession.BATISSEUR,
+			})
 
 	# Construire le chemin en croix si on a du cobblestone
 	if not _path_built and get_resource_count(25) >= 5:  # COBBLESTONE
@@ -426,8 +427,8 @@ func _evaluate_phase_2():
 				"required_profession": VProfession.Profession.FORGERON,
 			})
 
-	# Crafter stone_table (4 stone + 4 planks)
-	if total_iron >= 4 and total_stone >= 4 and not placed_workstations.has(22):
+	# Crafter stone_table (4 stone + 4 planks) — seulement si pas déjà dans le stockpile
+	if total_iron >= 4 and total_stone >= 4 and not placed_workstations.has(22) and get_resource_count(22) == 0:
 		if not _has_task_of_type("craft", "Table en pierre"):
 			_add_task({
 				"type": "craft",
@@ -436,14 +437,15 @@ func _evaluate_phase_2():
 				"required_profession": VProfession.Profession.FORGERON,
 			})
 
-	# Placer stone_table
+	# Placer stone_table — avec garde anti-doublon
 	if get_resource_count(22) >= 1 and not placed_workstations.has(22):
-		_add_task({
-			"type": "place_workstation",
-			"target_block": 22,  # STONE_TABLE
-			"priority": 5,
-			"required_profession": VProfession.Profession.BATISSEUR,
-		})
+		if not _has_task_of_type("place_workstation"):
+			_add_task({
+				"type": "place_workstation",
+				"target_block": 22,  # STONE_TABLE
+				"priority": 5,
+				"required_profession": VProfession.Profession.BATISSEUR,
+			})
 
 	# Chemin si pas encore fait
 	if not _path_built and get_resource_count(25) >= 5:
@@ -843,46 +845,91 @@ func _init_mine():
 	mine_entrance = best_pos
 	_mine_initialized = true
 
-	# Générer le plan de mine — escalier DROIT descendant (2 blocs de large)
-	# IMPORTANT: l'ordre des blocs est SÉQUENTIEL — chaque bloc n'est minable
-	# que si le précédent a été miné (top-down). Le feet block est TOUJOURS premier
-	# car il a de l'AIR au-dessus (surface), puis le head block est ajouté pour
-	# permettre au villageois de passer (2 blocs de haut).
+	# Générer le plan de mine — escalier descendant praticable par les PNJ
+	#
+	# GÉOMÉTRIE D'UNE MARCHE (vue latérale, → = direction) :
+	#
+	#   [H1][H2]         ← y+1 (blocs à miner pour la tête — 2 blocs de hauteur libre)
+	#   [F1][F2]         ← y   (blocs à miner pour les pieds)
+	#   [SOL SOL]        ← y-1 (sol sur lequel le PNJ marche — PAS miné)
+	#            [H3][H4]     ← y   (marche suivante, tête)
+	#            [F3][F4]     ← y-1 (marche suivante, pieds)
+	#            [SOL SOL]    ← y-2 (nouveau sol)
+	#
+	# Le PNJ a 2 blocs libres (pieds + tête minés), marche sur le sol en dessous.
+	# Descente de 1 bloc entre chaque palier → le PNJ tombe de 1 bloc (OK).
+	# Remontée : le PNJ saute de 1 bloc (OK — auto-jump).
+	# Palier de 2 blocs de large → le PNJ a de la place pour marcher.
+	#
+	# ORDRE DE MINAGE : séquentiel de haut en bas.
+	# Le premier bloc de chaque marche est toujours accessible car :
+	# - Marche 0 : le PNJ est à la surface, les blocs sont exposés
+	# - Marches N+1 : les blocs de la marche N sont déjà minés (air)
+
 	mine_plan.clear()
 	mine_front_index = 0
 
-	var target_y = maxi(center_y - 30, 20)  # descendre de 30 blocs max, minimum y=20
+	var target_y = maxi(center_y - 30, 20)
 	_mine_gallery_y = target_y
 
-	# Phase 1: Escalier droit — descend de 1/pas en X
-	# Chaque marche = [bloc pieds, bloc tête] — ordre séquentiel garanti
-	var pos = mine_entrance
-	var dir_x = 1
+	# Géométrie de l'escalier (identique à Minecraft, vue latérale) :
+	#
+	#   Chaque marche = 2 colonnes (avance) × 3 rangées (largeur) × 3 blocs (hauteur)
+	#   Le PNJ marche sur le bloc y-1 (sol, NON miné).
+	#   3 blocs d'air au-dessus (y, y+1, y+2) pour que le PNJ passe.
+	#   On avance de 2 blocs horizontalement, puis on descend de 1.
+	#   Mine = 3 blocs de large (z-1, z, z+1) pour que 2 mineurs travaillent côte à côte.
+	#
+	#   Vue de dessus (une marche) :
+	#
+	#          z-1   z   z+1
+	#   x    : [M]  [M]  [M]
+	#   x+dx : [M]  [M]  [M]
+	#
+	#   Ordre de minage par colonne : TOP-DOWN (y+2, y+1, y)
+
+	var cur_y = best_pos.y  # Y de la surface à l'entrée
+	var cur_x = best_pos.x
+	var cur_z = best_pos.z
+	var dir_x = 1   # direction horizontale
 	var steps = 0
-	while pos.y > target_y:
-		# Mine le sol (pieds) — toujours accessible car AIR au-dessus ou bloc précédent déjà miné
-		mine_plan.append(Vector3i(pos.x, pos.y, pos.z))
-		# Mine la tête (le bloc au-dessus du sol d'en dessous) — pour créer le passage
-		mine_plan.append(Vector3i(pos.x, pos.y + 1, pos.z))
-		# Descendre d'une marche
-		pos = Vector3i(pos.x + dir_x, pos.y - 1, pos.z)
+
+	while cur_y > target_y:
+		# 2 colonnes (avance) × 3 rangées (largeur) × 3 hauteurs, top-down
+		for col_x in [cur_x, cur_x + dir_x]:
+			for dz in [-1, 0, 1]:
+				mine_plan.append(Vector3i(col_x, cur_y + 2, cur_z + dz))
+				mine_plan.append(Vector3i(col_x, cur_y + 1, cur_z + dz))
+				mine_plan.append(Vector3i(col_x, cur_y, cur_z + dz))
+
+		# Avancer de 2 blocs horizontalement et descendre de 1
+		cur_x += dir_x * 2
+		cur_y -= 1
 		steps += 1
-		# Zigzag tous les 5 pas pour rester compact
+
+		# Zigzag tous les 5 paliers pour rester compact
 		if steps % 5 == 0:
 			dir_x = -dir_x
-			pos = Vector3i(pos.x, pos.y, pos.z + 1)
+			cur_z += 2  # décalé de 2 pour éviter de chevaucher (largeur 3)
 
-	# Phase 2: Galerie en étoile au fond — 4 branches de 8 blocs
-	_mine_gallery_center = Vector3i(pos.x, target_y, pos.z)
+	# Galerie en étoile au fond — 4 branches de 8 blocs (3 large × 3 haut)
+	_mine_gallery_center = Vector3i(cur_x, target_y, cur_z)
 	var gc = _mine_gallery_center
 	var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]]
 	for dir in dirs:
 		for i in range(1, 9):
-			mine_plan.append(Vector3i(gc.x + dir[0] * i, target_y, gc.z + dir[1] * i))
-			mine_plan.append(Vector3i(gc.x + dir[0] * i, target_y + 1, gc.z + dir[1] * i))
+			# Perpendiculaire à la direction de la branche pour la largeur
+			var perp_x = dir[1]  # si dir=(1,0) → perp=(0,1), si dir=(0,1) → perp=(1,0)
+			var perp_z = dir[0]
+			for w in [-1, 0, 1]:
+				var bx = gc.x + dir[0] * i + perp_x * w
+				var bz = gc.z + dir[1] * i + perp_z * w
+				mine_plan.append(Vector3i(bx, target_y + 2, bz))
+				mine_plan.append(Vector3i(bx, target_y + 1, bz))
+				mine_plan.append(Vector3i(bx, target_y, bz))
 
 	_mine_expansion_dir = 0
-	print("VillageManager: mine planifiée — %d blocs à creuser depuis %s" % [mine_plan.size(), str(mine_entrance)])
+	print("VillageManager: mine planifiée — %d blocs à creuser depuis %s (cible y=%d)" % [mine_plan.size(), str(mine_entrance), target_y])
 
 func get_next_mine_block() -> Vector3i:
 	# Retourne le prochain bloc SÉQUENTIEL dans le plan de mine
@@ -902,7 +949,7 @@ func get_next_mine_block() -> Vector3i:
 		if not claimed_positions.has(pos):
 			return pos
 		# Claimé par un autre mineur — chercher le prochain
-		# (max 4 blocs d'avance pour que les mineurs creusent côte à côte)
+		# Lookahead de 20 blocs solides — largement assez pour 2 mineurs
 		var lookahead = 0
 		for i in range(mine_front_index + 1, mine_plan.size()):
 			var p = mine_plan[i]
@@ -912,7 +959,7 @@ func get_next_mine_block() -> Vector3i:
 			if not claimed_positions.has(p):
 				return p
 			lookahead += 1
-			if lookahead >= 4:
+			if lookahead >= 20:
 				break
 		return Vector3i(-9999, -9999, -9999)
 
@@ -940,46 +987,70 @@ func _expand_mine():
 	if _mine_expansion_dir % 6 == 0 and _mine_gallery_y > 15:
 		# Tous les 6 expansions : descendre de 5 blocs via un nouvel escalier
 		var new_y = maxi(_mine_gallery_y - 5, 10)
-		# Escalier depuis le centre actuel vers le nouveau niveau
-		var pos = gc
+		# Escalier avec paliers de 2 blocs
+		var pos_x = gc.x
+		var pos_y = gc.y
+		var pos_z = gc.z
 		var dx = 1
-		while pos.y > new_y:
-			mine_plan.append(Vector3i(pos.x, pos.y, pos.z))
-			mine_plan.append(Vector3i(pos.x, pos.y + 1, pos.z))
-			pos = Vector3i(pos.x + dx, pos.y - 1, pos.z)
+		while pos_y > new_y:
+			# 2 colonnes × 3 rangées (largeur) × 3 blocs (hauteur), top-down
+			for col_x in [pos_x, pos_x + dx]:
+				for ddz in [-1, 0, 1]:
+					mine_plan.append(Vector3i(col_x, pos_y + 2, pos_z + ddz))
+					mine_plan.append(Vector3i(col_x, pos_y + 1, pos_z + ddz))
+					mine_plan.append(Vector3i(col_x, pos_y, pos_z + ddz))
+			pos_x += dx * 2
+			pos_y -= 1
 		_mine_gallery_y = new_y
-		_mine_gallery_center = pos
-		# 4 branches depuis le nouveau centre
+		_mine_gallery_center = Vector3i(pos_x, new_y, pos_z)
+		var pos = _mine_gallery_center
+		# 4 branches depuis le nouveau centre (3 large × 3 haut)
 		var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]]
 		for dir in dirs:
+			var p_x = dir[1]
+			var p_z = dir[0]
 			for i in range(1, branch_len + 1):
-				mine_plan.append(Vector3i(pos.x + dir[0] * i, new_y, pos.z + dir[1] * i))
-				mine_plan.append(Vector3i(pos.x + dir[0] * i, new_y + 1, pos.z + dir[1] * i))
+				for w in [-1, 0, 1]:
+					var bx = pos.x + dir[0] * i + p_x * w
+					var bz = pos.z + dir[1] * i + p_z * w
+					mine_plan.append(Vector3i(bx, new_y + 2, bz))
+					mine_plan.append(Vector3i(bx, new_y + 1, bz))
+					mine_plan.append(Vector3i(bx, new_y, bz))
 	else:
 		# Nouvelle branche latérale au même niveau — décalée à chaque expansion
 		var offset = _mine_expansion_dir * 2
 		var dir_idx = _mine_expansion_dir % 4
 		var dx = [1, -1, 0, 0][dir_idx]
 		var dz = [0, 0, 1, -1][dir_idx]
-		# Perpendiculaire pour décaler le départ
+		# Perpendiculaire pour décaler le départ et la largeur
 		var perp_dx = -dz if dz != 0 else 0
 		var perp_dz = dx if dx != 0 else 0
 		# Branche CONNECTÉE : part du centre + offset perpendiculaire
-		# D'abord un couloir du centre vers le point de départ de la branche
 		var start_x = gc.x + perp_dx * offset
 		var start_z = gc.z + perp_dz * offset
-		# Couloir de connexion (du centre vers le start)
+		# Couloir de connexion (du centre vers le start) — 3 large
 		var conn_len = abs(offset)
 		if conn_len > 0:
 			var conn_dx = 1 if start_x > gc.x else (-1 if start_x < gc.x else 0)
 			var conn_dz = 1 if start_z > gc.z else (-1 if start_z < gc.z else 0)
+			# Perpendiculaire au couloir de connexion
+			var cp_dx = -conn_dz if conn_dz != 0 else 0
+			var cp_dz = conn_dx if conn_dx != 0 else 0
 			for i in range(1, conn_len + 1):
-				mine_plan.append(Vector3i(gc.x + conn_dx * i, y, gc.z + conn_dz * i))
-				mine_plan.append(Vector3i(gc.x + conn_dx * i, y + 1, gc.z + conn_dz * i))
-		# Branche elle-même
+				for w in [-1, 0, 1]:
+					var bx = gc.x + conn_dx * i + cp_dx * w
+					var bz = gc.z + conn_dz * i + cp_dz * w
+					mine_plan.append(Vector3i(bx, y + 2, bz))
+					mine_plan.append(Vector3i(bx, y + 1, bz))
+					mine_plan.append(Vector3i(bx, y, bz))
+		# Branche elle-même — 3 large
 		for i in range(branch_len):
-			mine_plan.append(Vector3i(start_x + dx * i, y, start_z + dz * i))
-			mine_plan.append(Vector3i(start_x + dx * i, y + 1, start_z + dz * i))
+			for w in [-1, 0, 1]:
+				var bx = start_x + dx * i + perp_dx * w
+				var bz = start_z + dz * i + perp_dz * w
+				mine_plan.append(Vector3i(bx, y + 2, bz))
+				mine_plan.append(Vector3i(bx, y + 1, bz))
+				mine_plan.append(Vector3i(bx, y, bz))
 
 	print("VillageManager: mine étendue — +%d blocs (total %d, y=%d)" % [mine_plan.size() - old_size, mine_plan.size(), _mine_gallery_y])
 

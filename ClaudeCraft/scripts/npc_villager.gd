@@ -101,18 +101,9 @@ var _cached_block_below: int = 0
 var _cached_block_above: int = 0
 var _wall_impassable: bool = false  # mur 2+ blocs détecté devant
 
-# === Mine staircase ===
-var _mine_heading: Vector3i = Vector3i(1, 0, 0)  # direction horizontale du mineur
-var _mine_steps_total: int = 0  # nombre de marches descendues (pour zigzag)
-const MINE_ZIGZAG_STEPS = 5  # changer de direction tous les 5 descentes
-
-# Séquence de blocs à miner pour la marche en cours
-var _stair_queue: Array = []  # Array de Vector3i — blocs à miner dans l'ordre
-var _stair_walk_pos: Vector3 = Vector3.ZERO  # position où marcher entre deux phases
-var _stair_needs_walk: bool = false  # doit marcher avant de continuer à miner
-
 # === Retour surface mineur ===
 var _mine_entry_pos: Vector3 = Vector3.ZERO
+var _mine_resume_pos: Vector3 = Vector3.ZERO  # position sauvegardée pour reprendre le minage
 var _returning_to_surface: bool = false
 var _return_stuck_timer: float = 0.0
 
@@ -334,6 +325,8 @@ func _on_activity_changed(old_activity: int, new_activity: int):
 		if village_manager and not current_task.is_empty():
 			var task_type = current_task.get("type", "")
 			if task_type == "mine_gallery" and _mine_entry_pos != Vector3.ZERO:
+				# Sauvegarder la position pour y revenir après la balade
+				_mine_resume_pos = global_position
 				# Rendre la tâche et les positions
 				if _mine_target != INVALID_POS:
 					village_manager.release_position(_mine_target)
@@ -495,6 +488,8 @@ func _behavior_village_work(delta):
 		_arrived_at_target = false
 		_mine_timer = 0.0
 		_mine_target = INVALID_POS
+		_mine_entry_pos = Vector3.ZERO
+		_at_mine_entrance = false
 
 	# Dispatcher par type de tâche
 	match current_task.get("type", ""):
@@ -606,19 +601,34 @@ func _execute_harvest(delta):
 
 func _harvest_leaves_around(center_pos: Vector3i):
 	# Casser les feuilles proches du tronc abattu (rayon 2, hauteur 8)
-	# Limité pour éviter les freezes — max 50 blocs cassés par appel
+	# BATCHED : on set les blocs à AIR sans rebuild, puis rebuild 1 seule fois par chunk
 	var leaf_set = { 6: true, 44: true, 45: true, 46: true, 47: true, 48: true, 49: true }
 	var broken = 0
+	var affected_chunks: Dictionary = {}  # chunk_key -> chunk_ref
 	for dy in range(0, 8):
 		for dx in range(-2, 3):
 			for dz in range(-2, 3):
 				if broken >= 50:
-					return
+					break
 				var check_pos = Vector3i(center_pos.x + dx, center_pos.y + dy, center_pos.z + dz)
 				var bt = world_manager.get_block_at_position(Vector3(check_pos.x, check_pos.y, check_pos.z))
 				if leaf_set.has(bt):
-					village_manager.break_block(check_pos)
+					# Set block à AIR directement dans le chunk SANS rebuild
+					var cx = int(floor(float(check_pos.x) / 16.0))
+					var cz = int(floor(float(check_pos.z) / 16.0))
+					var chunk_key = Vector2i(cx, cz)
+					if world_manager.chunks.has(chunk_key):
+						var chunk = world_manager.chunks[chunk_key]
+						var lx = check_pos.x - cx * 16
+						var lz = check_pos.z - cz * 16
+						chunk.blocks[lx * 4096 + lz * 256 + check_pos.y] = 0  # AIR
+						chunk.is_modified = true
+						affected_chunks[chunk_key] = chunk
+					# Feuilles = pas de ressource, juste nettoyage visuel
 					broken += 1
+	# Rebuild mesh UNE SEULE FOIS par chunk affecté
+	for chunk in affected_chunks.values():
+		chunk._rebuild_mesh()
 
 func _find_nearest_trunk_around(from: Vector3, radius: float) -> Vector3i:
 	# Cherche le tronc d'arbre le plus proche dans un rayon 3D
@@ -717,18 +727,20 @@ func _execute_mine(delta):
 var _at_mine_entrance: bool = false  # le mineur est arrivé à l'entrée de mine
 
 func _execute_mine_gallery(delta):
-	# MINAGE EN ESCALIER — marche de 2 blocs large × 2 blocs haut, descente de 1
+	# MINAGE SÉQUENTIEL — suit le mine_plan pré-calculé par VillageManager.
 	#
-	# Chaque "marche" de l'escalier :
-	#   1. Miner 4 blocs : (pieds1, tête1, pieds2, tête2) devant le mineur
-	#   2. Marcher 2 blocs en avant dans le couloir creusé
-	#   3. Miner 1 bloc sous les pieds (descente)
-	#   4. Tomber d'1 bloc (gravité)
-	#   → Répéter depuis la nouvelle position
+	# Le mine_plan est un Array de Vector3i ordonné de haut en bas.
+	# Chaque marche = 4 blocs (2 colonnes × 2 hauteurs), puis descente de 1.
+	# Les blocs sont toujours adjacents au PNJ car il les mine dans l'ordre.
 	#
-	# Tous les MINE_ZIGZAG_STEPS descentes → changer de direction (zigzag)
+	# Flow simple :
+	#   1. Marcher vers l'entrée de mine (30 blocs du village)
+	#   2. Demander le prochain bloc au plan séquentiel
+	#   3. Si le bloc est à portée (< 6 blocs) → miner
+	#      Si le bloc est trop loin → marcher vers lui (horizontalement)
+	#   4. Boucler
 
-	# Enregistrer la position d'entrée de mine
+	# Mémoriser l'entrée de mine pour le retour surface le soir
 	if _mine_entry_pos == Vector3.ZERO:
 		if village_manager.mine_entrance != INVALID_POS:
 			_mine_entry_pos = Vector3(village_manager.mine_entrance.x + 0.5, village_manager.mine_entrance.y + 1, village_manager.mine_entrance.z + 0.5)
@@ -737,75 +749,92 @@ func _execute_mine_gallery(delta):
 
 	_task_status = "[%s] Mine" % village_manager.get_tool_tier_label("Pioche")
 
-	# Phase 1: Se rendre à l'entrée de mine si on est loin
+	# Phase 1: Se rendre à la mine (resume_pos si dispo, sinon entrée)
 	if not _at_mine_entrance:
-		var dist_to_entrance = Vector2(global_position.x - _mine_entry_pos.x, global_position.z - _mine_entry_pos.z).length()
-		if dist_to_entrance < 5.0 or global_position.y < _mine_entry_pos.y - 1:
+		var walk_target = _mine_entry_pos
+		if _mine_resume_pos != Vector3.ZERO:
+			walk_target = _mine_resume_pos
+		var dx = global_position.x - walk_target.x
+		var dz = global_position.z - walk_target.z
+		var dist_h = sqrt(dx * dx + dz * dz)
+		if dist_h < 3.0:
 			_at_mine_entrance = true
-			# Initialiser la direction de minage en s'éloignant du village
-			if village_manager:
-				var away = Vector3(global_position.x - village_manager.village_center.x, 0,
-					global_position.z - village_manager.village_center.z)
-				if abs(away.x) > abs(away.z):
-					_mine_heading = Vector3i(1 if away.x > 0 else -1, 0, 0)
-				else:
-					_mine_heading = Vector3i(0, 0, 1 if away.z > 0 else -1)
+			_mine_resume_pos = Vector3.ZERO  # consommé
 		else:
 			_task_status = "[%s] Vers mine..." % village_manager.get_tool_tier_label("Pioche")
-			_walk_toward(_mine_entry_pos, delta)
+			# Mode berserker : casser TOUT sur le chemin (0 détour)
+			_berserker_walk_toward(walk_target, delta)
 			return
 
-	# Phase 2a: Marcher vers un point intermédiaire (entre deux phases de minage)
-	if _stair_needs_walk:
-		var walk_dist = Vector2(global_position.x - _stair_walk_pos.x, global_position.z - _stair_walk_pos.z).length()
-		if walk_dist < 1.0 or not is_on_floor():
-			_stair_needs_walk = false
-		else:
-			_walk_toward(_stair_walk_pos, delta)
-			return
-
-	# Phase 2b: Calculer la séquence de blocs si vide
-	if _stair_queue.is_empty():
-		_compute_stair_step()
-
-	# Phase 2c: Prendre le prochain bloc de la séquence
+	# Phase 2: Obtenir le prochain bloc du plan de mine
 	if _mine_target == INVALID_POS:
-		while not _stair_queue.is_empty():
-			var next_block = _stair_queue.pop_front() as Vector3i
-			# Vérifier si le bloc est déjà air (grotte naturelle)
-			var bt = world_manager.get_block_at_position(Vector3(next_block.x, next_block.y, next_block.z))
-			if bt != BlockRegistry.BlockType.AIR and bt != BlockRegistry.BlockType.WATER:
-				_mine_target = next_block
-				village_manager.claim_position(_mine_target)
-				_mine_timer = 0.0
-				break
+		_mine_target = village_manager.get_next_mine_block()
 		if _mine_target == INVALID_POS:
-			# Tous les blocs étaient déjà air — passer au walk ou recomputer
-			if _stair_queue.is_empty():
-				# Séquence terminée, marcher et recomputer
-				return
+			# Pas de bloc dispo — attendre au lieu d'abandonner
 			_mine_timer += delta
-			if _mine_timer > 3.0:
-				_mine_timer = 0.0
+			_task_status = "[%s] Mine: attente..." % village_manager.get_tool_tier_label("Pioche")
+			if _mine_timer > 10.0:
+				# Après 10s d'attente, rendre la tâche
+				_task_status = "Mine OK"
 				current_task = {}
+				_mine_timer = 0.0
 			return
+		village_manager.claim_position(_mine_target)
+		_mine_timer = 0.0
 
-	# Phase 3: Miner le bloc ciblé
+	# Phase 3: Se rapprocher du bloc si nécessaire
 	var target_world = Vector3(_mine_target.x + 0.5, _mine_target.y, _mine_target.z + 0.5)
-	var dist = global_position.distance_to(target_world)
-	if dist > 5.0:
-		_walk_toward(target_world, delta)
+	var dx = global_position.x - target_world.x
+	var dz = global_position.z - target_world.z
+	var dist_h = sqrt(dx * dx + dz * dz)
+	var dy = global_position.y - target_world.y  # positif = mineur AU-DESSUS du bloc
+
+	if dy > 6.0 and dist_h > 3.0:
+		# Mineur très au-dessus du bloc cible — il est en surface ou en haut de l'escalier.
+		# D'abord aller à l'entrée de mine, puis descendre l'escalier naturellement.
+		var entry_dx = global_position.x - _mine_entry_pos.x
+		var entry_dz = global_position.z - _mine_entry_pos.z
+		var entry_dist = sqrt(entry_dx * entry_dx + entry_dz * entry_dz)
+		if entry_dist > 3.0:
+			# Pas encore à l'entrée — y aller d'abord
+			_task_status = "[%s] Vers mine..." % village_manager.get_tool_tier_label("Pioche")
+			_berserker_walk_toward(_mine_entry_pos, delta)
+		else:
+			# À l'entrée — descendre vers le bloc cible via l'escalier
+			_task_status = "[%s] Descend..." % village_manager.get_tool_tier_label("Pioche")
+			_berserker_walk_toward(target_world, delta)
+		_mine_timer += delta
+		if _mine_timer > 45.0:
+			print("Mineur: skip bloc trop profond à %s (dy=%.1f)" % [str(_mine_target), dy])
+			village_manager.release_position(_mine_target)
+			_mine_target = INVALID_POS
+			_mine_timer = 0.0
 		return
 
+	if dist_h > 5.0:
+		# Bloc trop loin horizontalement — berserker pour y aller
+		_berserker_walk_toward(target_world, delta)
+		_mine_timer += delta
+		if _mine_timer > 30.0:
+			print("Mineur: skip bloc inaccessible à %s (dist_h=%.1f)" % [str(_mine_target), dist_h])
+			village_manager.release_position(_mine_target)
+			_mine_target = INVALID_POS
+			_mine_timer = 0.0
+		return
+
+	# Phase 4: Miner le bloc
+	# Le bloc est à portée — on peut le miner même s'il est sous nos pieds ou devant
 	_face_target(target_world)
 	is_moving = false
 	_decelerate()
 	_play_anim("attack")
 
 	var block_type = world_manager.get_block_at_position(Vector3(_mine_target.x, _mine_target.y, _mine_target.z))
-	if block_type == BlockRegistry.BlockType.AIR:
+	if block_type == BlockRegistry.BlockType.AIR or block_type == BlockRegistry.BlockType.WATER:
+		# Bloc déjà vide — passer au suivant
 		village_manager.release_position(_mine_target)
 		_mine_target = INVALID_POS
+		_mine_timer = 0.0
 		return
 
 	_mine_timer += delta
@@ -817,55 +846,9 @@ func _execute_mine_gallery(delta):
 		village_manager.release_position(_mine_target)
 		_show_harvest_label("+1", _mine_target)
 		var prof_name = VProfession.get_profession_name(profession)
-		print("%s: miné bloc %d à %s" % [prof_name, block_type, str(_mine_target)])
+		print("%s: miné bloc %d à %s (y=%d)" % [prof_name, block_type, str(_mine_target), _mine_target.y])
 		_mine_target = INVALID_POS
 		_mine_timer = 0.0
-
-func _compute_stair_step():
-	# Calcule la séquence de blocs pour UNE marche d'escalier
-	# depuis la position actuelle du mineur + sa direction (_mine_heading)
-	#
-	# Géométrie d'une marche (vue de côté, → = heading) :
-	#   Position du mineur: M
-	#   Blocs à miner: 1,2,3,4 (couloir) puis 5 (descente)
-	#
-	#   [M]  [2][4]          ← y+1 (tête)
-	#   [M]  [1][3]          ← y   (pieds)
-	#             [5]        ← y-1 (descente)
-	#
-	#   Après minage de 1-4, le mineur marche en avant (2 blocs)
-	#   Après minage de 5, le mineur tombe d'1 bloc
-
-	_stair_queue.clear()
-
-	var my = Vector3i(int(round(global_position.x)), int(global_position.y), int(round(global_position.z)))
-	var h = _mine_heading
-
-	# Bloc 1: pieds, 1 bloc devant
-	_stair_queue.append(Vector3i(my.x + h.x, my.y, my.z + h.z))
-	# Bloc 2: tête, 1 bloc devant
-	_stair_queue.append(Vector3i(my.x + h.x, my.y + 1, my.z + h.z))
-	# Bloc 3: pieds, 2 blocs devant
-	_stair_queue.append(Vector3i(my.x + h.x * 2, my.y, my.z + h.z * 2))
-	# Bloc 4: tête, 2 blocs devant
-	_stair_queue.append(Vector3i(my.x + h.x * 2, my.y + 1, my.z + h.z * 2))
-
-	# Après les 4 blocs du couloir → marcher 2 blocs en avant
-	_stair_walk_pos = Vector3(my.x + h.x * 2 + 0.5, my.y, my.z + h.z * 2 + 0.5)
-	_stair_needs_walk = true
-
-	# Bloc 5: descente (sous les pieds de la nouvelle position)
-	_stair_queue.append(Vector3i(my.x + h.x * 2, my.y - 1, my.z + h.z * 2))
-
-	# Compter les descentes pour le zigzag
-	_mine_steps_total += 1
-	if _mine_steps_total >= MINE_ZIGZAG_STEPS:
-		_mine_steps_total = 0
-		# Tourner de 90° — perpendiculaire à la direction actuelle
-		if _mine_heading.x != 0:
-			_mine_heading = Vector3i(0, 0, 1 if randf() > 0.5 else -1)
-		else:
-			_mine_heading = Vector3i(1 if randf() > 0.5 else -1, 0, 0)
 
 
 func _execute_craft(delta):
@@ -1148,8 +1131,8 @@ func _behavior_return_to_surface(delta):
 		_label_update_timer = 0.0
 		_update_head_label()
 
-	# Marcher vers l'entrée de la mine
-	if _walk_toward(_mine_entry_pos, delta):
+	# Marcher vers l'entrée de la mine (berserker — casse tout sur le passage)
+	if _berserker_walk_toward(_mine_entry_pos, delta):
 		# Arrivé en surface
 		_returning_to_surface = false
 		_mine_entry_pos = Vector3.ZERO
@@ -1231,11 +1214,12 @@ func _walk_toward(target: Vector3, delta: float) -> bool:
 			_abandon_current_target()
 			return false
 
-	# Après 10 détours : essayer de casser le bloc devant
-	if _detour_count >= 10 and _detour_timer <= 0.0:
+	# Après 2 détours : casser le bloc devant pour passer (mode berserker)
+	if _detour_count >= 2 and _detour_timer <= 0.0:
 		if _try_break_path_block(diff.normalized()):
-			_detour_count -= 3  # récupérer du crédit après avoir cassé
+			_detour_count = 0
 			_wall_impassable = false
+			_detour_timer = 0.0
 
 	# En détour (contournement d'obstacle)
 	if _detour_timer > 0.0:
@@ -1270,6 +1254,56 @@ func _walk_toward(target: Vector3, delta: float) -> bool:
 			_total_stuck_time = maxf(0.0, _total_stuck_time - 1.0)
 			if moved_dist >= 0.5:
 				_detour_count = maxi(0, _detour_count - 1)
+		_last_pos = global_position
+		_target_stuck_timer = 0.0
+
+	return false
+
+func _berserker_walk_toward(target: Vector3, delta: float) -> bool:
+	# Walk vers la cible en mode berserker : casse IMMÉDIATEMENT tout bloc sur le chemin
+	# Pas de détour, pas de patience — on fonce et on casse.
+	var diff = Vector3(target.x - global_position.x, 0, target.z - global_position.z)
+	var dist = diff.length()
+
+	if dist < 1.5:
+		is_moving = false
+		_total_stuck_time = 0.0
+		_detour_count = 0
+		_wall_impassable = false
+		return true
+
+	# Téléportation de secours après 20s
+	if _total_stuck_time > 20.0:
+		global_position = Vector3(target.x, target.y + 1, target.z)
+		_total_stuck_time = 0.0
+		_detour_count = 0
+		_wall_impassable = false
+		is_moving = false
+		return true
+
+	# Forcer le passage : casser les blocs devant immédiatement
+	var toward = diff.normalized()
+	_try_break_path_block(toward)
+
+	# Marcher
+	wander_direction = toward
+	is_moving = true
+	has_target = true
+	_apply_movement(delta)
+	_play_anim("walk")
+
+	# Détection de blocage
+	_target_stuck_timer += delta
+	if _target_stuck_timer >= 1.5:
+		var moved_dist = global_position.distance_to(_last_pos)
+		if moved_dist < 0.3:
+			_total_stuck_time += 1.5
+			# Casser dans toutes les directions proches
+			_try_break_path_block(toward)
+			_try_break_path_block(Vector3(toward.z, 0, -toward.x))  # perpendiculaire
+			_try_break_path_block(Vector3(-toward.z, 0, toward.x))
+		else:
+			_total_stuck_time = maxf(0.0, _total_stuck_time - 1.0)
 		_last_pos = global_position
 		_target_stuck_timer = 0.0
 
@@ -1455,17 +1489,15 @@ func _apply_movement(delta):
 			return
 		elif _cached_block_ahead != BlockRegistry.BlockType.AIR:
 			if _cached_block_above == BlockRegistry.BlockType.AIR:
-				# Bloc simple devant — casser si mou, sinon sauter
-				var hardness_ahead = BlockRegistry.get_block_hardness(_cached_block_ahead as BlockRegistry.BlockType)
-				if has_target and hardness_ahead <= SOFT_BLOCK_HARDNESS and _try_break_soft_blocks_ahead():
-					_wall_impassable = false  # cassé, on passe
-				else:
-					velocity.y = _jump_velocity
-					_wall_impassable = false
+				# Bloc simple devant — sauter par-dessus
+				velocity.y = _jump_velocity
+				_wall_impassable = false
 			else:
-				# Mur de 2+ blocs — essayer de casser si blocs mous (feuilles, etc.)
-				if has_target and _try_break_soft_blocks_ahead():
+				# Mur de 2+ blocs — casser pour passer (tout bloc, pas juste mous)
+				if has_target and _try_break_path_block(wander_direction):
 					_wall_impassable = false  # passage dégagé
+				elif has_target and _try_break_soft_blocks_ahead():
+					_wall_impassable = false
 				else:
 					_wall_impassable = true
 
