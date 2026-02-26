@@ -230,34 +230,24 @@ func _generate_chunk_data(chunk_pos: Vector3i) -> Dictionary:
 					elif sv > 0.72 and sv < 0.78:
 						blocks[ox][oz][oy] = BlockRegistry.BlockType.DIORITE
 
-				# Minerais pres des grottes
+				# Minerais en veines dispersées dans la roche (indépendant des grottes)
 				if blocks[ox][oz][oy] in [BlockRegistry.BlockType.STONE, BlockRegistry.BlockType.DEEPSLATE, BlockRegistry.BlockType.ANDESITE, BlockRegistry.BlockType.GRANITE, BlockRegistry.BlockType.DIORITE]:
-					var near_cave = false
-					if oy > 0 and blocks[ox][oz][oy - 1] == BlockRegistry.BlockType.AIR:
-						near_cave = true
-					elif oy < CHUNK_HEIGHT - 1 and blocks[ox][oz][oy + 1] == BlockRegistry.BlockType.AIR:
-						near_cave = true
-					elif ox > 0 and blocks[ox - 1][oz][oy] == BlockRegistry.BlockType.AIR:
-						near_cave = true
-					elif ox < CHUNK_SIZE - 1 and blocks[ox + 1][oz][oy] == BlockRegistry.BlockType.AIR:
-						near_cave = true
-					elif oz > 0 and blocks[ox][oz - 1][oy] == BlockRegistry.BlockType.AIR:
-						near_cave = true
-					elif oz < CHUNK_SIZE - 1 and blocks[ox][oz + 1][oy] == BlockRegistry.BlockType.AIR:
-						near_cave = true
-
-					if near_cave:
-						var ore_val = ore_noise.get_noise_3d(owx, oy, owz)
-						if oy < 16 and ore_val > 0.92:
-							blocks[ox][oz][oy] = BlockRegistry.BlockType.DIAMOND_ORE
-						elif oy < 25 and ore_val > 0.8:
-							blocks[ox][oz][oy] = BlockRegistry.BlockType.GOLD_ORE
-						elif oy < 40 and ore_val > 0.7:
-							blocks[ox][oz][oy] = BlockRegistry.BlockType.IRON_ORE
-						elif oy < 50 and ore_val > 0.55:
-							blocks[ox][oz][oy] = BlockRegistry.BlockType.COPPER_ORE
-						elif ore_val > 0.6:
-							blocks[ox][oz][oy] = BlockRegistry.BlockType.COAL_ORE
+					var ore_val = ore_noise.get_noise_3d(owx, oy, owz)
+					# Charbon : partout y < 80, assez commun
+					if oy < 80 and ore_val > 0.72:
+						blocks[ox][oz][oy] = BlockRegistry.BlockType.COAL_ORE
+					# Cuivre : y < 50, commun
+					elif oy < 50 and ore_val > 0.68 and ore_val <= 0.72:
+						blocks[ox][oz][oy] = BlockRegistry.BlockType.COPPER_ORE
+					# Fer : y < 55, fréquent — critique pour la progression du village
+					elif oy < 55 and ore_val < -0.65:
+						blocks[ox][oz][oy] = BlockRegistry.BlockType.IRON_ORE
+					# Or : y < 30, rare
+					elif oy < 30 and ore_val > 0.85:
+						blocks[ox][oz][oy] = BlockRegistry.BlockType.GOLD_ORE
+					# Diamant : y < 16, très rare
+					elif oy < 16 and ore_val > 0.92:
+						blocks[ox][oz][oy] = BlockRegistry.BlockType.DIAMOND_ORE
 
 	# ============================================================
 	# PASSE 1.7 : Mousse sur les murs de grottes (rare)
