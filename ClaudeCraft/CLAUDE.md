@@ -16,7 +16,7 @@ Jeu voxel type Minecraft en GDScript avec Godot 4.5+, style pastel. Évolue vers
 - **`game_config.gd`** : config centrale (`const GC = preload()` partout). `ACTIVE_PACK` = "Faithful32". Fonctions `get_block_texture_path()`, `get_item_texture_path()`. Système d'aliases textures (8 aliases cross-pack)
 - **`block_registry.gd`** : 73 types de blocs (enum 0-72), couleurs pastel, dureté, textures par face, `is_workstation()`, `get_block_tint()`. Inclut agriculture (FARMLAND, WHEAT_STAGE_0→3, WHEAT_ITEM, BREAD) et éclairage (TORCH)
 - **`chunk.gd`** : 16×16×256 blocs, greedy meshing, AO, collision ConcavePolygon, UV corrigés, rendu torches (OmniLight3D, max 16/chunk)
-- **`chunk_generator.gd`** : génération procédurale threadée (4 workers, Mutex), 6 noises, arbres par biome, minerais souterrains, structures passe 4. **Grottes compactes** : tunnels spaghetti `abs(v1)+abs(v2) < 0.15` (~5% air), grandes salles très rares (`abs(v3) < 0.03`), bedrock solide y=0-7
+- **`chunk_generator.gd`** : génération procédurale threadée (4 workers, Mutex), 6 noises, arbres par biome, minerais souterrains, structures passe 4. **Grottes compactes** : tunnels spaghetti `abs(v1)+abs(v2) < 0.15` (~5% air), grandes salles très rares (`abs(v3) < 0.03`), bedrock solide y=0-7. **Minerais en veines** (indépendant des grottes, calibré Simplex réel) : charbon 6.3% (y<80), fer 5.2% (y<55), cuivre 3.1% (y<50), or rare (y<30), diamant très rare (y<16)
 - **`texture_manager.gd`** : Texture2DArray (86 layers), auto-détection résolution, fallback aliases, `_force_opaque()`
 - **`structure_manager.gd`** : Autoload — structures JSON depuis `res://structures/`, RLE, thread-safe
 
@@ -80,7 +80,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 
 ## Direction du projet
 
-**Version actuelle : v12.3.0**
+**Version actuelle : v12.4.0**
 
 | Phase | Statut | Contenu |
 |-------|--------|---------|
@@ -94,7 +94,8 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 | 5.1 | Fait | v12.1.0 — Forge (3 recettes upgrade outils, forgeron actif), Torches (bloc TORCH + OmniLight3D, max 16/chunk), Labels outils avec tier matériau (Hache Bois, Pioche Fer...), Retour surface mineurs (remonte l'escalier au lieu de téléporter) |
 | 5.2 | Fait | v12.2.0 — Fix mine/ferme bloqués (recherche robuste multi-passes, fallback), faim désactivée, bâtiments phase 1 tout planches, construction sans chemin, UI village agrandie (700×900, villageois numérotés, activité temps réel, téléport clic) |
 | 5.3 | Fait | v12.3.0 — Mine 3×3 (3 large × 3 haut), mode berserker mineurs (casse tout sur le chemin), position de reprise après balade, mineur 2 descend l'escalier, grottes compactes (~5% air, tunnels spaghetti), bedrock solide y=0-7, forgeron anti-doublon fourneau, feuilles batchées (fix FPS) |
-| 6 | À venir | Chaînes de production avancées, transport ressources, économie |
+| 5.4 | Fait | v12.4.0 — Minerais calibrés sur distribution Simplex réelle (fer 5.2%, charbon 6.3%, cuivre 3.1%), veines indépendantes des grottes, progression village débloquée jusqu'à Phase 3 (Âge du Fer) |
+| 6 | À venir | Boulanger/pâtissier (chaîne blé→pain), construction bâtiments (bâtisseur bloqué par manque planches), économie village |
 
 **Packs GLB utilisés (CC0)** : Kenney.nl (18 modèles PNJ villageois). **PNJ futurs** : KayKit Adventurers (161 anims travail)
 
