@@ -462,6 +462,17 @@ func _evaluate_phase_2():
 	if not _path_built and get_resource_count(25) >= 5:
 		_try_queue_path()
 
+	# Crafter du verre si on a du sable et du charbon (nécessaire pour bâtiments phase 2)
+	var glass_count = get_resource_count(61)  # GLASS
+	if glass_count < 10 and get_resource_count(4) >= 1 and get_resource_count(16) >= 1:
+		if not _has_task_of_type("craft", "Verre"):
+			_add_task({
+				"type": "craft",
+				"recipe_name": "Verre",
+				"priority": 12,
+				"required_profession": VProfession.Profession.FORGERON,
+			})
+
 	# Construire les bâtiments de phase 1 et 2
 	_try_queue_builds_for_phase(2)
 
@@ -515,6 +526,17 @@ func _evaluate_phase_3():
 
 	if total_stone < 40:
 		_add_mine_gallery_tasks(2)
+
+	# Crafter du verre si nécessaire
+	var glass_count_p3 = get_resource_count(61)
+	if glass_count_p3 < 10 and get_resource_count(4) >= 1 and get_resource_count(16) >= 1:
+		if not _has_task_of_type("craft", "Verre"):
+			_add_task({
+				"type": "craft",
+				"recipe_name": "Verre",
+				"priority": 12,
+				"required_profession": VProfession.Profession.FORGERON,
+			})
 
 	# Construire tous les bâtiments
 	_try_queue_builds_for_phase(3)
@@ -1312,8 +1334,19 @@ func _try_queue_build(blueprint_index: int):
 					_add_harvest_tasks(5, mini(ceili(float(deficit) / 4.0), 4))
 				elif bt == 3 or bt == 25:  # Stone/Cobble -> mine en galerie
 					_add_mine_gallery_tasks(2)
-				elif bt == 61:  # Glass -> miner du sable en surface
-					_add_mine_tasks(4, mini(deficit, 4))
+				elif bt == 61:  # Glass -> crafter du verre (sable + charbon → fourneau)
+					if get_resource_count(4) >= 1 and get_resource_count(16) >= 1:  # SAND + COAL_ORE
+						if not _has_task_of_type("craft", "Verre"):
+							_add_task({
+								"type": "craft",
+								"recipe_name": "Verre",
+								"priority": 10,
+								"required_profession": VProfession.Profession.FORGERON,
+							})
+					else:
+						# Pas de sable → miner du sable en surface
+						if get_resource_count(4) < deficit:
+							_add_mine_tasks(4, mini(deficit, 4))
 		return
 
 	# Trouver un emplacement

@@ -80,7 +80,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 
 ## Direction du projet
 
-**Version actuelle : v12.6.0**
+**Version actuelle : v12.6.1**
 
 | Phase | Statut | Contenu |
 |-------|--------|---------|
@@ -97,6 +97,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 | 5.4 | Fait | v12.4.0 — Minerais calibrés sur distribution Simplex réelle (fer 5.2%, charbon 6.3%, cuivre 3.1%), veines indépendantes des grottes, progression village débloquée jusqu'à Phase 3 (Âge du Fer) |
 | 5.5 | Fait | v12.5.0 — Boulanger (9e PNJ, craft Pain quand blé dispo), menuisier craft planches en continu (Phase 2+, seuil 80), déblocage bâtisseur, pop cap base 9 |
 | 5.6 | Fait | v12.6.0 — Fix construction bâtiments : craft batch (Planches/Pain ×8 par tâche), seuil planches 200, site terrain ±3 blocs, bâtisseur garde tâche build la nuit, forge vérifie tier avant craft, UI bâtiments (X/Y) avec progression et matériaux manquants |
+| 5.6.1 | Fait | v12.6.1 — Fix bâtiments phase 2+ bloqués par le verre : craft proactif "Verre" (sable+charbon) en phase 2/3, forgeron craft batch Verre et Lingot de fer (×8) |
 | 6 | À venir | Système de faim actif, animaux (viande/œufs), chaînes de production avancées, économie village |
 
 **Packs GLB utilisés (CC0)** : Kenney.nl (18 modèles PNJ villageois). **PNJ futurs** : KayKit Adventurers (161 anims travail)
