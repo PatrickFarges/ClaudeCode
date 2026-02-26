@@ -41,7 +41,7 @@ Jeu voxel type Minecraft en GDScript avec Godot 4.5+, style pastel. Évolue vers
 - **`locale.gd`** : traductions FR/EN
 
 ### Utilitaires
-- **`world_manager.gd`** : chunks render_distance=4, village 8 PNJ (professions fixes : 2 bûcherons, 2 mineurs, 1 forgeron, 1 bâtisseur, 1 menuisier, 1 fermier), POI manager, déchargement Dictionary-set O(1). *(Pas de spawn animaux — retiré v12.0.0)*
+- **`world_manager.gd`** : chunks render_distance=4, village 9 PNJ (professions fixes : 2 bûcherons, 2 mineurs, 1 forgeron, 1 bâtisseur, 1 menuisier, 1 fermier, 1 boulanger), POI manager, déchargement Dictionary-set O(1). *(Pas de spawn animaux — retiré v12.0.0)*
 - **`day_night_cycle.gd`** / **`save_manager.gd`** / **`health_ui.gd`** : cycle jour/nuit, sauvegarde, UI santé
 
 ## Biomes
@@ -80,7 +80,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 
 ## Direction du projet
 
-**Version actuelle : v12.4.0**
+**Version actuelle : v12.5.0**
 
 | Phase | Statut | Contenu |
 |-------|--------|---------|
@@ -95,7 +95,8 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 | 5.2 | Fait | v12.2.0 — Fix mine/ferme bloqués (recherche robuste multi-passes, fallback), faim désactivée, bâtiments phase 1 tout planches, construction sans chemin, UI village agrandie (700×900, villageois numérotés, activité temps réel, téléport clic) |
 | 5.3 | Fait | v12.3.0 — Mine 3×3 (3 large × 3 haut), mode berserker mineurs (casse tout sur le chemin), position de reprise après balade, mineur 2 descend l'escalier, grottes compactes (~5% air, tunnels spaghetti), bedrock solide y=0-7, forgeron anti-doublon fourneau, feuilles batchées (fix FPS) |
 | 5.4 | Fait | v12.4.0 — Minerais calibrés sur distribution Simplex réelle (fer 5.2%, charbon 6.3%, cuivre 3.1%), veines indépendantes des grottes, progression village débloquée jusqu'à Phase 3 (Âge du Fer) |
-| 6 | À venir | Boulanger/pâtissier (chaîne blé→pain), construction bâtiments (bâtisseur bloqué par manque planches), économie village |
+| 5.5 | Fait | v12.5.0 — Boulanger (9e PNJ, craft Pain quand blé dispo), menuisier craft planches en continu (Phase 2+, seuil 80), déblocage bâtisseur, pop cap base 9 |
+| 6 | À venir | Système de faim actif, animaux (viande/œufs), chaînes de production avancées, économie village |
 
 **Packs GLB utilisés (CC0)** : Kenney.nl (18 modèles PNJ villageois). **PNJ futurs** : KayKit Adventurers (161 anims travail)
 
