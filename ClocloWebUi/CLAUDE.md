@@ -5,14 +5,19 @@ Interface web locale (127.0.0.1:8420) pour piloter plusieurs sessions Claude Cod
 ## Lancer
 
 ```bash
+# Méthode recommandée (chemin Python explicite) :
+start.bat
+# Ou manuellement :
 pip install -r requirements.txt
-python server.py
+"D:\Program\Python 3.12.0\python.exe" server.py
 # Ouvrir http://127.0.0.1:8420
 ```
 
-**Dépendances :** aiohttp >= 3.9, pywinpty >= 2.0
+**Dépendances :** aiohttp >= 3.9, pywinpty >= 2.0 (s'importe via `import winpty` en v3.x)
 
-## Architecture (3 fichiers)
+**Python :** Utiliser Python 3.12 exclusivement. `start.bat` pointe en dur vers `D:\Program\Python 3.12.0\python.exe`.
+
+## Architecture (4 fichiers)
 
 - **`server.py` (~300 lignes) :** Backend aiohttp async
   - `scan_projects()` : scan `D:\Program\ClaudeCode`, parse CLAUDE.md via regex pour extraire descriptions
@@ -28,9 +33,11 @@ python server.py
   - Protocole JSON + base64 : `attach`, `input`, `resize`, `detach` (client→serveur) / `output`, `attached`, `exited` (serveur→client)
   - Décodage sortie : `atob()` → `Uint8Array` → `term.write(bytes)` pour UTF-8 correct (pas `atob` direct qui donne du latin1 cassé)
 - **`static/style.css` (~170 lignes) :** Thème Tokyo Night (#1a1b26), layout flexbox, sidebar 320px
+- **`start.bat` :** Lanceur Windows qui utilise explicitement Python 3.12 pour éviter les conflits de PATH
 
 ## Problèmes résolus durant le développement
 
 1. CDN xterm.js 404 → corrigé vers `@xterm/xterm@5.5.0` + `@xterm/addon-fit@0.10.0`
 2. Caractères Unicode cassés (ââââ) → décodage base64 en `Uint8Array` au lieu de string `atob()`
 3. Terminal vide au refresh → buffer de replay 128 KB côté serveur, rejoué à chaque `attach`
+4. `Unable to create process using 'C:\Python314\python.exe'` → Python 3.14 installé accidentellement par un outil MCP avait corrompu les wrappers pip. Résolu en forçant Python 3.12 via `start.bat` et `--force-reinstall` de pywinpty
