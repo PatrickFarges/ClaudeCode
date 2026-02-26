@@ -24,7 +24,7 @@ var poi_manager = null
 
 # Village
 var _village_spawned: bool = false
-const VILLAGE_NPC_COUNT = 8
+const VILLAGE_NPC_COUNT = 9
 
 func _ready():
 	# Générer un seed aléatoire si non défini
@@ -300,6 +300,7 @@ func _try_spawn_village(chunk_pos: Vector3i, chunk_data: Dictionary):
 		VProfession.Profession.BATISSEUR,  # PNJ 5
 		VProfession.Profession.MENUISIER,  # PNJ 6
 		VProfession.Profession.FERMIER,    # PNJ 7
+		VProfession.Profession.BOULANGER,  # PNJ 8
 	]
 
 	var spawned = 0

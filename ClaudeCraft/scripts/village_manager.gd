@@ -324,7 +324,7 @@ func _evaluate_phase_1():
 				"type": "craft",
 				"recipe_name": "Pain",
 				"priority": 12,
-				"required_profession": VProfession.Profession.FERMIER,
+				"required_profession": VProfession.Profession.BOULANGER,
 			})
 
 	# Toujours maintenir du bois en stock — les bûcherons ne s'arrêtent jamais
@@ -332,7 +332,7 @@ func _evaluate_phase_1():
 		_add_harvest_tasks(5, 4)  # un par bûcheron
 
 	# Le menuisier transforme le bois en planches en continu
-	if total_wood >= 2 and total_planks < 30:
+	if total_wood >= 2 and total_planks < 80:
 		if not _has_task_of_type("craft", "Planches"):
 			_add_task({
 				"type": "craft",
@@ -406,12 +406,23 @@ func _evaluate_phase_2():
 				"type": "craft",
 				"recipe_name": "Pain",
 				"priority": 12,
-				"required_profession": VProfession.Profession.FERMIER,
+				"required_profession": VProfession.Profession.BOULANGER,
 			})
 
 	# Maintenir le stock — bûcherons travaillent en continu
 	if total_wood < 50:
 		_add_harvest_tasks(5, 4)
+
+	# Le menuisier transforme le bois en planches en continu
+	var total_planks = get_total_planks()
+	if total_wood >= 2 and total_planks < 80:
+		if not _has_task_of_type("craft", "Planches"):
+			_add_task({
+				"type": "craft",
+				"recipe_name": "Planches",
+				"priority": 15,
+				"required_profession": VProfession.Profession.MENUISIER,
+			})
 
 	# Miner en galerie — mineurs travaillent en continu
 	if total_stone < 40 or total_coal < 15 or (total_iron_ore < 8 and total_iron < 8):
@@ -485,11 +496,23 @@ func _evaluate_phase_3():
 				"type": "craft",
 				"recipe_name": "Pain",
 				"priority": 12,
-				"required_profession": VProfession.Profession.FERMIER,
+				"required_profession": VProfession.Profession.BOULANGER,
 			})
 
 	if total_wood < 50:
 		_add_harvest_tasks(5, 4)
+
+	# Le menuisier transforme le bois en planches en continu
+	var total_planks = get_total_planks()
+	if total_wood >= 2 and total_planks < 80:
+		if not _has_task_of_type("craft", "Planches"):
+			_add_task({
+				"type": "craft",
+				"recipe_name": "Planches",
+				"priority": 15,
+				"required_profession": VProfession.Profession.MENUISIER,
+			})
+
 	if total_stone < 40:
 		_add_mine_gallery_tasks(2)
 
@@ -1883,7 +1906,7 @@ func get_population_cap() -> int:
 	for built in built_structures:
 		if built["name"] in ["Cabane", "Maison"]:
 			houses += 1
-	return 8 + (2 * houses)
+	return 9 + (2 * houses)
 
 func _pick_needed_profession() -> int:
 	# Compter les professions existantes
