@@ -65,6 +65,10 @@ var _mine_initialized: bool = false
 var _mine_gallery_center: Vector3i = Vector3i.ZERO  # centre de la galerie actuelle
 var _mine_gallery_y: int = 45      # profondeur galerie actuelle
 var _mine_expansion_dir: int = 0   # direction de la prochaine expansion (0-3)
+const MINE_PLAN_MAX_SIZE = 5000    # plafond du mine plan — empêche la croissance infinie
+const MINE_STOCK_PAUSE_STONE = 200 # pause minage si pierre > seuil
+const MINE_STOCK_PAUSE_COAL = 80   # pause minage si charbon > seuil
+const MINE_STOCK_PAUSE_IRON = 30   # pause minage si fer > seuil
 
 # === AGRICULTURE ===
 var farm_plots: Array = []  # Array de { "pos": Vector3i, "stage": int, "timer": float }
@@ -438,15 +442,17 @@ func _evaluate_phase_2():
 				"required_profession": VProfession.Profession.FORGERON,
 			})
 
-	# Crafter stone_table (4 stone + 4 planks) — seulement si pas déjà dans le stockpile
-	if total_iron >= 4 and total_stone >= 4 and not placed_workstations.has(22) and get_resource_count(22) == 0:
-		if not _has_task_of_type("craft", "Table en pierre"):
-			_add_task({
-				"type": "craft",
-				"recipe_name": "Table en pierre",
-				"priority": 8,
-				"required_profession": VProfession.Profession.FORGERON,
-			})
+	# Crafter stone_table (4 stone + 4 planks) — la recette ne demande PAS de fer
+	if not placed_workstations.has(22) and get_resource_count(22) == 0:
+		if total_stone >= 4 and get_total_planks() >= 4:
+			if not _has_task_of_type("craft", "Table en pierre"):
+				print("VillageManager: Ajout tâche craft Table en pierre (stone=%d, planks=%d)" % [total_stone, get_total_planks()])
+				_add_task({
+					"type": "craft",
+					"recipe_name": "Table en pierre",
+					"priority": 5,  # Haute priorité — bloque la progression !
+					"required_profession": VProfession.Profession.FORGERON,
+				})
 
 	# Placer stone_table — avec garde anti-doublon
 	if get_resource_count(22) >= 1 and not placed_workstations.has(22):
@@ -462,16 +468,23 @@ func _evaluate_phase_2():
 	if not _path_built and get_resource_count(25) >= 5:
 		_try_queue_path()
 
-	# Crafter du verre si on a du sable et du charbon (nécessaire pour bâtiments phase 2)
+	# Verre : récolter du sable si nécessaire, puis crafter
 	var glass_count = get_resource_count(61)  # GLASS
-	if glass_count < 10 and get_resource_count(4) >= 1 and get_resource_count(16) >= 1:
-		if not _has_task_of_type("craft", "Verre"):
-			_add_task({
-				"type": "craft",
-				"recipe_name": "Verre",
-				"priority": 12,
-				"required_profession": VProfession.Profession.FORGERON,
-			})
+	var sand_count = get_resource_count(4)    # SAND
+	var coal_count = get_resource_count(16)   # COAL_ORE
+	if glass_count < 10:
+		# Pas assez de sable → envoyer le bâtisseur en récolter (1 seul à la fois)
+		if sand_count < 2:
+			_add_sand_harvest_tasks(1)
+		# Crafter si on a les ingrédients
+		if sand_count >= 1 and coal_count >= 1:
+			if not _has_task_of_type("craft", "Verre"):
+				_add_task({
+					"type": "craft",
+					"recipe_name": "Verre",
+					"priority": 12,
+					"required_profession": VProfession.Profession.FORGERON,
+				})
 
 	# Construire les bâtiments de phase 1 et 2
 	_try_queue_builds_for_phase(2)
@@ -527,16 +540,21 @@ func _evaluate_phase_3():
 	if total_stone < 40:
 		_add_mine_gallery_tasks(2)
 
-	# Crafter du verre si nécessaire
+	# Verre : récolter du sable si nécessaire, puis crafter
 	var glass_count_p3 = get_resource_count(61)
-	if glass_count_p3 < 10 and get_resource_count(4) >= 1 and get_resource_count(16) >= 1:
-		if not _has_task_of_type("craft", "Verre"):
-			_add_task({
-				"type": "craft",
-				"recipe_name": "Verre",
-				"priority": 12,
-				"required_profession": VProfession.Profession.FORGERON,
-			})
+	var sand_count_p3 = get_resource_count(4)
+	var coal_count_p3 = get_resource_count(16)
+	if glass_count_p3 < 10:
+		if sand_count_p3 < 2:
+			_add_sand_harvest_tasks(1)
+		if sand_count_p3 >= 1 and coal_count_p3 >= 1:
+			if not _has_task_of_type("craft", "Verre"):
+				_add_task({
+					"type": "craft",
+					"recipe_name": "Verre",
+					"priority": 12,
+					"required_profession": VProfession.Profession.FORGERON,
+				})
 
 	# Construire tous les bâtiments
 	_try_queue_builds_for_phase(3)
@@ -590,6 +608,28 @@ func _add_mine_tasks(block_type: int, count: int):
 			"priority": 25,
 			"required_profession": VProfession.Profession.MINEUR,
 		})
+
+func _add_sand_harvest_tasks(count: int):
+	# Récolte de sable — max 1 tâche à la fois, assignée au BATISSEUR
+	# (le bâtisseur attend souvent les matériaux, autant l'occuper)
+	var max_sand_tasks = 1
+	var existing = 0
+	for t in task_queue:
+		if t["type"] == "mine" and t.get("target_block", -1) == 4:
+			existing += 1
+	# Aussi compter les villageois déjà en train de chercher du sable
+	for v in villagers:
+		if is_instance_valid(v) and v.current_task.get("type", "") == "mine" \
+			and v.current_task.get("target_block", -1) == 4:
+			existing += 1
+	if existing >= max_sand_tasks:
+		return
+	_add_task({
+		"type": "mine",
+		"target_block": 4,  # SAND
+		"priority": 25,  # basse priorité — ne pas bloquer les tâches importantes
+		"required_profession": VProfession.Profession.BATISSEUR,
+	})
 
 func _add_farming_tasks():
 	# Le fermier crée les parcelles et récolte le blé
@@ -753,9 +793,10 @@ func find_nearest_block(block_type: int, from_pos: Vector3, radius: float = 32.0
 
 	return best
 
-func find_nearest_surface_block(block_type: int, from_pos: Vector3, radius: float = 32.0) -> Vector3i:
+func find_nearest_surface_block(block_type: int, from_pos: Vector3, radius: float = 32.0, ignore_village_dist: bool = false) -> Vector3i:
 	# Comme find_nearest_block mais ne retourne que les blocs en surface (avec AIR au-dessus)
 	# OPTIMISÉ : rayon de chunk limité + échantillonnage
+	# ignore_village_dist: si true, pas de distance min du village (pour sable, etc.)
 	if not world_manager:
 		return Vector3i(-9999, -9999, -9999)
 
@@ -764,7 +805,7 @@ func find_nearest_surface_block(block_type: int, from_pos: Vector3, radius: floa
 		0,
 		floori(from_pos.z / CHUNK_SIZE)
 	)
-	var chunk_radius = mini(ceili(radius / CHUNK_SIZE) + 1, 2)
+	var chunk_radius = mini(ceili(radius / CHUNK_SIZE) + 1, 3)  # max 3 chunks (élargi de 2 à 3)
 	var best = Vector3i(-9999, -9999, -9999)
 	var best_dist = INF
 
@@ -801,10 +842,11 @@ func find_nearest_surface_block(block_type: int, from_pos: Vector3, radius: floa
 								)
 								if claimed_positions.has(world_pos):
 									continue
-								# Ne pas miner trop près du village center
-								var dist_to_village = Vector2(world_pos.x - village_center.x, world_pos.z - village_center.z).length()
-								if dist_to_village < 30.0:
-									continue
+								# Ne pas miner trop près du village center (sauf si ignore)
+								if not ignore_village_dist:
+									var dist_to_village = Vector2(world_pos.x - village_center.x, world_pos.z - village_center.z).length()
+									if dist_to_village < 30.0:
+										continue
 								var d = from_pos.distance_to(Vector3(world_pos.x, world_pos.y, world_pos.z))
 								if d <= radius and d < best_dist:
 									best_dist = d
@@ -976,6 +1018,14 @@ func _init_mine():
 	_mine_expansion_dir = 0
 	print("VillageManager: mine planifiée — %d blocs à creuser depuis %s (cible y=%d)" % [mine_plan.size(), str(mine_entrance), target_y])
 
+func is_mine_stock_full() -> bool:
+	# Retourne true si les ressources minières sont au-dessus des seuils de pause
+	# Permet aux mineurs de s'arrêter quand le stockpile est saturé
+	var stone = get_resource_count(3) + get_resource_count(25)  # STONE + COBBLE
+	var coal = get_resource_count(16)
+	var iron = get_resource_count(17) + get_resource_count(19)  # IRON_ORE + IRON_INGOT
+	return stone > MINE_STOCK_PAUSE_STONE and coal > MINE_STOCK_PAUSE_COAL and iron > MINE_STOCK_PAUSE_IRON
+
 func get_next_mine_block() -> Vector3i:
 	# Retourne le prochain bloc SÉQUENTIEL dans le plan de mine
 	# La mine est creusée de haut en bas — chaque bloc devient accessible
@@ -1023,6 +1073,16 @@ func _expand_mine():
 	# Étendre la mine — nouvelles branches latérales depuis le centre de la galerie
 	# IMPORTANT: les nouvelles branches partent TOUJOURS du centre de la galerie
 	# (qui est connecté à l'escalier), donc elles sont toujours accessibles
+
+	# Purger les blocs déjà minés pour libérer de la mémoire
+	if mine_front_index > 500:
+		mine_plan = mine_plan.slice(mine_front_index)
+		mine_front_index = 0
+
+	# Plafond : ne pas étendre si le plan est déjà trop gros
+	if mine_plan.size() > MINE_PLAN_MAX_SIZE:
+		return
+
 	_mine_expansion_dir += 1
 	var branch_len = 10
 	var old_size = mine_plan.size()
@@ -1097,7 +1157,8 @@ func _expand_mine():
 				mine_plan.append(Vector3i(bx, y + 1, bz))
 				mine_plan.append(Vector3i(bx, y, bz))
 
-	print("VillageManager: mine étendue — +%d blocs (total %d, y=%d)" % [mine_plan.size() - old_size, mine_plan.size(), _mine_gallery_y])
+	if _mine_expansion_dir % 5 == 0:
+		print("VillageManager: mine étendue — total %d blocs, y=%d" % [mine_plan.size(), _mine_gallery_y])
 
 func _is_block_accessible(pos: Vector3i) -> bool:
 	# Un bloc est accessible s'il a au moins un voisin AIR (on peut l'atteindre)
@@ -1116,6 +1177,9 @@ const MAX_MINERS = 2  # max 2 mineurs simultanés (tunnel 2 blocs de large)
 
 func _add_mine_gallery_tasks(count: int):
 	# Ajouter des tâches de minage en galerie (limité à MAX_MINERS)
+	# Ne pas miner si le stockpile est saturé
+	if is_mine_stock_full():
+		return
 	if not _mine_initialized:
 		_init_mine()
 	if not _mine_initialized:
@@ -1344,9 +1408,9 @@ func _try_queue_build(blueprint_index: int):
 								"required_profession": VProfession.Profession.FORGERON,
 							})
 					else:
-						# Pas de sable → miner du sable en surface
+						# Pas de sable → envoyer le bâtisseur en récolter (1 seul)
 						if get_resource_count(4) < deficit:
-							_add_mine_tasks(4, mini(deficit, 4))
+							_add_sand_harvest_tasks(1)
 		return
 
 	# Trouver un emplacement
@@ -1917,7 +1981,7 @@ func harvest_wheat(plot: Dictionary):
 	plot["stage"] = 0
 	plot["timer"] = 0.0
 	add_resource(BlockRegistry.BlockType.WHEAT_ITEM, 1)
-	print("VillageManager: blé récolté à %s" % str(plot["pos"]))
+	pass  # Log supprimé : trop fréquent
 
 func get_farm_stats() -> Dictionary:
 	var total = farm_plots.size()

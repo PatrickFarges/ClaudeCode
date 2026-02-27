@@ -485,7 +485,9 @@ func _behavior_village_work(delta):
 		# Log la prise de tâche
 		var task_type = current_task.get("type", "?")
 		var prof_name = VProfession.get_profession_name(profession)
-		print("%s: prend tâche '%s'" % [prof_name, task_type])
+		# Log uniquement les tâches notables (pas harvest/mine_gallery qui spamment)
+		if task_type not in ["harvest", "mine_gallery", "mine", "farm_harvest"]:
+			print("%s: prend tâche '%s'" % [prof_name, task_type])
 		# Reset navigation
 		has_target = false
 		_arrived_at_target = false
@@ -668,20 +670,21 @@ func _execute_mine(delta):
 	# Miner un type de bloc spécifique (sable, pierre en surface, etc.)
 	if _mine_target == INVALID_POS:
 		var block_type = current_task.get("target_block", 3)
-		# Chercher à partir d'un point éloigné du village center
+		var is_sand = (block_type == 4)  # SAND — pas de restriction distance village
+		# Chercher à partir d'un point éloigné du village center (sauf sable)
 		var search_from = global_position
-		if village_manager:
+		if village_manager and not is_sand:
 			var to_center = Vector3(global_position.x - village_manager.village_center.x, 0,
 				global_position.z - village_manager.village_center.z)
 			var dist_to_center = to_center.length()
 			if dist_to_center < MIN_MINE_DISTANCE_FROM_VILLAGE:
-				# Trop près du village — se projeter à 30 blocs du centre
 				var dir_away = to_center.normalized() if to_center.length() > 0.1 else Vector3(1, 0, 0)
 				search_from = village_manager.village_center + dir_away * MIN_MINE_DISTANCE_FROM_VILLAGE
 				search_from.y = global_position.y
-		_mine_target = village_manager.find_nearest_surface_block(block_type, search_from, 20.0)
+		var search_radius = 48.0 if is_sand else 20.0  # rayon élargi pour le sable
+		_mine_target = village_manager.find_nearest_surface_block(block_type, search_from, search_radius, is_sand)
 		if _mine_target == INVALID_POS:
-			_task_status = "Cherche..."
+			_task_status = "Cherche sable..." if is_sand else "Cherche..."
 			village_manager.return_task(current_task)
 			current_task = {}
 			_search_cooldown = SEARCH_COOLDOWN_DURATION
@@ -692,7 +695,11 @@ func _execute_mine(delta):
 		_mine_timer = 0.0
 
 	var target_world = Vector3(_mine_target.x + 0.5, _mine_target.y, _mine_target.z + 0.5)
-	_task_status = "[%s] Mine" % village_manager.get_tool_tier_label("Pioche")
+	var mine_block_type = current_task.get("target_block", 3)
+	if mine_block_type == 4:
+		_task_status = "[Pelle] Sable"
+	else:
+		_task_status = "[%s] Mine" % village_manager.get_tool_tier_label("Pioche")
 
 	if not _arrived_at_target:
 		var dist = global_position.distance_to(target_world)
@@ -722,7 +729,7 @@ func _execute_mine(delta):
 		village_manager.add_resource(block_type)
 		village_manager.release_position(_mine_target)
 		_show_harvest_label("+1", _mine_target)
-		print("PNJ[%d]: miné surface bloc %d à %s" % [profession, block_type, str(_mine_target)])
+		pass  # Supprimé : trop fréquent pour le log
 		_mine_target = INVALID_POS
 		_mine_timer = 0.0
 		current_task = {}
@@ -769,8 +776,13 @@ func _execute_mine_gallery(delta):
 			_berserker_walk_toward(walk_target, delta)
 			return
 
-	# Phase 2: Obtenir le prochain bloc du plan de mine
+	# Phase 2: Vérifier que le stockpile n'est pas saturé, puis obtenir le prochain bloc
 	if _mine_target == INVALID_POS:
+		if village_manager.is_mine_stock_full():
+			_task_status = "Stock plein — pause mine"
+			current_task = {}
+			_at_mine_entrance = false
+			return
 		_mine_target = village_manager.get_next_mine_block()
 		if _mine_target == INVALID_POS:
 			# Pas de bloc dispo — attendre au lieu d'abandonner
@@ -849,7 +861,7 @@ func _execute_mine_gallery(delta):
 		village_manager.release_position(_mine_target)
 		_show_harvest_label("+1", _mine_target)
 		var prof_name = VProfession.get_profession_name(profession)
-		print("%s: miné bloc %d à %s (y=%d)" % [prof_name, block_type, str(_mine_target), _mine_target.y])
+		pass  # Supprimé : trop fréquent pour le log
 		_mine_target = INVALID_POS
 		_mine_timer = 0.0
 
@@ -1379,7 +1391,7 @@ func _abandon_current_target():
 	_search_cooldown = SEARCH_COOLDOWN_DURATION
 
 	var prof_name = VProfession.get_profession_name(profession)
-	print("%s: abandonne la cible (trop de détours)" % prof_name)
+	pass  # Supprimé : trop fréquent pour le log
 
 func _try_break_path_block(toward: Vector3) -> bool:
 	# Casse les blocs devant le PNJ pour se frayer un passage
@@ -1413,7 +1425,7 @@ func _try_break_path_block(toward: Vector3) -> bool:
 	if broke_any:
 		_show_harvest_label("+Passage!", block_pos_feet)
 		var prof_name = VProfession.get_profession_name(profession)
-		print("%s: casse des blocs pour passer à %s" % [prof_name, str(block_pos_feet)])
+		pass  # Supprimé : trop fréquent pour le log
 
 	return broke_any
 

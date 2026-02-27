@@ -162,7 +162,8 @@ func _unload_distant_chunks(player_chunk_pos: Vector3i):
 	for chunk_pos in chunks_to_remove:
 		var chunk = chunks[chunk_pos]
 		# Conserver les données des chunks modifiés pour les restaurer plus tard
-		if chunk.is_modified:
+		# Plafonner à 100 chunks sauvegardés pour éviter le bloat mémoire
+		if chunk.is_modified and saved_chunk_data.size() < 100:
 			saved_chunk_data[chunk_pos] = chunk.blocks.duplicate()
 		chunk.queue_free()
 		chunks.erase(chunk_pos)
