@@ -922,7 +922,10 @@ func _execute_craft(delta):
 			if repeats < 8:
 				return  # Reste sur la tâche, re-boucle avec nouveau timer
 	else:
-		village_manager.return_task(current_task)
+		# Ne pas re-queue les tâches d'upgrade tier obsolètes
+		var tier_recipes = {"Outils en bois": 1, "Outils en pierre": 2, "Outils en fer": 3}
+		if not tier_recipes.has(recipe_name) or village_manager.village_tool_tier < tier_recipes[recipe_name]:
+			village_manager.return_task(current_task)
 	current_task = {}
 	_arrived_at_target = false
 

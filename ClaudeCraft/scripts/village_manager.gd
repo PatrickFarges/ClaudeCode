@@ -223,6 +223,17 @@ func consume_any_planks(count: int) -> bool:
 # ============================================================
 
 func _evaluate_needs():
+	# Purger les tâches craft d'upgrade tier obsolètes
+	# (ex: "Outils en pierre" si tier déjà >= 2, "Outils en fer" si tier >= 3)
+	var tier_recipes = {"Outils en bois": 1, "Outils en pierre": 2, "Outils en fer": 3}
+	task_queue = task_queue.filter(func(t):
+		if t.get("type", "") == "craft":
+			var rname = t.get("recipe_name", "")
+			if tier_recipes.has(rname) and village_tool_tier >= tier_recipes[rname]:
+				return false
+		return true
+	)
+
 	# Nettoyer les tâches en excès : supprimer les doublons harvest/mine
 	# pour laisser de la place aux tâches critiques (craft, build, farm)
 	if task_queue.size() > 20:
@@ -456,7 +467,6 @@ func _evaluate_phase_2():
 	if not placed_workstations.has(22) and get_resource_count(22) == 0:
 		if total_stone >= 4 and get_total_planks() >= 4:
 			if not _has_task_of_type("craft", "Table en pierre"):
-				print("VillageManager: Ajout tâche craft Table en pierre (stone=%d, planks=%d)" % [total_stone, get_total_planks()])
 				_add_task({
 					"type": "craft",
 					"recipe_name": "Table en pierre",
