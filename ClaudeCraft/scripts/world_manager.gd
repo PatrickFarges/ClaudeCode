@@ -284,9 +284,7 @@ func _try_spawn_village(chunk_pos: Vector3i, chunk_data: Dictionary):
 	if village_mgr:
 		village_mgr.set_village_center(village_center)
 
-	# Aplatir le terrain autour du village (rayon 6 blocs)
-	# Supprime les blocs isolés au-dessus du sol pour faciliter la navigation
-	_flatten_village_area(chunk_pos, packed_blocks, center_x, center_z, center_surface_y)
+	# L'aplanissement est désormais géré par le bâtisseur via VillageManager.flatten_plan
 
 	# Spawn 8 villageois groupés — professions FIXES et optimisées :
 	# 2 BUCHERON (récolte bois), 2 MINEUR (galerie souterraine),

@@ -262,13 +262,18 @@ func _refresh_contents():
 			else:
 				buildings_label.text = "Bâtiments (0/%d) : aucun" % total_blueprints
 
-	# Mine
+	# Objectif + aplanissement + mine
+	var obj_text = _get_next_objective()
+	if not village_manager._flatten_complete and village_manager.flatten_plan.size() > 0:
+		var done = village_manager.flatten_index
+		var total_flatten = village_manager.flatten_plan.size()
+		var pct = int(float(done) / float(total_flatten) * 100.0) if total_flatten > 0 else 0
+		obj_text += "\nAplanissement : %d/%d blocs (%d%%)" % [done, total_flatten, pct]
 	if village_manager._mine_initialized:
 		var mined = village_manager.mine_front_index
 		var total = village_manager.mine_plan.size()
-		objective_label.text = _get_next_objective() + "\nMine : %d/%d blocs creusés" % [mined, total]
-	else:
-		objective_label.text = _get_next_objective()
+		obj_text += "\nMine : %d/%d blocs creusés" % [mined, total]
+	objective_label.text = obj_text
 
 	# Nettoyer les entrées précédentes
 	for child in stockpile_container.get_children():

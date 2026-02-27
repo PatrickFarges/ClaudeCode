@@ -98,6 +98,13 @@ var BLUEPRINTS: Array = []
 # === BÂTIMENTS CONSTRUITS ===
 var built_structures: Array = []  # Array de { "name": String, "origin": Vector3i }
 
+# === APLANISSEMENT DU TERRAIN ===
+var village_ref_y: int = -1          # altitude de référence (médiane)
+var flatten_plan: Array = []         # [{pos: Vector3i, action: "break"/"place"}]
+var flatten_index: int = 0           # progression
+var _flatten_complete: bool = false   # flag
+const VILLAGE_RADIUS = 18            # zone 37×37 (18+1+18)
+
 # === CHEMIN DU VILLAGE ===
 var _path_built: bool = false  # true quand le chemin en croix est posé
 var _path_blocks: Array = []   # blocs du chemin à poser [Vector3i, ...]
@@ -134,6 +141,86 @@ func set_village_center(pos: Vector3):
 	village_center = pos
 	_center_set = true
 	print("VillageManager: centre du village à %s" % str(pos))
+	# Générer le plan d'aplanissement du terrain (après 3s pour que les chunks soient chargés)
+	get_tree().create_timer(3.0).timeout.connect(_generate_flatten_plan)
+
+func _generate_flatten_plan():
+	if not world_manager:
+		return
+	var cx = int(village_center.x)
+	var cz = int(village_center.z)
+
+	# Collecter les Y de surface dans la zone pour calculer la médiane
+	var surface_ys: Array = []
+	for dx in range(-VILLAGE_RADIUS, VILLAGE_RADIUS + 1):
+		for dz in range(-VILLAGE_RADIUS, VILLAGE_RADIUS + 1):
+			var sy = _find_surface_y(cx + dx, cz + dz)
+			if sy > 0:
+				surface_ys.append(sy)
+	if surface_ys.size() == 0:
+		print("VillageManager: flatten — aucune surface trouvée")
+		_flatten_complete = true
+		return
+
+	# Médiane = altitude de référence
+	surface_ys.sort()
+	village_ref_y = surface_ys[surface_ys.size() / 2]
+
+	# Positions des workstations à protéger
+	var ws_positions: Dictionary = {}
+	for ws_type in placed_workstations:
+		var wp = placed_workstations[ws_type]
+		ws_positions[wp] = true
+		# Protéger aussi le bloc en dessous de la workstation
+		ws_positions[Vector3i(wp.x, wp.y - 1, wp.z)] = true
+
+	# Générer le plan : break au-dessus, place en dessous
+	var break_list: Array = []
+	var place_list: Array = []
+	for dx in range(-VILLAGE_RADIUS, VILLAGE_RADIUS + 1):
+		for dz in range(-VILLAGE_RADIUS, VILLAGE_RADIUS + 1):
+			var wx = cx + dx
+			var wz = cz + dz
+			var sy = _find_surface_y(wx, wz)
+			if sy < 0:
+				continue
+			if sy > village_ref_y:
+				# Casser les blocs au-dessus du niveau de référence (du haut vers le bas)
+				for y in range(sy, village_ref_y, -1):
+					var pos = Vector3i(wx, y, wz)
+					if ws_positions.has(pos):
+						continue
+					break_list.append({"pos": pos, "action": "break"})
+			elif sy < village_ref_y:
+				# Combler les creux (du bas vers le haut)
+				for y in range(sy + 1, village_ref_y + 1):
+					var pos = Vector3i(wx, y, wz)
+					if ws_positions.has(pos):
+						continue
+					place_list.append({"pos": pos, "action": "place"})
+
+	# Trier : break du plus haut au plus bas, puis place du plus bas au plus haut
+	break_list.sort_custom(func(a, b): return a["pos"].y > b["pos"].y)
+	place_list.sort_custom(func(a, b): return a["pos"].y < b["pos"].y)
+
+	flatten_plan = break_list + place_list
+	flatten_index = 0
+
+	if flatten_plan.size() == 0:
+		_flatten_complete = true
+		print("VillageManager: terrain déjà plat (ref_y=%d)" % village_ref_y)
+	else:
+		var break_count = break_list.size()
+		var place_count = place_list.size()
+		print("VillageManager: flatten plan généré — %d blocs (%d break, %d place), ref_y=%d" % [flatten_plan.size(), break_count, place_count, village_ref_y])
+
+func get_next_flatten_block():
+	if flatten_index >= flatten_plan.size():
+		_flatten_complete = true
+		return null
+	var entry = flatten_plan[flatten_index]
+	flatten_index += 1
+	return entry
 
 # ============================================================
 # STOCKPILE
@@ -390,12 +477,20 @@ func _evaluate_phase_1():
 				"required_profession": VProfession.Profession.BATISSEUR,
 			})
 
-	# Construire le chemin en croix si on a de la pierre
-	if not _path_built and get_total_stone() >= 5:
-		_try_queue_path()
-
-	# Construire les bâtiments de phase 1 (pas besoin du chemin pour commencer)
-	_try_queue_builds_for_phase(1)
+	# Aplanissement AVANT toute construction
+	if not _flatten_complete and flatten_plan.size() > 0:
+		if not _has_flatten_active():
+			_add_task({
+				"type": "flatten",
+				"priority": 2,
+				"required_profession": VProfession.Profession.BATISSEUR,
+			})
+	else:
+		# Construire le chemin en croix si on a de la pierre
+		if not _path_built and get_total_stone() >= 5:
+			_try_queue_path()
+		# Construire les bâtiments de phase 1
+		_try_queue_builds_for_phase(1)
 
 	# Forge : outils en pierre
 	if get_total_stone() >= 4 and get_total_planks() >= 4 and village_tool_tier < 2:
@@ -484,30 +579,39 @@ func _evaluate_phase_2():
 				"required_profession": VProfession.Profession.BATISSEUR,
 			})
 
-	# Chemin si pas encore fait
-	if not _path_built and get_total_stone() >= 5:
-		_try_queue_path()
+	# Aplanissement AVANT toute construction
+	if not _flatten_complete and flatten_plan.size() > 0:
+		if not _has_flatten_active():
+			_add_task({
+				"type": "flatten",
+				"priority": 2,
+				"required_profession": VProfession.Profession.BATISSEUR,
+			})
+	else:
+		# Chemin si pas encore fait
+		if not _path_built and get_total_stone() >= 5:
+			_try_queue_path()
 
-	# Verre : récolter du sable si nécessaire, puis crafter
-	var glass_count = get_resource_count(61)  # GLASS
-	var sand_count = get_resource_count(4)    # SAND
-	var coal_count = get_resource_count(16)   # COAL_ORE
-	if glass_count < 10:
-		# Pas assez de sable → envoyer le bâtisseur en récolter (1 seul à la fois)
-		if sand_count < 2:
-			_add_sand_harvest_tasks(1)
-		# Crafter si on a les ingrédients
-		if sand_count >= 1 and coal_count >= 1:
-			if not _has_task_of_type("craft", "Verre"):
-				_add_task({
-					"type": "craft",
-					"recipe_name": "Verre",
-					"priority": 12,
-					"required_profession": VProfession.Profession.FORGERON,
-				})
+		# Verre : récolter du sable si nécessaire, puis crafter
+		var glass_count = get_resource_count(61)  # GLASS
+		var sand_count = get_resource_count(4)    # SAND
+		var coal_count = get_resource_count(16)   # COAL_ORE
+		if glass_count < 10:
+			# Pas assez de sable → envoyer le bâtisseur en récolter (1 seul à la fois)
+			if sand_count < 2:
+				_add_sand_harvest_tasks(1)
+			# Crafter si on a les ingrédients
+			if sand_count >= 1 and coal_count >= 1:
+				if not _has_task_of_type("craft", "Verre"):
+					_add_task({
+						"type": "craft",
+						"recipe_name": "Verre",
+						"priority": 12,
+						"required_profession": VProfession.Profession.FORGERON,
+					})
 
-	# Construire les bâtiments de phase 1 et 2
-	_try_queue_builds_for_phase(2)
+		# Construire les bâtiments de phase 1 et 2
+		_try_queue_builds_for_phase(2)
 
 	# Forge : outils en fer
 	if get_resource_count(19) >= 3 and get_total_planks() >= 3 and village_tool_tier < 3:
@@ -560,24 +664,33 @@ func _evaluate_phase_3():
 	if total_stone < 40:
 		_add_mine_gallery_tasks(2)
 
-	# Verre : récolter du sable si nécessaire, puis crafter
-	var glass_count_p3 = get_resource_count(61)
-	var sand_count_p3 = get_resource_count(4)
-	var coal_count_p3 = get_resource_count(16)
-	if glass_count_p3 < 10:
-		if sand_count_p3 < 2:
-			_add_sand_harvest_tasks(1)
-		if sand_count_p3 >= 1 and coal_count_p3 >= 1:
-			if not _has_task_of_type("craft", "Verre"):
-				_add_task({
-					"type": "craft",
-					"recipe_name": "Verre",
-					"priority": 12,
-					"required_profession": VProfession.Profession.FORGERON,
-				})
+	# Aplanissement AVANT toute construction
+	if not _flatten_complete and flatten_plan.size() > 0:
+		if not _has_flatten_active():
+			_add_task({
+				"type": "flatten",
+				"priority": 2,
+				"required_profession": VProfession.Profession.BATISSEUR,
+			})
+	else:
+		# Verre : récolter du sable si nécessaire, puis crafter
+		var glass_count_p3 = get_resource_count(61)
+		var sand_count_p3 = get_resource_count(4)
+		var coal_count_p3 = get_resource_count(16)
+		if glass_count_p3 < 10:
+			if sand_count_p3 < 2:
+				_add_sand_harvest_tasks(1)
+			if sand_count_p3 >= 1 and coal_count_p3 >= 1:
+				if not _has_task_of_type("craft", "Verre"):
+					_add_task({
+						"type": "craft",
+						"recipe_name": "Verre",
+						"priority": 12,
+						"required_profession": VProfession.Profession.FORGERON,
+					})
 
-	# Construire tous les bâtiments
-	_try_queue_builds_for_phase(3)
+		# Construire tous les bâtiments
+		_try_queue_builds_for_phase(3)
 
 # ============================================================
 # GESTION DES TÂCHES
@@ -592,6 +705,15 @@ func _has_task_of_type(type: String, recipe_name: String = "") -> bool:
 		if t["type"] == type:
 			if recipe_name != "" and t.get("recipe_name", "") != recipe_name:
 				continue
+			return true
+	return false
+
+func _has_flatten_active() -> bool:
+	# Vérifie si une tâche flatten est en queue OU en cours chez un villageois
+	if _has_task_of_type("flatten"):
+		return true
+	for v in villagers:
+		if is_instance_valid(v) and v.current_task.get("type", "") == "flatten":
 			return true
 	return false
 
@@ -1469,45 +1591,26 @@ func _try_queue_build(blueprint_index: int):
 	print("VillageManager: construction de '%s' à %s" % [bp["name"], str(origin)])
 
 func _find_build_site(blueprint: Dictionary) -> Vector3i:
-	# Trouver un terrain assez plat pour le bâtiment
-	# Tolère un dénivelé de 2 blocs, et aplatit le terrain lors de la construction
+	# Terrain aplani → origin.y = ref_y + 1 (garanti plat après flatten)
 	var size = blueprint["size"]
 	var cx = int(village_center.x)
 	var cz = int(village_center.z)
+	var ref_y = village_ref_y if village_ref_y > 0 else int(village_center.y)
 
 	var best_site = Vector3i(-9999, -9999, -9999)
-	var best_path_dist = INF
+	var best_dist = INF
 
 	for attempt in range(60):
-		var tx = cx + randi_range(-16, 16)
-		var tz = cz + randi_range(-16, 16)
+		var tx = cx + randi_range(-VILLAGE_RADIUS + 1, VILLAGE_RADIUS - size.x)
+		var tz = cz + randi_range(-VILLAGE_RADIUS + 1, VILLAGE_RADIUS - size.z)
 
-		# Vérifier que le terrain est ~plat sur toute la surface
-		var first_y = _find_surface_y(tx, tz)
-		if first_y < 0:
+		# Vérifier que le site est dans la zone village
+		if tx < cx - VILLAGE_RADIUS or tx + size.x > cx + VILLAGE_RADIUS + 1:
+			continue
+		if tz < cz - VILLAGE_RADIUS or tz + size.z > cz + VILLAGE_RADIUS + 1:
 			continue
 
-		var flat = true
-		var max_y = first_y
-		var min_y = first_y
-		for bx in range(size.x):
-			for bz in range(size.z):
-				var sy = _find_surface_y(tx + bx, tz + bz)
-				if sy < 0:
-					flat = false
-					break
-				max_y = maxi(max_y, sy)
-				min_y = mini(min_y, sy)
-				if max_y - min_y > 3:
-					flat = false
-					break
-			if not flat:
-				break
-
-		if not flat:
-			continue
-
-		# Pas de chevauchement avec les constructions existantes
+		# Pas de chevauchement avec les constructions existantes (marge 2)
 		var overlap = false
 		for built in built_structures:
 			var bo = built["origin"]
@@ -1516,22 +1619,25 @@ func _find_build_site(blueprint: Dictionary) -> Vector3i:
 				and tz < bo.z + bs.z + 2 and tz + size.z > bo.z - 2:
 				overlap = true
 				break
-
 		if overlap:
 			continue
 
-		# Utiliser le y le plus haut comme référence (les blocs en dessous seront comblés)
-		var site = Vector3i(tx, max_y + 1, tz)
-		var path_dist = INF
-		for pb in _path_blocks:
-			var d = abs(tx - pb.x) + abs(tz - pb.z)
-			if d < path_dist:
-				path_dist = d
-		# Sans chemin, utiliser la distance au centre
-		if path_dist == INF:
-			path_dist = abs(tx - cx) + abs(tz - cz)
-		if path_dist < best_path_dist:
-			best_path_dist = path_dist
+		# Pas de chevauchement avec les workstations
+		var ws_overlap = false
+		for ws_type in placed_workstations:
+			var ws_pos = placed_workstations[ws_type]
+			if tx <= ws_pos.x + 1 and tx + size.x > ws_pos.x - 1 \
+				and tz <= ws_pos.z + 1 and tz + size.z > ws_pos.z - 1:
+				ws_overlap = true
+				break
+		if ws_overlap:
+			continue
+
+		# origin.y = ref_y + 1 (terrain plat garanti)
+		var site = Vector3i(tx, ref_y + 1, tz)
+		var dist = abs(tx + size.x / 2 - cx) + abs(tz + size.z / 2 - cz)
+		if dist < best_dist:
+			best_dist = dist
 			best_site = site
 
 	return best_site

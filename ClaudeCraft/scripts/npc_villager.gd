@@ -78,6 +78,7 @@ var _mine_timer: float = 0.0
 var _mine_target: Vector3i = INVALID_POS
 var _build_timer: float = 0.0
 var _task_status: String = ""  # texte affiché
+var _flatten_action: String = "break"  # action en cours pour le flatten
 
 # === Label3D au-dessus de la tête ===
 var _head_label: Label3D = null
@@ -349,10 +350,10 @@ func _on_activity_changed(old_activity: int, new_activity: int):
 			if _mine_target != INVALID_POS:
 				village_manager.release_position(_mine_target)
 				_mine_target = INVALID_POS
-			if current_task.get("type", "") != "build":
+			if current_task.get("type", "") not in ["build", "flatten"]:
 				village_manager.return_task(current_task)
 				current_task = {}
-			# Les tâches build restent dans current_task pour reprendre demain
+			# Les tâches build/flatten restent dans current_task pour reprendre demain
 		_task_status = ""
 
 	# Reset navigation
@@ -522,6 +523,8 @@ func _behavior_village_work(delta):
 			_execute_farm_create(delta)
 		"farm_harvest":
 			_execute_farm_harvest(delta)
+		"flatten":
+			_execute_flatten(delta)
 		_:
 			current_task = {}
 
@@ -1155,6 +1158,63 @@ func _execute_farm_harvest(delta):
 		var next_plot = village_manager.get_mature_wheat_plot()
 		if next_plot.is_empty():
 			current_task = {}
+
+func _execute_flatten(delta):
+	_task_status = "Aplanissement terrain"
+
+	# Obtenir le prochain bloc à traiter
+	if _mine_target == INVALID_POS:
+		var next = village_manager.get_next_flatten_block()
+		if next == null:
+			current_task = {}  # flatten terminé
+			return
+		_mine_target = next["pos"]
+		_flatten_action = next["action"]
+		_arrived_at_target = false
+		_build_timer = 0.0
+
+	var target_world = Vector3(_mine_target.x + 0.5, _mine_target.y, _mine_target.z + 0.5)
+
+	# Marcher vers la position
+	if not _arrived_at_target:
+		var dist = Vector3(global_position.x, 0, global_position.z).distance_to(
+			Vector3(target_world.x, 0, target_world.z))
+		if dist < 3.0:
+			_arrived_at_target = true
+		else:
+			_walk_toward(target_world, delta)
+			return
+
+	_face_target(target_world)
+	is_moving = false
+	_decelerate()
+	_play_anim("attack")
+
+	_build_timer += delta
+	if _build_timer >= 0.5:
+		_build_timer = 0.0
+		if _flatten_action == "break":
+			# Casser le bloc — ajouter les ressources au stockpile
+			var bt = world_manager.get_block_at_position(
+				Vector3(_mine_target.x, _mine_target.y, _mine_target.z))
+			if bt != BlockRegistry.BlockType.AIR:
+				village_manager.place_block(_mine_target, BlockRegistry.BlockType.AIR)
+				village_manager.add_resource(_mined_drop(bt))
+			_show_harvest_label("Terrain!", _mine_target)
+		else:  # "place"
+			# Poser un bloc de cobblestone
+			if village_manager.get_total_stone() >= 1:
+				village_manager.consume_any_stone(1)
+				village_manager.place_block(_mine_target, BlockRegistry.BlockType.COBBLESTONE)
+				_show_harvest_label("Terrain!", _mine_target)
+			else:
+				# Pas assez de pierre — remettre en queue et passer à autre chose
+				village_manager.flatten_index -= 1
+				village_manager.return_task(current_task)
+				current_task = {}
+				_mine_target = INVALID_POS
+				return
+		_mine_target = INVALID_POS  # passer au bloc suivant
 
 func _behavior_return_to_surface(delta):
 	_task_status = "Remonte..."
