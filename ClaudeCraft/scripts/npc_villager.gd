@@ -1173,19 +1173,20 @@ func _execute_flatten(delta):
 		_arrived_at_target = false
 		_build_timer = 0.0
 
-	var target_world = Vector3(_mine_target.x + 0.5, _mine_target.y, _mine_target.z + 0.5)
+	# Marcher au niveau du sol, pas à la hauteur du bloc cible
+	var walk_target = Vector3(_mine_target.x + 0.5, global_position.y, _mine_target.z + 0.5)
 
-	# Marcher vers la position
+	# Marcher vers la position (distance horizontale seulement)
 	if not _arrived_at_target:
 		var dist = Vector3(global_position.x, 0, global_position.z).distance_to(
-			Vector3(target_world.x, 0, target_world.z))
+			Vector3(walk_target.x, 0, walk_target.z))
 		if dist < 3.0:
 			_arrived_at_target = true
 		else:
-			_walk_toward(target_world, delta)
+			_walk_toward(walk_target, delta)
 			return
 
-	_face_target(target_world)
+	_face_target(walk_target)
 	is_moving = false
 	_decelerate()
 	_play_anim("attack")

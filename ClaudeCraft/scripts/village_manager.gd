@@ -144,17 +144,36 @@ func set_village_center(pos: Vector3):
 	# Générer le plan d'aplanissement du terrain (après 3s pour que les chunks soient chargés)
 	get_tree().create_timer(3.0).timeout.connect(_generate_flatten_plan)
 
+func _find_ground_y(wx: int, wz: int) -> int:
+	# Trouver le Y du SOL (bloc solide non-végétal) — ignore feuilles, troncs, herbe
+	# Utilisé pour le flatten au lieu de _find_surface_y qui renvoie le sommet des arbres
+	var leaf_set = { 6: true, 44: true, 45: true, 46: true, 47: true, 48: true, 49: true }
+	var trunk_set = { 5: true, 32: true, 33: true, 34: true, 35: true, 36: true, 42: true }
+	var flora_set = { 7: true }  # TALL_GRASS etc.
+	var chunk_pos = Vector3i(floori(float(wx) / CHUNK_SIZE), 0, floori(float(wz) / CHUNK_SIZE))
+	var start_y = 120
+	if world_manager.chunks.has(chunk_pos):
+		start_y = mini(world_manager.chunks[chunk_pos].y_max + 1, CHUNK_HEIGHT - 1)
+	for y in range(start_y, 0, -1):
+		var bt = world_manager.get_block_at_position(Vector3(wx, y, wz))
+		if bt == BlockRegistry.BlockType.AIR or bt == BlockRegistry.BlockType.WATER:
+			continue
+		if leaf_set.has(bt) or trunk_set.has(bt) or flora_set.has(bt):
+			continue
+		return y
+	return -1
+
 func _generate_flatten_plan():
 	if not world_manager:
 		return
 	var cx = int(village_center.x)
 	var cz = int(village_center.z)
 
-	# Collecter les Y de surface dans la zone pour calculer la médiane
+	# Collecter les Y du SOL (pas des arbres) dans la zone pour calculer la médiane
 	var surface_ys: Array = []
 	for dx in range(-VILLAGE_RADIUS, VILLAGE_RADIUS + 1):
 		for dz in range(-VILLAGE_RADIUS, VILLAGE_RADIUS + 1):
-			var sy = _find_surface_y(cx + dx, cz + dz)
+			var sy = _find_ground_y(cx + dx, cz + dz)
 			if sy > 0:
 				surface_ys.append(sy)
 	if surface_ys.size() == 0:
@@ -174,34 +193,56 @@ func _generate_flatten_plan():
 		# Protéger aussi le bloc en dessous de la workstation
 		ws_positions[Vector3i(wp.x, wp.y - 1, wp.z)] = true
 
-	# Générer le plan : break au-dessus, place en dessous
-	var break_list: Array = []
-	var place_list: Array = []
+	# Générer le plan par colonne : chaque colonne (x,z) produit ses blocs de haut en bas (break) ou bas en haut (place)
+	# Trié par distance au centre (spirale sortante) pour que le bâtisseur travaille de proche en proche
+	var columns: Array = []  # [{dx, dz, dist, actions: [{pos, action}]}]
 	for dx in range(-VILLAGE_RADIUS, VILLAGE_RADIUS + 1):
 		for dz in range(-VILLAGE_RADIUS, VILLAGE_RADIUS + 1):
 			var wx = cx + dx
 			var wz = cz + dz
-			var sy = _find_surface_y(wx, wz)
-			if sy < 0:
+			# Trouver le Y de surface complet (y compris arbres) pour savoir quoi casser
+			var surface_y = _find_surface_y(wx, wz)
+			# Trouver le Y du sol (sans arbres) pour la comparaison avec ref_y
+			var ground_y = _find_ground_y(wx, wz)
+			if ground_y < 0 and surface_y < 0:
 				continue
-			if sy > village_ref_y:
-				# Casser les blocs au-dessus du niveau de référence (du haut vers le bas)
-				for y in range(sy, village_ref_y, -1):
-					var pos = Vector3i(wx, y, wz)
-					if ws_positions.has(pos):
-						continue
-					break_list.append({"pos": pos, "action": "break"})
-			elif sy < village_ref_y:
-				# Combler les creux (du bas vers le haut)
-				for y in range(sy + 1, village_ref_y + 1):
-					var pos = Vector3i(wx, y, wz)
-					if ws_positions.has(pos):
-						continue
-					place_list.append({"pos": pos, "action": "place"})
 
-	# Trier : break du plus haut au plus bas, puis place du plus bas au plus haut
-	break_list.sort_custom(func(a, b): return a["pos"].y > b["pos"].y)
-	place_list.sort_custom(func(a, b): return a["pos"].y < b["pos"].y)
+			var col_actions: Array = []
+
+			# Casser TOUT au-dessus de ref_y (arbres, terre, pierre, tout)
+			var top_y = maxi(surface_y, ground_y)
+			if top_y > village_ref_y:
+				for y in range(top_y, village_ref_y, -1):
+					var pos = Vector3i(wx, y, wz)
+					if ws_positions.has(pos):
+						continue
+					col_actions.append({"pos": pos, "action": "break"})
+
+			# Combler les creux sous ref_y
+			if ground_y >= 0 and ground_y < village_ref_y:
+				for y in range(ground_y + 1, village_ref_y + 1):
+					var pos = Vector3i(wx, y, wz)
+					if ws_positions.has(pos):
+						continue
+					col_actions.append({"pos": pos, "action": "place"})
+
+			if col_actions.size() > 0:
+				var dist = abs(dx) + abs(dz)  # distance Manhattan au centre
+				columns.append({"dist": dist, "actions": col_actions})
+
+	# Trier les colonnes par distance au centre (proches d'abord)
+	columns.sort_custom(func(a, b): return a["dist"] < b["dist"])
+
+	# Aplatir en un seul plan : d'abord les break (toutes colonnes proches→loin),
+	# puis les place (toutes colonnes proches→loin)
+	var break_list: Array = []
+	var place_list: Array = []
+	for col in columns:
+		for action in col["actions"]:
+			if action["action"] == "break":
+				break_list.append(action)
+			else:
+				place_list.append(action)
 
 	flatten_plan = break_list + place_list
 	flatten_index = 0
