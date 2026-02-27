@@ -255,14 +255,7 @@ func _evaluate_phase_0():
 	if total_wood < 10 and total_planks < 4:
 		if task_queue.size() == 0:
 			print("VillageManager: Phase 0 — bois=%d planches=%d → ajout tâches récolte" % [total_wood, total_planks])
-		_add_harvest_tasks(5, 4)  # Bûcherons
-		# Le fermier aide aussi à récolter du bois au bootstrap
-		_add_task({
-			"type": "harvest",
-			"target_block": 5,
-			"priority": 20,
-			"required_profession": VProfession.Profession.FERMIER,
-		})
+		_add_harvest_tasks(5, 4)  # Bûcherons uniquement — le fermier fait la ferme
 		return
 
 	# Crafter des planches si on a du bois (menuisier ou forgeron peut le faire)
@@ -677,8 +670,9 @@ func get_next_task() -> Dictionary:
 	return task_queue.pop_front()
 
 func return_task(task: Dictionary):
-	# Remettre une tâche non terminée dans la queue
-	task_queue.push_front(task)
+	# Remettre une tâche non terminée dans la queue (triée par priorité)
+	task_queue.append(task)
+	task_queue.sort_custom(func(a, b): return a.get("priority", 50) < b.get("priority", 50))
 
 # ============================================================
 # SCAN DE BLOCS
