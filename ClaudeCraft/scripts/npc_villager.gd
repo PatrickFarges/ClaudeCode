@@ -5,6 +5,12 @@ const VProfession = preload("res://scripts/villager_profession.gd")
 
 const INVALID_POS = Vector3i(-9999, -9999, -9999)
 
+# Conversion minage : STONE → COBBLESTONE (comme Minecraft)
+static func _mined_drop(block_type) -> int:
+	if block_type == BlockRegistry.BlockType.STONE:
+		return BlockRegistry.BlockType.COBBLESTONE
+	return block_type
+
 const MODEL_PATH = "res://BlockPNJ/Models/GLB format/"
 const MODEL_NAMES: Array[String] = [
 	"character-a", "character-b", "character-c", "character-d",
@@ -586,7 +592,7 @@ func _execute_harvest(delta):
 		# Casser le bloc
 		var last_pos = _mine_target
 		village_manager.break_block(_mine_target)
-		village_manager.add_resource(block_type)
+		village_manager.add_resource(_mined_drop(block_type))
 		village_manager.release_position(_mine_target)
 		_show_harvest_label("+1", _mine_target)
 
@@ -726,7 +732,7 @@ func _execute_mine(delta):
 
 	if _mine_timer >= mine_time:
 		village_manager.break_block(_mine_target)
-		village_manager.add_resource(block_type)
+		village_manager.add_resource(_mined_drop(block_type))
 		village_manager.release_position(_mine_target)
 		_show_harvest_label("+1", _mine_target)
 		pass  # Supprimé : trop fréquent pour le log
@@ -857,7 +863,7 @@ func _execute_mine_gallery(delta):
 
 	if _mine_timer >= mine_time:
 		village_manager.break_block(_mine_target)
-		village_manager.add_resource(block_type)
+		village_manager.add_resource(_mined_drop(block_type))
 		village_manager.release_position(_mine_target)
 		_show_harvest_label("+1", _mine_target)
 		var prof_name = VProfession.get_profession_name(profession)
@@ -1045,8 +1051,8 @@ func _execute_build_path(delta):
 		_build_timer = 0.0
 		# Remplacer le bloc de surface par du cobblestone
 		var BT_COBBLE = 25
-		if village_manager.has_resources(BT_COBBLE, 1):
-			village_manager.consume_resources(BT_COBBLE, 1)
+		if village_manager.get_total_stone() >= 1:
+			village_manager.consume_any_stone(1)
 			village_manager.place_block(_mine_target, BT_COBBLE)
 			_show_harvest_label("Chemin", _mine_target)
 		_mine_target = INVALID_POS
@@ -1411,7 +1417,7 @@ func _try_break_path_block(toward: Vector3) -> bool:
 	if bt_feet != BlockRegistry.BlockType.AIR and bt_feet != BlockRegistry.BlockType.WATER:
 		if not _is_in_village_structure(block_pos_feet):
 			village_manager.break_block(block_pos_feet)
-			village_manager.add_resource(bt_feet)
+			village_manager.add_resource(_mined_drop(bt_feet))
 			broke_any = true
 
 	# Casser le bloc à la tête (si pas protégé)
@@ -1419,7 +1425,7 @@ func _try_break_path_block(toward: Vector3) -> bool:
 	if bt_head != BlockRegistry.BlockType.AIR and bt_head != BlockRegistry.BlockType.WATER:
 		if not _is_in_village_structure(block_pos_head):
 			village_manager.break_block(block_pos_head)
-			village_manager.add_resource(bt_head)
+			village_manager.add_resource(_mined_drop(bt_head))
 			broke_any = true
 
 	if broke_any:
@@ -1450,7 +1456,7 @@ func _try_break_soft_blocks_ahead() -> bool:
 		var hardness = BlockRegistry.get_block_hardness(bt_feet as BlockRegistry.BlockType)
 		if hardness <= SOFT_BLOCK_HARDNESS and not _is_in_village_structure(block_pos_feet):
 			village_manager.break_block(block_pos_feet)
-			village_manager.add_resource(bt_feet)
+			village_manager.add_resource(_mined_drop(bt_feet))
 			broke_any = true
 
 	# Bloc à la tête
@@ -1459,7 +1465,7 @@ func _try_break_soft_blocks_ahead() -> bool:
 		var hardness = BlockRegistry.get_block_hardness(bt_head as BlockRegistry.BlockType)
 		if hardness <= SOFT_BLOCK_HARDNESS and not _is_in_village_structure(block_pos_head):
 			village_manager.break_block(block_pos_head)
-			village_manager.add_resource(bt_head)
+			village_manager.add_resource(_mined_drop(bt_head))
 			broke_any = true
 
 	return broke_any

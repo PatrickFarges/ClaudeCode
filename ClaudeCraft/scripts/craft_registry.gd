@@ -209,7 +209,7 @@ static func get_all_recipes() -> Array:
 		},
 		{
 			"name": "Fourneau",
-			"inputs": [[BlockRegistry.BlockType.STONE, 8]],
+			"inputs": [[BlockRegistry.BlockType.COBBLESTONE, 8]],
 			"output_type": BlockRegistry.BlockType.FURNACE,
 			"output_count": 1,
 			"station": "wood_table"
@@ -225,7 +225,7 @@ static func get_all_recipes() -> Array:
 		},
 		{
 			"name": "Table en pierre",
-			"inputs": [[BlockRegistry.BlockType.STONE, 4], [BlockRegistry.BlockType.PLANKS, 4]],
+			"inputs": [[BlockRegistry.BlockType.COBBLESTONE, 4], [BlockRegistry.BlockType.PLANKS, 4]],
 			"output_type": BlockRegistry.BlockType.STONE_TABLE,
 			"output_count": 1,
 			"station": "wood_table"

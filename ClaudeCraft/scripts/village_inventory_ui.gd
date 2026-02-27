@@ -527,8 +527,9 @@ func _get_next_objective() -> String:
 			return "Prochain : construire les premiers bâtiments"
 		2:
 			if not village_manager.placed_workstations.has(22):  # STONE_TABLE
-				var iron = village_manager.get_resource_count(19)
-				return "Prochain : Table en pierre (besoin 4 fer, a %d)" % iron
+				var stone = village_manager.get_resource_count(3) + village_manager.get_resource_count(25)
+				var planks = village_manager.get_total_planks()
+				return "Prochain : Table en pierre (pierre %d/4, planches %d/4)" % [stone, planks]
 			return "Prochain : expansion du village"
 		3:
 			var pop = village_manager.villagers.size()

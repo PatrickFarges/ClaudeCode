@@ -170,6 +170,24 @@ func get_total_planks() -> int:
 		total += stockpile.get(bt, 0)
 	return total
 
+func get_total_stone() -> int:
+	return stockpile.get(3, 0) + stockpile.get(25, 0)  # STONE + COBBLESTONE
+
+func consume_any_stone(count: int) -> bool:
+	var stone_types = [25, 3]  # COBBLESTONE d'abord (drop mineur), puis STONE
+	var remaining = count
+	for bt in stone_types:
+		var have = stockpile.get(bt, 0)
+		if have > 0:
+			var take = mini(have, remaining)
+			stockpile[bt] = have - take
+			if stockpile[bt] == 0:
+				stockpile.erase(bt)
+			remaining -= take
+			if remaining <= 0:
+				return true
+	return remaining <= 0
+
 func consume_any_wood(count: int) -> bool:
 	var wood_types = [5, 32, 33, 34, 35, 36, 42]
 	var remaining = count
@@ -307,8 +325,7 @@ func _evaluate_phase_1():
 	# Phase 1: Récolter plus de bois + pierre, crafter furnace, construire
 	var total_wood = get_total_wood()
 	var total_planks = get_total_planks()
-	var total_stone = get_resource_count(3)  # STONE
-	var total_cobble = get_resource_count(25)  # COBBLESTONE
+	var total_stone = get_total_stone()  # STONE + COBBLESTONE
 
 	# === AGRICULTURE — le fermier commence dès la phase 1 ===
 	_add_farming_tasks()
@@ -362,15 +379,15 @@ func _evaluate_phase_1():
 				"required_profession": VProfession.Profession.BATISSEUR,
 			})
 
-	# Construire le chemin en croix si on a du cobblestone
-	if not _path_built and get_resource_count(25) >= 5:  # COBBLESTONE
+	# Construire le chemin en croix si on a de la pierre
+	if not _path_built and get_total_stone() >= 5:
 		_try_queue_path()
 
 	# Construire les bâtiments de phase 1 (pas besoin du chemin pour commencer)
 	_try_queue_builds_for_phase(1)
 
 	# Forge : outils en pierre
-	if get_resource_count(25) >= 4 and get_total_planks() >= 4 and village_tool_tier < 2:
+	if get_total_stone() >= 4 and get_total_planks() >= 4 and village_tool_tier < 2:
 		if not _has_task_of_type("craft", "Outils en pierre"):
 			_add_task({
 				"type": "craft",
@@ -389,7 +406,7 @@ func _evaluate_phase_1():
 func _evaluate_phase_2():
 	# Phase 2: Miner charbon/fer, fondre, crafter stone_table
 	var total_wood = get_total_wood()
-	var total_stone = get_resource_count(3)
+	var total_stone = get_total_stone()
 	var total_coal = get_resource_count(16)   # COAL_ORE
 	var total_iron_ore = get_resource_count(17)  # IRON_ORE
 	var total_iron = get_resource_count(19)   # IRON_INGOT
@@ -458,7 +475,7 @@ func _evaluate_phase_2():
 			})
 
 	# Chemin si pas encore fait
-	if not _path_built and get_resource_count(25) >= 5:
+	if not _path_built and get_total_stone() >= 5:
 		_try_queue_path()
 
 	# Verre : récolter du sable si nécessaire, puis crafter
@@ -502,7 +519,7 @@ func _evaluate_phase_2():
 func _evaluate_phase_3():
 	# Phase 3: Expansion continue
 	var total_wood = get_total_wood()
-	var total_stone = get_resource_count(3)
+	var total_stone = get_total_stone()
 
 	# Agriculture
 	_add_farming_tasks()
@@ -1227,6 +1244,10 @@ func try_craft(recipe_name: String) -> bool:
 					if get_total_wood() < needed:
 						can = false
 						break
+				elif bt == 3 or bt == 25:  # STONE ou COBBLESTONE — interchangeables
+					if get_total_stone() < needed:
+						can = false
+						break
 				else:
 					if not has_resources(bt, needed):
 						can = false
@@ -1242,6 +1263,8 @@ func try_craft(recipe_name: String) -> bool:
 					consume_any_planks(needed)
 				elif bt == 5:
 					consume_any_wood(needed)
+				elif bt == 3 or bt == 25:
+					consume_any_stone(needed)
 				else:
 					consume_resources(bt, needed)
 
@@ -1368,14 +1391,13 @@ func _try_queue_build(blueprint_index: int):
 		var have = 0
 		if bt == 11:  # PLANKS
 			have = get_total_planks()
-			if have < needed:
-				can_build = false
-				missing_info.append("planches %d/%d" % [have, needed])
+		elif bt == 3 or bt == 25:  # STONE/COBBLESTONE interchangeables
+			have = get_total_stone()
 		else:
 			have = get_resource_count(bt)
-			if have < needed:
-				can_build = false
-				missing_info.append("bt%d %d/%d" % [bt, have, needed])
+		if have < needed:
+			can_build = false
+			missing_info.append("bt%d %d/%d" % [bt, have, needed])
 
 	if not can_build:
 		# Ajouter des tâches de récolte pour les matériaux manquants (max 4 par type)
@@ -1384,6 +1406,8 @@ func _try_queue_build(blueprint_index: int):
 			var have = 0
 			if bt == 11:
 				have = get_total_planks()
+			elif bt == 3 or bt == 25:
+				have = get_total_stone()
 			else:
 				have = get_resource_count(bt)
 			if have < needed:
@@ -1418,6 +1442,8 @@ func _try_queue_build(blueprint_index: int):
 		var needed = bp["materials"][bt]
 		if bt == 11:
 			consume_any_planks(needed)
+		elif bt == 3 or bt == 25:
+			consume_any_stone(needed)
 		else:
 			consume_resources(bt, needed)
 
@@ -1546,7 +1572,7 @@ func _try_queue_path():
 	if remaining <= 0:
 		_path_built = true
 		return
-	var cobble_count = get_resource_count(25)
+	var cobble_count = get_total_stone()
 	if cobble_count < 3:
 		return  # Pas assez, on attend
 
