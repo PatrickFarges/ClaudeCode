@@ -66,9 +66,9 @@ var _mine_gallery_center: Vector3i = Vector3i.ZERO  # centre de la galerie actue
 var _mine_gallery_y: int = 45      # profondeur galerie actuelle
 var _mine_expansion_dir: int = 0   # direction de la prochaine expansion (0-3)
 const MINE_PLAN_MAX_SIZE = 5000    # plafond du mine plan — empêche la croissance infinie
-const MINE_STOCK_PAUSE_STONE = 200 # pause minage si pierre > seuil
-const MINE_STOCK_PAUSE_COAL = 80   # pause minage si charbon > seuil
-const MINE_STOCK_PAUSE_IRON = 30   # pause minage si fer > seuil
+const MINE_STOCK_PAUSE_STONE = 2000 # pause minage si pavé > seuil (200 trop bas — mine 417 blocs → 1346 pavés)
+const MINE_STOCK_PAUSE_COAL = 200  # pause minage si charbon > seuil
+const MINE_STOCK_PAUSE_IRON = 80   # pause minage si fer > seuil
 
 # === AGRICULTURE ===
 var farm_plots: Array = []  # Array de { "pos": Vector3i, "stage": int, "timer": float }
@@ -557,7 +557,7 @@ func _evaluate_phase_1():
 		_add_harvest_tasks(5, 4)  # un par bûcheron
 
 	# Le menuisier transforme le bois en planches en continu
-	if total_wood >= 2 and total_planks < 500:
+	if total_wood >= 2 and total_planks < 1000:
 		if not _has_task_of_type("craft", "Planches"):
 			_add_task({
 				"type": "craft",
@@ -566,9 +566,8 @@ func _evaluate_phase_1():
 				"required_profession": VProfession.Profession.MENUISIER,
 			})
 
-	# Commencer à miner — mineurs travaillent en continu
-	if total_stone < 40:
-		_add_mine_gallery_tasks(2)
+	# Commencer à miner — mineurs travaillent en continu (is_mine_stock_full les pause)
+	_add_mine_gallery_tasks(2)
 
 	# Crafter le fourneau (8 stone) — seulement si on n'en a pas déjà un dans le stockpile
 	if total_stone >= 8 and not placed_workstations.has(21) and get_resource_count(21) == 0:
@@ -592,7 +591,7 @@ func _evaluate_phase_1():
 
 	# Aplanissement AVANT toute construction
 	if not _flatten_complete and flatten_plan.size() > 0:
-		if not _has_flatten_active():
+		if _count_flatten_active() < 2:
 			_add_task({
 				"type": "flatten",
 				"priority": 2,
@@ -648,7 +647,7 @@ func _evaluate_phase_2():
 
 	# Le menuisier transforme le bois en planches en continu
 	var total_planks = get_total_planks()
-	if total_wood >= 2 and total_planks < 500:
+	if total_wood >= 2 and total_planks < 1000:
 		if not _has_task_of_type("craft", "Planches"):
 			_add_task({
 				"type": "craft",
@@ -657,9 +656,8 @@ func _evaluate_phase_2():
 				"required_profession": VProfession.Profession.MENUISIER,
 			})
 
-	# Miner en galerie — mineurs travaillent en continu
-	if total_stone < 40 or total_coal < 15 or (total_iron_ore < 8 and total_iron < 8):
-		_add_mine_gallery_tasks(2)
+	# Miner en galerie — mineurs travaillent en continu (is_mine_stock_full les pause)
+	_add_mine_gallery_tasks(2)
 
 	# Fondre le fer (recette furnace: 1 iron_ore + 1 coal_ore -> 1 iron_ingot)
 	if total_iron_ore >= 1 and total_coal >= 1 and total_iron < 4:
@@ -694,7 +692,7 @@ func _evaluate_phase_2():
 
 	# Aplanissement AVANT toute construction
 	if not _flatten_complete and flatten_plan.size() > 0:
-		if not _has_flatten_active():
+		if _count_flatten_active() < 2:
 			_add_task({
 				"type": "flatten",
 				"priority": 2,
@@ -765,7 +763,7 @@ func _evaluate_phase_3():
 
 	# Le menuisier transforme le bois en planches en continu
 	var total_planks = get_total_planks()
-	if total_wood >= 2 and total_planks < 500:
+	if total_wood >= 2 and total_planks < 1000:
 		if not _has_task_of_type("craft", "Planches"):
 			_add_task({
 				"type": "craft",
@@ -779,7 +777,7 @@ func _evaluate_phase_3():
 
 	# Aplanissement AVANT toute construction
 	if not _flatten_complete and flatten_plan.size() > 0:
-		if not _has_flatten_active():
+		if _count_flatten_active() < 2:
 			_add_task({
 				"type": "flatten",
 				"priority": 2,
@@ -802,6 +800,17 @@ func _evaluate_phase_3():
 						"required_profession": VProfession.Profession.FORGERON,
 					})
 
+		# Fondre le fer (continu en phase 3)
+		var total_iron_ore_p3 = get_resource_count(17)
+		if total_iron_ore_p3 >= 1 and coal_count_p3 >= 1:
+			if not _has_task_of_type("craft", "Lingot de fer"):
+				_add_task({
+					"type": "craft",
+					"recipe_name": "Lingot de fer",
+					"priority": 14,
+					"required_profession": VProfession.Profession.FORGERON,
+				})
+
 		# Construire tous les bâtiments
 		_try_queue_builds_for_phase(3)
 
@@ -814,21 +823,32 @@ func _add_task(task: Dictionary):
 	task_queue.sort_custom(func(a, b): return a.get("priority", 50) < b.get("priority", 50))
 
 func _has_task_of_type(type: String, recipe_name: String = "") -> bool:
+	# Vérifie la queue ET les tâches actives des villageois
 	for t in task_queue:
 		if t["type"] == type:
 			if recipe_name != "" and t.get("recipe_name", "") != recipe_name:
 				continue
 			return true
+	# Aussi vérifier les villageois en cours d'exécution
+	for v in villagers:
+		if is_instance_valid(v) and not v.current_task.is_empty():
+			var ct = v.current_task
+			if ct.get("type", "") == type:
+				if recipe_name != "" and ct.get("recipe_name", "") != recipe_name:
+					continue
+				return true
 	return false
 
-func _has_flatten_active() -> bool:
-	# Vérifie si une tâche flatten est en queue OU en cours chez un villageois
-	if _has_task_of_type("flatten"):
-		return true
+func _count_flatten_active() -> int:
+	# Compte les tâches flatten en queue + en cours chez les villageois
+	var count = 0
+	for t in task_queue:
+		if t["type"] == "flatten":
+			count += 1
 	for v in villagers:
 		if is_instance_valid(v) and v.current_task.get("type", "") == "flatten":
-			return true
-	return false
+			count += 1
+	return count
 
 func _add_harvest_tasks(block_type: int, count: int):
 	# Tous les types de bois sont acceptables
@@ -836,6 +856,10 @@ func _add_harvest_tasks(block_type: int, count: int):
 	var existing = 0
 	for t in task_queue:
 		if t["type"] == "harvest" and t.get("target_block", -1) in wood_types:
+			existing += 1
+	# Compter aussi les villageois déjà en train de récolter
+	for v in villagers:
+		if is_instance_valid(v) and v.current_task.get("type", "") == "harvest":
 			existing += 1
 	if existing >= count:
 		return
@@ -865,9 +889,8 @@ func _add_mine_tasks(block_type: int, count: int):
 		})
 
 func _add_sand_harvest_tasks(count: int):
-	# Récolte de sable — max 1 tâche à la fois, assignée au BATISSEUR
-	# (le bâtisseur attend souvent les matériaux, autant l'occuper)
-	var max_sand_tasks = 1
+	# Récolte de sable — max 2 tâches à la fois, tout villageois libre
+	var max_sand_tasks = 2
 	var existing = 0
 	for t in task_queue:
 		if t["type"] == "mine" and t.get("target_block", -1) == 4:
@@ -882,8 +905,8 @@ func _add_sand_harvest_tasks(count: int):
 	_add_task({
 		"type": "mine",
 		"target_block": 4,  # SAND
-		"priority": 25,  # basse priorité — ne pas bloquer les tâches importantes
-		"required_profession": VProfession.Profession.BATISSEUR,
+		"priority": 15,  # priorité moyenne — le verre est critique pour les bâtiments
+		# Pas de required_profession — tout villageois libre peut récolter du sable
 	})
 
 func _add_farming_tasks():
@@ -1061,7 +1084,7 @@ func find_nearest_surface_block(block_type: int, from_pos: Vector3, radius: floa
 		0,
 		floori(from_pos.z / CHUNK_SIZE)
 	)
-	var chunk_radius = mini(ceili(radius / CHUNK_SIZE) + 1, 3)  # max 3 chunks (élargi de 2 à 3)
+	var chunk_radius = mini(ceili(radius / CHUNK_SIZE) + 1, 5)  # max 5 chunks (~80 blocs) pour trouver du sable lointain
 	var best = Vector3i(-9999, -9999, -9999)
 	var best_dist = INF
 
@@ -1275,13 +1298,12 @@ func _init_mine():
 	print("VillageManager: mine planifiée — %d blocs à creuser depuis %s (cible y=%d)" % [mine_plan.size(), str(mine_entrance), target_y])
 
 func is_mine_stock_full() -> bool:
-	# Retourne true si les ressources minières sont au-dessus des seuils de pause
-	# Note : ne compte PAS le cobblestone (pollué par le flatten qui en génère des milliers)
-	# On compte seulement STONE brut (drop du mineur = cobblestone, mais on check stone pure ici)
-	var stone = get_resource_count(25)  # COBBLESTONE seulement (vrai drop mineur)
+	# Retourne true si les ressources minières sont TOUTES au-dessus des seuils de pause
+	# Seuils élevés : pavé 2000, charbon 200, fer 80 — le village consomme beaucoup
+	var cobble = get_resource_count(25)  # COBBLESTONE (vrai drop du mineur)
 	var coal = get_resource_count(16)
 	var iron = get_resource_count(17) + get_resource_count(19)  # IRON_ORE + IRON_INGOT
-	return stone > MINE_STOCK_PAUSE_STONE and coal > MINE_STOCK_PAUSE_COAL and iron > MINE_STOCK_PAUSE_IRON
+	return cobble > MINE_STOCK_PAUSE_STONE and coal > MINE_STOCK_PAUSE_COAL and iron > MINE_STOCK_PAUSE_IRON
 
 func get_next_mine_block() -> Vector3i:
 	# Retourne le prochain bloc SÉQUENTIEL dans le plan de mine

@@ -11,6 +11,31 @@ static func _mined_drop(block_type) -> int:
 		return BlockRegistry.BlockType.COBBLESTONE
 	return block_type
 
+# Blocs inutiles cassés par le berserker — ne PAS ajouter au stockpile
+static var _junk_blocks: Dictionary = {}
+static func _is_junk_block(bt: int) -> bool:
+	if _junk_blocks.is_empty():
+		# Blocs inutiles pour le village — utiliser les enum pour éviter les erreurs d'ID
+		for junk in [
+			BlockRegistry.BlockType.GRASS,
+			BlockRegistry.BlockType.DIRT,
+			BlockRegistry.BlockType.LEAVES,
+			BlockRegistry.BlockType.SNOW,
+			BlockRegistry.BlockType.DARK_GRASS,
+			BlockRegistry.BlockType.GRAVEL,
+			BlockRegistry.BlockType.SPRUCE_LEAVES,
+			BlockRegistry.BlockType.BIRCH_LEAVES,
+			BlockRegistry.BlockType.JUNGLE_LEAVES,
+			BlockRegistry.BlockType.ACACIA_LEAVES,
+			BlockRegistry.BlockType.DARK_OAK_LEAVES,
+			BlockRegistry.BlockType.CHERRY_LEAVES,
+			BlockRegistry.BlockType.PODZOL,
+			BlockRegistry.BlockType.MOSS_BLOCK,
+			BlockRegistry.BlockType.FARMLAND,
+		]:
+			_junk_blocks[junk] = true
+	return _junk_blocks.has(bt)
+
 const MODEL_PATH = "res://BlockPNJ/Models/GLB format/"
 const MODEL_NAMES: Array[String] = [
 	"character-a", "character-b", "character-c", "character-d",
@@ -742,7 +767,7 @@ func _execute_mine(delta):
 				var dir_away = to_center.normalized() if to_center.length() > 0.1 else Vector3(1, 0, 0)
 				search_from = village_manager.village_center + dir_away * MIN_MINE_DISTANCE_FROM_VILLAGE
 				search_from.y = global_position.y
-		var search_radius = 48.0 if is_sand else 20.0  # rayon élargi pour le sable
+		var search_radius = 72.0 if is_sand else 20.0  # rayon élargi pour le sable (~5 chunks)
 		_mine_target = village_manager.find_nearest_surface_block(block_type, search_from, search_radius, is_sand)
 		if _mine_target == INVALID_POS:
 			_task_status = "Cherche sable..." if is_sand else "Cherche..."
@@ -787,7 +812,8 @@ func _execute_mine(delta):
 
 	if _mine_timer >= mine_time:
 		village_manager.break_block(_mine_target)
-		village_manager.add_resource(_mined_drop(block_type))
+		if not _is_junk_block(block_type):
+			village_manager.add_resource(_mined_drop(block_type))
 		village_manager.release_position(_mine_target)
 		_show_harvest_label("+1", _mine_target)
 		pass  # Supprimé : trop fréquent pour le log
@@ -930,7 +956,8 @@ func _execute_mine_gallery(delta):
 
 	if _mine_timer >= mine_time:
 		village_manager.break_block(_mine_target)
-		village_manager.add_resource(_mined_drop(block_type))
+		if not _is_junk_block(block_type):
+			village_manager.add_resource(_mined_drop(block_type))
 		village_manager.release_position(_mine_target)
 		_show_harvest_label("+1", _mine_target)
 		var prof_name = VProfession.get_profession_name(profession)
@@ -989,10 +1016,9 @@ func _execute_craft(delta):
 			if repeats < 8:
 				return  # Reste sur la tâche, re-boucle avec nouveau timer
 	else:
-		# Ne pas re-queue les tâches d'upgrade tier obsolètes
-		var tier_recipes = {"Outils en bois": 1, "Outils en pierre": 2, "Outils en fer": 3}
-		if not tier_recipes.has(recipe_name) or village_manager.village_tool_tier < tier_recipes[recipe_name]:
-			village_manager.return_task(current_task)
+		# Craft échoué — ne PAS remettre en queue, l'évaluation re-créera la tâche
+		# quand les ressources seront disponibles. Évite le spam "prend tâche 'craft'"
+		_search_cooldown = SEARCH_COOLDOWN_DURATION
 	current_task = {}
 	_arrived_at_target = false
 
@@ -1575,7 +1601,8 @@ func _try_break_path_block(toward: Vector3) -> bool:
 	if bt_feet != BlockRegistry.BlockType.AIR and bt_feet != BlockRegistry.BlockType.WATER:
 		if not _is_in_village_structure(block_pos_feet):
 			village_manager.break_block(block_pos_feet)
-			village_manager.add_resource(_mined_drop(bt_feet))
+			if not _is_junk_block(bt_feet):
+				village_manager.add_resource(_mined_drop(bt_feet))
 			broke_any = true
 
 	# Casser le bloc à la tête (si pas protégé)
@@ -1583,7 +1610,8 @@ func _try_break_path_block(toward: Vector3) -> bool:
 	if bt_head != BlockRegistry.BlockType.AIR and bt_head != BlockRegistry.BlockType.WATER:
 		if not _is_in_village_structure(block_pos_head):
 			village_manager.break_block(block_pos_head)
-			village_manager.add_resource(_mined_drop(bt_head))
+			if not _is_junk_block(bt_head):
+				village_manager.add_resource(_mined_drop(bt_head))
 			broke_any = true
 
 	if broke_any:
@@ -1614,7 +1642,8 @@ func _try_break_soft_blocks_ahead() -> bool:
 		var hardness = BlockRegistry.get_block_hardness(bt_feet as BlockRegistry.BlockType)
 		if hardness <= SOFT_BLOCK_HARDNESS and not _is_in_village_structure(block_pos_feet):
 			village_manager.break_block(block_pos_feet)
-			village_manager.add_resource(_mined_drop(bt_feet))
+			if not _is_junk_block(bt_feet):
+				village_manager.add_resource(_mined_drop(bt_feet))
 			broke_any = true
 
 	# Bloc à la tête
@@ -1623,7 +1652,8 @@ func _try_break_soft_blocks_ahead() -> bool:
 		var hardness = BlockRegistry.get_block_hardness(bt_head as BlockRegistry.BlockType)
 		if hardness <= SOFT_BLOCK_HARDNESS and not _is_in_village_structure(block_pos_head):
 			village_manager.break_block(block_pos_head)
-			village_manager.add_resource(_mined_drop(bt_head))
+			if not _is_junk_block(bt_head):
+				village_manager.add_resource(_mined_drop(bt_head))
 			broke_any = true
 
 	return broke_any
