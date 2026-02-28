@@ -1014,10 +1014,16 @@ func _execute_build(delta):
 	_play_anim("attack")
 
 	_build_timer += delta
-	if _build_timer >= 0.8:
+	if _build_timer >= 0.15:
 		_build_timer = 0.0
-		village_manager.place_block(world_pos, block_data[3])
-		current_task["block_index"] = block_index + 1
+		# Batch : placer jusqu'à 4 blocs d'un coup (blocs proches)
+		var placed = 0
+		while placed < 4 and block_index + placed < block_list.size():
+			var bd = block_list[block_index + placed]
+			var wp = Vector3i(origin.x + bd[0], origin.y + bd[1], origin.z + bd[2])
+			village_manager.place_block(wp, bd[3])
+			placed += 1
+		current_task["block_index"] = block_index + placed
 		_arrived_at_target = false  # Bouger vers le prochain bloc
 
 func _execute_build_path(delta):
@@ -1053,17 +1059,28 @@ func _execute_build_path(delta):
 	_play_anim("attack")
 
 	_build_timer += delta
-	if _build_timer >= 0.5:
+	if _build_timer >= 0.1:
 		_build_timer = 0.0
-		# Remplacer le bloc de surface par du cobblestone
+		# Batch chemin : poser jusqu'à 6 blocs par tick
 		var BT_COBBLE = 25
-		if village_manager.get_total_stone() >= 1:
-			village_manager.consume_any_stone(1)
-			village_manager.place_block(_mine_target, BT_COBBLE)
-			_show_harvest_label("Chemin", _mine_target)
+		var placed = 0
+		while placed < 6:
+			if village_manager.get_total_stone() >= 1:
+				village_manager.consume_any_stone(1)
+				village_manager.place_block(_mine_target, BT_COBBLE)
+				placed += 1
+			else:
+				break
+			# Bloc suivant
+			_mine_target = village_manager.get_next_path_block()
+			if _mine_target == INVALID_POS:
+				village_manager.mark_path_complete()
+				current_task = {}
+				return
+		if placed > 0:
+			_show_harvest_label("Chemin x%d" % placed, _mine_target)
 		_mine_target = INVALID_POS
 		_arrived_at_target = false
-		# Vérifier s'il reste des blocs
 		if village_manager._path_index >= village_manager._path_blocks.size():
 			village_manager.mark_path_complete()
 			current_task = {}
@@ -1192,30 +1209,40 @@ func _execute_flatten(delta):
 	_play_anim("attack")
 
 	_build_timer += delta
-	if _build_timer >= 0.5:
+	if _build_timer >= 0.08:
 		_build_timer = 0.0
-		if _flatten_action == "break":
-			# Casser le bloc — ajouter les ressources au stockpile
-			var bt = world_manager.get_block_at_position(
-				Vector3(_mine_target.x, _mine_target.y, _mine_target.z))
-			if bt != BlockRegistry.BlockType.AIR:
-				village_manager.place_block(_mine_target, BlockRegistry.BlockType.AIR)
-				village_manager.add_resource(_mined_drop(bt))
-			_show_harvest_label("Terrain!", _mine_target)
-		else:  # "place"
-			# Poser un bloc de cobblestone
-			if village_manager.get_total_stone() >= 1:
-				village_manager.consume_any_stone(1)
-				village_manager.place_block(_mine_target, BlockRegistry.BlockType.COBBLESTONE)
-				_show_harvest_label("Terrain!", _mine_target)
-			else:
-				# Pas assez de pierre — remettre en queue et passer à autre chose
-				village_manager.flatten_index -= 1
-				village_manager.return_task(current_task)
-				current_task = {}
+		# Batch flatten : traiter jusqu'à 8 blocs par tick
+		var batch_count = 0
+		while batch_count < 8:
+			# Premier bloc = _mine_target déjà récupéré
+			if _flatten_action == "break":
+				var bt = world_manager.get_block_at_position(
+					Vector3(_mine_target.x, _mine_target.y, _mine_target.z))
+				if bt != BlockRegistry.BlockType.AIR:
+					village_manager.place_block(_mine_target, BlockRegistry.BlockType.AIR)
+					village_manager.add_resource(_mined_drop(bt))
+			else:  # "place"
+				if village_manager.get_total_stone() >= 1:
+					village_manager.consume_any_stone(1)
+					village_manager.place_block(_mine_target, BlockRegistry.BlockType.COBBLESTONE)
+				else:
+					village_manager.flatten_index -= 1
+					village_manager.return_task(current_task)
+					current_task = {}
+					_mine_target = INVALID_POS
+					return
+			batch_count += 1
+			# Chercher le bloc suivant
+			var next = village_manager.get_next_flatten_block()
+			if next == null:
 				_mine_target = INVALID_POS
+				current_task = {}  # flatten terminé
 				return
-		_mine_target = INVALID_POS  # passer au bloc suivant
+			_mine_target = next["pos"]
+			_flatten_action = next["action"]
+		# Montrer le label sur le dernier bloc traité
+		_show_harvest_label("Terrain! x%d" % batch_count, _mine_target)
+		_mine_target = INVALID_POS  # reprendre au prochain tick
 
 func _behavior_return_to_surface(delta):
 	_task_status = "Remonte..."
