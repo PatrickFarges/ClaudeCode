@@ -227,18 +227,27 @@ func _update_head_label():
 # PHYSICS PROCESS — dispatch par activité
 # ============================================================
 
+func _get_game_speed() -> float:
+	if _day_night and _day_night.has_method("get_speed_multiplier"):
+		return _day_night.get_speed_multiplier()
+	return 1.0
+
 func _physics_process(delta):
-	# Gravité
+	# Gravité (toujours en temps réel)
 	if not is_on_floor():
 		velocity.y -= gravity_val * delta
 
-	# Vérifier le schedule toutes les 2 secondes
-	_schedule_timer += delta
+	# Vitesse de déplacement adaptée au multiplicateur (cap à ×3 pour éviter la physique cassée)
+	var game_speed = _get_game_speed()
+	move_speed = _base_move_speed * minf(game_speed, 3.0)
+
+	# Vérifier le schedule — accéléré par la vitesse du jeu
+	_schedule_timer += delta * game_speed
 	if _schedule_timer >= 2.0:
 		_schedule_timer = 0.0
 		_update_schedule()
 
-	# Mettre à jour le label au-dessus de la tête (toutes les 0.5s)
+	# Mettre à jour le label au-dessus de la tête (toujours en temps réel)
 	_label_update_timer += delta
 	if _label_update_timer >= 0.5:
 		_label_update_timer = 0.0
@@ -253,7 +262,8 @@ func _physics_process(delta):
 	# === Faim ===
 	_update_hunger(delta)
 
-	# Dispatcher selon l'activité courante
+	# Dispatcher selon l'activité courante — delta normal pour le mouvement,
+	# le game_speed est utilisé DANS les behaviors pour les timers de travail uniquement
 	match current_activity:
 		VProfession.Activity.WANDER:
 			_behavior_wander(delta)
@@ -279,13 +289,13 @@ func _update_hunger(delta):
 	var drain = HUNGER_DRAIN_REST
 	if current_activity == VProfession.Activity.WORK:
 		drain = HUNGER_DRAIN_WORK
-	hunger = maxf(0.0, hunger - drain * delta)
+	hunger = maxf(0.0, hunger - drain * delta * _get_game_speed())
 
-	# Ralentissement si très affamé
+	# Ralentissement si très affamé (appliqué sur _base_move_speed, le game_speed s'applique en amont)
 	if hunger < HUNGER_THRESHOLD_SLOW:
-		move_speed = _base_move_speed * 0.5
+		_base_move_speed = 1.0  # moitié de la vitesse de base (2.0 * 0.5)
 	else:
-		move_speed = _base_move_speed
+		_base_move_speed = 2.0
 
 	# Famine totale
 	_is_starving = hunger <= 0.0
@@ -594,7 +604,7 @@ func _execute_harvest(delta):
 			_mine_timer = 0.0
 		return
 
-	_mine_timer += delta
+	_mine_timer += delta * _get_game_speed()
 	var mine_time = village_manager.get_mine_time(block_type)
 
 	if _mine_timer >= mine_time:
@@ -620,35 +630,73 @@ func _execute_harvest(delta):
 			_mine_timer = 0.0
 
 func _harvest_leaves_around(center_pos: Vector3i):
-	# Casser les feuilles proches du tronc abattu (rayon 2, hauteur 8)
-	# BATCHED : on set les blocs à AIR sans rebuild, puis rebuild 1 seule fois par chunk
+	# Leaf decay style Minecraft : détruit toutes les feuilles orphelines autour du tronc abattu.
+	# Une feuille est orpheline si aucun tronc n'existe dans un rayon de 4 blocs (Manhattan).
+	# BATCHED : modifie directement chunk.blocks, rebuild 1 seule fois par chunk.
 	var leaf_set = { 6: true, 44: true, 45: true, 46: true, 47: true, 48: true, 49: true }
-	var broken = 0
-	var affected_chunks: Dictionary = {}  # chunk_key -> chunk_ref
-	for dy in range(0, 8):
-		for dx in range(-2, 3):
-			for dz in range(-2, 3):
-				if broken >= 50:
-					break
-				var check_pos = Vector3i(center_pos.x + dx, center_pos.y + dy, center_pos.z + dz)
-				var bt = world_manager.get_block_at_position(Vector3(check_pos.x, check_pos.y, check_pos.z))
+	var wood_set = { 5: true, 32: true, 33: true, 34: true, 35: true, 36: true, 42: true }
+
+	# Scan élargi : rayon 8 pour trouver feuilles et troncs d'arbres voisins
+	var scan_r = 8
+	var scan_h_min = -2
+	var scan_h_max = 18
+
+	# Phase 1 : scanner la zone, collecter feuilles ET troncs
+	var leaf_positions: Array = []
+	var trunk_positions: Array = []
+	for dy in range(scan_h_min, scan_h_max):
+		for dx in range(-scan_r, scan_r + 1):
+			for dz in range(-scan_r, scan_r + 1):
+				var pos = Vector3i(center_pos.x + dx, center_pos.y + dy, center_pos.z + dz)
+				var bt = world_manager.get_block_at_position(Vector3(pos.x, pos.y, pos.z))
 				if leaf_set.has(bt):
-					# Set block à AIR directement dans le chunk SANS rebuild
-					var cx = int(floor(float(check_pos.x) / 16.0))
-					var cz = int(floor(float(check_pos.z) / 16.0))
-					var chunk_key = Vector2i(cx, cz)
-					if world_manager.chunks.has(chunk_key):
-						var chunk = world_manager.chunks[chunk_key]
-						var lx = check_pos.x - cx * 16
-						var lz = check_pos.z - cz * 16
-						chunk.blocks[lx * 4096 + lz * 256 + check_pos.y] = 0  # AIR
-						chunk.is_modified = true
-						affected_chunks[chunk_key] = chunk
-					# Feuilles = pas de ressource, juste nettoyage visuel
-					broken += 1
+					leaf_positions.append(pos)
+				elif wood_set.has(bt):
+					trunk_positions.append(pos)
+
+	if leaf_positions.is_empty():
+		return
+
+	# Phase 2 : identifier les feuilles orphelines (aucun tronc à distance Manhattan ≤ 4)
+	var orphan_leaves: Array = []
+	for leaf_pos in leaf_positions:
+		var has_trunk = false
+		for trunk_pos in trunk_positions:
+			var dist = abs(leaf_pos.x - trunk_pos.x) + abs(leaf_pos.y - trunk_pos.y) + abs(leaf_pos.z - trunk_pos.z)
+			if dist <= 4:
+				has_trunk = true
+				break
+		if not has_trunk:
+			orphan_leaves.append(leaf_pos)
+
+	if orphan_leaves.is_empty():
+		return
+
+	# Phase 3 : détruire les feuilles orphelines en batch (1 rebuild par chunk)
+	var affected_chunks: Dictionary = {}
+	for leaf_pos in orphan_leaves:
+		var cx = floori(float(leaf_pos.x) / 16.0)
+		var cz = floori(float(leaf_pos.z) / 16.0)
+		var chunk_key = Vector3i(cx, 0, cz)
+		if world_manager.chunks.has(chunk_key):
+			var chunk = world_manager.chunks[chunk_key]
+			var lx = leaf_pos.x - cx * 16
+			var lz = leaf_pos.z - cz * 16
+			if lx < 0:
+				lx += 16
+			if lz < 0:
+				lz += 16
+			chunk.blocks[lx * 4096 + lz * 256 + leaf_pos.y] = 0  # AIR
+			chunk.is_modified = true
+			affected_chunks[chunk_key] = chunk
+
 	# Rebuild mesh UNE SEULE FOIS par chunk affecté
 	for chunk in affected_chunks.values():
 		chunk._rebuild_mesh()
+
+	# Ajouter les feuilles à l'inventaire du village
+	if village_manager and orphan_leaves.size() > 0:
+		village_manager.add_resource(BlockRegistry.BlockType.LEAVES, orphan_leaves.size())
 
 func _find_nearest_trunk_around(from: Vector3, radius: float) -> Vector3i:
 	# Cherche le tronc d'arbre le plus proche dans un rayon 3D
@@ -736,7 +784,7 @@ func _execute_mine(delta):
 		current_task = {}
 		return
 
-	_mine_timer += delta
+	_mine_timer += delta * _get_game_speed()
 	var mine_time = village_manager.get_mine_time(block_type)
 
 	if _mine_timer >= mine_time:
@@ -779,17 +827,23 @@ func _execute_mine_gallery(delta):
 		var walk_target = _mine_entry_pos
 		if _mine_resume_pos != Vector3.ZERO:
 			walk_target = _mine_resume_pos
-		var dx = global_position.x - walk_target.x
-		var dz = global_position.z - walk_target.z
-		var dist_h = sqrt(dx * dx + dz * dz)
+		var p_dx = global_position.x - walk_target.x
+		var p_dz = global_position.z - walk_target.z
+		var dist_h = sqrt(p_dx * p_dx + p_dz * p_dz)
 		if dist_h < 3.0:
 			_at_mine_entrance = true
 			_mine_resume_pos = Vector3.ZERO  # consommé
 		else:
-			_task_status = "[%s] Vers mine..." % village_manager.get_tool_tier_label("Pioche")
-			# Mode berserker : casser TOUT sur le chemin (0 détour)
-			_berserker_walk_toward(walk_target, delta)
-			return
+			# Téléportation en mode rapide (×2+)
+			if _get_game_speed() >= 2.0:
+				global_position = Vector3(walk_target.x, walk_target.y, walk_target.z)
+				_at_mine_entrance = true
+				_mine_resume_pos = Vector3.ZERO
+			else:
+				_task_status = "[%s] Vers mine..." % village_manager.get_tool_tier_label("Pioche")
+				# Mode berserker : casser TOUT sur le chemin (0 détour)
+				_berserker_walk_toward(walk_target, delta)
+				return
 
 	# Phase 2: Vérifier que le stockpile n'est pas saturé, puis obtenir le prochain bloc
 	if _mine_target == INVALID_POS:
@@ -801,7 +855,7 @@ func _execute_mine_gallery(delta):
 		_mine_target = village_manager.get_next_mine_block()
 		if _mine_target == INVALID_POS:
 			# Pas de bloc dispo — attendre au lieu d'abandonner
-			_mine_timer += delta
+			_mine_timer += delta * _get_game_speed()
 			_task_status = "[%s] Mine: attente..." % village_manager.get_tool_tier_label("Pioche")
 			if _mine_timer > 10.0:
 				# Après 10s d'attente, rendre la tâche
@@ -819,7 +873,13 @@ func _execute_mine_gallery(delta):
 	var dist_h = sqrt(dx * dx + dz * dz)
 	var dy = global_position.y - target_world.y  # positif = mineur AU-DESSUS du bloc
 
-	if dy > 6.0 and dist_h > 3.0:
+	# En mode rapide (×2+), téléporter le mineur directement au bloc cible
+	var game_speed = _get_game_speed()
+	if game_speed >= 2.0 and (dy > 6.0 or dist_h > 5.0):
+		global_position = Vector3(target_world.x, target_world.y + 1, target_world.z)
+		# Pas de return — on enchaîne directement avec le minage ci-dessous
+
+	elif dy > 6.0 and dist_h > 3.0:
 		# Mineur très au-dessus du bloc cible — il est en surface ou en haut de l'escalier.
 		# D'abord aller à l'entrée de mine, puis descendre l'escalier naturellement.
 		var entry_dx = global_position.x - _mine_entry_pos.x
@@ -833,7 +893,7 @@ func _execute_mine_gallery(delta):
 			# À l'entrée — descendre vers le bloc cible via l'escalier
 			_task_status = "[%s] Descend..." % village_manager.get_tool_tier_label("Pioche")
 			_berserker_walk_toward(target_world, delta)
-		_mine_timer += delta
+		_mine_timer += delta  # timeout en temps RÉEL (pas accéléré)
 		if _mine_timer > 45.0:
 			print("Mineur: skip bloc trop profond à %s (dy=%.1f)" % [str(_mine_target), dy])
 			village_manager.release_position(_mine_target)
@@ -841,10 +901,10 @@ func _execute_mine_gallery(delta):
 			_mine_timer = 0.0
 		return
 
-	if dist_h > 5.0:
+	elif dist_h > 5.0:
 		# Bloc trop loin horizontalement — berserker pour y aller
 		_berserker_walk_toward(target_world, delta)
-		_mine_timer += delta
+		_mine_timer += delta  # timeout en temps RÉEL (pas accéléré)
 		if _mine_timer > 30.0:
 			print("Mineur: skip bloc inaccessible à %s (dist_h=%.1f)" % [str(_mine_target), dist_h])
 			village_manager.release_position(_mine_target)
@@ -867,7 +927,7 @@ func _execute_mine_gallery(delta):
 		_mine_timer = 0.0
 		return
 
-	_mine_timer += delta
+	_mine_timer += delta * _get_game_speed()
 	var mine_time = village_manager.get_mine_time(block_type)
 
 	if _mine_timer >= mine_time:
@@ -914,7 +974,7 @@ func _execute_craft(delta):
 	_play_anim("attack")
 
 	# Petit délai de craft (0.8s)
-	_mine_timer += delta
+	_mine_timer += delta * _get_game_speed()
 	if _mine_timer < 0.8:
 		return
 	_mine_timer = 0.0
@@ -1019,7 +1079,7 @@ func _execute_build(delta):
 	_decelerate()
 	_play_anim("attack")
 
-	_build_timer += delta
+	_build_timer += delta * _get_game_speed()
 	if _build_timer >= 0.15:
 		_build_timer = 0.0
 		# Batch : placer jusqu'à 4 blocs d'un coup (blocs proches)
@@ -1066,7 +1126,7 @@ func _execute_build_path(delta):
 	_decelerate()
 	_play_anim("attack")
 
-	_build_timer += delta
+	_build_timer += delta * _get_game_speed()
 	if _build_timer >= 0.1:
 		_build_timer = 0.0
 		# Batch : poser jusqu'à 6 blocs par tick
@@ -1128,7 +1188,7 @@ func _execute_farm_create(delta):
 	_decelerate()
 	_play_anim("attack")
 
-	_build_timer += delta
+	_build_timer += delta * _get_game_speed()
 	if _build_timer >= 1.0:
 		_build_timer = 0.0
 		village_manager.create_farm_plot(_mine_target)
@@ -1171,7 +1231,7 @@ func _execute_farm_harvest(delta):
 	_decelerate()
 	_play_anim("attack")
 
-	_build_timer += delta
+	_build_timer += delta * _get_game_speed()
 	if _build_timer >= 0.8:
 		_build_timer = 0.0
 		# Trouver le plot correspondant et le récolter
@@ -1212,14 +1272,17 @@ func _execute_flatten(delta):
 			_berserker_walk_toward(walk_target, delta)
 			return
 
-	# Arrivé : nettoyer la colonne entière au-dessus de ref_y
-	village_manager.clear_column_above_ref(_mine_target.x, _mine_target.z)
+	# Arrivé : nettoyer la colonne entière au-dessus de ref_y (BATCHED)
+	var affected_chunks: Dictionary = {}
+	village_manager.clear_column_above_ref_batched(_mine_target.x, _mine_target.z, affected_chunks)
 
 	# Nettoyer aussi les 4 voisins (évite les blocs flottants sur les bords)
 	for neighbor in [Vector2i(1,0), Vector2i(-1,0), Vector2i(0,1), Vector2i(0,-1)]:
 		var nx = _mine_target.x + neighbor.x
 		var nz = _mine_target.z + neighbor.y
-		village_manager.clear_column_above_ref(nx, nz)
+		village_manager.clear_column_above_ref_batched(nx, nz, affected_chunks)
+	# Rebuild mesh UNE SEULE FOIS par chunk affecté
+	village_manager.flush_affected_chunks(affected_chunks)
 
 	_show_harvest_label("Terrain!", _mine_target)
 	_mine_target = INVALID_POS
@@ -1231,8 +1294,14 @@ func _behavior_return_to_surface(delta):
 		_label_update_timer = 0.0
 		_update_head_label()
 
-	# Marcher vers l'entrée de la mine (berserker — casse tout sur le passage)
-	if _berserker_walk_toward(_mine_entry_pos, delta):
+	# En mode rapide, téléport direct à l'entrée de la mine
+	var arrived = false
+	if _get_game_speed() >= 2.0:
+		global_position = Vector3(_mine_entry_pos.x, _mine_entry_pos.y, _mine_entry_pos.z)
+		arrived = true
+	else:
+		arrived = _berserker_walk_toward(_mine_entry_pos, delta)
+	if arrived:
 		# Arrivé en surface
 		_returning_to_surface = false
 		_mine_entry_pos = Vector3.ZERO
@@ -1294,6 +1363,16 @@ func _walk_toward(target: Vector3, delta: float) -> bool:
 		_total_stuck_time = 0.0
 		_detour_count = 0
 		_wall_impassable = false
+		return true
+
+	# Téléportation accélérée en mode rapide (×2+) quand la cible est loin
+	var game_speed = _get_game_speed()
+	if game_speed >= 2.0 and dist > 8.0:
+		global_position = Vector3(target.x, target.y + 1, target.z)
+		_total_stuck_time = 0.0
+		_detour_count = 0
+		_wall_impassable = false
+		is_moving = false
 		return true
 
 	# Téléportation de secours : seuil relevé à 25s (dernier recours)
@@ -1370,6 +1449,16 @@ func _berserker_walk_toward(target: Vector3, delta: float) -> bool:
 		_total_stuck_time = 0.0
 		_detour_count = 0
 		_wall_impassable = false
+		return true
+
+	# Téléportation accélérée en mode rapide (×2+) quand la cible est loin
+	var game_speed = _get_game_speed()
+	if game_speed >= 2.0 and dist > 8.0:
+		global_position = Vector3(target.x, target.y + 1, target.z)
+		_total_stuck_time = 0.0
+		_detour_count = 0
+		_wall_impassable = false
+		is_moving = false
 		return true
 
 	# Téléportation de secours après 20s

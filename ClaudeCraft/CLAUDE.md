@@ -81,7 +81,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 
 ## Direction du projet
 
-**Version actuelle : v14.0.0**
+**Version actuelle : v14.1.0**
 
 | Phase | Statut | Contenu |
 |-------|--------|---------|
@@ -107,7 +107,8 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 | 6.2 | Fait | v13.2.0 — **Éditeur de structures 3D** (`structure_viewer.py` v2.0.0) : 73 blocs pastel, palette latérale swatches, placement/suppression clic (raycasting AABB), curseur 3D transparent, undo/redo (Ctrl+Z/Y), toggle Editer (Ctrl+E) avec texte vert + bordure verte viewport, Ctrl+N nouveau, export JSON. Palette cachée en mode visu, visible en mode édition |
 | 6.3 | Fait | v13.3.0 — **Chapelle de village** : église médiévale 13×18×21 générée (pierre, clocher carré, vitraux, rosace, autel, bancs, torches). Blueprint Phase 2, 11 bâtiments au total. Script `generate_church.py` |
 | 6.4 | Fait | v13.4.0 — **Place du village** : puits central 5×5 + 4 torches + 4 chemins cobblestone 3 large × 12 long. PNJ convergent vers la place pendant la pause déjeuner (12h-13h). UI progression place |
-| 7.0 | Fait | v14.0.0 — **Refonte flatten berserker + vitesse du temps**. Bâtisseur en mode berserker pour aplanir (détruit colonnes entières, pas de pavage). `FLATTEN_RADIUS=20` (zone 41×41) séparé de `VILLAGE_RADIUS=45`. Attente chargement chunks avant flatten. Re-scan 3 passes. Ferme à 30+ blocs du centre. Vitesse du temps : glissière HUD 4 niveaux (Lent ×0.5 / Normal ×1 / Rapide ×2 / Très rapide ×10) + raccourcis `[` `]` |
+| 7.0 | Fait | v14.0.0 — **Refonte flatten berserker + vitesse du temps**. Bâtisseur en mode berserker pour aplanir (détruit colonnes entières, pas de pavage). `FLATTEN_RADIUS=20` (zone 41×41) séparé de `VILLAGE_RADIUS=45`. Attente chargement chunks avant flatten. Re-scan 3 passes. Ferme à 30+ blocs du centre. Vitesse du temps : Ctrl+Molette 4 niveaux (Lent ×0.5 / Normal ×1 / Rapide ×2 / Très rapide ×10) |
+| 7.1 | Fait | v14.1.0 — **Fix FPS + leaf decay Minecraft**. `clear_column_above_ref_batched` : modifie blocs directement dans chunk.blocks sans rebuild, rebuild 1 seule fois par chunk affecté (élimine 50+ rebuilds/colonne). Leaf decay : scan rayon 8, identifie feuilles orphelines (aucun tronc à distance Manhattan ≤ 4), destruction batch + ajout à l'inventaire village. Fix workstations sur feuilles : `find_flat_spot_near_center` utilise `ref_y+1` au lieu de `_find_surface_y` |
 | 8 | À venir | Système de faim actif, chaînes de production |
 
 **Packs GLB utilisés (CC0)** : Kenney.nl (18 modèles PNJ villageois). **PNJ futurs** : KayKit Adventurers (161 anims travail)

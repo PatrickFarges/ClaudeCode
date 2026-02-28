@@ -117,10 +117,18 @@ func _ready():
 	_init_blueprints()
 	print("VillageManager: initialisé")
 
+func _get_game_speed() -> float:
+	var dnc = get_tree().get_first_node_in_group("day_night_cycle")
+	if dnc and dnc.has_method("get_speed_multiplier"):
+		return dnc.get_speed_multiplier()
+	return 1.0
+
 func _process(delta):
 	if not world_manager:
 		world_manager = get_tree().get_first_node_in_group("world_manager")
 		return
+
+	var game_speed = _get_game_speed()
 
 	# Attendre que tous les chunks de la zone village soient chargés
 	if _waiting_for_chunks:
@@ -128,16 +136,17 @@ func _process(delta):
 			_waiting_for_chunks = false
 			_generate_flatten_plan()
 
+	# Évaluation des besoins — temps RÉEL (pas accéléré, sinon scans massifs)
 	_eval_timer += delta
 	if _eval_timer >= EVAL_INTERVAL:
 		_eval_timer = 0.0
 		_evaluate_needs()
 
-	# Croissance du blé
-	_update_wheat_growth(delta)
+	# Croissance du blé — accélérée par la vitesse du jeu
+	_update_wheat_growth(delta * game_speed)
 
-	# Croissance du village (nouveaux villageois)
-	_growth_timer += delta
+	# Croissance du village — accélérée par la vitesse du jeu
+	_growth_timer += delta * game_speed
 	if _growth_timer >= GROWTH_CHECK_INTERVAL:
 		_growth_timer = 0.0
 		_try_grow_village()
@@ -270,22 +279,40 @@ func get_next_flatten_column() -> Dictionary:
 	flatten_index += 1
 	return entry
 
-func clear_column_above_ref(wx: int, wz: int):
+func clear_column_above_ref_batched(wx: int, wz: int, affected_chunks: Dictionary):
 	# Détruit tous les blocs au-dessus de ref_y dans la colonne (x,z)
-	# Protège les workstations
+	# BATCHED : modifie les blocs directement sans rebuild, collecte les chunks affectés
 	var top_y = _find_surface_y(wx, wz)
 	if top_y <= village_ref_y:
 		return
+	var cx = floori(float(wx) / CHUNK_SIZE)
+	var cz = floori(float(wz) / CHUNK_SIZE)
+	var chunk_key = Vector3i(cx, 0, cz)
+	if not world_manager.chunks.has(chunk_key):
+		return
+	var chunk = world_manager.chunks[chunk_key]
+	var lx = wx - cx * CHUNK_SIZE
+	var lz = wz - cz * CHUNK_SIZE
+	if lx < 0:
+		lx += CHUNK_SIZE
+	if lz < 0:
+		lz += CHUNK_SIZE
 	for y in range(top_y, village_ref_y, -1):
-		var bt = world_manager.get_block_at_position(Vector3(wx, y, wz))
+		var bt = chunk.blocks[lx * 4096 + lz * 256 + y]
 		if bt != BlockRegistry.BlockType.AIR:
-			# Protéger workstations
 			if BlockRegistry.is_workstation(bt):
 				continue
-			place_block(Vector3i(wx, y, wz), BlockRegistry.BlockType.AIR)
+			chunk.blocks[lx * 4096 + lz * 256 + y] = 0  # AIR
+			chunk.is_modified = true
+			affected_chunks[chunk_key] = chunk
 			var drop = _flatten_drop(bt)
 			if drop >= 0:
 				add_resource(drop)
+
+func flush_affected_chunks(affected_chunks: Dictionary):
+	# Rebuild mesh UNE SEULE FOIS par chunk affecté
+	for chunk in affected_chunks.values():
+		chunk._rebuild_mesh()
 
 func _flatten_drop(bt: int) -> int:
 	# Retourne le type de ressource obtenu en cassant un bloc pendant le flatten
@@ -1505,32 +1532,27 @@ func try_craft(recipe_name: String) -> bool:
 # ============================================================
 
 func find_flat_spot_near_center(radius: float = 8.0) -> Vector3i:
-	# Trouver un spot plat près du centre du village
+	# Trouver un spot plat près du centre du village (utilise ref_y, pas surface_y)
 	if not world_manager:
 		return Vector3i(-9999, -9999, -9999)
 
 	var cx = int(village_center.x)
 	var cz = int(village_center.z)
 	var r = int(radius)
+	var ry = village_ref_y if village_ref_y > 0 else int(village_center.y)
 
 	for attempt in range(20):
 		var tx = cx + randi_range(-r, r)
 		var tz = cz + randi_range(-r, r)
 
-		# Trouver la surface
-		var surface_y = _find_surface_y(tx, tz)
-		if surface_y < 0:
-			continue
+		# Placer à ref_y + 1 (terrain aplani garanti)
+		var pos = Vector3i(tx, ry + 1, tz)
 
-		# Vérifier que c'est plat (bloc solide dessous, air dessus)
-		var pos = Vector3i(tx, surface_y + 1, tz)
-		var block_below = world_manager.get_block_at_position(Vector3(tx, surface_y, tz))
-		var block_at = world_manager.get_block_at_position(Vector3(tx, surface_y + 1, tz))
-		var block_above = world_manager.get_block_at_position(Vector3(tx, surface_y + 2, tz))
+		# Vérifier qu'il y a de l'air
+		var block_at = world_manager.get_block_at_position(Vector3(tx, ry + 1, tz))
+		var block_above = world_manager.get_block_at_position(Vector3(tx, ry + 2, tz))
 
-		if block_below != BlockRegistry.BlockType.AIR and block_below != BlockRegistry.BlockType.WATER \
-			and block_at == BlockRegistry.BlockType.AIR and block_above == BlockRegistry.BlockType.AIR:
-			# Pas déjà occupé
+		if block_at == BlockRegistry.BlockType.AIR and block_above == BlockRegistry.BlockType.AIR:
 			if not claimed_positions.has(pos):
 				return pos
 
