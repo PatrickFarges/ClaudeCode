@@ -694,9 +694,7 @@ func _harvest_leaves_around(center_pos: Vector3i):
 	for chunk in affected_chunks.values():
 		chunk._rebuild_mesh()
 
-	# Ajouter les feuilles à l'inventaire du village
-	if village_manager and orphan_leaves.size() > 0:
-		village_manager.add_resource(BlockRegistry.BlockType.LEAVES, orphan_leaves.size())
+	# Feuilles détruites — pas d'ajout à l'inventaire (inutile, pollue le stock)
 
 func _find_nearest_trunk_around(from: Vector3, radius: float) -> Vector3i:
 	# Cherche le tronc d'arbre le plus proche dans un rayon 3D

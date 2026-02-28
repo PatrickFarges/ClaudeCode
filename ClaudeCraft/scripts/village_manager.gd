@@ -305,9 +305,8 @@ func clear_column_above_ref_batched(wx: int, wz: int, affected_chunks: Dictionar
 			chunk.blocks[lx * 4096 + lz * 256 + y] = 0  # AIR
 			chunk.is_modified = true
 			affected_chunks[chunk_key] = chunk
-			var drop = _flatten_drop(bt)
-			if drop >= 0:
-				add_resource(drop)
+			# Pas de drop pendant le flatten — ça saturait le stock (4000+ pavés)
+			# et bloquait les mineurs via is_mine_stock_full()
 
 func flush_affected_chunks(affected_chunks: Dictionary):
 	# Rebuild mesh UNE SEULE FOIS par chunk affecté
@@ -558,7 +557,7 @@ func _evaluate_phase_1():
 		_add_harvest_tasks(5, 4)  # un par bûcheron
 
 	# Le menuisier transforme le bois en planches en continu
-	if total_wood >= 2 and total_planks < 200:
+	if total_wood >= 2 and total_planks < 500:
 		if not _has_task_of_type("craft", "Planches"):
 			_add_task({
 				"type": "craft",
@@ -649,7 +648,7 @@ func _evaluate_phase_2():
 
 	# Le menuisier transforme le bois en planches en continu
 	var total_planks = get_total_planks()
-	if total_wood >= 2 and total_planks < 200:
+	if total_wood >= 2 and total_planks < 500:
 		if not _has_task_of_type("craft", "Planches"):
 			_add_task({
 				"type": "craft",
@@ -766,7 +765,7 @@ func _evaluate_phase_3():
 
 	# Le menuisier transforme le bois en planches en continu
 	var total_planks = get_total_planks()
-	if total_wood >= 2 and total_planks < 200:
+	if total_wood >= 2 and total_planks < 500:
 		if not _has_task_of_type("craft", "Planches"):
 			_add_task({
 				"type": "craft",
@@ -775,8 +774,8 @@ func _evaluate_phase_3():
 				"required_profession": VProfession.Profession.MENUISIER,
 			})
 
-	if total_stone < 40:
-		_add_mine_gallery_tasks(2)
+	# Mineurs en continu — is_mine_stock_full() les pause si stock saturé
+	_add_mine_gallery_tasks(2)
 
 	# Aplanissement AVANT toute construction
 	if not _flatten_complete and flatten_plan.size() > 0:
@@ -1277,8 +1276,9 @@ func _init_mine():
 
 func is_mine_stock_full() -> bool:
 	# Retourne true si les ressources minières sont au-dessus des seuils de pause
-	# Permet aux mineurs de s'arrêter quand le stockpile est saturé
-	var stone = get_resource_count(3) + get_resource_count(25)  # STONE + COBBLE
+	# Note : ne compte PAS le cobblestone (pollué par le flatten qui en génère des milliers)
+	# On compte seulement STONE brut (drop du mineur = cobblestone, mais on check stone pure ici)
+	var stone = get_resource_count(25)  # COBBLESTONE seulement (vrai drop mineur)
 	var coal = get_resource_count(16)
 	var iron = get_resource_count(17) + get_resource_count(19)  # IRON_ORE + IRON_INGOT
 	return stone > MINE_STOCK_PAUSE_STONE and coal > MINE_STOCK_PAUSE_COAL and iron > MINE_STOCK_PAUSE_IRON
