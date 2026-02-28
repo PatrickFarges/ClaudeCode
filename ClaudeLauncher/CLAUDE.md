@@ -2,7 +2,7 @@
 
 Lanceur de jeux/applications style Steam/Playnite, avec interface PyQt6 et images SteamGridDB.
 
-**Version courante :** `APP_VERSION = "7.1"` (constante en haut du fichier, à incrémenter à chaque modification)
+**Version courante :** `APP_VERSION = "7.2"` (constante en haut du fichier, à incrémenter à chaque modification)
 
 ## Lancer
 
@@ -13,10 +13,11 @@ python claudelauncher_v7.0.py
 
 **Dépendances :** PyQt6 >= 6.6.0, requests >= 2.31.0, Pillow >= 10.0.0
 
-## Architecture (fichier unique `claudelauncher_v7.0.py`, ~2240 lignes, 4 classes)
+## Architecture (fichier unique `claudelauncher_v7.0.py`, ~2400 lignes, 5 classes)
 
 - **`ImageDownloader(QThread)`** : téléchargement asynchrone images SteamGridDB, cache local MD5 dans `~/.claudelauncher/images/`, recherche intelligente avec variantes du nom
 - **`CustomImageDownloader(QThread)`** : téléchargement d'images personnalisées depuis URL avec cache MD5
+- **`WebImageSearcher(QThread)`** : recherche d'images web multi-sources (SteamGridDB + DuckDuckGo), dialogue de sélection visuelle avec miniatures
 - **`ProgramScanner(QThread)`** : scan multi-sources (Registry Windows, Steam `.acf`, Epic Games manifests, dossiers custom, fichiers custom .bat/.exe/.lnk, tous les disques), classification jeux vs apps (blacklist, publishers, chemins)
 - **`ClaudeLauncher(QMainWindow)`** : UI 4 onglets (Jeux, Applications, Favoris, Plus utilisés), persistance JSON dans `~/.claudelauncher/` (13 fichiers config), lancement programmes, menu contextuel (renommer, favoris, masquer, tags, images, forcer catégorie, modifier exe/arguments), barre de recherche par nom/tag, carrousel d'images personnalisées
 

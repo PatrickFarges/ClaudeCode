@@ -9,9 +9,12 @@ Nouveautés V7.0 :
 - Fix Unicode console Windows cp1252
 V7.1 :
 - Lancement en mode fenêtre maximisée par défaut
+V7.2 :
+- Recherche d'images web (SteamGridDB + DuckDuckGo) avec terme personnalisé
+- Dialogue de sélection visuelle des images trouvées
 """
 
-APP_VERSION = "7.1"
+APP_VERSION = "7.2"
 
 import sys
 import os
@@ -38,7 +41,8 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QListWidget, QLabel, QTabWidget, QPushButton, QSplitter,
     QListWidgetItem, QTextEdit, QMessageBox, QMenu, QFileDialog,
-    QInputDialog, QLineEdit, QSpinBox, QDialog, QDialogButtonBox
+    QInputDialog, QLineEdit, QSpinBox, QDialog, QDialogButtonBox,
+    QGridLayout, QScrollArea, QCheckBox, QProgressBar
 )
 from PyQt6.QtCore import Qt, QSize, QThread, pyqtSignal, QTimer
 from PyQt6.QtGui import QPixmap, QIcon, QFont, QAction, QCursor
@@ -305,6 +309,143 @@ class CustomImageDownloader(QThread):
         except Exception as e:
             print(f"Erreur téléchargement image custom {self.source_url}: {e}")
             self.download_failed.emit(self.source_url)
+
+
+class WebImageSearcher(QThread):
+    """V7.2 — Recherche d'images web via SteamGridDB + DuckDuckGo"""
+    results_ready = pyqtSignal(list)  # liste de {"url": str, "thumb": bytes, "source": str}
+    search_failed = pyqtSignal(str)   # message d'erreur
+    progress = pyqtSignal(int, int)   # current, total
+
+    def __init__(self, search_term: str, max_results: int = 20, steamgrid_api_key: str = None):
+        super().__init__()
+        self.search_term = search_term
+        self.max_results = max_results
+        self.steamgrid_api_key = steamgrid_api_key
+
+    def run(self):
+        if not REQUESTS_AVAILABLE:
+            self.search_failed.emit("Module 'requests' non disponible")
+            return
+
+        all_results = []
+
+        # 1) SteamGridDB (si clé API dispo)
+        if self.steamgrid_api_key:
+            sgdb = self._search_steamgriddb()
+            all_results.extend(sgdb)
+
+        # 2) DuckDuckGo images (pas besoin de clé API)
+        ddg = self._search_duckduckgo()
+        all_results.extend(ddg)
+
+        if not all_results:
+            self.search_failed.emit(f"Aucune image trouvée pour '{self.search_term}'")
+            return
+
+        # Télécharger les miniatures
+        final = []
+        for i, item in enumerate(all_results[:self.max_results]):
+            self.progress.emit(i + 1, min(len(all_results), self.max_results))
+            try:
+                resp = requests.get(item['url'], timeout=8, headers={
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                })
+                if resp.status_code == 200 and resp.content and len(resp.content) > 500:
+                    item['thumb'] = resp.content
+                    final.append(item)
+            except Exception:
+                pass
+
+        if final:
+            self.results_ready.emit(final)
+        else:
+            self.search_failed.emit(f"Impossible de télécharger les images trouvées pour '{self.search_term}'")
+
+    def _search_steamgriddb(self) -> list:
+        """Recherche sur SteamGridDB avec le terme personnalisé"""
+        results = []
+        try:
+            headers = {"Authorization": f"Bearer {self.steamgrid_api_key}"}
+            encoded = quote(self.search_term)
+            url = f"https://www.steamgriddb.com/api/v2/search/autocomplete/{encoded}"
+            resp = requests.get(url, headers=headers, timeout=10)
+            if resp.status_code != 200:
+                return results
+
+            games = resp.json().get('data', [])
+            if not games:
+                return results
+
+            # Prendre les 3 premiers résultats de jeux
+            for game in games[:3]:
+                game_id = game['id']
+                # Heroes (bannières larges)
+                for img_type in ('heroes', 'grids'):
+                    img_url = f"https://www.steamgriddb.com/api/v2/{img_type}/game/{game_id}"
+                    img_resp = requests.get(img_url, headers=headers, timeout=10)
+                    if img_resp.status_code == 200:
+                        images = img_resp.json().get('data', [])
+                        for img in images[:4]:
+                            results.append({
+                                'url': img['url'],
+                                'source': f"SteamGridDB ({game.get('name', '')})",
+                                'thumb': b''
+                            })
+                    if len(results) >= 12:
+                        break
+                if len(results) >= 12:
+                    break
+
+        except Exception as e:
+            print(f"[WebSearch] Erreur SteamGridDB: {e}")
+        return results
+
+    def _search_duckduckgo(self) -> list:
+        """Recherche d'images via DuckDuckGo (pas de clé API requise)"""
+        results = []
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+            # Étape 1 : obtenir le token vqd
+            token_url = f"https://duckduckgo.com/?q={quote(self.search_term)}&iax=images&ia=images"
+            token_resp = requests.get(token_url, headers=headers, timeout=10)
+            vqd_match = re.search(r'vqd=["\']([^"\']+)', token_resp.text)
+            if not vqd_match:
+                # Fallback: essayer via le endpoint JSON
+                vqd_match = re.search(r'vqd=([^&"\']+)', token_resp.text)
+            if not vqd_match:
+                print("[WebSearch] DuckDuckGo: impossible d'obtenir le token vqd")
+                return results
+
+            vqd = vqd_match.group(1)
+
+            # Étape 2 : requête images
+            search_url = "https://duckduckgo.com/i.js"
+            params = {
+                'l': 'fr-fr',
+                'o': 'json',
+                'q': self.search_term,
+                'vqd': vqd,
+                'f': ',,,,,',
+                'p': '1',
+            }
+            img_resp = requests.get(search_url, params=params, headers=headers, timeout=10)
+            if img_resp.status_code == 200:
+                data = img_resp.json()
+                for item in data.get('results', [])[:12]:
+                    img_url = item.get('image', '')
+                    if img_url and img_url.startswith('http'):
+                        results.append({
+                            'url': img_url,
+                            'source': f"DuckDuckGo",
+                            'thumb': b''
+                        })
+
+        except Exception as e:
+            print(f"[WebSearch] Erreur DuckDuckGo: {e}")
+        return results
 
 
 class ProgramScanner(QThread):
@@ -2195,6 +2336,13 @@ class ClaudeLauncher(QMainWindow):
         add_url_btn.clicked.connect(add_url)
         btn_layout.addWidget(add_url_btn)
 
+        # V7.2: Recherche web
+        search_btn = QPushButton("🔍 Rechercher")
+        def open_search():
+            self._open_web_image_search(dialog, display_name, current_images, image_list)
+        search_btn.clicked.connect(open_search)
+        btn_layout.addWidget(search_btn)
+
         remove_btn = QPushButton("🗑️ Supprimer")
         def remove_image():
             row = image_list.currentRow()
@@ -2232,6 +2380,193 @@ class ClaudeLauncher(QMainWindow):
             self._save_custom_images()
             self.show_program_info_direct(prog)
             self.title_label.setText(f"✅ Images mises à jour pour {display_name}")
+
+    def _open_web_image_search(self, parent_dialog, display_name: str, current_images: list, image_list_widget):
+        """V7.2 — Dialogue de recherche d'images web avec sélection visuelle"""
+        dialog = QDialog(parent_dialog)
+        dialog.setWindowTitle(f"Rechercher des images - {display_name}")
+        dialog.setMinimumSize(750, 550)
+        dialog.setStyleSheet("""
+            QDialog { background-color: #1a1a1a; color: #fff; }
+            QLineEdit { background-color: #2a2a2a; color: #fff; border: 1px solid #444;
+                         border-radius: 5px; padding: 8px; font-size: 11pt; }
+            QPushButton { background-color: #0078d4; color: white; border: none;
+                          padding: 8px 16px; border-radius: 5px; }
+            QPushButton:hover { background-color: #0086f0; }
+            QPushButton:disabled { background-color: #555; color: #888; }
+            QLabel { color: #fff; }
+            QCheckBox { color: #fff; spacing: 4px; }
+            QCheckBox::indicator { width: 18px; height: 18px; }
+            QProgressBar { background-color: #2a2a2a; border: none; border-radius: 3px;
+                           text-align: center; color: #fff; }
+            QProgressBar::chunk { background-color: #0078d4; border-radius: 3px; }
+            QScrollArea { border: none; background-color: #1a1a1a; }
+        """)
+
+        layout = QVBoxLayout(dialog)
+
+        # Barre de recherche
+        search_layout = QHBoxLayout()
+        search_input = QLineEdit()
+        search_input.setPlaceholderText("Ex: Minecraft, web browsers, navigateurs...")
+        search_input.setText(display_name)
+        search_layout.addWidget(search_input)
+
+        search_go_btn = QPushButton("🔍 Chercher")
+        search_layout.addWidget(search_go_btn)
+        layout.addLayout(search_layout)
+
+        # Barre de progression
+        progress_bar = QProgressBar()
+        progress_bar.setMaximumHeight(6)
+        progress_bar.setTextVisible(False)
+        progress_bar.hide()
+        layout.addWidget(progress_bar)
+
+        # Zone de résultats (grille scrollable)
+        status_label = QLabel("Tapez un terme de recherche et cliquez sur 'Chercher'")
+        status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        status_label.setStyleSheet("color: #888; font-size: 10pt; padding: 10px;")
+        layout.addWidget(status_label)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.hide()
+        results_widget = QWidget()
+        results_grid = QGridLayout(results_widget)
+        results_grid.setSpacing(8)
+        scroll.setWidget(results_widget)
+        layout.addWidget(scroll)
+
+        # Boutons du bas
+        bottom_layout = QHBoxLayout()
+        select_all_btn = QPushButton("✅ Tout sélectionner")
+        select_all_btn.hide()
+        bottom_layout.addWidget(select_all_btn)
+        bottom_layout.addStretch()
+
+        add_selected_btn = QPushButton("➕ Ajouter la sélection")
+        add_selected_btn.hide()
+        bottom_layout.addWidget(add_selected_btn)
+
+        close_btn = QPushButton("Fermer")
+        close_btn.clicked.connect(dialog.close)
+        bottom_layout.addWidget(close_btn)
+        layout.addLayout(bottom_layout)
+
+        # État interne
+        checkboxes = []  # (QCheckBox, url_str)
+        searcher_ref = [None]  # garder une référence pour éviter GC
+
+        def do_search():
+            term = search_input.text().strip()
+            if not term:
+                return
+
+            # Reset
+            for i in reversed(range(results_grid.count())):
+                w = results_grid.itemAt(i).widget()
+                if w:
+                    w.deleteLater()
+            checkboxes.clear()
+
+            status_label.setText(f"🔍 Recherche en cours pour '{term}'...")
+            status_label.show()
+            scroll.hide()
+            select_all_btn.hide()
+            add_selected_btn.hide()
+            search_go_btn.setEnabled(False)
+            progress_bar.setValue(0)
+            progress_bar.show()
+
+            searcher = WebImageSearcher(term, max_results=20, steamgrid_api_key=self.steamgrid_api_key)
+
+            def on_progress(current, total):
+                progress_bar.setMaximum(total)
+                progress_bar.setValue(current)
+
+            def on_results(results):
+                progress_bar.hide()
+                search_go_btn.setEnabled(True)
+                status_label.hide()
+                scroll.show()
+
+                cols = 4
+                for idx, item in enumerate(results):
+                    row, col = divmod(idx, cols)
+
+                    # Container pour chaque image
+                    cell = QWidget()
+                    cell_layout = QVBoxLayout(cell)
+                    cell_layout.setContentsMargins(2, 2, 2, 2)
+                    cell_layout.setSpacing(2)
+
+                    # Miniature
+                    img_label = QLabel()
+                    img_label.setFixedSize(160, 100)
+                    img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    img_label.setStyleSheet("background-color: #2a2a2a; border-radius: 5px;")
+                    pix = QPixmap()
+                    if pix.loadFromData(item['thumb']):
+                        img_label.setPixmap(pix.scaled(
+                            160, 100,
+                            Qt.AspectRatioMode.KeepAspectRatio,
+                            Qt.TransformationMode.SmoothTransformation
+                        ))
+                    cell_layout.addWidget(img_label)
+
+                    # Checkbox
+                    cb = QCheckBox(item.get('source', '')[:25])
+                    cb.setChecked(True)
+                    cell_layout.addWidget(cb)
+                    checkboxes.append((cb, item['url']))
+
+                    results_grid.addWidget(cell, row, col)
+
+                if results:
+                    select_all_btn.show()
+                    add_selected_btn.show()
+                    status_label.hide()
+                else:
+                    status_label.setText("Aucun résultat")
+                    status_label.show()
+
+            def on_failed(msg):
+                progress_bar.hide()
+                search_go_btn.setEnabled(True)
+                status_label.setText(f"❌ {msg}")
+                status_label.show()
+
+            searcher.results_ready.connect(on_results)
+            searcher.search_failed.connect(on_failed)
+            searcher.progress.connect(on_progress)
+            searcher.start()
+            searcher_ref[0] = searcher
+
+        def toggle_all():
+            # Si toutes cochées → tout décocher, sinon tout cocher
+            all_checked = all(cb.isChecked() for cb, _ in checkboxes)
+            for cb, _ in checkboxes:
+                cb.setChecked(not all_checked)
+            select_all_btn.setText("✅ Tout sélectionner" if all_checked else "☐ Tout désélectionner")
+
+        def add_selected():
+            added = 0
+            for cb, url in checkboxes:
+                if cb.isChecked() and url not in current_images:
+                    current_images.append(url)
+                    image_list_widget.addItem(url)
+                    added += 1
+            if added:
+                status_label.setText(f"✅ {added} image(s) ajoutée(s)")
+                status_label.show()
+
+        search_go_btn.clicked.connect(do_search)
+        search_input.returnPressed.connect(do_search)
+        select_all_btn.clicked.connect(toggle_all)
+        add_selected_btn.clicked.connect(add_selected)
+
+        dialog.exec()
 
     def _start_carousel(self, prog_key: str):
         """Démarre le carrousel d'images personnalisées"""
