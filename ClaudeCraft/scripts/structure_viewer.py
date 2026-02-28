@@ -1,25 +1,27 @@
 #!/usr/bin/env python3
 """
-Visualiseur 3D de structures ClaudeCraft.
+Editeur et visualiseur 3D de structures ClaudeCraft.
 
-Charge et affiche des structures voxel et des modeles 3D en 3D avec controles de camera.
-Formats supportes :
-  - Voxel : .json (ClaudeCraft), .schem (Sponge Schematic), .litematic (Litematica)
-  - Mesh  : .glb (glTF Binary), .obj (Wavefront OBJ)
+Charge, affiche et edite des structures voxel en 3D.
+73 types de blocs ClaudeCraft avec couleurs pastel.
+
+Modes :
+  - Visualisation : charge .json/.schem/.litematic/.glb/.obj
+  - Editeur (Ctrl+N ou Ctrl+E) : place/supprime des blocs, palette 73 types,
+    undo/redo, export JSON ClaudeCraft
 
 Controles souris :
-  - Clic droit maintenu + deplacement  : rotation
-  - Clic gauche maintenu + deplacement  : deplacement X/Y
-  - Ctrl + clic gauche + deplacement    : deplacement Z (profondeur)
-  - Molette souris                      : zoom
+  - Clic droit maintenu + drag  : rotation
+  - Ctrl + clic gauche + drag   : deplacement Z (profondeur)
+  - Molette souris               : zoom
+  - Mode editeur : Clic gauche = placer bloc, Clic droit = supprimer
 
 Dependances :
   pip install PyQt6 PyOpenGL numpy
 
 Usage :
   python structure_viewer.py
-  python structure_viewer.py "chemin/vers/structure.litematic"
-  python structure_viewer.py "chemin/vers/modele.glb"
+  python structure_viewer.py "chemin/vers/structure.json"
 """
 
 import sys
@@ -77,33 +79,84 @@ except ImportError:
 # ============================================================
 
 BLOCK_COLORS = {
-    "AIR":            None,
-    "GRASS":          (0.60, 0.90, 0.60),
-    "DIRT":           (0.75, 0.60, 0.50),
-    "STONE":          (0.70, 0.70, 0.75),
-    "SAND":           (0.95, 0.90, 0.70),
-    "WOOD":           (0.80, 0.65, 0.50),
-    "LEAVES":         (0.65, 0.85, 0.65),
-    "SNOW":           (0.95, 0.95, 1.00),
-    "CACTUS":         (0.50, 0.75, 0.50),
-    "DARK_GRASS":     (0.40, 0.70, 0.40),
-    "GRAVEL":         (0.50, 0.50, 0.55),
-    "PLANKS":         (0.85, 0.72, 0.50),
-    "CRAFTING_TABLE": (0.55, 0.35, 0.20),
-    "BRICK":          (0.80, 0.50, 0.40),
-    "SANDSTONE":      (0.90, 0.82, 0.60),
-    "WATER":          (0.30, 0.50, 0.90),
-    "COAL_ORE":       (0.25, 0.25, 0.30),
-    "IRON_ORE":       (0.75, 0.60, 0.55),
-    "GOLD_ORE":       (0.85, 0.75, 0.30),
-    "IRON_INGOT":     (0.80, 0.80, 0.85),
-    "GOLD_INGOT":     (0.95, 0.85, 0.30),
-    "FURNACE":        (0.45, 0.45, 0.50),
-    "STONE_TABLE":    (0.60, 0.55, 0.50),
-    "IRON_TABLE":     (0.65, 0.60, 0.60),
-    "GOLD_TABLE":     (0.75, 0.65, 0.30),
-    "KEEP":           (1.00, 0.00, 1.00),
+    "AIR":                None,
+    "GRASS":              (0.60, 0.90, 0.60),
+    "DIRT":               (0.75, 0.60, 0.50),
+    "STONE":              (0.70, 0.70, 0.75),
+    "SAND":               (0.95, 0.90, 0.70),
+    "WOOD":               (0.80, 0.65, 0.50),
+    "LEAVES":             (0.65, 0.85, 0.65),
+    "SNOW":               (0.95, 0.95, 1.00),
+    "CACTUS":             (0.50, 0.75, 0.50),
+    "DARK_GRASS":         (0.40, 0.70, 0.40),
+    "GRAVEL":             (0.50, 0.50, 0.55),
+    "PLANKS":             (0.85, 0.72, 0.50),
+    "CRAFTING_TABLE":     (0.55, 0.35, 0.20),
+    "BRICK":              (0.80, 0.50, 0.40),
+    "SANDSTONE":          (0.90, 0.82, 0.60),
+    "WATER":              (0.30, 0.50, 0.90),
+    "COAL_ORE":           (0.25, 0.25, 0.30),
+    "IRON_ORE":           (0.75, 0.60, 0.55),
+    "GOLD_ORE":           (0.85, 0.75, 0.30),
+    "IRON_INGOT":         (0.80, 0.80, 0.85),
+    "GOLD_INGOT":         (0.95, 0.85, 0.30),
+    "FURNACE":            (0.45, 0.45, 0.50),
+    "STONE_TABLE":        (0.60, 0.55, 0.50),
+    "IRON_TABLE":         (0.65, 0.60, 0.60),
+    "GOLD_TABLE":         (0.75, 0.65, 0.30),
+    "COBBLESTONE":        (0.60, 0.60, 0.65),
+    "MOSSY_COBBLESTONE":  (0.50, 0.65, 0.50),
+    "ANDESITE":           (0.60, 0.60, 0.60),
+    "GRANITE":            (0.65, 0.50, 0.45),
+    "DIORITE":            (0.75, 0.75, 0.75),
+    "DEEPSLATE":          (0.35, 0.35, 0.40),
+    "SMOOTH_STONE":       (0.72, 0.72, 0.76),
+    "SPRUCE_LOG":         (0.45, 0.30, 0.20),
+    "BIRCH_LOG":          (0.85, 0.82, 0.75),
+    "JUNGLE_LOG":         (0.60, 0.45, 0.30),
+    "ACACIA_LOG":         (0.60, 0.40, 0.30),
+    "DARK_OAK_LOG":       (0.35, 0.25, 0.15),
+    "SPRUCE_PLANKS":      (0.55, 0.40, 0.25),
+    "BIRCH_PLANKS":       (0.90, 0.85, 0.70),
+    "JUNGLE_PLANKS":      (0.70, 0.50, 0.35),
+    "ACACIA_PLANKS":      (0.75, 0.45, 0.25),
+    "DARK_OAK_PLANKS":    (0.40, 0.28, 0.15),
+    "CHERRY_LOG":         (0.70, 0.45, 0.50),
+    "CHERRY_PLANKS":      (0.85, 0.60, 0.60),
+    "SPRUCE_LEAVES":      (0.35, 0.55, 0.35),
+    "BIRCH_LEAVES":       (0.60, 0.80, 0.45),
+    "JUNGLE_LEAVES":      (0.30, 0.70, 0.25),
+    "ACACIA_LEAVES":      (0.55, 0.70, 0.30),
+    "DARK_OAK_LEAVES":    (0.30, 0.50, 0.25),
+    "CHERRY_LEAVES":      (0.90, 0.60, 0.70),
+    "DIAMOND_ORE":        (0.50, 0.85, 0.90),
+    "COPPER_ORE":         (0.70, 0.55, 0.45),
+    "DIAMOND_BLOCK":      (0.55, 0.90, 0.95),
+    "COPPER_BLOCK":       (0.75, 0.55, 0.40),
+    "COPPER_INGOT":       (0.80, 0.60, 0.45),
+    "COAL_BLOCK":         (0.15, 0.15, 0.18),
+    "CLAY":               (0.65, 0.65, 0.72),
+    "PODZOL":             (0.50, 0.38, 0.25),
+    "ICE":                (0.70, 0.85, 0.95),
+    "PACKED_ICE":         (0.60, 0.75, 0.90),
+    "MOSS_BLOCK":         (0.40, 0.60, 0.30),
+    "GLASS":              (0.85, 0.90, 0.95),
+    "BOOKSHELF":          (0.55, 0.40, 0.30),
+    "HAY_BLOCK":          (0.85, 0.75, 0.30),
+    "BARREL":             (0.60, 0.45, 0.30),
+    "FARMLAND":           (0.55, 0.35, 0.20),
+    "WHEAT_STAGE_0":      (0.40, 0.60, 0.20),
+    "WHEAT_STAGE_1":      (0.50, 0.70, 0.25),
+    "WHEAT_STAGE_2":      (0.70, 0.75, 0.30),
+    "WHEAT_STAGE_3":      (0.85, 0.80, 0.30),
+    "WHEAT_ITEM":         (0.85, 0.75, 0.30),
+    "BREAD":              (0.80, 0.60, 0.30),
+    "TORCH":              (1.00, 0.85, 0.50),
+    "KEEP":               (1.00, 0.00, 1.00),
 }
+
+# Ordered list of placeable block names for the editor palette (excludes AIR and KEEP)
+EDITOR_PALETTE = [name for name in BLOCK_COLORS if name not in ("AIR", "KEEP", None) and BLOCK_COLORS[name] is not None]
 
 # Blocs non-solides (transparents pour le face culling)
 _TRANSPARENT = {"AIR", "WATER"}
@@ -1063,7 +1116,10 @@ def load_file_data(path):
 # ============================================================
 
 class VoxelGLWidget(QOpenGLWidget):
-    """Widget OpenGL pour le rendu de structures voxel en 3D."""
+    """Widget OpenGL pour le rendu de structures voxel en 3D et edition."""
+
+    # Signal emis quand un bloc est place/supprime en mode editeur
+    editor_changed = pyqtSignal()
 
     # Definitions des 6 faces d'un cube unitaire
     # Chaque face : (normal, 4 vertices CCW vu de l'exterieur)
@@ -1100,6 +1156,7 @@ class VoxelGLWidget(QOpenGLWidget):
         self.last_pos = None
         self.right_pressed = False
         self.left_pressed = False
+        self._mouse_moved = False  # track drag vs click
 
         # Mesh mode (GLB/OBJ)
         self.mesh_data = None
@@ -1107,13 +1164,376 @@ class VoxelGLWidget(QOpenGLWidget):
         self.mesh_face_count = 0
         self.show_wireframe = False
 
+        # Editor mode
+        self.editor_mode = False
+        self.selected_block = "PLANKS"  # bloc selectionne dans la palette
+        self.editor_blocks = {}  # {(x,y,z): "BLOCK_NAME"} — blocs places
+        self.editor_size = (64, 64, 64)  # taille max de la grille editeur
+        self.cursor_pos = None  # (x, y, z) position du curseur 3D
+        self.cursor_face = None  # face touchee pour placement adjacent
+        self._undo_stack = []  # list of (action, data) for undo
+        self._redo_stack = []  # list of (action, data) for redo
+
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setMinimumSize(640, 480)
+        self.setMouseTracking(True)  # pour le curseur 3D
+
+    def new_editor(self, size=(32, 32, 32)):
+        """Cree une grille vide pour l'editeur."""
+        self.structure = None
+        self.mesh_data = None
+        self.editor_mode = True
+        self.editor_blocks = {}
+        self.editor_size = size
+        self._undo_stack.clear()
+        self._redo_stack.clear()
+        self.cursor_pos = None
+
+        if self.display_list_id:
+            glDeleteLists(self.display_list_id, 1)
+            self.display_list_id = 0
+            self.face_count = 0
+        if self.mesh_display_list:
+            glDeleteLists(self.mesh_display_list, 2)
+            self.mesh_display_list = 0
+
+        sx, sy, sz = size
+        self.center = (sx / 2.0, 0.0, sz / 2.0)
+        self.zoom = max(sx, sz) * 1.8
+        self.rot_x = 25.0
+        self.rot_y = -45.0
+        self.pan_x = 0.0
+        self.pan_y = 0.0
+        self.pan_z = 0.0
+        self.update()
+
+    def edit_structure(self, structure):
+        """Passe en mode editeur avec une structure existante."""
+        self.editor_mode = True
+        self.editor_blocks = {}
+        self._undo_stack.clear()
+        self._redo_stack.clear()
+        self.cursor_pos = None
+
+        # Convertir la structure en editor_blocks dict
+        sx, sy, sz = structure.size
+        for y in range(sy):
+            for z in range(sz):
+                for x in range(sx):
+                    idx = structure.blocks[y][z][x]
+                    if idx > 0 and idx < len(structure.palette):
+                        name = structure.palette[idx]
+                        if name != "AIR" and name != "KEEP":
+                            self.editor_blocks[(x, y, z)] = name
+
+        self.editor_size = (max(sx, 64), max(sy, 64), max(sz, 64))
+        self.structure = None
+        self.mesh_data = None
+        if self.mesh_display_list:
+            glDeleteLists(self.mesh_display_list, 2)
+            self.mesh_display_list = 0
+
+        self.center = (sx / 2.0, sy / 2.0, sz / 2.0)
+        self.zoom = max(sx, sy, sz) * 1.8
+        self.rot_x = 25.0
+        self.rot_y = -45.0
+        self.pan_x = 0.0
+        self.pan_y = 0.0
+        self.pan_z = 0.0
+        self._rebuild_editor_display_list()
+        self.update()
+
+    def place_block(self, x, y, z, block_name):
+        """Place un bloc en mode editeur avec support undo."""
+        key = (x, y, z)
+        old = self.editor_blocks.get(key)
+        if old == block_name:
+            return
+        self._undo_stack.append(("place", key, old))
+        self._redo_stack.clear()
+        if block_name == "AIR" or block_name is None:
+            self.editor_blocks.pop(key, None)
+        else:
+            self.editor_blocks[key] = block_name
+        self._rebuild_editor_display_list()
+        self.editor_changed.emit()
+        self.update()
+
+    def remove_block(self, x, y, z):
+        """Supprime un bloc en mode editeur avec support undo."""
+        key = (x, y, z)
+        old = self.editor_blocks.get(key)
+        if old is None:
+            return
+        self._undo_stack.append(("remove", key, old))
+        self._redo_stack.clear()
+        del self.editor_blocks[key]
+        self._rebuild_editor_display_list()
+        self.editor_changed.emit()
+        self.update()
+
+    def undo(self):
+        """Annule la derniere action."""
+        if not self._undo_stack:
+            return
+        action, key, old_val = self._undo_stack.pop()
+        current = self.editor_blocks.get(key)
+        self._redo_stack.append((action, key, current))
+        if old_val is None:
+            self.editor_blocks.pop(key, None)
+        else:
+            self.editor_blocks[key] = old_val
+        self._rebuild_editor_display_list()
+        self.editor_changed.emit()
+        self.update()
+
+    def redo(self):
+        """Refait la derniere action annulee."""
+        if not self._redo_stack:
+            return
+        action, key, val = self._redo_stack.pop()
+        current = self.editor_blocks.get(key)
+        self._undo_stack.append((action, key, current))
+        if val is None:
+            self.editor_blocks.pop(key, None)
+        else:
+            self.editor_blocks[key] = val
+        self._rebuild_editor_display_list()
+        self.editor_changed.emit()
+        self.update()
+
+    def to_structure_data(self):
+        """Convertit les blocs editeur en StructureData pour export."""
+        if not self.editor_blocks:
+            return None
+        # Calculer le bounding box
+        min_x = min(k[0] for k in self.editor_blocks)
+        min_y = min(k[1] for k in self.editor_blocks)
+        min_z = min(k[2] for k in self.editor_blocks)
+        max_x = max(k[0] for k in self.editor_blocks)
+        max_y = max(k[1] for k in self.editor_blocks)
+        max_z = max(k[2] for k in self.editor_blocks)
+
+        sx = max_x - min_x + 1
+        sy = max_y - min_y + 1
+        sz = max_z - min_z + 1
+
+        # Construire palette
+        names = {"AIR"}
+        for n in self.editor_blocks.values():
+            names.add(n)
+        palette = ["AIR"] + sorted(names - {"AIR"})
+        idx_map = {n: i for i, n in enumerate(palette)}
+
+        # Construire blocks 3D
+        blocks_3d = [[[0] * sx for _ in range(sz)] for _ in range(sy)]
+        for (bx, by, bz), name in self.editor_blocks.items():
+            blocks_3d[by - min_y][bz - min_z][bx - min_x] = idx_map[name]
+
+        return StructureData("editor_structure", (sx, sy, sz), palette, blocks_3d)
+
+    def _rebuild_editor_display_list(self):
+        """Reconstruit le display list pour les blocs editeur."""
+        if self.display_list_id:
+            glDeleteLists(self.display_list_id, 1)
+            self.display_list_id = 0
+            self.face_count = 0
+
+        if not self.editor_blocks:
+            return
+
+        self.display_list_id = glGenLists(1)
+        glNewList(self.display_list_id, GL_COMPILE)
+        glBegin(GL_QUADS)
+
+        face_count = 0
+        adj_dirs = {
+            "top": (0, 1, 0), "bottom": (0, -1, 0),
+            "north": (0, 0, -1), "south": (0, 0, 1),
+            "west": (-1, 0, 0), "east": (1, 0, 0),
+        }
+
+        for (x, y, z), block_name in self.editor_blocks.items():
+            base_color = BLOCK_COLORS.get(block_name, (0.7, 0.7, 0.75))
+            if base_color is None:
+                continue
+
+            for face_name, (normal, verts_fn) in self.FACE_DEFS.items():
+                dx, dy, dz = adj_dirs[face_name]
+                neighbor = (x + dx, y + dy, z + dz)
+                if neighbor in self.editor_blocks:
+                    continue
+
+                brightness = self.FACE_BRIGHTNESS[face_name]
+                r = min(1.0, base_color[0] * brightness)
+                g = min(1.0, base_color[1] * brightness)
+                b = min(1.0, base_color[2] * brightness)
+
+                glColor3f(r, g, b)
+                for vx, vy, vz in verts_fn(x, y, z):
+                    glVertex3f(vx, vy, vz)
+                face_count += 1
+
+        glEnd()
+        glEndList()
+        self.face_count = face_count
+
+    def _raycast_editor(self, mx, my):
+        """Raycast depuis la souris vers la grille editeur. Retourne (hit_pos, face_normal) ou (None, None)."""
+        # Recuperer les matrices OpenGL
+        try:
+            modelview = glGetDoublev(GL_MODELVIEW_MATRIX)
+            projection = glGetDoublev(GL_PROJECTION_MATRIX)
+            viewport = glGetIntegerv(GL_VIEWPORT)
+        except Exception:
+            return None, None
+
+        # Convertir coordonnees ecran en coordonnees monde (near + far)
+        wy = viewport[3] - my  # inverser Y
+        try:
+            near = gluUnProject(mx, wy, 0.0, modelview, projection, viewport)
+            far = gluUnProject(mx, wy, 1.0, modelview, projection, viewport)
+        except Exception:
+            return None, None
+
+        # Direction du rayon
+        ray_origin = np.array(near, dtype=np.float64)
+        ray_dir = np.array(far, dtype=np.float64) - ray_origin
+        ray_len = np.linalg.norm(ray_dir)
+        if ray_len < 1e-10:
+            return None, None
+        ray_dir /= ray_len
+
+        # DDA voxel traversal (Amanatides & Woo)
+        best_t = float('inf')
+        best_pos = None
+        best_normal = None
+
+        # Tester chaque bloc existant + le sol (y=0)
+        # Pour la performance, on teste les faces de chaque bloc existant
+        blocks_to_test = set(self.editor_blocks.keys())
+        # Ajouter les voisins libres des blocs existants pour le placement
+        neighbors = set()
+        for (bx, by, bz) in blocks_to_test:
+            for dx, dy, dz in [(1,0,0),(-1,0,0),(0,1,0),(0,-1,0),(0,0,1),(0,0,-1)]:
+                n = (bx+dx, by+dy, bz+dz)
+                if n not in blocks_to_test and 0 <= n[1] < self.editor_size[1]:
+                    neighbors.add(n)
+
+        # Aussi tester le plan y=0 pour placer le premier bloc
+        if not self.editor_blocks:
+            # Grille vide : intersection avec le plan y=0
+            if abs(ray_dir[1]) > 1e-10:
+                t = -ray_origin[1] / ray_dir[1]
+                if t > 0:
+                    hit = ray_origin + t * ray_dir
+                    gx = int(math.floor(hit[0]))
+                    gz = int(math.floor(hit[2]))
+                    sx, _, sz = self.editor_size
+                    if 0 <= gx < sx and 0 <= gz < sz:
+                        return (gx, 0, gz), (0, 1, 0)
+            return None, None
+
+        # Tester intersection rayon-AABB pour chaque bloc existant
+        for (bx, by, bz) in blocks_to_test:
+            t, normal = self._ray_aabb(ray_origin, ray_dir, bx, by, bz)
+            if t is not None and t < best_t:
+                best_t = t
+                best_pos = (bx, by, bz)
+                best_normal = normal
+
+        if best_pos is not None:
+            return best_pos, best_normal
+        return None, None
+
+    def _ray_aabb(self, origin, direction, bx, by, bz):
+        """Test intersection rayon-AABB pour un cube unitaire a (bx,by,bz)."""
+        tmin = -float('inf')
+        tmax = float('inf')
+        normal = (0, 1, 0)
+
+        box_min = (bx, by, bz)
+        box_max = (bx + 1, by + 1, bz + 1)
+
+        for i in range(3):
+            if abs(direction[i]) < 1e-10:
+                if origin[i] < box_min[i] or origin[i] > box_max[i]:
+                    return None, None
+            else:
+                t1 = (box_min[i] - origin[i]) / direction[i]
+                t2 = (box_max[i] - origin[i]) / direction[i]
+                n = [0, 0, 0]
+                if t1 > t2:
+                    t1, t2 = t2, t1
+                    n[i] = 1
+                else:
+                    n[i] = -1
+                if t1 > tmin:
+                    tmin = t1
+                    normal = tuple(n)
+                if t2 < tmax:
+                    tmax = t2
+                if tmin > tmax:
+                    return None, None
+
+        if tmin < 0:
+            return None, None
+        return tmin, normal
+
+    def _draw_cursor(self):
+        """Dessine le curseur 3D transparent a la position de placement."""
+        if not self.cursor_pos or not self.editor_mode:
+            return
+
+        x, y, z = self.cursor_pos
+        color = BLOCK_COLORS.get(self.selected_block, (0.7, 0.7, 0.75))
+        if color is None:
+            color = (0.7, 0.7, 0.75)
+
+        # Cube transparent
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        glDepthMask(GL_FALSE)
+
+        glColor4f(color[0], color[1], color[2], 0.35)
+        glBegin(GL_QUADS)
+        for face_name, (normal, verts_fn) in self.FACE_DEFS.items():
+            for vx, vy, vz in verts_fn(x, y, z):
+                glVertex3f(vx, vy, vz)
+        glEnd()
+
+        # Contour du curseur
+        glDepthMask(GL_TRUE)
+        glDisable(GL_BLEND)
+        glLineWidth(2.0)
+        glColor3f(1.0, 1.0, 1.0)
+        self._draw_cube_wireframe(x, y, z)
+
+    def _draw_cube_wireframe(self, x, y, z):
+        """Dessine les aretes d'un cube unitaire."""
+        x0, y0, z0 = x, y, z
+        x1, y1, z1 = x + 1, y + 1, z + 1
+        glBegin(GL_LINES)
+        # Bottom face
+        for a, b in [((x0,y0,z0),(x1,y0,z0)), ((x1,y0,z0),(x1,y0,z1)),
+                     ((x1,y0,z1),(x0,y0,z1)), ((x0,y0,z1),(x0,y0,z0))]:
+            glVertex3f(*a); glVertex3f(*b)
+        # Top face
+        for a, b in [((x0,y1,z0),(x1,y1,z0)), ((x1,y1,z0),(x1,y1,z1)),
+                     ((x1,y1,z1),(x0,y1,z1)), ((x0,y1,z1),(x0,y1,z0))]:
+            glVertex3f(*a); glVertex3f(*b)
+        # Vertical edges
+        for a, b in [((x0,y0,z0),(x0,y1,z0)), ((x1,y0,z0),(x1,y1,z0)),
+                     ((x1,y0,z1),(x1,y1,z1)), ((x0,y0,z1),(x0,y1,z1))]:
+            glVertex3f(*a); glVertex3f(*b)
+        glEnd()
 
     def set_structure(self, structure):
         """Charge une nouvelle structure et reconstruit le mesh."""
         self.structure = structure
         self.mesh_data = None
+        self.editor_mode = False
+        self.editor_blocks = {}
         if self.mesh_display_list:
             glDeleteLists(self.mesh_display_list, 2)
             self.mesh_display_list = 0
@@ -1187,15 +1607,21 @@ class VoxelGLWidget(QOpenGLWidget):
         self._draw_axes()
 
         # Grille au sol
-        if self.mesh_data:
+        if self.editor_mode:
+            self._draw_editor_grid()
+        elif self.mesh_data:
             self._draw_mesh_grid()
         else:
             self._draw_grid()
 
-        # Structure voxel
+        # Structure voxel ou blocs editeur
         if self.display_list_id:
             glEnable(GL_CULL_FACE)
             glCallList(self.display_list_id)
+
+        # Curseur 3D en mode editeur
+        if self.editor_mode:
+            self._draw_cursor()
 
         # Mesh 3D (GLB/OBJ)
         if self.mesh_display_list:
@@ -1257,6 +1683,32 @@ class VoxelGLWidget(QOpenGLWidget):
                                 (-s,-s,s),(-s,s,s),(s,s,s),(s,-s,s)]:
                 glVertex3f(px+dx, py+dy, pz+dz)
             glEnd()
+
+    def _draw_editor_grid(self):
+        """Dessine une grille au sol pour l'editeur."""
+        sx, _, sz = self.editor_size
+        # Grille principale
+        glColor4f(0.25, 0.25, 0.35, 0.5)
+        glLineWidth(1.0)
+        glBegin(GL_LINES)
+        for x in range(sx + 1):
+            glVertex3f(x, 0, 0)
+            glVertex3f(x, 0, sz)
+        for z in range(sz + 1):
+            glVertex3f(0, 0, z)
+            glVertex3f(sx, 0, z)
+        glEnd()
+
+        # Axes sur la grille (plus epais)
+        glLineWidth(3.0)
+        glBegin(GL_LINES)
+        # X rouge
+        glColor3f(0.8, 0.2, 0.2)
+        glVertex3f(0, 0.01, 0); glVertex3f(sx, 0.01, 0)
+        # Z bleu
+        glColor3f(0.2, 0.4, 0.8)
+        glVertex3f(0, 0.01, 0); glVertex3f(0, 0.01, sz)
+        glEnd()
 
     def _draw_grid(self):
         """Dessine une grille au sol (y=0)."""
@@ -1438,6 +1890,7 @@ class VoxelGLWidget(QOpenGLWidget):
 
     def mousePressEvent(self, event):
         self.last_pos = event.position()
+        self._mouse_moved = False
         if event.button() == Qt.MouseButton.RightButton:
             self.right_pressed = True
         elif event.button() == Qt.MouseButton.LeftButton:
@@ -1445,8 +1898,31 @@ class VoxelGLWidget(QOpenGLWidget):
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.RightButton:
+            # Clic droit sans drag en mode editeur = supprimer bloc
+            if self.editor_mode and not self._mouse_moved:
+                pos = event.position()
+                hit, normal = self._raycast_editor(pos.x(), pos.y())
+                if hit and hit in self.editor_blocks:
+                    self.remove_block(*hit)
             self.right_pressed = False
         elif event.button() == Qt.MouseButton.LeftButton:
+            # Clic gauche sans drag en mode editeur = placer bloc
+            if self.editor_mode and not self._mouse_moved:
+                modifiers = QApplication.keyboardModifiers()
+                if not (modifiers & Qt.KeyboardModifier.ControlModifier):
+                    pos = event.position()
+                    hit, normal = self._raycast_editor(pos.x(), pos.y())
+                    if hit is not None and normal is not None:
+                        if hit in self.editor_blocks:
+                            # Placer a cote du bloc touche
+                            nx = hit[0] + normal[0]
+                            ny = hit[1] + normal[1]
+                            nz = hit[2] + normal[2]
+                            if ny >= 0 and ny < self.editor_size[1]:
+                                self.place_block(nx, ny, nz, self.selected_block)
+                        else:
+                            # Placer sur la grille vide (premier bloc)
+                            self.place_block(*hit, self.selected_block)
             self.left_pressed = False
 
     def mouseMoveEvent(self, event):
@@ -1456,6 +1932,11 @@ class VoxelGLWidget(QOpenGLWidget):
 
         dx = event.position().x() - self.last_pos.x()
         dy = event.position().y() - self.last_pos.y()
+
+        # Detecter si la souris a bouge (pour distinguer clic vs drag)
+        if abs(dx) > 3 or abs(dy) > 3:
+            self._mouse_moved = True
+
         self.last_pos = event.position()
 
         if self.right_pressed:
@@ -1470,10 +1951,26 @@ class VoxelGLWidget(QOpenGLWidget):
                 # Deplacement Z (profondeur)
                 self.pan_z += dy * 0.05 * max(1.0, self.zoom / 50.0)
             else:
-                # Deplacement X/Y
-                scale = max(0.01, self.zoom / 800.0)
-                self.pan_x += dx * scale
-                self.pan_y -= dy * scale
+                if self.editor_mode and not self._mouse_moved:
+                    pass  # ne pas deplacer si c'est un clic editeur
+                else:
+                    # Deplacement X/Y
+                    scale = max(0.01, self.zoom / 800.0)
+                    self.pan_x += dx * scale
+                    self.pan_y -= dy * scale
+            self.update()
+        elif self.editor_mode and not self.right_pressed and not self.left_pressed:
+            # Mise a jour du curseur 3D en mode editeur (mouse tracking)
+            pos = event.position()
+            hit, normal = self._raycast_editor(pos.x(), pos.y())
+            if hit is not None and normal is not None:
+                if hit in self.editor_blocks:
+                    # Curseur a cote du bloc
+                    self.cursor_pos = (hit[0] + normal[0], hit[1] + normal[1], hit[2] + normal[2])
+                else:
+                    self.cursor_pos = hit
+            else:
+                self.cursor_pos = None
             self.update()
 
     def wheelEvent(self, event):
@@ -1483,11 +1980,25 @@ class VoxelGLWidget(QOpenGLWidget):
         self.update()
 
     def keyPressEvent(self, event):
-        """Raccourcis clavier : R=reset vue, F=vue de face, T=vue de dessus, W=wireframe."""
+        """Raccourcis clavier : R=reset, F=face, T=dessus, W=wireframe, Ctrl+Z/Y=undo/redo."""
         key = event.key()
+        modifiers = event.modifiers()
+
+        if modifiers & Qt.KeyboardModifier.ControlModifier:
+            if key == Qt.Key.Key_Z and self.editor_mode:
+                self.undo()
+                return
+            elif key == Qt.Key.Key_Y and self.editor_mode:
+                self.redo()
+                return
+
         if key == Qt.Key.Key_R:
             # Reset camera
-            if self.mesh_data:
+            if self.editor_mode:
+                sx, _, sz = self.editor_size
+                self.center = (sx / 2.0, 0.0, sz / 2.0)
+                self.zoom = max(sx, sz) * 1.8
+            elif self.mesh_data:
                 center = self.mesh_data.center
                 dims = self.mesh_data.dimensions
                 self.center = (float(center[0]), float(center[1]), float(center[2]))
@@ -1724,16 +2235,115 @@ class FileBrowserPanel(QWidget):
 
 
 # ============================================================
+# PANNEAU PALETTE DE BLOCS (EDITEUR)
+# ============================================================
+
+class BlockPalettePanel(QWidget):
+    """Panneau de selection de blocs pour l'editeur."""
+
+    block_selected = pyqtSignal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(4)
+
+        # Titre
+        title = QLabel("Palette de blocs")
+        title.setStyleSheet("color: #89b4fa; font-weight: bold; font-size: 13px; padding: 2px;")
+        layout.addWidget(title)
+
+        # Info bloc selectionne
+        self.selected_label = QLabel("PLANKS")
+        self.selected_label.setStyleSheet("""
+            QLabel {
+                color: #a6e3a1; font-size: 12px; font-family: Consolas, monospace;
+                padding: 4px; background: #313244; border: 1px solid #45475a; border-radius: 3px;
+            }
+        """)
+        layout.addWidget(self.selected_label)
+
+        # Liste des blocs
+        self.block_list = QListWidget()
+        self.block_list.setStyleSheet("""
+            QListWidget {
+                background-color: #1e1e2e; border: 1px solid #45475a;
+                font-family: Consolas, monospace; font-size: 11px;
+                outline: none;
+            }
+            QListWidget::item {
+                padding: 3px 6px; border: none;
+            }
+            QListWidget::item:selected {
+                background-color: #45475a;
+            }
+            QListWidget::item:hover {
+                background-color: #2a2b3d;
+            }
+        """)
+        self.block_list.currentItemChanged.connect(self._on_selection_changed)
+        layout.addWidget(self.block_list)
+
+        # Compteur de blocs
+        self.count_label = QLabel("0 blocs")
+        self.count_label.setStyleSheet("color: #a6adc8; font-size: 11px; padding: 2px;")
+        layout.addWidget(self.count_label)
+
+        self.setStyleSheet("background-color: #1e1e2e;")
+        self._populate()
+
+    def _populate(self):
+        """Remplit la liste avec tous les blocs de la palette."""
+        for name in EDITOR_PALETTE:
+            color = BLOCK_COLORS.get(name, (0.7, 0.7, 0.75))
+            hex_color = "#{:02x}{:02x}{:02x}".format(
+                int(color[0] * 255), int(color[1] * 255), int(color[2] * 255))
+
+            # Nom lisible
+            display = name.replace("_", " ").title()
+            item = QListWidgetItem(f"\u2588 {display}")
+            item.setForeground(QColor(hex_color))
+            item.setData(Qt.ItemDataRole.UserRole, name)
+            self.block_list.addItem(item)
+
+        # Selectionner PLANKS par defaut
+        for i in range(self.block_list.count()):
+            item = self.block_list.item(i)
+            if item.data(Qt.ItemDataRole.UserRole) == "PLANKS":
+                self.block_list.setCurrentItem(item)
+                break
+
+    def _on_selection_changed(self, current, previous):
+        if current:
+            name = current.data(Qt.ItemDataRole.UserRole)
+            self.selected_label.setText(name)
+            self.block_selected.emit(name)
+
+    def update_count(self, count):
+        """Met a jour le compteur de blocs."""
+        self.count_label.setText(f"{count:,} blocs")
+
+    def select_block(self, name):
+        """Selectionne un bloc par son nom."""
+        for i in range(self.block_list.count()):
+            item = self.block_list.item(i)
+            if item.data(Qt.ItemDataRole.UserRole) == name:
+                self.block_list.setCurrentItem(item)
+                break
+
+
+# ============================================================
 # FENETRE PRINCIPALE
 # ============================================================
 
 class StructureViewer(QMainWindow):
-    """Fenetre principale du visualiseur de structures."""
+    """Fenetre principale du visualiseur/editeur de structures."""
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("ClaudeCraft - Visualiseur de Structures 3D")
-        self.resize(1280, 800)
+        self.setWindowTitle("ClaudeCraft - Editeur de Structures 3D")
+        self.resize(1400, 900)
 
         self.current_structure = None
         self.current_mesh = None
@@ -1741,6 +2351,7 @@ class StructureViewer(QMainWindow):
 
         # Widget OpenGL
         self.gl_widget = VoxelGLWidget(self)
+        self.gl_widget.editor_changed.connect(self._on_editor_changed)
 
         # Panneau d'informations (en bas, compact)
         self.info_panel = QTextEdit(self)
@@ -1762,6 +2373,11 @@ class StructureViewer(QMainWindow):
         self.file_browser = FileBrowserPanel(self)
         self.file_browser.file_selected.connect(self._on_browser_file_selected)
 
+        # Panneau palette de blocs (droite)
+        self.palette_panel = BlockPalettePanel(self)
+        self.palette_panel.block_selected.connect(self._on_block_selected)
+        self.palette_panel.setFixedWidth(220)
+
         # Layout : splitter vertical (viewport + info)
         right_splitter = QSplitter(Qt.Orientation.Vertical, self)
         right_splitter.addWidget(self.gl_widget)
@@ -1770,13 +2386,21 @@ class StructureViewer(QMainWindow):
         right_splitter.setStretchFactor(1, 0)
         right_splitter.setSizes([700, 140])
 
-        # Layout principal : splitter horizontal (browser | viewport+info)
+        # Widget central avec viewport + palette
+        center_widget = QWidget()
+        center_layout = QHBoxLayout(center_widget)
+        center_layout.setContentsMargins(0, 0, 0, 0)
+        center_layout.setSpacing(0)
+        center_layout.addWidget(right_splitter, 1)
+        center_layout.addWidget(self.palette_panel, 0)
+
+        # Layout principal : splitter horizontal (browser | viewport+info+palette)
         main_splitter = QSplitter(Qt.Orientation.Horizontal, self)
         main_splitter.addWidget(self.file_browser)
-        main_splitter.addWidget(right_splitter)
+        main_splitter.addWidget(center_widget)
         main_splitter.setStretchFactor(0, 0)
         main_splitter.setStretchFactor(1, 1)
-        main_splitter.setSizes([250, 1030])
+        main_splitter.setSizes([250, 1150])
         self.setCentralWidget(main_splitter)
 
         # Initialiser le navigateur avec le dernier repertoire ou CWD
@@ -1790,7 +2414,7 @@ class StructureViewer(QMainWindow):
         self._create_toolbar()
 
         # Status bar
-        self.statusBar().showMessage("Pret — Ouvrir .json, .schem, .litematic, .glb ou .obj  |  Ctrl+O: Ouvrir  |  Echap/Ctrl+Q: Quitter")
+        self.statusBar().showMessage("Pret — Ctrl+N: Nouveau | Ctrl+O: Ouvrir | Ctrl+E: Editer | Ctrl+S: Exporter | Echap: Quitter")
         self.statusBar().setStyleSheet("color: #a6adc8;")
 
         # Drag and drop
@@ -1804,11 +2428,23 @@ class StructureViewer(QMainWindow):
         toolbar.setMovable(False)
         toolbar.setIconSize(QSize(20, 20))
 
+        # Nouveau (editeur vide)
+        act_new = QAction("Nouveau", self)
+        act_new.setShortcut(QKeySequence("Ctrl+N"))
+        act_new.triggered.connect(self._new_structure)
+        toolbar.addAction(act_new)
+
         # Ouvrir
         act_open = QAction("Ouvrir", self)
         act_open.setShortcut(QKeySequence("Ctrl+O"))
         act_open.triggered.connect(self.open_file)
         toolbar.addAction(act_open)
+
+        # Editer (passe la structure chargee en mode editeur)
+        act_edit = QAction("Editer", self)
+        act_edit.setShortcut(QKeySequence("Ctrl+E"))
+        act_edit.triggered.connect(self._edit_current)
+        toolbar.addAction(act_edit)
 
         toolbar.addSeparator()
 
@@ -1820,11 +2456,23 @@ class StructureViewer(QMainWindow):
 
         toolbar.addSeparator()
 
+        # Undo
+        act_undo = QAction("Annuler (Ctrl+Z)", self)
+        act_undo.setShortcut(QKeySequence("Ctrl+Z"))
+        act_undo.triggered.connect(lambda: self.gl_widget.undo())
+        toolbar.addAction(act_undo)
+
+        # Redo
+        act_redo = QAction("Refaire (Ctrl+Y)", self)
+        act_redo.setShortcut(QKeySequence("Ctrl+Y"))
+        act_redo.triggered.connect(lambda: self.gl_widget.redo())
+        toolbar.addAction(act_redo)
+
+        toolbar.addSeparator()
+
         # Reset vue
         act_reset = QAction("Reset vue (R)", self)
-        act_reset.triggered.connect(lambda: self.gl_widget.keyPressEvent(
-            type('Event', (), {'key': lambda: Qt.Key.Key_R})()
-        ) if False else self._reset_view())
+        act_reset.triggered.connect(self._reset_view)
         toolbar.addAction(act_reset)
 
         # Vue de face
@@ -1859,8 +2507,106 @@ class StructureViewer(QMainWindow):
         act_quit.triggered.connect(self.close)
         toolbar.addAction(act_quit)
 
+    def _new_structure(self):
+        """Cree une nouvelle structure vide en mode editeur."""
+        self.gl_widget.new_editor((32, 64, 32))
+        self.current_structure = None
+        self.current_mesh = None
+        self.current_path = None
+        self.setWindowTitle("ClaudeCraft Editeur — Nouvelle structure")
+        self.statusBar().showMessage("Mode editeur — Clic gauche: placer | Clic droit: supprimer | Ctrl+Z: annuler | Ctrl+Y: refaire")
+        self.palette_panel.update_count(0)
+        self._update_editor_info()
+
+    def _edit_current(self):
+        """Passe la structure courante en mode editeur."""
+        if self.current_structure:
+            self.gl_widget.edit_structure(self.current_structure)
+            name = self.current_structure.name
+            self.current_structure = None
+            self.current_mesh = None
+            self.setWindowTitle(f"ClaudeCraft Editeur — {name}")
+            self.statusBar().showMessage("Mode editeur — Clic gauche: placer | Clic droit: supprimer | Ctrl+Z: annuler | Ctrl+Y: refaire")
+            self.palette_panel.update_count(len(self.gl_widget.editor_blocks))
+            self._update_editor_info()
+        elif self.gl_widget.editor_mode:
+            self.statusBar().showMessage("Deja en mode editeur")
+        else:
+            self.statusBar().showMessage("Charger une structure d'abord (Ctrl+O)")
+
+    def _on_block_selected(self, block_name):
+        """Appele quand un bloc est selectionne dans la palette."""
+        self.gl_widget.selected_block = block_name
+
+    def _on_editor_changed(self):
+        """Appele quand un bloc est place/supprime en mode editeur."""
+        self.palette_panel.update_count(len(self.gl_widget.editor_blocks))
+        self._update_editor_info()
+
+    def _update_editor_info(self):
+        """Met a jour le panneau d'info pour le mode editeur."""
+        blocks = self.gl_widget.editor_blocks
+        count = len(blocks)
+
+        if count == 0:
+            html = """<b style="color:#89b4fa;">Mode editeur</b> — Aucun bloc place.
+            <br><b style="color:#a6e3a1;">Controles :</b>
+            Clic gauche = Placer bloc | Clic droit = Supprimer | Ctrl+Z = Annuler | Ctrl+Y = Refaire
+            <br>Clic droit maintenu + drag = Rotation | Ctrl+clic gauche + drag = Profondeur | Molette = Zoom"""
+            self.info_panel.setHtml(html)
+            return
+
+        # Compter par type
+        counts = {}
+        for name in blocks.values():
+            counts[name] = counts.get(name, 0) + 1
+
+        # Bounding box
+        min_x = min(k[0] for k in blocks)
+        min_y = min(k[1] for k in blocks)
+        min_z = min(k[2] for k in blocks)
+        max_x = max(k[0] for k in blocks)
+        max_y = max(k[1] for k in blocks)
+        max_z = max(k[2] for k in blocks)
+        sx = max_x - min_x + 1
+        sy = max_y - min_y + 1
+        sz = max_z - min_z + 1
+
+        html = f"""<table width="100%"><tr>
+        <td valign="top" width="30%">
+            <b style="color:#89b4fa;">Mode editeur</b> &nbsp;
+            <span style="color:#cdd6f4;">
+            Taille: <b>{sx}x{sy}x{sz}</b> &nbsp;|&nbsp;
+            Blocs: <b>{count:,}</b> &nbsp;|&nbsp;
+            Types: {len(counts)} &nbsp;|&nbsp;
+            Undo: {len(self.gl_widget._undo_stack)} &nbsp;|&nbsp;
+            Redo: {len(self.gl_widget._redo_stack)}
+            </span>
+        </td>
+        <td valign="top" width="70%">
+            <b style="color:#a6e3a1;">Repartition :</b> &nbsp;
+        """
+
+        for name, cnt in sorted(counts.items(), key=lambda kv: -kv[1]):
+            pct = cnt / count * 100 if count else 0
+            color = BLOCK_COLORS.get(name, (0.7, 0.7, 0.75))
+            if color:
+                hex_color = "#{:02x}{:02x}{:02x}".format(
+                    int(color[0]*255), int(color[1]*255), int(color[2]*255))
+                swatch = f'<span style="color:{hex_color};">\u2588</span>'
+            else:
+                swatch = ""
+            html += f"{swatch} {name}:{cnt:,} ({pct:.0f}%) &nbsp; "
+
+        html += "</td></tr></table>"
+        self.info_panel.setHtml(html)
+
     def _reset_view(self):
-        if self.gl_widget.mesh_data:
+        if self.gl_widget.editor_mode:
+            sx, _, sz = self.gl_widget.editor_size
+            self.gl_widget.center = (sx / 2.0, 0.0, sz / 2.0)
+            self.gl_widget.zoom = max(sx, sz) * 1.8
+        elif self.gl_widget.mesh_data:
             center = self.gl_widget.mesh_data.center
             dims = self.gl_widget.mesh_data.dimensions
             self.gl_widget.center = (float(center[0]), float(center[1]), float(center[2]))
@@ -1904,21 +2650,24 @@ class StructureViewer(QMainWindow):
     def _default_info_html(self):
         return """
         <table width="100%"><tr>
-        <td valign="top" width="33%">
+        <td valign="top" width="30%">
             <b style="color:#89b4fa;">Controles souris</b><br>
             Clic droit + drag = Rotation &nbsp;|&nbsp;
-            Clic gauche + drag = Deplacement X/Y &nbsp;|&nbsp;
-            Ctrl + clic gauche = Deplacement Z &nbsp;|&nbsp;
-            Molette = Zoom
+            Ctrl + clic gauche + drag = Profondeur &nbsp;|&nbsp;
+            Molette = Zoom<br>
+            <b style="color:#a6e3a1;">Mode editeur :</b>
+            Clic gauche = Placer bloc &nbsp;|&nbsp;
+            Clic droit = Supprimer
         </td>
-        <td valign="top" width="33%">
+        <td valign="top" width="40%">
             <b style="color:#89b4fa;">Raccourcis</b><br>
-            R = Reset vue &nbsp;|&nbsp; F = Vue face &nbsp;|&nbsp; T = Vue dessus &nbsp;|&nbsp;
-            W = Fil de fer &nbsp;|&nbsp;
-            I = Masquer/afficher ce panneau &nbsp;|&nbsp;
-            Ctrl+O = Ouvrir &nbsp;|&nbsp; Ctrl+S = Exporter &nbsp;|&nbsp; Echap = Quitter
+            Ctrl+N = Nouveau &nbsp;|&nbsp; Ctrl+O = Ouvrir &nbsp;|&nbsp;
+            Ctrl+E = Editer &nbsp;|&nbsp; Ctrl+S = Exporter JSON<br>
+            Ctrl+Z = Annuler &nbsp;|&nbsp; Ctrl+Y = Refaire &nbsp;|&nbsp;
+            R = Reset vue &nbsp;|&nbsp; F = Face &nbsp;|&nbsp; T = Dessus &nbsp;|&nbsp;
+            W = Fil de fer &nbsp;|&nbsp; I = Infos &nbsp;|&nbsp; Echap = Quitter
         </td>
-        <td valign="top" width="33%">
+        <td valign="top" width="30%">
             <b style="color:#89b4fa;">Formats</b><br>
             .json (ClaudeCraft) &nbsp;|&nbsp; .schem (Sponge) &nbsp;|&nbsp; .litematic (Litematica)<br>
             <span style="color:#f38ba8;">.glb (glTF Binary) &nbsp;|&nbsp; .obj (Wavefront)</span>
@@ -2100,7 +2849,15 @@ class StructureViewer(QMainWindow):
         self.info_panel.setHtml(html)
 
     def export_json(self):
-        if not self.current_structure:
+        # Mode editeur : convertir les blocs editeur en StructureData
+        if self.gl_widget.editor_mode:
+            s = self.gl_widget.to_structure_data()
+            if s is None:
+                QMessageBox.information(self, "Info", "Aucun bloc a exporter.")
+                return
+        elif self.current_structure:
+            s = self.current_structure
+        else:
             if self.current_mesh:
                 QMessageBox.information(self, "Info",
                     "L'export JSON n'est disponible que pour les structures voxel.\n"
@@ -2109,7 +2866,6 @@ class StructureViewer(QMainWindow):
                 QMessageBox.information(self, "Info", "Aucune structure chargee.")
             return
 
-        s = self.current_structure
         default_path = os.path.join(
             os.path.dirname(_SCRIPT_DIR), "structures", s.name + ".json")
 
@@ -2168,7 +2924,7 @@ def main():
     QSurfaceFormat.setDefaultFormat(fmt)
 
     app = QApplication(sys.argv)
-    app.setApplicationName("ClaudeCraft Structure Viewer")
+    app.setApplicationName("ClaudeCraft Structure Editor")
     app.setStyle("Fusion")
 
     # Style sombre
