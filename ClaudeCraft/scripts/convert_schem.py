@@ -807,6 +807,403 @@ def strip_block_states(block_name: str) -> str:
     return block_name
 
 
+# ============================================================
+# MAPPING IDs NUMÉRIQUES MINECRAFT PRÉ-1.13 (MCEdit/Alpha)
+# ============================================================
+# ID -> (nom_base, {metadata: nom_variante})
+# Metadata 0 = variante par défaut, seules les variantes utiles sont listées
+
+MCEDIT_ID_MAP = {
+    0: "minecraft:air",
+    1: "minecraft:stone",          # meta: 1=granite, 2=polished_granite, 3=diorite, 4=polished_diorite, 5=andesite, 6=polished_andesite
+    2: "minecraft:grass_block",
+    3: "minecraft:dirt",           # meta: 1=coarse_dirt, 2=podzol
+    4: "minecraft:cobblestone",
+    5: "minecraft:oak_planks",     # meta: 1=spruce, 2=birch, 3=jungle, 4=acacia, 5=dark_oak
+    6: "minecraft:oak_sapling",
+    7: "minecraft:bedrock",
+    8: "minecraft:water",
+    9: "minecraft:water",
+    10: "minecraft:lava",
+    11: "minecraft:lava",
+    12: "minecraft:sand",          # meta: 1=red_sand
+    13: "minecraft:gravel",
+    14: "minecraft:gold_ore",
+    15: "minecraft:iron_ore",
+    16: "minecraft:coal_ore",
+    17: "minecraft:oak_log",       # meta: 1=spruce_log, 2=birch_log, 3=jungle_log (+ axis bits 4,8)
+    18: "minecraft:oak_leaves",    # meta: 1=spruce, 2=birch, 3=jungle
+    19: "minecraft:sponge",
+    20: "minecraft:glass",
+    21: "minecraft:lapis_ore",
+    22: "minecraft:lapis_block",
+    23: "minecraft:dispenser",
+    24: "minecraft:sandstone",     # meta: 1=chiseled, 2=cut
+    25: "minecraft:note_block",
+    26: "minecraft:red_bed",
+    27: "minecraft:powered_rail",
+    28: "minecraft:detector_rail",
+    29: "minecraft:sticky_piston",
+    30: "minecraft:cobweb",
+    31: "minecraft:tall_grass",    # meta: 0=dead_bush, 1=grass, 2=fern
+    32: "minecraft:dead_bush",
+    33: "minecraft:piston",
+    34: "minecraft:piston_head",
+    35: "minecraft:white_wool",    # meta: 0-15 = 16 couleurs
+    37: "minecraft:dandelion",
+    38: "minecraft:poppy",         # meta: 1=blue_orchid, 2=allium, etc.
+    39: "minecraft:brown_mushroom",
+    40: "minecraft:red_mushroom",
+    41: "minecraft:gold_block",
+    42: "minecraft:iron_block",
+    43: "minecraft:stone_slab",    # double slab
+    44: "minecraft:stone_slab",    # meta: 0=stone, 1=sandstone, 2=wood, 3=cobble, 4=brick, 5=stone_brick
+    45: "minecraft:bricks",
+    46: "minecraft:tnt",
+    47: "minecraft:bookshelf",
+    48: "minecraft:mossy_cobblestone",
+    49: "minecraft:obsidian",
+    50: "minecraft:torch",
+    51: "minecraft:fire",
+    52: "minecraft:spawner",
+    53: "minecraft:oak_stairs",
+    54: "minecraft:chest",
+    55: "minecraft:redstone_wire",
+    56: "minecraft:diamond_ore",
+    57: "minecraft:diamond_block",
+    58: "minecraft:crafting_table",
+    59: "minecraft:wheat",
+    60: "minecraft:farmland",
+    61: "minecraft:furnace",
+    62: "minecraft:furnace",       # lit furnace
+    63: "minecraft:oak_sign",
+    64: "minecraft:oak_door",
+    65: "minecraft:ladder",
+    66: "minecraft:rail",
+    67: "minecraft:cobblestone_stairs",
+    68: "minecraft:oak_wall_sign",
+    69: "minecraft:lever",
+    70: "minecraft:stone_pressure_plate",
+    71: "minecraft:iron_door",
+    72: "minecraft:oak_pressure_plate",
+    73: "minecraft:redstone_ore",
+    74: "minecraft:redstone_ore",  # lit
+    75: "minecraft:redstone_torch",
+    76: "minecraft:redstone_torch",
+    77: "minecraft:stone_button",
+    78: "minecraft:snow",
+    79: "minecraft:ice",
+    80: "minecraft:snow_block",
+    81: "minecraft:cactus",
+    82: "minecraft:clay",
+    83: "minecraft:sugar_cane",
+    84: "minecraft:jukebox",
+    85: "minecraft:oak_fence",
+    86: "minecraft:carved_pumpkin",
+    87: "minecraft:netherrack",
+    88: "minecraft:soul_sand",
+    89: "minecraft:glowstone",
+    90: "minecraft:nether_portal",
+    91: "minecraft:jack_o_lantern",
+    92: "minecraft:cake",
+    93: "minecraft:repeater",
+    94: "minecraft:repeater",
+    95: "minecraft:white_stained_glass",  # meta: 0-15 couleurs
+    96: "minecraft:oak_trapdoor",
+    97: "minecraft:infested_stone",
+    98: "minecraft:stone_bricks",  # meta: 1=mossy, 2=cracked, 3=chiseled
+    99: "minecraft:brown_mushroom_block",
+    100: "minecraft:red_mushroom_block",
+    101: "minecraft:iron_bars",
+    102: "minecraft:glass_pane",
+    103: "minecraft:melon",
+    104: "minecraft:pumpkin_stem",
+    105: "minecraft:melon_stem",
+    106: "minecraft:vine",
+    107: "minecraft:oak_fence_gate",
+    108: "minecraft:brick_stairs",
+    109: "minecraft:stone_brick_stairs",
+    110: "minecraft:mycelium",
+    111: "minecraft:lily_pad",
+    112: "minecraft:nether_bricks",
+    113: "minecraft:nether_brick_fence",
+    114: "minecraft:nether_brick_stairs",
+    115: "minecraft:nether_wart",
+    116: "minecraft:enchanting_table",
+    117: "minecraft:brewing_stand",
+    118: "minecraft:cauldron",
+    119: "minecraft:end_portal",
+    120: "minecraft:end_portal_frame",
+    121: "minecraft:end_stone",
+    122: "minecraft:dragon_egg",
+    123: "minecraft:redstone_lamp",
+    124: "minecraft:redstone_lamp",
+    125: "minecraft:oak_planks",   # double wood slab
+    126: "minecraft:oak_slab",     # meta: 0-5 = wood types
+    128: "minecraft:sandstone_stairs",
+    129: "minecraft:emerald_ore",
+    130: "minecraft:ender_chest",
+    131: "minecraft:tripwire_hook",
+    132: "minecraft:tripwire",
+    133: "minecraft:emerald_block",
+    134: "minecraft:spruce_stairs",
+    135: "minecraft:birch_stairs",
+    136: "minecraft:jungle_stairs",
+    137: "minecraft:command_block",
+    138: "minecraft:beacon",
+    139: "minecraft:cobblestone_wall",  # meta: 1=mossy
+    140: "minecraft:flower_pot",
+    141: "minecraft:carrots",
+    142: "minecraft:potatoes",
+    143: "minecraft:oak_button",
+    144: "minecraft:skeleton_skull",
+    145: "minecraft:anvil",
+    146: "minecraft:trapped_chest",
+    147: "minecraft:light_weighted_pressure_plate",
+    148: "minecraft:heavy_weighted_pressure_plate",
+    149: "minecraft:comparator",
+    150: "minecraft:comparator",
+    151: "minecraft:daylight_detector",
+    152: "minecraft:redstone_block",
+    153: "minecraft:nether_quartz_ore",
+    154: "minecraft:hopper",
+    155: "minecraft:quartz_block",
+    156: "minecraft:quartz_stairs",
+    157: "minecraft:activator_rail",
+    158: "minecraft:dropper",
+    159: "minecraft:white_terracotta",  # meta: 0-15 couleurs
+    160: "minecraft:white_stained_glass_pane",  # meta: 0-15 couleurs
+    161: "minecraft:acacia_leaves",  # meta: 1=dark_oak
+    162: "minecraft:acacia_log",     # meta: 1=dark_oak_log
+    163: "minecraft:acacia_stairs",
+    164: "minecraft:dark_oak_stairs",
+    165: "minecraft:slime_block",
+    166: "minecraft:barrier",
+    167: "minecraft:iron_trapdoor",
+    168: "minecraft:prismarine",
+    169: "minecraft:sea_lantern",
+    170: "minecraft:hay_block",
+    171: "minecraft:white_carpet",   # meta: 0-15 couleurs
+    172: "minecraft:terracotta",
+    173: "minecraft:coal_block",
+    174: "minecraft:packed_ice",
+    175: "minecraft:sunflower",      # meta: 1=lilac, 2=tall_grass, 3=large_fern, 4=rose_bush, 5=peony
+    176: "minecraft:white_banner",
+    177: "minecraft:white_wall_banner",
+    178: "minecraft:daylight_detector",
+    179: "minecraft:red_sandstone",
+    180: "minecraft:red_sandstone_stairs",
+    181: "minecraft:red_sandstone_slab",  # double
+    182: "minecraft:red_sandstone_slab",
+    183: "minecraft:spruce_fence_gate",
+    184: "minecraft:birch_fence_gate",
+    185: "minecraft:jungle_fence_gate",
+    186: "minecraft:dark_oak_fence_gate",
+    187: "minecraft:acacia_fence_gate",
+    188: "minecraft:spruce_fence",
+    189: "minecraft:birch_fence",
+    190: "minecraft:jungle_fence",
+    191: "minecraft:dark_oak_fence",
+    192: "minecraft:acacia_fence",
+    193: "minecraft:spruce_door",
+    194: "minecraft:birch_door",
+    195: "minecraft:jungle_door",
+    196: "minecraft:acacia_door",
+    197: "minecraft:dark_oak_door",
+    198: "minecraft:end_rod",
+    199: "minecraft:chorus_plant",
+    200: "minecraft:chorus_flower",
+    201: "minecraft:purpur_block",
+    202: "minecraft:purpur_pillar",
+    203: "minecraft:purpur_stairs",
+    205: "minecraft:purpur_slab",
+    206: "minecraft:end_stone_bricks",
+    207: "minecraft:beetroots",
+    208: "minecraft:grass_path",
+    209: "minecraft:end_gateway",
+    210: "minecraft:repeating_command_block",
+    211: "minecraft:chain_command_block",
+    212: "minecraft:frosted_ice",
+    213: "minecraft:magma_block",
+    214: "minecraft:nether_wart_block",
+    215: "minecraft:red_nether_bricks",
+    216: "minecraft:bone_block",
+    217: "minecraft:structure_void",
+    218: "minecraft:observer",
+    219: "minecraft:white_shulker_box",
+    235: "minecraft:white_glazed_terracotta",
+    251: "minecraft:white_concrete",
+    252: "minecraft:white_concrete_powder",
+    255: "minecraft:structure_block",
+}
+
+# Metadata → variantes pour IDs spécifiques
+MCEDIT_META_MAP = {
+    1: {1: "minecraft:granite", 2: "minecraft:polished_granite", 3: "minecraft:diorite",
+        4: "minecraft:polished_diorite", 5: "minecraft:andesite", 6: "minecraft:polished_andesite"},
+    3: {1: "minecraft:coarse_dirt", 2: "minecraft:podzol"},
+    5: {1: "minecraft:spruce_planks", 2: "minecraft:birch_planks", 3: "minecraft:jungle_planks",
+        4: "minecraft:acacia_planks", 5: "minecraft:dark_oak_planks"},
+    17: {1: "minecraft:spruce_log", 2: "minecraft:birch_log", 3: "minecraft:jungle_log"},
+    18: {1: "minecraft:spruce_leaves", 2: "minecraft:birch_leaves", 3: "minecraft:jungle_leaves"},
+    24: {1: "minecraft:chiseled_sandstone", 2: "minecraft:cut_sandstone"},
+    98: {1: "minecraft:mossy_stone_bricks", 2: "minecraft:cracked_stone_bricks", 3: "minecraft:chiseled_stone_bricks"},
+    126: {1: "minecraft:spruce_slab", 2: "minecraft:birch_slab", 3: "minecraft:jungle_slab",
+          4: "minecraft:acacia_slab", 5: "minecraft:dark_oak_slab"},
+    161: {1: "minecraft:dark_oak_leaves"},
+    162: {1: "minecraft:dark_oak_log"},
+}
+
+# Couleurs laine/verre/terracotta (metadata 0-15)
+_DYE_COLORS = [
+    "white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray",
+    "light_gray", "cyan", "purple", "blue", "brown", "green", "red", "black"
+]
+_COLORED_BLOCKS = {
+    35: "minecraft:{color}_wool",
+    95: "minecraft:{color}_stained_glass",
+    159: "minecraft:{color}_terracotta",
+    160: "minecraft:{color}_stained_glass_pane",
+    171: "minecraft:{color}_carpet",
+    251: "minecraft:{color}_concrete",
+    252: "minecraft:{color}_concrete_powder",
+}
+
+
+def _mcedit_block_name(block_id: int, meta: int) -> str:
+    """Convertit un ID numérique MCEdit + metadata en nom de bloc Minecraft."""
+    # Blocs colorés (laine, verre, terracotta, etc.)
+    if block_id in _COLORED_BLOCKS and 0 <= meta <= 15:
+        color = _DYE_COLORS[meta]
+        return _COLORED_BLOCKS[block_id].format(color=color)
+
+    # Variantes par metadata (bois, pierre, etc.)
+    if block_id in MCEDIT_META_MAP:
+        base_meta = meta & 0x03  # les 2 bits hauts sont souvent l'axe pour les logs
+        if block_id in (17, 162):
+            base_meta = meta & 0x03
+        else:
+            base_meta = meta
+        variant = MCEDIT_META_MAP[block_id].get(base_meta)
+        if variant:
+            return variant
+
+    # ID connu → nom par défaut
+    if block_id in MCEDIT_ID_MAP:
+        return MCEDIT_ID_MAP[block_id]
+
+    # ID inconnu
+    return f"minecraft:unknown_{block_id}"
+
+
+def _convert_mcedit(blocks_raw: bytes, meta_raw: bytes, width: int, height: int, length: int,
+                    schem_path: str, output_path: str = None, info_only: bool = False):
+    """Convertit un fichier MCEdit/Alpha (.schematic ancien format) en JSON ClaudeCraft."""
+    total = width * height * length
+
+    # Collecter les IDs uniques avec metadata
+    unique_combos = set()
+    for i in range(min(len(blocks_raw), total)):
+        bid = blocks_raw[i]
+        meta = meta_raw[i] if i < len(meta_raw) else 0
+        unique_combos.add((bid, meta))
+
+    # Construire la palette : (id, meta) → nom Minecraft → nom ClaudeCraft
+    id_meta_to_mc = {}
+    for bid, meta in unique_combos:
+        id_meta_to_mc[(bid, meta)] = _mcedit_block_name(bid, meta)
+
+    # Afficher la palette
+    unique_mc = sorted(set(id_meta_to_mc.values()))
+    print(f"Palette    : {len(unique_mc)} types de blocs MC ({len(unique_combos)} combos id+meta)")
+
+    if info_only:
+        print("\n--- Palette complète ---")
+        unmapped = []
+        for mc_name in sorted(unique_mc):
+            stripped = strip_block_states(mc_name)
+            cc_name = smart_map_block(stripped)
+            if cc_name is None:
+                cc_name = "STONE"
+                unmapped.append(stripped)
+                marker = "  <-- NON MAPPÉ"
+            else:
+                marker = ""
+            print(f"  {mc_name:50s} -> {cc_name}{marker}")
+
+        if unmapped:
+            unique_unmapped = sorted(set(unmapped))
+            print(f"\n/!\\ {len(unique_unmapped)} bloc(s) non mappé(s) (seront convertis en STONE) :")
+            for n in unique_unmapped:
+                print(f"  {n}")
+        else:
+            print("\nTous les blocs sont mappés !")
+        return
+
+    # Mapper chaque combo → ClaudeCraft
+    cc_palette_set = set()
+    cc_palette_set.add("AIR")
+    combo_to_cc = {}
+    unmapped_blocks = {}
+    for (bid, meta), mc_name in id_meta_to_mc.items():
+        stripped = strip_block_states(mc_name)
+        cc_name = smart_map_block(stripped)
+        if cc_name is None:
+            cc_name = "STONE"
+            unmapped_blocks[stripped] = unmapped_blocks.get(stripped, 0)
+        combo_to_cc[(bid, meta)] = cc_name
+        cc_palette_set.add(cc_name)
+
+    cc_palette = ["AIR"] + sorted(cc_palette_set - {"AIR"})
+    cc_name_to_idx = {name: idx for idx, name in enumerate(cc_palette)}
+
+    # Convertir les blocs — MCEdit order: index = (y * length + z) * width + x
+    converted = []
+    for i in range(total):
+        if i < len(blocks_raw):
+            bid = blocks_raw[i]
+            meta = meta_raw[i] if i < len(meta_raw) else 0
+            cc_name = combo_to_cc.get((bid, meta), "STONE")
+        else:
+            cc_name = "AIR"
+        converted.append(cc_name_to_idx[cc_name])
+
+    non_air = sum(1 for b in converted if b != 0)
+    air_pct = (1 - non_air / len(converted)) * 100 if converted else 0
+
+    rle = encode_rle(converted)
+
+    print(f"Blocs pleins: {non_air:,} ({100 - air_pct:.1f}%), air: {air_pct:.1f}%")
+    print(f"RLE         : {len(rle)} valeurs ({len(rle) // 2} runs)")
+
+    if unmapped_blocks:
+        print(f"\n/!\\ {len(unmapped_blocks)} type(s) de blocs non mappé(s) -> STONE :")
+        for name in sorted(unmapped_blocks.keys()):
+            print(f"  {name}")
+
+    structure_name = os.path.splitext(os.path.basename(schem_path))[0]
+    structure_name = structure_name.lower().replace(" ", "_").replace("-", "_")
+
+    output_data = {
+        "name": structure_name,
+        "size": [width, height, length],
+        "palette": cc_palette,
+        "blocks_rle": rle
+    }
+
+    if output_path is None:
+        output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "structures")
+        os.makedirs(output_dir, exist_ok=True)
+        output_path = os.path.join(output_dir, structure_name + ".json")
+
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(output_data, f, separators=(',', ':'))
+
+    file_size = os.path.getsize(output_path)
+    print(f"\n-> Sauvegardé : {output_path}")
+    print(f"   Taille     : {file_size:,} octets ({file_size / 1024:.1f} Ko)")
+
+
 def convert_schem(schem_path: str, output_path: str = None, info_only: bool = False):
     # Lire et décompresser
     with open(schem_path, 'rb') as f:
@@ -832,6 +1229,21 @@ def convert_schem(schem_path: str, output_path: str = None, info_only: bool = Fa
     print(f"Dimensions : {width} x {height} x {length} (X x Y x Z)")
     print(f"Total blocs: {width * height * length:,}")
 
+    # Détecter le format : MCEdit/Alpha (Blocks = byte array) vs Sponge (Palette dict)
+    raw_blocks = root.get("Blocks", None)
+    is_mcedit = isinstance(raw_blocks, (bytes, bytearray)) and "Palette" not in root
+
+    if is_mcedit:
+        # === FORMAT MCEDIT/ALPHA ===
+        # Blocks = byte array d'IDs numériques Minecraft pré-1.13
+        # Data = byte array de metadata (4 bits par bloc, utilisé pour variantes bois etc.)
+        print("Format     : MCEdit/Alpha (IDs numériques)")
+        meta_raw = root.get("Data", b"")
+        _convert_mcedit(raw_blocks, meta_raw, width, height, length,
+                        schem_path, output_path, info_only)
+        return
+
+    # === FORMAT SPONGE ===
     # Récupérer la palette et les données de blocs
     # v3 : root.Blocks.Palette + root.Blocks.Data
     # v2 : root.Palette + root.BlockData
