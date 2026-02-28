@@ -308,11 +308,12 @@ class ProgramScanner(QThread):
     finished = pyqtSignal(list)
     progress = pyqtSignal(str)
     
-    def __init__(self, custom_folders: List[str] = None):
+    def __init__(self, custom_folders: List[str] = None, custom_files: List[str] = None):
         super().__init__()
         self.cache_dir = Path.home() / ".claudelauncher" / "cache"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.custom_folders = custom_folders or []
+        self.custom_files = custom_files or []
         self.steam_games = set()
         self.epic_games = set()
         
@@ -335,7 +336,11 @@ class ProgramScanner(QThread):
         if self.custom_folders:
             self.progress.emit("Scan des dossiers personnalisés...")
             programs.extend(self._scan_custom_folders())
-        
+
+        if self.custom_files:
+            self.progress.emit("Scan des fichiers personnalisés...")
+            programs.extend(self._scan_custom_files())
+
         unique_programs = self._deduplicate(programs)
         
         self.progress.emit(f"Trouvé {len(unique_programs)} programmes")
@@ -525,9 +530,29 @@ class ProgramScanner(QThread):
                     'install_date': "N/A",
                     'type': 'game'
                 })
-        
+
         return programs
-    
+
+    def _scan_custom_files(self) -> List[Dict]:
+        """Scanne les fichiers custom (bat, exe, lnk, etc.)"""
+        programs = []
+
+        for file_path in self.custom_files:
+            fp = Path(file_path)
+            if not fp.exists() or not fp.is_file():
+                continue
+
+            programs.append({
+                'name': fp.stem,
+                'path': str(fp),
+                'publisher': "Custom",
+                'version': "N/A",
+                'install_date': "N/A",
+                'type': 'app'
+            })
+
+        return programs
+
     def _scan_registry(self) -> List[Dict]:
         """Scanne le registre Windows"""
         programs = []
@@ -685,6 +710,7 @@ class ClaudeLauncher(QMainWindow):
         self.programs = []
         self.current_program = None
         self.custom_folders = self._load_custom_folders()
+        self.custom_files = self._load_custom_files()
         self.user_overrides = self._load_overrides()
         self.custom_exes = self._load_custom_exes()
         self.custom_args = self._load_custom_args()
@@ -725,7 +751,25 @@ class ClaudeLauncher(QMainWindow):
         custom_file.parent.mkdir(parents=True, exist_ok=True)
         with open(custom_file, 'w', encoding='utf-8') as f:
             json.dump(self.custom_folders, f, indent=2)
-    
+
+    def _load_custom_files(self) -> List[str]:
+        """Charge les fichiers custom"""
+        custom_file = Path.home() / ".claudelauncher" / "custom_files.json"
+        if custom_file.exists():
+            try:
+                with open(custom_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return []
+
+    def _save_custom_files(self):
+        """Sauvegarde les fichiers custom"""
+        custom_file = Path.home() / ".claudelauncher" / "custom_files.json"
+        custom_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(custom_file, 'w', encoding='utf-8') as f:
+            json.dump(self.custom_files, f, indent=2)
+
     def _load_overrides(self) -> Dict[str, str]:
         """Charge les overrides"""
         override_file = Path.home() / ".claudelauncher" / "overrides.json"
@@ -1067,7 +1111,12 @@ class ClaudeLauncher(QMainWindow):
         add_folder_btn.clicked.connect(self.add_custom_folder)
         add_folder_btn.setMaximumWidth(180)
         buttons_layout.addWidget(add_folder_btn)
-        
+
+        add_file_btn = QPushButton("📄 Ajouter un fichier")
+        add_file_btn.clicked.connect(self.add_custom_file)
+        add_file_btn.setMaximumWidth(180)
+        buttons_layout.addWidget(add_file_btn)
+
         # NOUVEAU V6: Bouton pour ajouter clé API
         api_btn = QPushButton("🔑 Clé API SteamGridDB")
         api_btn.clicked.connect(self.set_api_key)
@@ -1399,7 +1448,21 @@ class ClaudeLauncher(QMainWindow):
             self.custom_folders.append(folder)
             self._save_custom_folders()
             self.scan_programs()
-    
+
+    def add_custom_file(self):
+        """Ajoute un fichier custom (bat, exe, lnk, etc.)"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Sélectionner un fichier à ajouter",
+            "",
+            "Tous les fichiers (*.*);;Batch (*.bat *.cmd);;Exécutables (*.exe);;Raccourcis (*.lnk)"
+        )
+
+        if file_path and file_path not in self.custom_files:
+            self.custom_files.append(file_path)
+            self._save_custom_files()
+            self.scan_programs()
+
     def rename_tab(self, index: int):
         """Renomme un onglet"""
         if index == -1:
@@ -1668,7 +1731,7 @@ class ClaudeLauncher(QMainWindow):
     
     def scan_programs(self):
         """Lance le scan"""
-        self.scanner = ProgramScanner(self.custom_folders)
+        self.scanner = ProgramScanner(self.custom_folders, self.custom_files)
         self.scanner.finished.connect(self.on_scan_finished)
         self.scanner.progress.connect(self.on_scan_progress)
         self.scanner.start()
