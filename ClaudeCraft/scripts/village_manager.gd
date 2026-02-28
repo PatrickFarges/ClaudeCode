@@ -103,7 +103,7 @@ var village_ref_y: int = -1          # altitude de référence (médiane)
 var flatten_plan: Array = []         # [{pos: Vector3i, action: "break"/"place"}]
 var flatten_index: int = 0           # progression
 var _flatten_complete: bool = false   # flag
-const VILLAGE_RADIUS = 18            # zone 37×37 (18+1+18)
+const VILLAGE_RADIUS = 45            # zone 91×91 (45+1+45) — agrandi pour vrais bâtiments MC
 
 # === CHEMIN DU VILLAGE ===
 var _path_built: bool = false  # true quand le chemin en croix est posé
@@ -1641,7 +1641,8 @@ func _find_build_site(blueprint: Dictionary) -> Vector3i:
 	var best_site = Vector3i(-9999, -9999, -9999)
 	var best_dist = INF
 
-	for attempt in range(60):
+	# Plus de tentatives car les bâtiments sont plus grands
+	for attempt in range(120):
 		var tx = cx + randi_range(-VILLAGE_RADIUS + 1, VILLAGE_RADIUS - size.x)
 		var tz = cz + randi_range(-VILLAGE_RADIUS + 1, VILLAGE_RADIUS - size.z)
 
@@ -1651,13 +1652,13 @@ func _find_build_site(blueprint: Dictionary) -> Vector3i:
 		if tz < cz - VILLAGE_RADIUS or tz + size.z > cz + VILLAGE_RADIUS + 1:
 			continue
 
-		# Pas de chevauchement avec les constructions existantes (marge 2)
+		# Pas de chevauchement avec les constructions existantes (marge 4 pour vrais bâtiments)
 		var overlap = false
 		for built in built_structures:
 			var bo = built["origin"]
 			var bs = built["size"]
-			if tx < bo.x + bs.x + 2 and tx + size.x > bo.x - 2 \
-				and tz < bo.z + bs.z + 2 and tz + size.z > bo.z - 2:
+			if tx < bo.x + bs.x + 4 and tx + size.x > bo.x - 4 \
+				and tz < bo.z + bs.z + 4 and tz + size.z > bo.z - 4:
 				overlap = true
 				break
 		if overlap:
@@ -1667,8 +1668,8 @@ func _find_build_site(blueprint: Dictionary) -> Vector3i:
 		var ws_overlap = false
 		for ws_type in placed_workstations:
 			var ws_pos = placed_workstations[ws_type]
-			if tx <= ws_pos.x + 1 and tx + size.x > ws_pos.x - 1 \
-				and tz <= ws_pos.z + 1 and tz + size.z > ws_pos.z - 1:
+			if tx <= ws_pos.x + 2 and tx + size.x > ws_pos.x - 2 \
+				and tz <= ws_pos.z + 2 and tz + size.z > ws_pos.z - 2:
 				ws_overlap = true
 				break
 		if ws_overlap:
@@ -1790,228 +1791,35 @@ func unregister_villager(npc):
 # ============================================================
 
 func _init_blueprints():
-	# Cabane simple 5x4x5 (murs planches, toit planches, porte)
-	var cabin_blocks = []
+	# === Chargement des structures JSON converties depuis Minecraft ===
+	# Les structures terrain (dirt, grass, leaves, logs naturels) sont filtrées
+	# Seuls les blocs de construction sont gardés dans le blueprint
+
+	# Blocs terrain à ignorer (pas des blocs de construction)
+	var terrain_set: Dictionary = {}
+	for bt in [0, 1, 2, 4, 6, 7, 8, 9, 10, 15, 44, 45, 46, 47, 48, 49, 56, 57, 58, 59, 60]:
+		# AIR, GRASS, DIRT, SAND, LEAVES, SNOW, CACTUS, DARK_GRASS, GRAVEL, WATER,
+		# SPRUCE_LEAVES..CHERRY_LEAVES, CLAY, PODZOL, ICE, PACKED_ICE, MOSS_BLOCK
+		terrain_set[bt] = true
+
+	# Phase 1 — Cabane en bois (Small Survival House)
+	_load_structure_blueprint(
+		"res://structures/small_(15x13)_survival_house___(mcbuild_org).json",
+		"Cabane", 1, terrain_set)
+
+	# Phase 1 — Ferme (Wood House — plus rustique, convient à une ferme)
+	_load_structure_blueprint(
+		"res://structures/wood_house___(mcbuild_org).json",
+		"Ferme", 1, terrain_set)
+
+	# Phase 1 — Entrée de mine (trop simple pour un JSON, on garde le hardcode)
 	var BT_PLANKS = 11
-	var BT_GLASS = 61
-
-	# Sol (y=0)
-	for x in range(5):
-		for z in range(5):
-			cabin_blocks.append([x, 0, z, BT_PLANKS])
-
-	# Murs (y=1 à y=3)
-	for y in range(1, 4):
-		for x in range(5):
-			for z in range(5):
-				# Murs extérieurs seulement
-				if x == 0 or x == 4 or z == 0 or z == 4:
-					# Porte : ouverture 1 bloc large à y=1-2, z=2, x=0
-					if x == 0 and z == 2 and y <= 2:
-						continue
-					# Fenêtres ouvertes à y=2 sur les côtés (pas de verre en phase 1)
-					if y == 2 and ((x == 2 and (z == 0 or z == 4)) or (z == 2 and x == 4)):
-						continue  # Ouvertures pour les fenêtres
-					else:
-						cabin_blocks.append([x, y, z, BT_PLANKS])
-
-	# Toit (y=4)
-	for x in range(5):
-		for z in range(5):
-			cabin_blocks.append([x, 4, z, BT_PLANKS])
-
-	BLUEPRINTS.append({
-		"name": "Cabane",
-		"size": Vector3i(5, 5, 5),
-		"materials": { BT_PLANKS: 65 },
-		"block_list": cabin_blocks,
-		"phase": 1,
-	})
-
-	# Atelier 7x5x5
-	var workshop_blocks = []
-	var BT_COBBLE = 25
-
-	# Sol
-	for x in range(7):
-		for z in range(5):
-			workshop_blocks.append([x, 0, z, BT_COBBLE])
-
-	# Murs (y=1-3)
-	for y in range(1, 4):
-		for x in range(7):
-			for z in range(5):
-				if x == 0 or x == 6 or z == 0 or z == 4:
-					if x == 3 and z == 0 and y <= 2:
-						continue  # Porte
-					if y == 2 and ((z == 0 and (x == 1 or x == 5)) or (z == 4 and (x == 1 or x == 5))):
-						workshop_blocks.append([x, y, z, BT_GLASS])
-					else:
-						workshop_blocks.append([x, y, z, BT_PLANKS])
-
-	# Toit
-	for x in range(7):
-		for z in range(5):
-			workshop_blocks.append([x, 4, z, BT_PLANKS])
-
-	BLUEPRINTS.append({
-		"name": "Atelier",
-		"size": Vector3i(7, 5, 5),
-		"materials": { BT_PLANKS: 62, BT_COBBLE: 35, BT_GLASS: 4 },
-		"block_list": workshop_blocks,
-		"phase": 2,
-	})
-
-	# Tour de guet 3x8x3
-	var tower_blocks = []
-
-	# Sol
-	for x in range(3):
-		for z in range(3):
-			tower_blocks.append([x, 0, z, BT_COBBLE])
-
-	# Piliers (coins, y=1-6)
-	for y in range(1, 7):
-		tower_blocks.append([0, y, 0, BT_COBBLE])
-		tower_blocks.append([2, y, 0, BT_COBBLE])
-		tower_blocks.append([0, y, 2, BT_COBBLE])
-		tower_blocks.append([2, y, 2, BT_COBBLE])
-
-	# Plateforme (y=7)
-	for x in range(3):
-		for z in range(3):
-			tower_blocks.append([x, 7, z, BT_PLANKS])
-
-	BLUEPRINTS.append({
-		"name": "Tour de guet",
-		"size": Vector3i(3, 8, 3),
-		"materials": { BT_COBBLE: 33, BT_PLANKS: 9 },
-		"block_list": tower_blocks,
-		"phase": 3,
-	})
-
-	# === Ferme 6x4x6 (Phase 1) — tout en planches (pas besoin de pierre) ===
-	var farm_blocks = []
-	# Sol planches
-	for x in range(6):
-		for z in range(6):
-			farm_blocks.append([x, 0, z, BT_PLANKS])
-	# Murs bas (y=1-2) — planches, porte au centre x=0
-	for y in range(1, 3):
-		for x in range(6):
-			for z in range(6):
-				if x == 0 or x == 5 or z == 0 or z == 5:
-					if x == 0 and z == 3 and y <= 2:
-						continue  # Porte
-					farm_blocks.append([x, y, z, BT_PLANKS])
-	# Toit planches (y=3)
-	for x in range(6):
-		for z in range(6):
-			farm_blocks.append([x, 3, z, BT_PLANKS])
-	BLUEPRINTS.append({
-		"name": "Ferme",
-		"size": Vector3i(6, 4, 6),
-		"materials": { BT_PLANKS: 78 },
-		"block_list": farm_blocks,
-		"phase": 1,
-	})
-
-	# === Forge 5x5x5 (Phase 2) ===
-	var forge_blocks = []
-	var BT_STONE = 3
-	# Sol cobblestone
-	for x in range(5):
-		for z in range(5):
-			forge_blocks.append([x, 0, z, BT_COBBLE])
-	# Murs (y=1-3) — stone + cobblestone, cheminée
-	for y in range(1, 4):
-		for x in range(5):
-			for z in range(5):
-				if x == 0 or x == 4 or z == 0 or z == 4:
-					if x == 0 and z == 2 and y <= 2:
-						continue  # Porte
-					if y == 2 and ((x == 2 and z == 0) or (x == 2 and z == 4)):
-						forge_blocks.append([x, y, z, BT_GLASS])
-					else:
-						forge_blocks.append([x, y, z, BT_STONE if y >= 2 else BT_COBBLE])
-	# Toit (y=4)
-	for x in range(5):
-		for z in range(5):
-			forge_blocks.append([x, 4, z, BT_COBBLE])
-	BLUEPRINTS.append({
-		"name": "Forge",
-		"size": Vector3i(5, 5, 5),
-		"materials": { BT_COBBLE: 45, BT_STONE: 16, BT_GLASS: 2 },
-		"block_list": forge_blocks,
-		"phase": 2,
-	})
-
-	# === Entrepôt 7x4x7 (Phase 2) ===
-	var storage_blocks = []
-	# Sol planches
-	for x in range(7):
-		for z in range(7):
-			storage_blocks.append([x, 0, z, BT_PLANKS])
-	# Murs (y=1-2)
-	for y in range(1, 3):
-		for x in range(7):
-			for z in range(7):
-				if x == 0 or x == 6 or z == 0 or z == 6:
-					if x == 3 and z == 0 and y <= 2:
-						continue  # Porte large
-					if x == 4 and z == 0 and y <= 2:
-						continue
-					storage_blocks.append([x, y, z, BT_PLANKS])
-	# Toit (y=3)
-	for x in range(7):
-		for z in range(7):
-			storage_blocks.append([x, 3, z, BT_PLANKS])
-	BLUEPRINTS.append({
-		"name": "Entrepôt",
-		"size": Vector3i(7, 4, 7),
-		"materials": { BT_PLANKS: 98 },
-		"block_list": storage_blocks,
-		"phase": 2,
-	})
-
-	# === Maison 5x4x5 (Phase 2) ===
-	var house_blocks = []
-	# Sol planches
-	for x in range(5):
-		for z in range(5):
-			house_blocks.append([x, 0, z, BT_PLANKS])
-	# Murs (y=1-2) — planches, fenêtres verre
-	for y in range(1, 3):
-		for x in range(5):
-			for z in range(5):
-				if x == 0 or x == 4 or z == 0 or z == 4:
-					if x == 0 and z == 2 and y <= 2:
-						continue  # Porte
-					if y == 2 and ((x == 2 and (z == 0 or z == 4)) or (z == 2 and x == 4)):
-						house_blocks.append([x, y, z, BT_GLASS])
-					else:
-						house_blocks.append([x, y, z, BT_PLANKS])
-	# Toit (y=3)
-	for x in range(5):
-		for z in range(5):
-			house_blocks.append([x, 3, z, BT_PLANKS])
-	BLUEPRINTS.append({
-		"name": "Maison",
-		"size": Vector3i(5, 4, 5),
-		"materials": { BT_PLANKS: 56, BT_GLASS: 3 },
-		"block_list": house_blocks,
-		"phase": 2,
-	})
-
-	# === Entrée de mine 3x3x3 (Phase 1) — planches (pas besoin de pierre) ===
 	var mine_entry_blocks = []
-	# Piliers (y=0-2) aux 4 coins
 	for y in range(3):
 		mine_entry_blocks.append([0, y, 0, BT_PLANKS])
 		mine_entry_blocks.append([2, y, 0, BT_PLANKS])
 		mine_entry_blocks.append([0, y, 2, BT_PLANKS])
 		mine_entry_blocks.append([2, y, 2, BT_PLANKS])
-	# Linteau (y=2, milieu)
 	mine_entry_blocks.append([1, 2, 0, BT_PLANKS])
 	mine_entry_blocks.append([1, 2, 2, BT_PLANKS])
 	mine_entry_blocks.append([0, 2, 1, BT_PLANKS])
@@ -2024,6 +1832,174 @@ func _init_blueprints():
 		"block_list": mine_entry_blocks,
 		"phase": 1,
 	})
+
+	# Phase 2 — Forge (Fantasy Forge)
+	_load_structure_blueprint(
+		"res://structures/fantasy_forge___(mcbuild_org).json",
+		"Forge", 2, terrain_set)
+
+	# Phase 2 — Maison (Medieval Spruce Wood House 2)
+	_load_structure_blueprint(
+		"res://structures/medieval_spruce_wood_house_2___(mcbuild_org).json",
+		"Maison", 2, terrain_set)
+
+	# Phase 2 — Entrepôt (Medieval Guard Outpost — bâtiment trapu en pierre)
+	_load_structure_blueprint(
+		"res://structures/medieval_guard_outpost.json",
+		"Entrepôt", 2, terrain_set)
+
+	# Phase 3 — Tour de guet (Tour Garde existante)
+	_load_structure_blueprint(
+		"res://structures/tour_garde.json",
+		"Tour de guet", 3, terrain_set)
+
+	# Phase 3 — Guilde (Medieval Spruce Wood House — grande bâtisse)
+	_load_structure_blueprint(
+		"res://structures/medieval_spruce_wood_house___(mcbuild_org).json",
+		"Guilde", 3, terrain_set)
+
+	print("VillageManager: %d blueprints chargés" % BLUEPRINTS.size())
+
+
+func _load_structure_blueprint(path: String, bp_name: String, phase: int, terrain_set: Dictionary):
+	"""Charge une structure JSON et la convertit en blueprint village."""
+	var file = FileAccess.open(path, FileAccess.READ)
+	if not file:
+		push_warning("VillageManager: impossible de lire " + path)
+		return
+
+	var json = JSON.new()
+	if json.parse(file.get_as_text()) != OK:
+		push_warning("VillageManager: JSON invalide " + path)
+		return
+
+	var data = json.data
+	var sz = data["size"]  # [w, h, l] — ne pas utiliser data.size (conflit avec Dictionary.size())
+	var w = int(sz[0])
+	var h = int(sz[1])
+	var l = int(sz[2])
+	var palette_names: Array = data["palette"]
+
+	# Résoudre la palette → BlockType IDs
+	var palette: Array = []
+	for pname in palette_names:
+		if pname == "AIR":
+			palette.append(0)
+		elif pname == "KEEP":
+			palette.append(-1)  # sera ignoré
+		else:
+			var resolved = -1
+			for key in BlockRegistry.BlockType.keys():
+				if key == pname:
+					resolved = BlockRegistry.BlockType[key]
+					break
+			if resolved == -1:
+				# Bloc inconnu → STONE comme fallback
+				resolved = BlockRegistry.BlockType.STONE
+			palette.append(resolved)
+
+	# Décoder le RLE
+	var rle: Array = data["blocks_rle"]
+	var total = w * h * l
+	var blocks: Array = []
+	blocks.resize(total)
+	var pos = 0
+	var i = 0
+	while i + 1 < rle.size():
+		var pidx = int(rle[i])
+		var count = int(rle[i + 1])
+		var bt = palette[pidx] if pidx < palette.size() else 0
+		for j in range(count):
+			if pos < total:
+				blocks[pos] = bt
+				pos += 1
+		i += 2
+
+	# Extraire les blocs de construction (ignorer AIR, terrain, KEEP)
+	var block_list: Array = []
+	var wood_count: int = 0
+	var stone_count: int = 0
+	var glass_count: int = 0
+
+	# Sets pour classification des matériaux
+	var wood_types: Dictionary = {}
+	for bt in [5, 11, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 62, 64]:
+		# WOOD, PLANKS, logs, planks variantes, BOOKSHELF, BARREL
+		wood_types[bt] = true
+	var stone_types: Dictionary = {}
+	for bt in [3, 13, 25, 26, 27, 28, 29, 30, 31]:
+		# STONE, BRICK, COBBLESTONE, MOSSY, ANDESITE, GRANITE, DIORITE, DEEPSLATE, SMOOTH
+		stone_types[bt] = true
+
+	# Trouver le bounding box des blocs de construction
+	var min_x = w
+	var max_x = 0
+	var min_y = h
+	var max_y = 0
+	var min_z = l
+	var max_z = 0
+
+	for y in range(h):
+		for z in range(l):
+			for x in range(w):
+				var idx = y * w * l + z * w + x
+				var bt = blocks[idx]
+				if bt <= 0:
+					continue  # AIR ou KEEP
+				if terrain_set.has(bt):
+					continue  # Bloc terrain, ignorer
+				min_x = mini(min_x, x)
+				max_x = maxi(max_x, x)
+				min_y = mini(min_y, y)
+				max_y = maxi(max_y, y)
+				min_z = mini(min_z, z)
+				max_z = maxi(max_z, z)
+
+	if max_x < min_x:
+		push_warning("VillageManager: aucun bloc de construction dans " + path)
+		return
+
+	# Recalculer les coordonnées relatives au bounding box
+	for y in range(min_y, max_y + 1):
+		for z in range(l):
+			for x in range(w):
+				var idx = y * w * l + z * w + x
+				var bt = blocks[idx]
+				if bt <= 0:
+					continue
+				if terrain_set.has(bt):
+					continue
+				block_list.append([x - min_x, y - min_y, z - min_z, bt])
+				# Compter les matériaux
+				if wood_types.has(bt):
+					wood_count += 1
+				elif stone_types.has(bt):
+					stone_count += 1
+				elif bt == 61:  # GLASS
+					glass_count += 1
+
+	var bp_size = Vector3i(max_x - min_x + 1, max_y - min_y + 1, max_z - min_z + 1)
+
+	# Matériaux simplifiés : on ne demande que bois, pierre et verre
+	# Les blocs décoratifs/spéciaux sont "offerts" par la structure
+	var materials: Dictionary = {}
+	if wood_count > 0:
+		materials[11] = wood_count  # PLANKS (on accepte tout type de bois)
+	if stone_count > 0:
+		materials[25] = stone_count  # COBBLESTONE (on accepte tout type de pierre)
+	if glass_count > 0:
+		materials[61] = glass_count  # GLASS
+
+	BLUEPRINTS.append({
+		"name": bp_name,
+		"size": bp_size,
+		"materials": materials,
+		"block_list": block_list,
+		"phase": phase,
+	})
+	print("VillageManager: blueprint '%s' chargé — %dx%dx%d, %d blocs (W:%d S:%d G:%d)" % [
+		bp_name, bp_size.x, bp_size.y, bp_size.z, block_list.size(),
+		wood_count, stone_count, glass_count])
 
 # ============================================================
 # AGRICULTURE (Farming)

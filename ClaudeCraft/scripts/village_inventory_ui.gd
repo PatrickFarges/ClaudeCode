@@ -501,6 +501,8 @@ func _get_next_building_info() -> String:
 				var have = 0
 				if bt == 11:  # PLANKS
 					have = village_manager.get_total_planks()
+				elif bt == 3 or bt == 25:  # STONE/COBBLESTONE interchangeables
+					have = village_manager.get_total_stone()
 				else:
 					have = village_manager.get_resource_count(bt)
 				if have < needed:
