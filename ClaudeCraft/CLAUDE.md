@@ -80,7 +80,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 
 ## Direction du projet
 
-**Version actuelle : v13.0.0**
+**Version actuelle : v13.1.0**
 
 | Phase | Statut | Contenu |
 |-------|--------|---------|
@@ -102,7 +102,8 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 | 5.8 | Fait | v12.8.0 — Aplanissement terrain village 37×37 (`VILLAGE_RADIUS=18`). Altitude médiane comme référence, bâtisseur casse au-dessus et comble en cobblestone en dessous. Phase gating : pas de builds/chemin tant que le terrain n'est pas plat. `_find_build_site` simplifié (`ref_y+1`, zone bornée, anti-overlap workstations). UI progression aplanissement (X/Y blocs, %). Ancien flatten cosmétique (13×13, break only) supprimé |
 | 5.9 | Fait | v12.9.0 — Bâtisseur turbo : flatten batch ×8 blocs/tick (0.08s), construction batch ×4 blocs/tick (0.15s), chemin batch ×6 blocs/tick (0.1s). Terrain aplani ~10× plus vite, bâtiments construits ~5× plus vite |
 | 6.0 | Fait | v13.0.0 — **Vrais bâtiments Minecraft** : blueprints chargés depuis JSON (structures .schematic converties). Cabane=Survival House, Ferme=Wood House, Forge=Fantasy Forge, Maison=Spruce House 2, Entrepôt=Guard Outpost, Guilde=Spruce House. `convert_schem.py` supporte MCEdit/Alpha (IDs numériques pré-1.13, 256 blocs + metadata couleurs). Village agrandi `VILLAGE_RADIUS=45` (zone 91×91). Filtrage terrain automatique, matériaux simplifiés (bois/pierre/verre). 22 structures converties en stock |
-| 7 | À venir | Église centrale, place du village, taverne, moulin, éditeur de structures, système de faim actif |
+| 6.1 | Fait | v13.1.0 — Taverne (Medieval Tavern Inn, 19×19×31) et Moulin (Windmill, 35×49×35) ajoutés comme blueprints Phase 2. 10 bâtiments au total |
+| 7 | À venir | Église centrale, place du village, éditeur de structures, système de faim actif |
 
 **Packs GLB utilisés (CC0)** : Kenney.nl (18 modèles PNJ villageois). **PNJ futurs** : KayKit Adventurers (161 anims travail)
 

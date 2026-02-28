@@ -1848,6 +1848,16 @@ func _init_blueprints():
 		"res://structures/medieval_guard_outpost.json",
 		"Entrepôt", 2, terrain_set)
 
+	# Phase 2 — Taverne (Medieval Tavern Inn)
+	_load_structure_blueprint(
+		"res://structures/medieval_tavern_inn____(mcbuild_org).json",
+		"Taverne", 2, terrain_set)
+
+	# Phase 2 — Moulin (Windmill — boulangerie)
+	_load_structure_blueprint(
+		"res://structures/windmill___(mcbuild_org).json",
+		"Moulin", 2, terrain_set)
+
 	# Phase 3 — Tour de guet (Tour Garde existante)
 	_load_structure_blueprint(
 		"res://structures/tour_garde.json",
