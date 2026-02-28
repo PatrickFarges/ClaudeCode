@@ -264,11 +264,13 @@ func _refresh_contents():
 
 	# Objectif + aplanissement + mine
 	var obj_text = _get_next_objective()
-	if not village_manager._flatten_complete and village_manager.flatten_plan.size() > 0:
+	if village_manager._waiting_for_chunks:
+		obj_text += "\nChargement du terrain..."
+	elif not village_manager._flatten_complete and village_manager.flatten_plan.size() > 0:
 		var done = village_manager.flatten_index
 		var total_flatten = village_manager.flatten_plan.size()
 		var pct = int(float(done) / float(total_flatten) * 100.0) if total_flatten > 0 else 0
-		obj_text += "\nAplanissement : %d/%d blocs (%d%%)" % [done, total_flatten, pct]
+		obj_text += "\nAplanissement : %d/%d colonnes (%d%%)" % [done, total_flatten, pct]
 	if not village_manager._path_built and village_manager._path_blocks.size() > 0:
 		var path_done = village_manager._path_index
 		var path_total = village_manager._path_blocks.size()

@@ -103,7 +103,8 @@ var village_ref_y: int = -1          # altitude de référence (médiane)
 var flatten_plan: Array = []         # [{pos: Vector3i, action: "break"/"place"}]
 var flatten_index: int = 0           # progression
 var _flatten_complete: bool = false   # flag
-const VILLAGE_RADIUS = 45            # zone 91×91 (45+1+45) — agrandi pour vrais bâtiments MC
+const VILLAGE_RADIUS = 45            # zone 91×91 (45+1+45) — rayon pour placer les bâtiments
+const FLATTEN_RADIUS = 20            # zone 41×41 — rayon d'aplanissement (place + premiers bâtiments)
 
 # === PLACE DU VILLAGE ===
 var _path_built: bool = false  # true quand la place + chemins sont posés
@@ -120,6 +121,12 @@ func _process(delta):
 	if not world_manager:
 		world_manager = get_tree().get_first_node_in_group("world_manager")
 		return
+
+	# Attendre que tous les chunks de la zone village soient chargés
+	if _waiting_for_chunks:
+		if _are_village_chunks_loaded():
+			_waiting_for_chunks = false
+			_generate_flatten_plan()
 
 	_eval_timer += delta
 	if _eval_timer >= EVAL_INTERVAL:
@@ -143,8 +150,28 @@ func set_village_center(pos: Vector3):
 	village_center = pos
 	_center_set = true
 	print("VillageManager: centre du village à %s" % str(pos))
-	# Générer le plan d'aplanissement du terrain (après 3s pour que les chunks soient chargés)
-	get_tree().create_timer(3.0).timeout.connect(_generate_flatten_plan)
+	# On attend que tous les chunks de la zone village soient chargés
+	_waiting_for_chunks = true
+
+var _waiting_for_chunks: bool = false
+var _flatten_pass: int = 0  # nombre de passes de flatten effectuées
+
+func _are_village_chunks_loaded() -> bool:
+	if not world_manager:
+		return false
+	var cx = int(village_center.x)
+	var cz = int(village_center.z)
+	# Vérifier que tous les chunks couvrant la zone de flatten sont chargés
+	var min_cx = floori(float(cx - FLATTEN_RADIUS) / CHUNK_SIZE)
+	var max_cx = floori(float(cx + FLATTEN_RADIUS) / CHUNK_SIZE)
+	var min_cz = floori(float(cz - FLATTEN_RADIUS) / CHUNK_SIZE)
+	var max_cz = floori(float(cz + FLATTEN_RADIUS) / CHUNK_SIZE)
+	for chunk_x in range(min_cx, max_cx + 1):
+		for chunk_z in range(min_cz, max_cz + 1):
+			var chunk_pos = Vector3i(chunk_x, 0, chunk_z)
+			if not world_manager.chunks.has(chunk_pos):
+				return false
+	return true
 
 func _find_ground_y(wx: int, wz: int) -> int:
 	# Trouver le Y du SOL (bloc solide non-végétal) — ignore feuilles, troncs, herbe
@@ -166,104 +193,121 @@ func _find_ground_y(wx: int, wz: int) -> int:
 	return -1
 
 func _generate_flatten_plan():
+	# Génère une liste de colonnes (x,z) à visiter, triées par distance au centre.
+	# Le bâtisseur marchera en berserker et nettoiera chaque colonne au-dessus de ref_y.
+	# PAS de placement de pierre — juste du cassage.
 	if not world_manager:
 		return
 	var cx = int(village_center.x)
 	var cz = int(village_center.z)
 
-	# Collecter les Y du SOL (pas des arbres) dans la zone pour calculer la médiane
-	var surface_ys: Array = []
-	for dx in range(-VILLAGE_RADIUS, VILLAGE_RADIUS + 1):
-		for dz in range(-VILLAGE_RADIUS, VILLAGE_RADIUS + 1):
-			var sy = _find_ground_y(cx + dx, cz + dz)
-			if sy > 0:
-				surface_ys.append(sy)
-	if surface_ys.size() == 0:
-		print("VillageManager: flatten — aucune surface trouvée")
-		_flatten_complete = true
-		return
-
-	# Médiane = altitude de référence
-	surface_ys.sort()
-	village_ref_y = surface_ys[surface_ys.size() / 2]
+	# Calculer la médiane seulement à la première passe
+	if village_ref_y < 0:
+		var surface_ys: Array = []
+		for dx in range(-FLATTEN_RADIUS, FLATTEN_RADIUS + 1):
+			for dz in range(-FLATTEN_RADIUS, FLATTEN_RADIUS + 1):
+				var sy = _find_ground_y(cx + dx, cz + dz)
+				if sy > 0:
+					surface_ys.append(sy)
+		if surface_ys.size() == 0:
+			print("VillageManager: flatten — aucune surface trouvée")
+			_flatten_complete = true
+			return
+		surface_ys.sort()
+		village_ref_y = surface_ys[surface_ys.size() / 2]
 
 	# Positions des workstations à protéger
-	var ws_positions: Dictionary = {}
+	var ws_set: Dictionary = {}
 	for ws_type in placed_workstations:
 		var wp = placed_workstations[ws_type]
-		ws_positions[wp] = true
-		# Protéger aussi le bloc en dessous de la workstation
-		ws_positions[Vector3i(wp.x, wp.y - 1, wp.z)] = true
+		ws_set[Vector2i(wp.x, wp.z)] = true
 
-	# Générer le plan par colonne : chaque colonne (x,z) produit ses blocs de haut en bas (break) ou bas en haut (place)
-	# Trié par distance au centre (spirale sortante) pour que le bâtisseur travaille de proche en proche
-	var columns: Array = []  # [{dx, dz, dist, actions: [{pos, action}]}]
-	for dx in range(-VILLAGE_RADIUS, VILLAGE_RADIUS + 1):
-		for dz in range(-VILLAGE_RADIUS, VILLAGE_RADIUS + 1):
+	# Générer les colonnes à nettoyer : chaque entrée = { pos: Vector3i(x, ref_y, z) }
+	# Le bâtisseur nettoiera la colonne entière au-dessus de ref_y quand il arrive
+	var columns: Array = []
+	for dx in range(-FLATTEN_RADIUS, FLATTEN_RADIUS + 1):
+		for dz in range(-FLATTEN_RADIUS, FLATTEN_RADIUS + 1):
 			var wx = cx + dx
 			var wz = cz + dz
-			# Trouver le Y de surface complet (y compris arbres) pour savoir quoi casser
-			var surface_y = _find_surface_y(wx, wz)
-			# Trouver le Y du sol (sans arbres) pour la comparaison avec ref_y
-			var ground_y = _find_ground_y(wx, wz)
-			if ground_y < 0 and surface_y < 0:
+			# Protéger les workstations
+			if ws_set.has(Vector2i(wx, wz)):
 				continue
+			var surface_y = _find_surface_y(wx, wz)
+			if surface_y > village_ref_y:
+				var dist = abs(dx) + abs(dz)
+				columns.append({"pos": Vector3i(wx, village_ref_y, wz), "dist": dist})
 
-			var col_actions: Array = []
-
-			# Casser TOUT au-dessus de ref_y (arbres, terre, pierre, tout)
-			var top_y = maxi(surface_y, ground_y)
-			if top_y > village_ref_y:
-				for y in range(top_y, village_ref_y, -1):
-					var pos = Vector3i(wx, y, wz)
-					if ws_positions.has(pos):
-						continue
-					col_actions.append({"pos": pos, "action": "break"})
-
-			# Combler les creux sous ref_y
-			if ground_y >= 0 and ground_y < village_ref_y:
-				for y in range(ground_y + 1, village_ref_y + 1):
-					var pos = Vector3i(wx, y, wz)
-					if ws_positions.has(pos):
-						continue
-					col_actions.append({"pos": pos, "action": "place"})
-
-			if col_actions.size() > 0:
-				var dist = abs(dx) + abs(dz)  # distance Manhattan au centre
-				columns.append({"dist": dist, "actions": col_actions})
-
-	# Trier les colonnes par distance au centre (proches d'abord)
+	# Trier par distance au centre (spirale sortante)
 	columns.sort_custom(func(a, b): return a["dist"] < b["dist"])
 
-	# Aplatir en un seul plan : d'abord les break (toutes colonnes proches→loin),
-	# puis les place (toutes colonnes proches→loin)
-	var break_list: Array = []
-	var place_list: Array = []
+	flatten_plan = []
 	for col in columns:
-		for action in col["actions"]:
-			if action["action"] == "break":
-				break_list.append(action)
-			else:
-				place_list.append(action)
-
-	flatten_plan = break_list + place_list
+		flatten_plan.append(col)
 	flatten_index = 0
 
 	if flatten_plan.size() == 0:
 		_flatten_complete = true
 		print("VillageManager: terrain déjà plat (ref_y=%d)" % village_ref_y)
 	else:
-		var break_count = break_list.size()
-		var place_count = place_list.size()
-		print("VillageManager: flatten plan généré — %d blocs (%d break, %d place), ref_y=%d" % [flatten_plan.size(), break_count, place_count, village_ref_y])
+		print("VillageManager: flatten plan — %d colonnes à nettoyer, ref_y=%d" % [flatten_plan.size(), village_ref_y])
 
-func get_next_flatten_block():
+func get_next_flatten_column() -> Dictionary:
+	# Retourne la prochaine colonne à nettoyer { pos: Vector3i }
 	if flatten_index >= flatten_plan.size():
+		# Re-scanner pour vérifier s'il reste des colonnes
+		if _flatten_pass < 3:
+			_flatten_pass += 1
+			_generate_flatten_plan()
+			if flatten_plan.size() > 0:
+				print("VillageManager: flatten passe %d — %d colonnes supplémentaires" % [_flatten_pass, flatten_plan.size()])
+				var entry = flatten_plan[flatten_index]
+				flatten_index += 1
+				return entry
 		_flatten_complete = true
-		return null
+		print("VillageManager: aplanissement terminé après %d passe(s)" % _flatten_pass)
+		return {}
 	var entry = flatten_plan[flatten_index]
 	flatten_index += 1
 	return entry
+
+func clear_column_above_ref(wx: int, wz: int):
+	# Détruit tous les blocs au-dessus de ref_y dans la colonne (x,z)
+	# Protège les workstations
+	var top_y = _find_surface_y(wx, wz)
+	if top_y <= village_ref_y:
+		return
+	for y in range(top_y, village_ref_y, -1):
+		var bt = world_manager.get_block_at_position(Vector3(wx, y, wz))
+		if bt != BlockRegistry.BlockType.AIR:
+			# Protéger workstations
+			if BlockRegistry.is_workstation(bt):
+				continue
+			place_block(Vector3i(wx, y, wz), BlockRegistry.BlockType.AIR)
+			var drop = _flatten_drop(bt)
+			if drop >= 0:
+				add_resource(drop)
+
+func _flatten_drop(bt: int) -> int:
+	# Retourne le type de ressource obtenu en cassant un bloc pendant le flatten
+	match bt:
+		BlockRegistry.BlockType.STONE, BlockRegistry.BlockType.COBBLESTONE, \
+		BlockRegistry.BlockType.ANDESITE, BlockRegistry.BlockType.GRANITE, \
+		BlockRegistry.BlockType.DIORITE, BlockRegistry.BlockType.DEEPSLATE, \
+		BlockRegistry.BlockType.SMOOTH_STONE:
+			return BlockRegistry.BlockType.COBBLESTONE
+		BlockRegistry.BlockType.COAL_ORE:
+			return BlockRegistry.BlockType.COAL_ORE
+		BlockRegistry.BlockType.IRON_ORE:
+			return BlockRegistry.BlockType.IRON_ORE
+		BlockRegistry.BlockType.LOG, BlockRegistry.BlockType.SPRUCE_LOG, \
+		BlockRegistry.BlockType.BIRCH_LOG, BlockRegistry.BlockType.JUNGLE_LOG, \
+		BlockRegistry.BlockType.ACACIA_LOG, BlockRegistry.BlockType.DARK_OAK_LOG, \
+		BlockRegistry.BlockType.CHERRY_LOG:
+			return bt  # garder le type de bois
+		BlockRegistry.BlockType.SAND:
+			return BlockRegistry.BlockType.SAND
+		_:
+			return -1  # pas de drop (terre, herbe, feuilles...)
 
 # ============================================================
 # STOCKPILE
@@ -1731,22 +1775,10 @@ func _generate_plaza_plan():
 	var sy = ref_y  # terrain plat garanti après flatten
 	plaza_center = Vector3(cx, sy, cz)
 
-	var BT_SMOOTH = BlockRegistry.BlockType.SMOOTH_STONE  # 41 — sol de la place
-	var BT_COBBLE = BlockRegistry.BlockType.COBBLESTONE    # 25 — chemins + puits
-	var BT_BRICK = BlockRegistry.BlockType.BRICK           # 19 — bordure de la place
+	var BT_COBBLE = BlockRegistry.BlockType.COBBLESTONE    # 25 — puits + chemins
 	var BT_TORCH = BlockRegistry.BlockType.TORCH           # 72 — éclairage
 
-	# --- 1) Disque pavé en smooth_stone (rayon PLAZA_RADIUS) ---
-	# Bordure en brique, intérieur en smooth_stone
-	for dx in range(-PLAZA_RADIUS, PLAZA_RADIUS + 1):
-		for dz in range(-PLAZA_RADIUS, PLAZA_RADIUS + 1):
-			var dist_sq = dx * dx + dz * dz
-			if dist_sq <= PLAZA_RADIUS * PLAZA_RADIUS:
-				var on_border = dist_sq > (PLAZA_RADIUS - 1) * (PLAZA_RADIUS - 1)
-				var block_type = BT_BRICK if on_border else BT_SMOOTH
-				_path_blocks.append([Vector3i(cx + dx, sy, cz + dz), block_type])
-
-	# --- 2) Puits central (5×5 base, 3×3 creux, murs 2 blocs de haut) ---
+	# --- 1) Puits central (5×5 base, murs 2 blocs de haut, poteaux, toit) ---
 	# Base du puits en cobblestone (5×5)
 	for dx in range(-2, 3):
 		for dz in range(-2, 3):
@@ -1760,39 +1792,25 @@ func _generate_plaza_plan():
 	# Poteaux aux 4 coins (3 blocs de haut)
 	for corner in [[-2, -2], [-2, 2], [2, -2], [2, 2]]:
 		_path_blocks.append([Vector3i(cx + corner[0], sy + 3, cz + corner[1]), BT_COBBLE])
-	# Toit du puits (traverse en bois — cobblestone pour simplifier)
+	# Toit du puits (traverse en croix)
 	for dx in range(-2, 3):
 		_path_blocks.append([Vector3i(cx + dx, sy + 4, cz), BT_COBBLE])
 	for dz in range(-2, 3):
-		if dz != 0:  # centre déjà posé
+		if dz != 0:
 			_path_blocks.append([Vector3i(cx, sy + 4, cz + dz), BT_COBBLE])
 
-	# --- 3) Torches autour du puits ---
-	var torch_offsets = [[-3, -3], [-3, 3], [3, -3], [3, 3]]
-	for off in torch_offsets:
+	# --- 2) Torches autour du puits ---
+	for off in [[-3, -3], [-3, 3], [3, -3], [3, 3]]:
 		_path_blocks.append([Vector3i(cx + off[0], sy + 1, cz + off[1]), BT_TORCH])
-	# Torches sur le bord de la place (8 points cardinaux/diagonaux)
-	var border_r = PLAZA_RADIUS - 2
-	var torch_dirs = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]
-	for td in torch_dirs:
-		var tx = cx + int(td[0] * border_r * 0.7)
-		var tz = cz + int(td[1] * border_r * 0.7)
-		# Vérifier qu'on est dans le disque
-		var ddx = tx - cx
-		var ddz = tz - cz
-		if ddx * ddx + ddz * ddz <= (PLAZA_RADIUS - 1) * (PLAZA_RADIUS - 1):
-			_path_blocks.append([Vector3i(tx, sy + 1, tz), BT_TORCH])
 
-	# --- 4) Quatre chemins en cobblestone vers l'extérieur (3 blocs de large) ---
+	# --- 3) Quatre chemins en cobblestone (3 blocs de large, 12 blocs de long) ---
 	var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]]
 	for dir in dirs:
-		for i in range(PLAZA_RADIUS + 1, PLAZA_RADIUS + 15):
-			# Chemin de 3 blocs de large
+		for i in range(3, 15):  # depuis le bord du puits vers l'extérieur
 			for w in range(-1, 2):
 				var wx = cx + dir[0] * i + dir[1] * w
 				var wz = cz + dir[1] * i + dir[0] * w
-				# Vérifier qu'on reste dans la zone du village
-				if abs(wx - cx) <= VILLAGE_RADIUS and abs(wz - cz) <= VILLAGE_RADIUS:
+				if abs(wx - cx) <= FLATTEN_RADIUS and abs(wz - cz) <= FLATTEN_RADIUS:
 					_path_blocks.append([Vector3i(wx, sy, wz), BT_COBBLE])
 
 	_path_index = 0
@@ -2116,8 +2134,8 @@ func init_farm():
 	# Passe 3: 5-50 blocs, pas de check plat (fallback)
 	for pass_num in range(3):
 		var tolerance = [1, 2, 999][pass_num]
-		var min_dist = [15, 8, 5][pass_num]
-		var max_dist = [35, 45, 50][pass_num]
+		var min_dist = [30, 25, 22][pass_num]
+		var max_dist = [50, 55, 60][pass_num]
 
 		for attempt in range(60):
 			var dist = randi_range(min_dist, max_dist)

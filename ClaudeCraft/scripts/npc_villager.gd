@@ -79,7 +79,6 @@ var _mine_target: Vector3i = INVALID_POS
 var _build_timer: float = 0.0
 var _path_block_type: int = 25  # type de bloc courant pour build_path (default COBBLESTONE)
 var _task_status: String = ""  # texte affiché
-var _flatten_action: String = "break"  # action en cours pour le flatten
 
 # === Label3D au-dessus de la tête ===
 var _head_label: Label3D = null
@@ -1192,70 +1191,38 @@ func _execute_farm_harvest(delta):
 func _execute_flatten(delta):
 	_task_status = "Aplanissement terrain"
 
-	# Obtenir le prochain bloc à traiter
+	# Obtenir la prochaine colonne à nettoyer
 	if _mine_target == INVALID_POS:
-		var next = village_manager.get_next_flatten_block()
-		if next == null:
+		var next = village_manager.get_next_flatten_column()
+		if next.is_empty():
 			current_task = {}  # flatten terminé
 			return
 		_mine_target = next["pos"]
-		_flatten_action = next["action"]
 		_arrived_at_target = false
-		_build_timer = 0.0
 
-	# Marcher au niveau du sol, pas à la hauteur du bloc cible
+	# Marcher en BERSERKER vers la colonne (détruit tout sur le passage)
 	var walk_target = Vector3(_mine_target.x + 0.5, global_position.y, _mine_target.z + 0.5)
 
-	# Marcher vers la position (distance horizontale seulement)
 	if not _arrived_at_target:
 		var dist = Vector3(global_position.x, 0, global_position.z).distance_to(
 			Vector3(walk_target.x, 0, walk_target.z))
-		if dist < 3.0:
+		if dist < 2.0:
 			_arrived_at_target = true
 		else:
-			_walk_toward(walk_target, delta)
+			_berserker_walk_toward(walk_target, delta)
 			return
 
-	_face_target(walk_target)
-	is_moving = false
-	_decelerate()
-	_play_anim("attack")
+	# Arrivé : nettoyer la colonne entière au-dessus de ref_y
+	village_manager.clear_column_above_ref(_mine_target.x, _mine_target.z)
 
-	_build_timer += delta
-	if _build_timer >= 0.08:
-		_build_timer = 0.0
-		# Batch flatten : traiter jusqu'à 8 blocs par tick
-		var batch_count = 0
-		while batch_count < 8:
-			# Premier bloc = _mine_target déjà récupéré
-			if _flatten_action == "break":
-				var bt = world_manager.get_block_at_position(
-					Vector3(_mine_target.x, _mine_target.y, _mine_target.z))
-				if bt != BlockRegistry.BlockType.AIR:
-					village_manager.place_block(_mine_target, BlockRegistry.BlockType.AIR)
-					village_manager.add_resource(_mined_drop(bt))
-			else:  # "place"
-				if village_manager.get_total_stone() >= 1:
-					village_manager.consume_any_stone(1)
-					village_manager.place_block(_mine_target, BlockRegistry.BlockType.COBBLESTONE)
-				else:
-					village_manager.flatten_index -= 1
-					village_manager.return_task(current_task)
-					current_task = {}
-					_mine_target = INVALID_POS
-					return
-			batch_count += 1
-			# Chercher le bloc suivant
-			var next = village_manager.get_next_flatten_block()
-			if next == null:
-				_mine_target = INVALID_POS
-				current_task = {}  # flatten terminé
-				return
-			_mine_target = next["pos"]
-			_flatten_action = next["action"]
-		# Montrer le label sur le dernier bloc traité
-		_show_harvest_label("Terrain! x%d" % batch_count, _mine_target)
-		_mine_target = INVALID_POS  # reprendre au prochain tick
+	# Nettoyer aussi les 4 voisins (évite les blocs flottants sur les bords)
+	for neighbor in [Vector2i(1,0), Vector2i(-1,0), Vector2i(0,1), Vector2i(0,-1)]:
+		var nx = _mine_target.x + neighbor.x
+		var nz = _mine_target.z + neighbor.y
+		village_manager.clear_column_above_ref(nx, nz)
+
+	_show_harvest_label("Terrain!", _mine_target)
+	_mine_target = INVALID_POS
 
 func _behavior_return_to_surface(delta):
 	_task_status = "Remonte..."

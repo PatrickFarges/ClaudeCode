@@ -1,11 +1,16 @@
 extends Node
 
-@export var day_duration: float = 600.0  # Secondes pour un cycle complet (10 min)
+@export var day_duration: float = 600.0  # Secondes pour un cycle complet (10 min) à vitesse normale
 @export var start_time: float = 0.3      # 0=minuit, 0.25=aube, 0.5=midi, 0.75=crépuscule
 
 var current_time: float = 0.3
 var sun: DirectionalLight3D
 var env: Environment
+
+# Vitesse du temps
+var speed_index: int = 1  # 0=Lent, 1=Normal, 2=Rapide, 3=Très rapide
+const SPEED_NAMES = ["Lent", "Normal", "Rapide", "Très rapide"]
+const SPEED_MULTIPLIERS = [0.5, 1.0, 2.0, 10.0]
 
 # Couleurs du ciel
 const SKY_DAY = Color(0.7, 0.85, 0.95)
@@ -25,7 +30,8 @@ func _ready():
 	add_to_group("day_night_cycle")
 
 func _process(delta):
-	current_time += delta / day_duration
+	var speed_mult = SPEED_MULTIPLIERS[speed_index]
+	current_time += (delta * speed_mult) / day_duration
 	if current_time >= 1.0:
 		current_time -= 1.0
 
@@ -101,3 +107,12 @@ func get_hour() -> float:
 
 func set_time(time: float):
 	current_time = clampf(time, 0.0, 1.0)
+
+func get_speed_name() -> String:
+	return SPEED_NAMES[speed_index]
+
+func get_speed_multiplier() -> float:
+	return SPEED_MULTIPLIERS[speed_index]
+
+func set_speed(index: int):
+	speed_index = clampi(index, 0, SPEED_NAMES.size() - 1)
