@@ -59,7 +59,7 @@ Format JSON : palette + RLE layer-first. `KEEP`=terrain intact, `AIR`=creuser. P
 ## Outils Python
 
 - **`scripts/convert_schem.py`** (~940 lignes) : convertisseur `.schem` → JSON ClaudeCraft, parseur NBT maison, 260+ mappings blocs
-- **`scripts/structure_viewer.py`** (~2500 lignes) : **éditeur + visualiseur 3D** PyQt6/PyOpenGL — 73 types de blocs, palette couleurs, placement/suppression clic, undo/redo (Ctrl+Z/Y), curseur 3D transparent, export JSON. Modes : visu (charge .json/.schem/.litematic/.glb/.obj) + éditeur (Ctrl+N nouveau, Ctrl+E éditer existant)
+- **`scripts/structure_viewer.py`** (v2.0.0, ~2600 lignes) : **éditeur + visualiseur 3D** PyQt6/PyOpenGL — 73 types de blocs, palette couleurs latérale, placement/suppression clic (raycasting AABB), undo/redo (Ctrl+Z/Y), curseur 3D transparent, export JSON. Toggle "Editer" (Ctrl+E) avec feedback visuel (texte vert + bordure verte viewport). Modes : visu (charge .json/.schem/.litematic/.glb/.obj) + éditeur (Ctrl+N nouveau, Ctrl+E toggle)
 - **`scripts/minecraft_import.py`** (~700 lignes) : extracteur client.jar → 8 JSON (2390 blocs, 1283 items, 1396 recettes, etc.) dans `minecraft_data/` (gitignored)
 
 ## Packs de textures (`TexturesPack/`)
@@ -80,7 +80,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 
 ## Direction du projet
 
-**Version actuelle : v13.2.0**
+**Version actuelle : v13.2.1**
 
 | Phase | Statut | Contenu |
 |-------|--------|---------|
@@ -103,7 +103,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 | 5.9 | Fait | v12.9.0 — Bâtisseur turbo : flatten batch ×8 blocs/tick (0.08s), construction batch ×4 blocs/tick (0.15s), chemin batch ×6 blocs/tick (0.1s). Terrain aplani ~10× plus vite, bâtiments construits ~5× plus vite |
 | 6.0 | Fait | v13.0.0 — **Vrais bâtiments Minecraft** : blueprints chargés depuis JSON (structures .schematic converties). Cabane=Survival House, Ferme=Wood House, Forge=Fantasy Forge, Maison=Spruce House 2, Entrepôt=Guard Outpost, Guilde=Spruce House. `convert_schem.py` supporte MCEdit/Alpha (IDs numériques pré-1.13, 256 blocs + metadata couleurs). Village agrandi `VILLAGE_RADIUS=45` (zone 91×91). Filtrage terrain automatique, matériaux simplifiés (bois/pierre/verre). 22 structures converties en stock |
 | 6.1 | Fait | v13.1.0 — Taverne (Medieval Tavern Inn, 19×19×31) et Moulin (Windmill, 35×49×35) ajoutés comme blueprints Phase 2. 10 bâtiments au total |
-| 6.2 | Fait | v13.2.0 — **Éditeur de structures 3D** : `structure_viewer.py` transformé en éditeur complet. 73 types de blocs avec couleurs pastel, palette latérale avec swatches, placement/suppression par clic (raycasting AABB), curseur 3D transparent, undo/redo (Ctrl+Z/Y), nouveau/éditer existant (Ctrl+N/E), export JSON ClaudeCraft |
+| 6.2 | Fait | v13.2.0 — **Éditeur de structures 3D** (`structure_viewer.py` v2.0.0) : 73 blocs pastel, palette latérale swatches, placement/suppression clic (raycasting AABB), curseur 3D transparent, undo/redo (Ctrl+Z/Y), toggle Editer (Ctrl+E) avec texte vert + bordure verte viewport, Ctrl+N nouveau, export JSON. Palette cachée en mode visu, visible en mode édition |
 | 7 | À venir | Église centrale, place du village, système de faim actif |
 
 **Packs GLB utilisés (CC0)** : Kenney.nl (18 modèles PNJ villageois). **PNJ futurs** : KayKit Adventurers (161 anims travail)

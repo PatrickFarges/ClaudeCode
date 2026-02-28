@@ -22,7 +22,14 @@ Dependances :
 Usage :
   python structure_viewer.py
   python structure_viewer.py "chemin/vers/structure.json"
+
+Changelog :
+  v2.0.0 — Editeur 3D complet (palette 73 blocs, placement/suppression,
+            raycasting AABB, curseur 3D, undo/redo, toggle Editer vert + bordure)
+  v1.0.0 — Visualiseur 3D (voxel + mesh, navigateur fichiers, export JSON)
 """
+
+APP_VERSION = "2.0.0"
 
 import sys
 import os
@@ -1154,6 +1161,7 @@ class VoxelGLWidget(QOpenGLWidget):
 
         # Mouse
         self.last_pos = None
+        self._press_pos = None  # position initiale du clic
         self.right_pressed = False
         self.left_pressed = False
         self._mouse_moved = False  # track drag vs click
@@ -1189,6 +1197,7 @@ class VoxelGLWidget(QOpenGLWidget):
         self._redo_stack.clear()
         self.cursor_pos = None
 
+        self.makeCurrent()
         if self.display_list_id:
             glDeleteLists(self.display_list_id, 1)
             self.display_list_id = 0
@@ -1196,6 +1205,7 @@ class VoxelGLWidget(QOpenGLWidget):
         if self.mesh_display_list:
             glDeleteLists(self.mesh_display_list, 2)
             self.mesh_display_list = 0
+        self.doneCurrent()
 
         sx, sy, sz = size
         self.center = (sx / 2.0, 0.0, sz / 2.0)
@@ -1229,9 +1239,13 @@ class VoxelGLWidget(QOpenGLWidget):
         self.editor_size = (max(sx, 64), max(sy, 64), max(sz, 64))
         self.structure = None
         self.mesh_data = None
+
+        self.makeCurrent()
         if self.mesh_display_list:
             glDeleteLists(self.mesh_display_list, 2)
             self.mesh_display_list = 0
+        self._rebuild_editor_display_list()
+        self.doneCurrent()
 
         self.center = (sx / 2.0, sy / 2.0, sz / 2.0)
         self.zoom = max(sx, sy, sz) * 1.8
@@ -1240,7 +1254,6 @@ class VoxelGLWidget(QOpenGLWidget):
         self.pan_x = 0.0
         self.pan_y = 0.0
         self.pan_z = 0.0
-        self._rebuild_editor_display_list()
         self.update()
 
     def place_block(self, x, y, z, block_name):
@@ -1255,7 +1268,9 @@ class VoxelGLWidget(QOpenGLWidget):
             self.editor_blocks.pop(key, None)
         else:
             self.editor_blocks[key] = block_name
+        self.makeCurrent()
         self._rebuild_editor_display_list()
+        self.doneCurrent()
         self.editor_changed.emit()
         self.update()
 
@@ -1268,7 +1283,9 @@ class VoxelGLWidget(QOpenGLWidget):
         self._undo_stack.append(("remove", key, old))
         self._redo_stack.clear()
         del self.editor_blocks[key]
+        self.makeCurrent()
         self._rebuild_editor_display_list()
+        self.doneCurrent()
         self.editor_changed.emit()
         self.update()
 
@@ -1283,7 +1300,9 @@ class VoxelGLWidget(QOpenGLWidget):
             self.editor_blocks.pop(key, None)
         else:
             self.editor_blocks[key] = old_val
+        self.makeCurrent()
         self._rebuild_editor_display_list()
+        self.doneCurrent()
         self.editor_changed.emit()
         self.update()
 
@@ -1298,7 +1317,9 @@ class VoxelGLWidget(QOpenGLWidget):
             self.editor_blocks.pop(key, None)
         else:
             self.editor_blocks[key] = val
+        self.makeCurrent()
         self._rebuild_editor_display_list()
+        self.doneCurrent()
         self.editor_changed.emit()
         self.update()
 
@@ -1380,7 +1401,15 @@ class VoxelGLWidget(QOpenGLWidget):
 
     def _raycast_editor(self, mx, my):
         """Raycast depuis la souris vers la grille editeur. Retourne (hit_pos, face_normal) ou (None, None)."""
-        # Recuperer les matrices OpenGL
+        # Activer le contexte OpenGL pour lire les matrices
+        self.makeCurrent()
+        try:
+            return self._do_raycast(mx, my)
+        finally:
+            self.doneCurrent()
+
+    def _do_raycast(self, mx, my):
+        """Implementation interne du raycast (contexte GL deja actif)."""
         try:
             modelview = glGetDoublev(GL_MODELVIEW_MATRIX)
             projection = glGetDoublev(GL_PROJECTION_MATRIX)
@@ -1404,25 +1433,12 @@ class VoxelGLWidget(QOpenGLWidget):
             return None, None
         ray_dir /= ray_len
 
-        # DDA voxel traversal (Amanatides & Woo)
         best_t = float('inf')
         best_pos = None
         best_normal = None
 
-        # Tester chaque bloc existant + le sol (y=0)
-        # Pour la performance, on teste les faces de chaque bloc existant
-        blocks_to_test = set(self.editor_blocks.keys())
-        # Ajouter les voisins libres des blocs existants pour le placement
-        neighbors = set()
-        for (bx, by, bz) in blocks_to_test:
-            for dx, dy, dz in [(1,0,0),(-1,0,0),(0,1,0),(0,-1,0),(0,0,1),(0,0,-1)]:
-                n = (bx+dx, by+dy, bz+dz)
-                if n not in blocks_to_test and 0 <= n[1] < self.editor_size[1]:
-                    neighbors.add(n)
-
-        # Aussi tester le plan y=0 pour placer le premier bloc
+        # Grille vide : intersection avec le plan y=0
         if not self.editor_blocks:
-            # Grille vide : intersection avec le plan y=0
             if abs(ray_dir[1]) > 1e-10:
                 t = -ray_origin[1] / ray_dir[1]
                 if t > 0:
@@ -1435,7 +1451,7 @@ class VoxelGLWidget(QOpenGLWidget):
             return None, None
 
         # Tester intersection rayon-AABB pour chaque bloc existant
-        for (bx, by, bz) in blocks_to_test:
+        for (bx, by, bz) in self.editor_blocks:
             t, normal = self._ray_aabb(ray_origin, ray_dir, bx, by, bz)
             if t is not None and t < best_t:
                 best_t = t
@@ -1444,6 +1460,18 @@ class VoxelGLWidget(QOpenGLWidget):
 
         if best_pos is not None:
             return best_pos, best_normal
+
+        # Fallback : intersection plan y=0 si aucun bloc touche
+        if abs(ray_dir[1]) > 1e-10:
+            t = -ray_origin[1] / ray_dir[1]
+            if t > 0:
+                hit = ray_origin + t * ray_dir
+                gx = int(math.floor(hit[0]))
+                gz = int(math.floor(hit[2]))
+                sx, _, sz = self.editor_size
+                if 0 <= gx < sx and 0 <= gz < sz:
+                    return (gx, 0, gz), (0, 1, 0)
+
         return None, None
 
     def _ray_aabb(self, origin, direction, bx, by, bz):
@@ -1889,6 +1917,7 @@ class VoxelGLWidget(QOpenGLWidget):
     # ---- Controles souris ----
 
     def mousePressEvent(self, event):
+        self._press_pos = event.position()  # position initiale du clic
         self.last_pos = event.position()
         self._mouse_moved = False
         if event.button() == Qt.MouseButton.RightButton:
@@ -1914,14 +1943,12 @@ class VoxelGLWidget(QOpenGLWidget):
                     hit, normal = self._raycast_editor(pos.x(), pos.y())
                     if hit is not None and normal is not None:
                         if hit in self.editor_blocks:
-                            # Placer a cote du bloc touche
                             nx = hit[0] + normal[0]
                             ny = hit[1] + normal[1]
                             nz = hit[2] + normal[2]
                             if ny >= 0 and ny < self.editor_size[1]:
                                 self.place_block(nx, ny, nz, self.selected_block)
                         else:
-                            # Placer sur la grille vide (premier bloc)
                             self.place_block(*hit, self.selected_block)
             self.left_pressed = False
 
@@ -1933,39 +1960,40 @@ class VoxelGLWidget(QOpenGLWidget):
         dx = event.position().x() - self.last_pos.x()
         dy = event.position().y() - self.last_pos.y()
 
-        # Detecter si la souris a bouge (pour distinguer clic vs drag)
-        if abs(dx) > 3 or abs(dy) > 3:
-            self._mouse_moved = True
+        # Detecter si la souris a bouge assez depuis le clic initial (distance totale)
+        if self._press_pos and (self.right_pressed or self.left_pressed):
+            total_dx = event.position().x() - self._press_pos.x()
+            total_dy = event.position().y() - self._press_pos.y()
+            if abs(total_dx) > 5 or abs(total_dy) > 5:
+                self._mouse_moved = True
 
         self.last_pos = event.position()
 
         if self.right_pressed:
-            # Rotation orbitale
-            self.rot_y += dx * 0.4
-            self.rot_x += dy * 0.4
-            self.rot_x = max(-90, min(90, self.rot_x))
-            self.update()
+            if self._mouse_moved:
+                # Rotation orbitale (seulement si drag confirme)
+                self.rot_y += dx * 0.4
+                self.rot_x += dy * 0.4
+                self.rot_x = max(-90, min(90, self.rot_x))
+                self.update()
         elif self.left_pressed:
-            modifiers = QApplication.keyboardModifiers()
-            if modifiers & Qt.KeyboardModifier.ControlModifier:
-                # Deplacement Z (profondeur)
-                self.pan_z += dy * 0.05 * max(1.0, self.zoom / 50.0)
-            else:
-                if self.editor_mode and not self._mouse_moved:
-                    pass  # ne pas deplacer si c'est un clic editeur
+            if self._mouse_moved:
+                modifiers = QApplication.keyboardModifiers()
+                if modifiers & Qt.KeyboardModifier.ControlModifier:
+                    # Deplacement Z (profondeur)
+                    self.pan_z += dy * 0.05 * max(1.0, self.zoom / 50.0)
                 else:
                     # Deplacement X/Y
                     scale = max(0.01, self.zoom / 800.0)
                     self.pan_x += dx * scale
                     self.pan_y -= dy * scale
-            self.update()
-        elif self.editor_mode and not self.right_pressed and not self.left_pressed:
-            # Mise a jour du curseur 3D en mode editeur (mouse tracking)
+                self.update()
+        elif self.editor_mode:
+            # Mise a jour du curseur 3D en mode editeur (survol sans bouton)
             pos = event.position()
             hit, normal = self._raycast_editor(pos.x(), pos.y())
             if hit is not None and normal is not None:
                 if hit in self.editor_blocks:
-                    # Curseur a cote du bloc
                     self.cursor_pos = (hit[0] + normal[0], hit[1] + normal[1], hit[2] + normal[2])
                 else:
                     self.cursor_pos = hit
@@ -2342,7 +2370,7 @@ class StructureViewer(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("ClaudeCraft - Editeur de Structures 3D")
+        self.setWindowTitle(f"ClaudeCraft Editeur v{APP_VERSION}")
         self.resize(1400, 900)
 
         self.current_structure = None
@@ -2377,6 +2405,7 @@ class StructureViewer(QMainWindow):
         self.palette_panel = BlockPalettePanel(self)
         self.palette_panel.block_selected.connect(self._on_block_selected)
         self.palette_panel.setFixedWidth(220)
+        self.palette_panel.setVisible(False)  # cache par defaut (mode visu)
 
         # Layout : splitter vertical (viewport + info)
         right_splitter = QSplitter(Qt.Orientation.Vertical, self)
@@ -2440,11 +2469,12 @@ class StructureViewer(QMainWindow):
         act_open.triggered.connect(self.open_file)
         toolbar.addAction(act_open)
 
-        # Editer (passe la structure chargee en mode editeur)
-        act_edit = QAction("Editer", self)
-        act_edit.setShortcut(QKeySequence("Ctrl+E"))
-        act_edit.triggered.connect(self._edit_current)
-        toolbar.addAction(act_edit)
+        # Editer (toggle mode editeur)
+        self.act_edit = QAction("Editer", self)
+        self.act_edit.setShortcut(QKeySequence("Ctrl+E"))
+        self.act_edit.setCheckable(True)
+        self.act_edit.triggered.connect(self._toggle_edit_mode)
+        toolbar.addAction(self.act_edit)
 
         toolbar.addSeparator()
 
@@ -2513,26 +2543,59 @@ class StructureViewer(QMainWindow):
         self.current_structure = None
         self.current_mesh = None
         self.current_path = None
-        self.setWindowTitle("ClaudeCraft Editeur — Nouvelle structure")
-        self.statusBar().showMessage("Mode editeur — Clic gauche: placer | Clic droit: supprimer | Ctrl+Z: annuler | Ctrl+Y: refaire")
-        self.palette_panel.update_count(0)
-        self._update_editor_info()
+        self._set_editor_ui(True)
 
-    def _edit_current(self):
-        """Passe la structure courante en mode editeur."""
-        if self.current_structure:
-            self.gl_widget.edit_structure(self.current_structure)
-            name = self.current_structure.name
-            self.current_structure = None
-            self.current_mesh = None
-            self.setWindowTitle(f"ClaudeCraft Editeur — {name}")
-            self.statusBar().showMessage("Mode editeur — Clic gauche: placer | Clic droit: supprimer | Ctrl+Z: annuler | Ctrl+Y: refaire")
+    def _toggle_edit_mode(self, checked=None):
+        """Active/desactive le mode editeur."""
+        if checked is None:
+            checked = not self.gl_widget.editor_mode
+
+        if checked:
+            # Activer le mode editeur
+            if self.current_structure:
+                self.gl_widget.edit_structure(self.current_structure)
+                self.current_structure = None
+                self.current_mesh = None
+            elif not self.gl_widget.editor_mode:
+                # Pas de structure chargee — creer une grille vide
+                self.gl_widget.new_editor((32, 64, 32))
+                self.current_structure = None
+                self.current_mesh = None
+            self._set_editor_ui(True)
+        else:
+            # Desactiver le mode editeur — repasser en mode visualisation
+            if self.gl_widget.editor_blocks:
+                # Convertir les blocs editeur en structure pour la visu
+                s = self.gl_widget.to_structure_data()
+                if s:
+                    self.current_structure = s
+                    self.gl_widget.set_structure(s)
+            self.gl_widget.editor_mode = False
+            self._set_editor_ui(False)
+
+    def _set_editor_ui(self, active):
+        """Met a jour l'interface pour refléter l'etat du mode editeur."""
+        self.act_edit.setChecked(active)
+        if active:
+            self.setWindowTitle(f"ClaudeCraft Editeur v{APP_VERSION} — Mode edition")
+            self.statusBar().showMessage("MODE EDITION — Clic gauche: placer | Clic droit: supprimer | Ctrl+Z: annuler | Ctrl+Y: refaire")
             self.palette_panel.update_count(len(self.gl_widget.editor_blocks))
             self._update_editor_info()
-        elif self.gl_widget.editor_mode:
-            self.statusBar().showMessage("Deja en mode editeur")
+            # Bordure verte autour du viewport
+            self.gl_widget.setStyleSheet("border: 3px solid #40c040;")
+            self.palette_panel.setVisible(True)
         else:
-            self.statusBar().showMessage("Charger une structure d'abord (Ctrl+O)")
+            self.setWindowTitle(f"ClaudeCraft Editeur v{APP_VERSION} — Visualisation")
+            self.statusBar().showMessage("Mode visualisation — Ctrl+E ou bouton Editer pour modifier")
+            self.gl_widget.setStyleSheet("")
+            # Garder la palette visible mais la masquer en mode visu
+            self.palette_panel.setVisible(False)
+            if self.current_structure:
+                self._update_info_panel(
+                    self.current_structure,
+                    self.current_structure.count_non_air(),
+                    self.current_structure.size[0] * self.current_structure.size[1] * self.current_structure.size[2],
+                    self.gl_widget.face_count, 0, 0)
 
     def _on_block_selected(self, block_name):
         """Appele quand un bloc est selectionne dans la palette."""
@@ -2697,6 +2760,10 @@ class StructureViewer(QMainWindow):
 
     def load_file(self, path):
         """Charge et affiche un fichier (structure voxel ou modele 3D)."""
+        # Desactiver le mode editeur si actif
+        if self.gl_widget.editor_mode:
+            self.gl_widget.editor_mode = False
+            self._set_editor_ui(False)
         basename = os.path.basename(path)
         self.statusBar().showMessage(f"Chargement de {basename}...")
         QApplication.processEvents()
@@ -2735,7 +2802,7 @@ class StructureViewer(QMainWindow):
                 f"{len(data.submeshes)} sous-objets — "
                 f"Charge en {t_load:.2f}s, rendu en {t_render:.2f}s"
             )
-            self.setWindowTitle(f"ClaudeCraft Viewer — {data.name}")
+            self.setWindowTitle(f"ClaudeCraft Editeur — {data.name}")
             self._update_mesh_info_panel(data, t_load, t_render)
         else:
             # Structure voxel
@@ -2754,7 +2821,7 @@ class StructureViewer(QMainWindow):
                 f"{non_air:,} blocs — {faces:,} faces — "
                 f"Charge en {t_load:.1f}s, mesh en {t_render:.1f}s"
             )
-            self.setWindowTitle(f"ClaudeCraft Viewer — {data.name}")
+            self.setWindowTitle(f"ClaudeCraft Editeur — {data.name}")
             self._update_info_panel(data, non_air, total, faces, t_load, t_render)
 
         # Mettre en surbrillance dans le navigateur
@@ -2934,6 +3001,7 @@ def main():
         QToolBar QToolButton { color: #cdd6f4; background: #313244; border: 1px solid #45475a;
                                padding: 4px 10px; border-radius: 4px; font-size: 12px; }
         QToolBar QToolButton:hover { background: #45475a; }
+        QToolBar QToolButton:checked { color: #40e040; background: #2a3a2a; border: 1px solid #40c040; font-weight: bold; }
         QStatusBar { background-color: #181825; color: #a6adc8; font-size: 11px; }
         QSplitter::handle { background-color: #45475a; width: 2px; }
         QSplitter::handle:horizontal { width: 3px; }
