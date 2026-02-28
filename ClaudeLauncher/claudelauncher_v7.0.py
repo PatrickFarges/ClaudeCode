@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ClaudeLauncher V7.0 - Style Steam/Playnite
+ClaudeLauncher - Style Steam/Playnite
 Nouveautés V7.0 :
 - Auto-sélection + mémorisation de l'onglet actif
 - Tags / Mots-clés pour organiser les programmes
 - Carrousel d'images personnalisées (local + URL)
 - Fix Unicode console Windows cp1252
+V7.1 :
+- Lancement en mode fenêtre maximisée par défaut
 """
+
+APP_VERSION = "7.1"
 
 import sys
 import os
@@ -1092,7 +1096,7 @@ class ClaudeLauncher(QMainWindow):
     
     def init_ui(self):
         """Initialise l'interface"""
-        self.setWindowTitle("ClaudeLauncher V7.0 🏷️")
+        self.setWindowTitle(f"ClaudeLauncher V{APP_VERSION} 🏷️")
         self.setMinimumSize(1200, 700)
         
         central_widget = QWidget()
@@ -2422,7 +2426,7 @@ class ClaudeLauncher(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     launcher = ClaudeLauncher()
-    launcher.show()
+    launcher.showMaximized()
     sys.exit(app.exec())
 
 

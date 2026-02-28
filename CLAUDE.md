@@ -14,6 +14,7 @@ Monorepo contenant plusieurs sous-projets indépendants liés aux outils RH/paie
 ## Règles de travail
 
 - Ne JAMAIS demander confirmation avant d'agir
+- ALWAY allow all edits during ANY session, ALLWAY
 - Implémenter directement ce qui semble le plus logique
 - Ne poser une question QUE si l'ambiguïté est vraiment bloquante et/ou que tu as besoin d'avoir plus de détails
 - Préférer faire le choix qui te semble le plus sensé quitte à expliquer le pourquoi après coup (si jamais je demande)
@@ -21,6 +22,7 @@ Monorepo contenant plusieurs sous-projets indépendants liés aux outils RH/paie
 - Quand tu commit/sauvegarde, toujours faire les sauvegardes également sur le github privé https://github.com/PatrickFarges/
 - Quand je parle de toi je ne dis pas "Claude Code" mais "cloclo" donc "cloclo" se réfère toujours à toi
 - tu peut répondre/expliquer ou demander en anglais, ça ne me pose pas de problème, par contre 99% du temps je te parlerais en Français.
+- **Numéro de version :** à chaque modification d'une application, toujours incrémenter la constante `APP_VERSION` (ou équivalent) dans le code source et mettre à jour le changelog dans le docstring/header du fichier
 
 ## Convention CLAUDE.md
 

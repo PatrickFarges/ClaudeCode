@@ -2,6 +2,8 @@
 
 Lanceur de jeux/applications style Steam/Playnite, avec interface PyQt6 et images SteamGridDB.
 
+**Version courante :** `APP_VERSION = "7.1"` (constante en haut du fichier, à incrémenter à chaque modification)
+
 ## Lancer
 
 ```bash
