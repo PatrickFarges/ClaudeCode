@@ -1858,6 +1858,11 @@ func _init_blueprints():
 		"res://structures/windmill___(mcbuild_org).json",
 		"Moulin", 2, terrain_set)
 
+	# Phase 2 — Chapelle (générée, pierre + clocher)
+	_load_structure_blueprint(
+		"res://structures/chapelle_village.json",
+		"Chapelle", 2, terrain_set)
+
 	# Phase 3 — Tour de guet (Tour Garde existante)
 	_load_structure_blueprint(
 		"res://structures/tour_garde.json",
