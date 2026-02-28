@@ -299,7 +299,7 @@ func _flatten_drop(bt: int) -> int:
 			return BlockRegistry.BlockType.COAL_ORE
 		BlockRegistry.BlockType.IRON_ORE:
 			return BlockRegistry.BlockType.IRON_ORE
-		BlockRegistry.BlockType.LOG, BlockRegistry.BlockType.SPRUCE_LOG, \
+		BlockRegistry.BlockType.WOOD, BlockRegistry.BlockType.SPRUCE_LOG, \
 		BlockRegistry.BlockType.BIRCH_LOG, BlockRegistry.BlockType.JUNGLE_LOG, \
 		BlockRegistry.BlockType.ACACIA_LOG, BlockRegistry.BlockType.DARK_OAK_LOG, \
 		BlockRegistry.BlockType.CHERRY_LOG:
