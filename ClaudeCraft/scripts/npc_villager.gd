@@ -77,6 +77,7 @@ var current_task: Dictionary = {}
 var _mine_timer: float = 0.0
 var _mine_target: Vector3i = INVALID_POS
 var _build_timer: float = 0.0
+var _path_block_type: int = 25  # type de bloc courant pour build_path (default COBBLESTONE)
 var _task_status: String = ""  # texte affiché
 var _flatten_action: String = "break"  # action en cours pour le flatten
 
@@ -399,17 +400,23 @@ func _behavior_gather(delta):
 	if hunger < HUNGER_MAX and village_manager:
 		_try_eat()
 
-	# Errer mais rester dans un rayon de 15 blocs autour de home
-	var dist_to_home = Vector3(global_position.x, 0, global_position.z).distance_to(
-		Vector3(home_position.x, 0, home_position.z))
+	# Se diriger vers la place du village si elle existe, sinon errer autour de home
+	var gather_center = home_position
+	var gather_radius = 15.0
+	if village_manager and village_manager.plaza_center != Vector3.ZERO:
+		gather_center = village_manager.plaza_center
+		gather_radius = float(village_manager.PLAZA_RADIUS) + 3.0
 
-	if dist_to_home > 15.0:
-		# Trop loin, retourner vers home
-		if _walk_toward(home_position, delta):
+	var dist_to_center = Vector3(global_position.x, 0, global_position.z).distance_to(
+		Vector3(gather_center.x, 0, gather_center.z))
+
+	if dist_to_center > gather_radius:
+		# Trop loin, aller vers la place
+		if _walk_toward(gather_center, delta):
 			_pick_new_wander()
 			has_target = false
 	else:
-		# Errer normalement
+		# Errer sur la place
 		wander_timer -= delta
 		if wander_timer <= 0:
 			_pick_new_wander()
@@ -1027,16 +1034,18 @@ func _execute_build(delta):
 		_arrived_at_target = false  # Bouger vers le prochain bloc
 
 func _execute_build_path(delta):
-	_task_status = "[%s] Construction" % village_manager.get_tool_tier_label("Marteau")
+	_task_status = "[%s] Place" % village_manager.get_tool_tier_label("Marteau")
 
-	# Récupérer le prochain bloc du chemin à poser
+	# Récupérer le prochain bloc de la place/chemin à poser
 	if _mine_target == INVALID_POS:
-		_mine_target = village_manager.get_next_path_block()
-		if _mine_target == INVALID_POS:
-			# Chemin terminé
+		var entry = village_manager.get_next_path_block()
+		if entry.is_empty():
+			# Place terminée
 			village_manager.mark_path_complete()
 			current_task = {}
 			return
+		_mine_target = entry[0] as Vector3i
+		_path_block_type = entry[1] as int
 		has_target = true
 		_arrived_at_target = false
 		_build_timer = 0.0
@@ -1061,24 +1070,28 @@ func _execute_build_path(delta):
 	_build_timer += delta
 	if _build_timer >= 0.1:
 		_build_timer = 0.0
-		# Batch chemin : poser jusqu'à 6 blocs par tick
-		var BT_COBBLE = 25
+		# Batch : poser jusqu'à 6 blocs par tick
 		var placed = 0
 		while placed < 6:
-			if village_manager.get_total_stone() >= 1:
-				village_manager.consume_any_stone(1)
-				village_manager.place_block(_mine_target, BT_COBBLE)
+			# Torches = gratuites, autres = consomment de la pierre
+			var is_torch = _path_block_type == BlockRegistry.BlockType.TORCH
+			if is_torch or village_manager.get_total_stone() >= 1:
+				if not is_torch:
+					village_manager.consume_any_stone(1)
+				village_manager.place_block(_mine_target, _path_block_type)
 				placed += 1
 			else:
 				break
 			# Bloc suivant
-			_mine_target = village_manager.get_next_path_block()
-			if _mine_target == INVALID_POS:
+			var entry = village_manager.get_next_path_block()
+			if entry.is_empty():
 				village_manager.mark_path_complete()
 				current_task = {}
 				return
+			_mine_target = entry[0] as Vector3i
+			_path_block_type = entry[1] as int
 		if placed > 0:
-			_show_harvest_label("Chemin x%d" % placed, _mine_target)
+			_show_harvest_label("Place x%d" % placed, _mine_target)
 		_mine_target = INVALID_POS
 		_arrived_at_target = false
 		if village_manager._path_index >= village_manager._path_blocks.size():

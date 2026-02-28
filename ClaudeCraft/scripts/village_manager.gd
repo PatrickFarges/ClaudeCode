@@ -105,10 +105,12 @@ var flatten_index: int = 0           # progression
 var _flatten_complete: bool = false   # flag
 const VILLAGE_RADIUS = 45            # zone 91×91 (45+1+45) — agrandi pour vrais bâtiments MC
 
-# === CHEMIN DU VILLAGE ===
-var _path_built: bool = false  # true quand le chemin en croix est posé
-var _path_blocks: Array = []   # blocs du chemin à poser [Vector3i, ...]
-var _path_index: int = 0       # progression dans la pose du chemin
+# === PLACE DU VILLAGE ===
+var _path_built: bool = false  # true quand la place + chemins sont posés
+var _path_blocks: Array = []   # blocs à poser [[Vector3i, block_type], ...]
+var _path_index: int = 0       # progression dans la pose
+var plaza_center: Vector3 = Vector3.ZERO  # centre de la place (pour les PNJ)
+const PLAZA_RADIUS = 9                    # rayon de la place pavée
 
 func _ready():
 	_init_blueprints()
@@ -1689,7 +1691,7 @@ func register_built_structure(name: String, origin: Vector3i, size: Vector3i):
 	print("VillageManager: structure '%s' terminée à %s" % [name, str(origin)])
 
 # ============================================================
-# CHEMIN DU VILLAGE (croix de pavés autour du centre)
+# PLACE DU VILLAGE (place pavée circulaire + puits + chemins)
 # ============================================================
 
 func _try_queue_path():
@@ -1703,35 +1705,17 @@ func _try_queue_path():
 		if v.current_task.get("type", "") == "build_path":
 			return
 
-	# Générer le plan du chemin : croix de 8 blocs dans chaque direction
+	# Générer le plan de la place du village
 	if _path_blocks.size() == 0:
-		var cx = int(village_center.x)
-		var cz = int(village_center.z)
-		# Croix : 4 branches de 8 blocs depuis le centre
-		var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]]
-		for dir in dirs:
-			for i in range(1, 9):
-				var wx = cx + dir[0] * i
-				var wz = cz + dir[1] * i
-				var sy = _find_surface_y(wx, wz)
-				if sy > 0:
-					_path_blocks.append(Vector3i(wx, sy, wz))
-		# Place centrale (2x2)
-		for dx in range(-1, 2):
-			for dz in range(-1, 2):
-				var sy = _find_surface_y(cx + dx, cz + dz)
-				if sy > 0:
-					_path_blocks.append(Vector3i(cx + dx, sy, cz + dz))
-		_path_index = 0
-		print("VillageManager: chemin planifié — %d blocs" % _path_blocks.size())
+		_generate_plaza_plan()
 
-	# Vérifier qu'on a assez de cobblestone
+	# Vérifier qu'on a assez de pierre
 	var remaining = _path_blocks.size() - _path_index
 	if remaining <= 0:
 		_path_built = true
 		return
-	var cobble_count = get_total_stone()
-	if cobble_count < 3:
+	var stone_count = get_total_stone()
+	if stone_count < 3:
 		return  # Pas assez, on attend
 
 	_add_task({
@@ -1739,6 +1723,80 @@ func _try_queue_path():
 		"priority": 12,
 		"required_profession": VProfession.Profession.BATISSEUR,
 	})
+
+func _generate_plaza_plan():
+	var cx = int(village_center.x)
+	var cz = int(village_center.z)
+	var ref_y = village_ref_y if village_ref_y > 0 else int(village_center.y)
+	var sy = ref_y  # terrain plat garanti après flatten
+	plaza_center = Vector3(cx, sy, cz)
+
+	var BT_SMOOTH = BlockRegistry.BlockType.SMOOTH_STONE  # 41 — sol de la place
+	var BT_COBBLE = BlockRegistry.BlockType.COBBLESTONE    # 25 — chemins + puits
+	var BT_BRICK = BlockRegistry.BlockType.BRICK           # 19 — bordure de la place
+	var BT_TORCH = BlockRegistry.BlockType.TORCH           # 72 — éclairage
+
+	# --- 1) Disque pavé en smooth_stone (rayon PLAZA_RADIUS) ---
+	# Bordure en brique, intérieur en smooth_stone
+	for dx in range(-PLAZA_RADIUS, PLAZA_RADIUS + 1):
+		for dz in range(-PLAZA_RADIUS, PLAZA_RADIUS + 1):
+			var dist_sq = dx * dx + dz * dz
+			if dist_sq <= PLAZA_RADIUS * PLAZA_RADIUS:
+				var on_border = dist_sq > (PLAZA_RADIUS - 1) * (PLAZA_RADIUS - 1)
+				var block_type = BT_BRICK if on_border else BT_SMOOTH
+				_path_blocks.append([Vector3i(cx + dx, sy, cz + dz), block_type])
+
+	# --- 2) Puits central (5×5 base, 3×3 creux, murs 2 blocs de haut) ---
+	# Base du puits en cobblestone (5×5)
+	for dx in range(-2, 3):
+		for dz in range(-2, 3):
+			_path_blocks.append([Vector3i(cx + dx, sy, cz + dz), BT_COBBLE])
+	# Murs du puits (anneau extérieur 5×5, 2 blocs de haut)
+	for ring_y in range(1, 3):
+		for dx in range(-2, 3):
+			for dz in range(-2, 3):
+				if abs(dx) == 2 or abs(dz) == 2:
+					_path_blocks.append([Vector3i(cx + dx, sy + ring_y, cz + dz), BT_COBBLE])
+	# Poteaux aux 4 coins (3 blocs de haut)
+	for corner in [[-2, -2], [-2, 2], [2, -2], [2, 2]]:
+		_path_blocks.append([Vector3i(cx + corner[0], sy + 3, cz + corner[1]), BT_COBBLE])
+	# Toit du puits (traverse en bois — cobblestone pour simplifier)
+	for dx in range(-2, 3):
+		_path_blocks.append([Vector3i(cx + dx, sy + 4, cz), BT_COBBLE])
+	for dz in range(-2, 3):
+		if dz != 0:  # centre déjà posé
+			_path_blocks.append([Vector3i(cx, sy + 4, cz + dz), BT_COBBLE])
+
+	# --- 3) Torches autour du puits ---
+	var torch_offsets = [[-3, -3], [-3, 3], [3, -3], [3, 3]]
+	for off in torch_offsets:
+		_path_blocks.append([Vector3i(cx + off[0], sy + 1, cz + off[1]), BT_TORCH])
+	# Torches sur le bord de la place (8 points cardinaux/diagonaux)
+	var border_r = PLAZA_RADIUS - 2
+	var torch_dirs = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]
+	for td in torch_dirs:
+		var tx = cx + int(td[0] * border_r * 0.7)
+		var tz = cz + int(td[1] * border_r * 0.7)
+		# Vérifier qu'on est dans le disque
+		var ddx = tx - cx
+		var ddz = tz - cz
+		if ddx * ddx + ddz * ddz <= (PLAZA_RADIUS - 1) * (PLAZA_RADIUS - 1):
+			_path_blocks.append([Vector3i(tx, sy + 1, tz), BT_TORCH])
+
+	# --- 4) Quatre chemins en cobblestone vers l'extérieur (3 blocs de large) ---
+	var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+	for dir in dirs:
+		for i in range(PLAZA_RADIUS + 1, PLAZA_RADIUS + 15):
+			# Chemin de 3 blocs de large
+			for w in range(-1, 2):
+				var wx = cx + dir[0] * i + dir[1] * w
+				var wz = cz + dir[1] * i + dir[0] * w
+				# Vérifier qu'on reste dans la zone du village
+				if abs(wx - cx) <= VILLAGE_RADIUS and abs(wz - cz) <= VILLAGE_RADIUS:
+					_path_blocks.append([Vector3i(wx, sy, wz), BT_COBBLE])
+
+	_path_index = 0
+	print("VillageManager: place du village planifiée — %d blocs (rayon %d)" % [_path_blocks.size(), PLAZA_RADIUS])
 
 # ============================================================
 # MINAGE VILLAGEOIS
@@ -1759,19 +1817,19 @@ func place_block(pos: Vector3i, block_type: int):
 	if world_manager:
 		world_manager.place_block_at_position(Vector3(pos.x, pos.y, pos.z), block_type as BlockRegistry.BlockType)
 
-func get_next_path_block() -> Vector3i:
-	# Retourne le prochain bloc du chemin à poser
+func get_next_path_block() -> Array:
+	# Retourne [Vector3i, block_type] du prochain bloc à poser
 	if _path_index >= _path_blocks.size():
 		_path_built = true
-		return INVALID_POS_CONST
-	var pos = _path_blocks[_path_index]
+		return []
+	var entry = _path_blocks[_path_index]
 	_path_index += 1
-	return pos
+	return entry  # [Vector3i, int]
 
 func mark_path_complete():
 	if _path_index >= _path_blocks.size():
 		_path_built = true
-		print("VillageManager: chemin terminé !")
+		print("VillageManager: place du village terminée !")
 
 const INVALID_POS_CONST = Vector3i(-9999, -9999, -9999)
 

@@ -269,6 +269,11 @@ func _refresh_contents():
 		var total_flatten = village_manager.flatten_plan.size()
 		var pct = int(float(done) / float(total_flatten) * 100.0) if total_flatten > 0 else 0
 		obj_text += "\nAplanissement : %d/%d blocs (%d%%)" % [done, total_flatten, pct]
+	if not village_manager._path_built and village_manager._path_blocks.size() > 0:
+		var path_done = village_manager._path_index
+		var path_total = village_manager._path_blocks.size()
+		var path_pct = int(float(path_done) / float(path_total) * 100.0) if path_total > 0 else 0
+		obj_text += "\nPlace du village : %d/%d blocs (%d%%)" % [path_done, path_total, path_pct]
 	if village_manager._mine_initialized:
 		var mined = village_manager.mine_front_index
 		var total = village_manager.mine_plan.size()
