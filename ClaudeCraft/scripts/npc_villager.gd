@@ -352,7 +352,7 @@ func _update_schedule():
 	if not _day_night:
 		return
 	var hour = _day_night.get_hour()
-	var new_activity = VProfession.get_activity_for_hour(hour)
+	var new_activity = VProfession.get_activity_for_hour(hour, profession)
 	if new_activity != current_activity:
 		_on_activity_changed(current_activity, new_activity)
 		current_activity = new_activity
@@ -643,6 +643,10 @@ func _execute_harvest(delta):
 		# Chercher le prochain tronc à proximité (même arbre ou arbre voisin)
 		var next_trunk = _find_nearest_trunk_around(Vector3(last_pos.x, last_pos.y, last_pos.z), 3.0)
 		if next_trunk != INVALID_POS:
+			# Si le prochain tronc est sur une colonne XZ différente, c'est un autre arbre
+			# → nettoyer les feuilles de l'arbre qu'on vient de finir
+			if next_trunk.x != last_pos.x or next_trunk.z != last_pos.z:
+				_harvest_leaves_around(last_pos)
 			_mine_target = next_trunk
 			village_manager.claim_position(_mine_target)
 			_arrived_at_target = false  # remarcher vers le nouveau tronc
@@ -661,10 +665,10 @@ func _harvest_leaves_around(center_pos: Vector3i):
 	var leaf_set = { 6: true, 44: true, 45: true, 46: true, 47: true, 48: true, 49: true }
 	var wood_set = { 5: true, 32: true, 33: true, 34: true, 35: true, 36: true, 42: true }
 
-	# Scan élargi : rayon 8 pour trouver feuilles et troncs d'arbres voisins
+	# Scan élargi : rayon 8, grande portée verticale (feuilles souvent sous le sommet)
 	var scan_r = 8
-	var scan_h_min = -2
-	var scan_h_max = 18
+	var scan_h_min = -12
+	var scan_h_max = 8
 
 	# Phase 1 : scanner la zone, collecter feuilles ET troncs
 	var leaf_positions: Array = []
@@ -1156,11 +1160,17 @@ func _execute_build_path(delta):
 		# Batch : poser jusqu'à 6 blocs par tick
 		var placed = 0
 		while placed < 6:
-			# Torches = gratuites, autres = consomment de la pierre
+			# Torches = consomment du stock de torches, autres = consomment de la pierre
 			var is_torch = _path_block_type == BlockRegistry.BlockType.TORCH
-			if is_torch or village_manager.get_total_stone() >= 1:
-				if not is_torch:
-					village_manager.consume_any_stone(1)
+			if is_torch:
+				if village_manager.has_resources(BlockRegistry.BlockType.TORCH, 1):
+					village_manager.consume_resources(BlockRegistry.BlockType.TORCH, 1)
+					village_manager.place_block(_mine_target, _path_block_type)
+					placed += 1
+				else:
+					break  # Pas de torches en stock, on attend
+			elif village_manager.get_total_stone() >= 1:
+				village_manager.consume_any_stone(1)
 				village_manager.place_block(_mine_target, _path_block_type)
 				placed += 1
 			else:

@@ -11,6 +11,11 @@ enum Profession {
 	BOULANGER = 6,
 	CHAMAN = 7,
 	MINEUR = 8,
+	# === Phase 4 — Militaire ===
+	ESPION = 9,
+	SOLDAT = 10,
+	GARDE = 11,
+	CAPITAINE = 12,
 }
 
 enum Activity {
@@ -99,6 +104,35 @@ const PROFESSION_DATA = {
 		"name_fr": "Mineur",
 		"name_en": "Miner",
 	},
+	# === Phase 4 — Militaire (modèles temporaires, à remplacer par nouveaux GLB) ===
+	Profession.ESPION: {
+		"workstation": -1,
+		"models": [14, 15],  # temporaire: réutilise Chaman
+		"work_anim": "idle",
+		"name_fr": "Espion",
+		"name_en": "Spy",
+	},
+	Profession.SOLDAT: {
+		"workstation": -1,
+		"models": [8, 9],  # temporaire: réutilise Bâtisseur
+		"work_anim": "attack",
+		"name_fr": "Soldat",
+		"name_en": "Soldier",
+	},
+	Profession.GARDE: {
+		"workstation": -1,
+		"models": [6, 7],  # temporaire: réutilise Forgeron
+		"work_anim": "attack",
+		"name_fr": "Garde",
+		"name_en": "Guard",
+	},
+	Profession.CAPITAINE: {
+		"workstation": -1,
+		"models": [16, 17],  # temporaire: réutilise Mineur
+		"work_anim": "attack",
+		"name_fr": "Capitaine",
+		"name_en": "Captain",
+	},
 }
 
 # Emploi du temps : plages horaires -> activité
@@ -113,8 +147,25 @@ const SCHEDULE = [
 	{"start": 21.0, "end": 24.0, "activity": Activity.SLEEP},
 ]
 
-static func get_activity_for_hour(hour: float) -> Activity:
-	for slot in SCHEDULE:
+# Schedule militaire : garde/soldat travaillent 18h (4h-22h), pas de pause déjeuner
+const MILITARY_SCHEDULE = [
+	{"start": 0.0, "end": 4.0, "activity": Activity.SLEEP},
+	{"start": 4.0, "end": 22.0, "activity": Activity.WORK},
+	{"start": 22.0, "end": 24.0, "activity": Activity.SLEEP},
+]
+
+# Schedule espion : toujours en mission (travail 24/7)
+const SPY_SCHEDULE = [
+	{"start": 0.0, "end": 24.0, "activity": Activity.WORK},
+]
+
+static func get_activity_for_hour(hour: float, profession: int = -1) -> Activity:
+	var sched = SCHEDULE
+	if profession == Profession.ESPION:
+		sched = SPY_SCHEDULE
+	elif profession in [Profession.SOLDAT, Profession.GARDE, Profession.CAPITAINE]:
+		sched = MILITARY_SCHEDULE
+	for slot in sched:
 		if hour >= slot["start"] and hour < slot["end"]:
 			return slot["activity"]
 	return Activity.SLEEP

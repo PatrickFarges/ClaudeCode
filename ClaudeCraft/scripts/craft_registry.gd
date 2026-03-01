@@ -307,6 +307,28 @@ static func get_all_recipes() -> Array:
 			"station": "stone_table",
 			"_tool_tier": 3,
 		},
+		# --- Armes militaires (Phase 4) ---
+		{
+			"name": "Épée en fer",
+			"inputs": [[BlockRegistry.BlockType.IRON_INGOT, 2], [BlockRegistry.BlockType.PLANKS, 1]],
+			"output_type": BlockRegistry.BlockType.IRON_SWORD,
+			"output_count": 1,
+			"station": "stone_table"
+		},
+		{
+			"name": "Bouclier",
+			"inputs": [[BlockRegistry.BlockType.IRON_INGOT, 1], [BlockRegistry.BlockType.PLANKS, 2]],
+			"output_type": BlockRegistry.BlockType.SHIELD,
+			"output_count": 1,
+			"station": "stone_table"
+		},
+		{
+			"name": "Épée en or",
+			"inputs": [[BlockRegistry.BlockType.GOLD_INGOT, 2], [BlockRegistry.BlockType.PLANKS, 1]],
+			"output_type": BlockRegistry.BlockType.GOLD_SWORD,
+			"output_count": 1,
+			"station": "iron_table"
+		},
 		{
 			"name": "Briques (batch)",
 			"inputs": [[BlockRegistry.BlockType.STONE, 12]],

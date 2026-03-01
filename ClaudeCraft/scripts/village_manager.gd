@@ -113,6 +113,10 @@ var _path_index: int = 0       # progression dans la pose
 var plaza_center: Vector3 = Vector3.ZERO  # centre de la place (pour les PNJ)
 const PLAZA_RADIUS = 9                    # rayon de la place pavée
 
+# === NETTOYAGE FEUILLES ===
+var _leaf_cleanup_timer: float = 0.0
+const LEAF_CLEANUP_INTERVAL = 30.0  # toutes les 30 secondes (temps réel)
+
 func _ready():
 	_init_blueprints()
 	print("VillageManager: initialisé")
@@ -150,6 +154,12 @@ func _process(delta):
 	if _growth_timer >= GROWTH_CHECK_INTERVAL:
 		_growth_timer = 0.0
 		_try_grow_village()
+
+	# Nettoyage périodique des feuilles orphelines dans la zone village
+	_leaf_cleanup_timer += delta
+	if _leaf_cleanup_timer >= LEAF_CLEANUP_INTERVAL:
+		_leaf_cleanup_timer = 0.0
+		_cleanup_orphan_leaves()
 
 # ============================================================
 # CENTRE DU VILLAGE
@@ -313,6 +323,80 @@ func flush_affected_chunks(affected_chunks: Dictionary):
 	for chunk in affected_chunks.values():
 		chunk._rebuild_mesh()
 
+func _cleanup_orphan_leaves():
+	# Scan périodique : détruire les feuilles orphelines dans la zone village
+	if not world_manager or not _center_set:
+		return
+	var cx = int(village_center.x)
+	var cz = int(village_center.z)
+	var leaf_set = { 6: true, 44: true, 45: true, 46: true, 47: true, 48: true, 49: true }
+	var wood_set = { 5: true, 32: true, 33: true, 34: true, 35: true, 36: true, 42: true }
+	var ref_y = village_ref_y if village_ref_y > 0 else int(village_center.y)
+
+	# Échantillonnage : scanner un quadrant aléatoire pour ne pas tout scanner à chaque tick
+	var qx = randi_range(0, 1)  # 0 ou 1
+	var qz = randi_range(0, 1)
+	var x_start = cx - VILLAGE_RADIUS if qx == 0 else cx
+	var x_end = cx if qx == 0 else cx + VILLAGE_RADIUS
+	var z_start = cz - VILLAGE_RADIUS if qz == 0 else cz
+	var z_end = cz if qz == 0 else cz + VILLAGE_RADIUS
+
+	var leaf_positions: Array = []
+	var trunk_positions: Array = []
+
+	# Scanner le quadrant pour feuilles et troncs (au-dessus de ref_y seulement)
+	for x in range(x_start, x_end + 1, 2):  # échantillonnage 1/2
+		for z in range(z_start, z_end + 1, 2):
+			for y in range(ref_y, ref_y + 30):
+				var bt = world_manager.get_block_at_position(Vector3(x, y, z))
+				if bt == 0:
+					continue
+				if leaf_set.has(bt):
+					leaf_positions.append(Vector3i(x, y, z))
+				elif wood_set.has(bt):
+					trunk_positions.append(Vector3i(x, y, z))
+
+	if leaf_positions.is_empty():
+		return
+
+	# Identifier les feuilles orphelines (aucun tronc à distance Manhattan ≤ 4)
+	var orphan_leaves: Array = []
+	for leaf_pos in leaf_positions:
+		var has_trunk = false
+		for trunk_pos in trunk_positions:
+			var dist = abs(leaf_pos.x - trunk_pos.x) + abs(leaf_pos.y - trunk_pos.y) + abs(leaf_pos.z - trunk_pos.z)
+			if dist <= 4:
+				has_trunk = true
+				break
+		if not has_trunk:
+			orphan_leaves.append(leaf_pos)
+
+	if orphan_leaves.is_empty():
+		return
+
+	# Détruire en batch
+	var affected_chunks_cleanup: Dictionary = {}
+	for leaf_pos in orphan_leaves:
+		var chunk_cx = floori(float(leaf_pos.x) / CHUNK_SIZE)
+		var chunk_cz = floori(float(leaf_pos.z) / CHUNK_SIZE)
+		var chunk_key = Vector3i(chunk_cx, 0, chunk_cz)
+		if world_manager.chunks.has(chunk_key):
+			var chunk = world_manager.chunks[chunk_key]
+			var lx = leaf_pos.x - chunk_cx * CHUNK_SIZE
+			var lz = leaf_pos.z - chunk_cz * CHUNK_SIZE
+			if lx < 0:
+				lx += CHUNK_SIZE
+			if lz < 0:
+				lz += CHUNK_SIZE
+			chunk.blocks[lx * 4096 + lz * 256 + leaf_pos.y] = 0
+			chunk.is_modified = true
+			affected_chunks_cleanup[chunk_key] = chunk
+
+	flush_affected_chunks(affected_chunks_cleanup)
+
+	if orphan_leaves.size() > 0:
+		print("VillageManager: nettoyage feuilles orphelines — %d feuilles détruites" % orphan_leaves.size())
+
 func _flatten_drop(bt: int) -> int:
 	# Retourne le type de ressource obtenu en cassant un bloc pendant le flatten
 	match bt:
@@ -448,6 +532,8 @@ func _evaluate_needs():
 			_evaluate_phase_2()
 		3:
 			_evaluate_phase_3()
+		4:
+			_evaluate_phase_4()
 
 func _trim_excess_tasks():
 	# Supprimer les tâches de récolte/mine en surplus pour ne pas bloquer
@@ -566,6 +652,18 @@ func _evaluate_phase_1():
 				"required_profession": VProfession.Profession.MENUISIER,
 			})
 
+	# Crafter des torches si on a du charbon et des planches (1 coal + 1 plank = 4 torches)
+	var torch_count = get_resource_count(BlockRegistry.BlockType.TORCH)
+	var coal_for_torch = get_resource_count(16)  # COAL_ORE
+	if coal_for_torch >= 1 and total_planks >= 1 and torch_count < 32:
+		if not _has_task_of_type("craft", "Torche"):
+			_add_task({
+				"type": "craft",
+				"recipe_name": "Torche",
+				"priority": 10,
+				"required_profession": VProfession.Profession.MENUISIER,
+			})
+
 	# Commencer à miner — mineurs travaillent en continu (is_mine_stock_full les pause)
 	_add_mine_gallery_tasks(2)
 
@@ -653,6 +751,17 @@ func _evaluate_phase_2():
 				"type": "craft",
 				"recipe_name": "Planches",
 				"priority": 15,
+				"required_profession": VProfession.Profession.MENUISIER,
+			})
+
+	# Crafter des torches
+	var torch_count_p2 = get_resource_count(BlockRegistry.BlockType.TORCH)
+	if total_coal >= 1 and total_planks >= 1 and torch_count_p2 < 32:
+		if not _has_task_of_type("craft", "Torche"):
+			_add_task({
+				"type": "craft",
+				"recipe_name": "Torche",
+				"priority": 10,
 				"required_profession": VProfession.Profession.MENUISIER,
 			})
 
@@ -772,6 +881,18 @@ func _evaluate_phase_3():
 				"required_profession": VProfession.Profession.MENUISIER,
 			})
 
+	# Crafter des torches
+	var torch_count_p3 = get_resource_count(BlockRegistry.BlockType.TORCH)
+	var coal_for_torch_p3 = get_resource_count(16)
+	if coal_for_torch_p3 >= 1 and total_planks >= 1 and torch_count_p3 < 32:
+		if not _has_task_of_type("craft", "Torche"):
+			_add_task({
+				"type": "craft",
+				"recipe_name": "Torche",
+				"priority": 10,
+				"required_profession": VProfession.Profession.MENUISIER,
+			})
+
 	# Mineurs en continu — is_mine_stock_full() les pause si stock saturé
 	_add_mine_gallery_tasks(2)
 
@@ -813,6 +934,127 @@ func _evaluate_phase_3():
 
 		# Construire tous les bâtiments
 		_try_queue_builds_for_phase(3)
+
+	# Transition Phase 3 → Phase 4 : château quand 5+ bâtiments et outils fer
+	if built_structures.size() >= 5 and village_tool_tier >= 3:
+		village_phase = 4
+		print("VillageManager: === PHASE 4 — ÂGE MÉDIÉVAL === Construction du château !")
+		# Spawner le village ennemi
+		var wm = get_tree().get_first_node_in_group("world_manager")
+		if wm and wm.has_method("_spawn_enemy_village"):
+			wm._spawn_enemy_village(village_center)
+
+func _evaluate_phase_4():
+	# Phase 4: Âge Médiéval — château, armement, guerre
+	var total_wood = get_total_wood()
+	var total_stone = get_total_stone()
+	var total_planks = get_total_planks()
+	var total_iron = get_resource_count(19)  # IRON_INGOT
+	var total_coal = get_resource_count(16)  # COAL_ORE
+	var total_bread = get_resource_count(BlockRegistry.BlockType.BREAD)
+
+	# === ÉCONOMIE DE BASE (continue comme Phase 3) ===
+	_add_farming_tasks()
+
+	# Pain
+	var wheat_count = get_resource_count(BlockRegistry.BlockType.WHEAT_ITEM)
+	if wheat_count >= 3:
+		if not _has_task_of_type("craft", "Pain"):
+			_add_task({
+				"type": "craft",
+				"recipe_name": "Pain",
+				"priority": 12,
+				"required_profession": VProfession.Profession.BOULANGER,
+			})
+
+	# Bois
+	if total_wood < 50:
+		_add_harvest_tasks(5, 4)
+
+	# Planches
+	if total_wood >= 2 and total_planks < 1000:
+		if not _has_task_of_type("craft", "Planches"):
+			_add_task({
+				"type": "craft",
+				"recipe_name": "Planches",
+				"priority": 15,
+				"required_profession": VProfession.Profession.MENUISIER,
+			})
+
+	# Torches
+	var torch_count = get_resource_count(BlockRegistry.BlockType.TORCH)
+	if total_coal >= 1 and total_planks >= 1 and torch_count < 32:
+		if not _has_task_of_type("craft", "Torche"):
+			_add_task({
+				"type": "craft",
+				"recipe_name": "Torche",
+				"priority": 10,
+				"required_profession": VProfession.Profession.MENUISIER,
+			})
+
+	# Minage continu
+	_add_mine_gallery_tasks(2)
+
+	# Fondre le fer
+	var total_iron_ore = get_resource_count(17)
+	if total_iron_ore >= 1 and total_coal >= 1:
+		if not _has_task_of_type("craft", "Lingot de fer"):
+			_add_task({
+				"type": "craft",
+				"recipe_name": "Lingot de fer",
+				"priority": 14,
+				"required_profession": VProfession.Profession.FORGERON,
+			})
+
+	# Verre
+	var glass_count = get_resource_count(61)
+	var sand_count = get_resource_count(4)
+	if glass_count < 10:
+		if sand_count < 2:
+			_add_sand_harvest_tasks(1)
+		if sand_count >= 1 and total_coal >= 1:
+			if not _has_task_of_type("craft", "Verre"):
+				_add_task({
+					"type": "craft",
+					"recipe_name": "Verre",
+					"priority": 12,
+					"required_profession": VProfession.Profession.FORGERON,
+				})
+
+	# === CONSTRUCTION CHÂTEAU ===
+	# Aplanissement
+	if not _flatten_complete and flatten_plan.size() > 0:
+		if _count_flatten_active() < 2:
+			_add_task({
+				"type": "flatten",
+				"priority": 2,
+				"required_profession": VProfession.Profession.BATISSEUR,
+			})
+	else:
+		# Construire tous les bâtiments phases 1-4
+		_try_queue_builds_for_phase(4)
+
+	# === FORGE D'ARMES (prioritaire en Phase 4) ===
+	var swords_count = get_resource_count(BlockRegistry.BlockType.IRON_SWORD)
+	if total_iron >= 2 and total_planks >= 1 and swords_count < 10:
+		if not _has_task_of_type("craft", "Épée en fer"):
+			_add_task({
+				"type": "craft",
+				"recipe_name": "Épée en fer",
+				"priority": 8,
+				"required_profession": VProfession.Profession.FORGERON,
+			})
+
+	# Boucliers
+	var shields_count = get_resource_count(BlockRegistry.BlockType.SHIELD)
+	if total_iron >= 1 and total_planks >= 2 and shields_count < 5:
+		if not _has_task_of_type("craft", "Bouclier"):
+			_add_task({
+				"type": "craft",
+				"recipe_name": "Bouclier",
+				"priority": 9,
+				"required_profession": VProfession.Profession.FORGERON,
+			})
 
 # ============================================================
 # GESTION DES TÂCHES
@@ -1777,6 +2019,103 @@ func _find_build_site(blueprint: Dictionary) -> Vector3i:
 func register_built_structure(name: String, origin: Vector3i, size: Vector3i):
 	built_structures.append({ "name": name, "origin": origin, "size": size })
 	print("VillageManager: structure '%s' terminée à %s" % [name, str(origin)])
+	# Générer un chemin de 3 blocs de large entre le bâtiment et la plaza
+	_generate_road_to_plaza(origin, size, name)
+	# Relancer la construction des chemins si nécessaire
+	_path_built = false
+
+func _generate_road_to_plaza(origin: Vector3i, size: Vector3i, building_name: String):
+	var cx = int(village_center.x)
+	var cz = int(village_center.z)
+	var ref_y = village_ref_y if village_ref_y > 0 else int(village_center.y)
+	var sy = ref_y
+
+	var BT_COBBLE = BlockRegistry.BlockType.COBBLESTONE
+
+	# Centre du bâtiment
+	var bx = origin.x + size.x / 2
+	var bz = origin.z + size.z / 2
+
+	# Direction vers la plaza (axe principal)
+	var dx_total = cx - bx
+	var dz_total = cz - bz
+
+	# Déterminer le point de départ (bord du bâtiment côté plaza)
+	var start_x = bx
+	var start_z = bz
+	if abs(dx_total) >= abs(dz_total):
+		# Chemin horizontal (axe X)
+		start_x = origin.x if dx_total < 0 else origin.x + size.x - 1
+	else:
+		# Chemin vertical (axe Z)
+		start_z = origin.z if dz_total < 0 else origin.z + size.z - 1
+
+	# Tracer le chemin en L : d'abord X puis Z (3 blocs de large)
+	var road_width = 3  # 3 blocs de large minimum
+	var half_w = road_width / 2
+
+	# Si la chapelle, place de 7 blocs autour
+	if building_name == "Chapelle":
+		_generate_chapel_plaza(origin, size, sy)
+
+	var BT_TORCH = BlockRegistry.BlockType.TORCH
+	var blocks_added = 0
+
+	# Segment X (horizontal)
+	var x_start = mini(start_x, cx)
+	var x_end = maxi(start_x, cx)
+	for x in range(x_start, x_end + 1):
+		for w in range(-half_w, half_w + 1):
+			var pos = Vector3i(x, sy, start_z + w)
+			_path_blocks.append([pos, BT_COBBLE])
+			blocks_added += 1
+		# Torche tous les 6 blocs sur le bord du chemin
+		if (x - x_start) % 6 == 3 and x != x_start and x != x_end:
+			_path_blocks.append([Vector3i(x, sy + 1, start_z + half_w + 1), BT_TORCH])
+			blocks_added += 1
+
+	# Segment Z (vertical)
+	var z_start = mini(start_z, cz)
+	var z_end = maxi(start_z, cz)
+	for z in range(z_start, z_end + 1):
+		for w in range(-half_w, half_w + 1):
+			var pos = Vector3i(cx + w, sy, z)
+			_path_blocks.append([pos, BT_COBBLE])
+			blocks_added += 1
+		# Torche tous les 6 blocs sur le bord du chemin
+		if (z - z_start) % 6 == 3 and z != z_start and z != z_end:
+			_path_blocks.append([Vector3i(cx + half_w + 1, sy + 1, z), BT_TORCH])
+			blocks_added += 1
+
+	print("VillageManager: chemin vers '%s' planifié — %d blocs (3 large, torches)" % [building_name, blocks_added])
+
+func _generate_chapel_plaza(origin: Vector3i, size: Vector3i, sy: int):
+	var BT_COBBLE = BlockRegistry.BlockType.COBBLESTONE
+	var BT_TORCH = BlockRegistry.BlockType.TORCH
+	var margin = 7  # 7 blocs de large autour
+	var blocks_added = 0
+
+	# Place en cobblestone autour de la chapelle
+	for x in range(origin.x - margin, origin.x + size.x + margin):
+		for z in range(origin.z - margin, origin.z + size.z + margin):
+			# Seulement la bordure extérieure (pas sous le bâtiment)
+			var inside_building = x >= origin.x and x < origin.x + size.x \
+				and z >= origin.z and z < origin.z + size.z
+			if not inside_building:
+				_path_blocks.append([Vector3i(x, sy, z), BT_COBBLE])
+				blocks_added += 1
+
+	# Torches aux 4 coins de la place
+	for corner in [
+		[origin.x - margin + 1, origin.z - margin + 1],
+		[origin.x - margin + 1, origin.z + size.z + margin - 2],
+		[origin.x + size.x + margin - 2, origin.z - margin + 1],
+		[origin.x + size.x + margin - 2, origin.z + size.z + margin - 2],
+	]:
+		_path_blocks.append([Vector3i(corner[0], sy + 1, corner[1]), BT_TORCH])
+		blocks_added += 4
+
+	print("VillageManager: place de la chapelle planifiée — %d blocs (marge %d)" % [blocks_added, margin])
 
 # ============================================================
 # PLACE DU VILLAGE (place pavée circulaire + puits + chemins)
@@ -1847,11 +2186,11 @@ func _generate_plaza_plan():
 	for off in [[-3, -3], [-3, 3], [3, -3], [3, 3]]:
 		_path_blocks.append([Vector3i(cx + off[0], sy + 1, cz + off[1]), BT_TORCH])
 
-	# --- 3) Quatre chemins en cobblestone (3 blocs de large, 12 blocs de long) ---
+	# --- 3) Quatre chemins en cobblestone (5 blocs de large, 15 blocs de long) ---
 	var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]]
 	for dir in dirs:
-		for i in range(3, 15):  # depuis le bord du puits vers l'extérieur
-			for w in range(-1, 2):
+		for i in range(3, 18):  # depuis le bord du puits vers l'extérieur
+			for w in range(-2, 3):  # 5 blocs de large (-2, -1, 0, 1, 2)
 				var wx = cx + dir[0] * i + dir[1] * w
 				var wz = cz + dir[1] * i + dir[0] * w
 				if abs(wx - cx) <= FLATTEN_RADIUS and abs(wz - cz) <= FLATTEN_RADIUS:
@@ -1993,6 +2332,26 @@ func _init_blueprints():
 		"res://structures/medieval_spruce_wood_house___(mcbuild_org).json",
 		"Guilde", 3, terrain_set)
 
+	# Phase 4 — Caserne (entraînement soldats)
+	_load_structure_blueprint(
+		"res://structures/caserne.json",
+		"Caserne", 4, terrain_set)
+
+	# Phase 4 — Donjon (bâtiment central du château)
+	_load_structure_blueprint(
+		"res://structures/donjon.json",
+		"Donjon", 4, terrain_set)
+
+	# Phase 4 — Rempart (segment de mur)
+	_load_structure_blueprint(
+		"res://structures/rempart.json",
+		"Rempart", 4, terrain_set)
+
+	# Phase 4 — Tour de défense (coins du château)
+	_load_structure_blueprint(
+		"res://structures/tour_defense.json",
+		"Tour de défense", 4, terrain_set)
+
 	print("VillageManager: %d blueprints chargés" % BLUEPRINTS.size())
 
 
@@ -2038,6 +2397,7 @@ func _load_structure_blueprint(path: String, bp_name: String, phase: int, terrai
 	var total = w * h * l
 	var blocks: Array = []
 	blocks.resize(total)
+	blocks.fill(0)
 	var pos = 0
 	var i = 0
 	while i + 1 < rle.size():

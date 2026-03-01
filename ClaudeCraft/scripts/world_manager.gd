@@ -341,6 +341,34 @@ func _try_spawn_village(chunk_pos: Vector3i, chunk_data: Dictionary):
 
 	print("WorldManager: village spawné avec %d villageois à %s" % [spawned, str(village_center)])
 
+	# Le village ennemi sera spawné par VillageManager quand le joueur atteint Phase 4
+
+func _spawn_enemy_village(player_village_center: Vector3):
+	# Spawner le village ennemi à ~500 blocs dans une direction cardinale aléatoire
+	var EnemyVillageScript = preload("res://scripts/enemy_village.gd")
+	var WarManagerScript = preload("res://scripts/war_manager.gd")
+
+	var directions = [Vector3(1, 0, 0), Vector3(-1, 0, 0), Vector3(0, 0, 1), Vector3(0, 0, -1)]
+	var dir = directions[randi() % 4]
+	var distance = randi_range(400, 600)  # 400-600 blocs
+	var enemy_center = player_village_center + dir * distance
+	enemy_center.y = 70  # altitude estimée (pas de chunks chargés là-bas)
+
+	# Créer le village ennemi
+	var enemy = EnemyVillageScript.new()
+	enemy.name = "EnemyVillage"
+	enemy.add_to_group("enemy_village")
+	get_parent().call_deferred("add_child", enemy)
+	enemy.call_deferred("initialize", enemy_center, 70)
+
+	# Créer le war manager
+	var war_mgr = WarManagerScript.new()
+	war_mgr.name = "WarManager"
+	get_parent().call_deferred("add_child", war_mgr)
+
+	print("WorldManager: village ennemi initialisé à %s (distance: %d blocs, direction: %s)" % [
+		str(enemy_center), distance, str(dir)])
+
 func _flatten_village_area(chunk_pos: Vector3i, packed_blocks: PackedByteArray, cx: int, cz: int, ref_y: int):
 	# Supprimer les blocs gênants au-dessus du sol dans un rayon de 6 blocs
 	# Pour que les villageois puissent naviguer librement autour du village

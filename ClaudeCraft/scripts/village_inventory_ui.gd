@@ -201,8 +201,9 @@ func _refresh_contents():
 	if not village_manager:
 		return
 
-	var phase_names = ["Phase 0 — Bootstrap", "Phase 1 — Age du Bois", "Phase 2 — Age de la Pierre", "Phase 3 — Age du Fer"]
-	phase_label.text = phase_names[village_manager.village_phase]
+	var phase_names = ["Phase 0 — Bootstrap", "Phase 1 — Age du Bois", "Phase 2 — Age de la Pierre", "Phase 3 — Age du Fer", "Phase 4 — Age Médiéval"]
+	var phase_idx = clampi(village_manager.village_phase, 0, phase_names.size() - 1)
+	phase_label.text = phase_names[phase_idx]
 
 	var tier_names = ["Mains nues (x1.0)", "Outils bois (x1.67)", "Outils pierre (x2.0)", "Outils fer (x2.5)"]
 	tier_label.text = "Outils : " + tier_names[village_manager.village_tool_tier]
@@ -280,6 +281,17 @@ func _refresh_contents():
 		var mined = village_manager.mine_front_index
 		var total = village_manager.mine_plan.size()
 		obj_text += "\nMine : %d/%d blocs creusés" % [mined, total]
+	# Section militaire (Phase 4+)
+	if village_manager.village_phase >= 4:
+		var war_mgr = get_tree().get_first_node_in_group("war_manager")
+		if war_mgr:
+			obj_text += "\n--- Militaire ---"
+			obj_text += "\nGuerre : " + war_mgr.get_war_status_text()
+			obj_text += "\nEnnemi : " + war_mgr.get_enemy_status_text()
+			var swords = village_manager.get_resource_count(BlockRegistry.BlockType.IRON_SWORD)
+			var shields = village_manager.get_resource_count(BlockRegistry.BlockType.SHIELD)
+			obj_text += "\nÉpées : %d | Boucliers : %d" % [swords, shields]
+
 	objective_label.text = obj_text
 
 	# Nettoyer les entrées précédentes

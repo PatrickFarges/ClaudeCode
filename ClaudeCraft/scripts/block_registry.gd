@@ -88,6 +88,10 @@ enum BlockType {
 	BREAD,
 	# === ECLAIRAGE (72) ===
 	TORCH,
+	# === MILITAIRE (73-75) ===
+	IRON_SWORD,
+	GOLD_SWORD,
+	SHIELD,
 }
 
 const BLOCK_DATA = {
@@ -615,6 +619,28 @@ const BLOCK_DATA = {
 		"color": Color(1.0, 0.85, 0.5, 1.0),
 		"hardness": 0.0,
 		"faces": { "all": "torch" }
+	},
+	# === MILITAIRE ===
+	BlockType.IRON_SWORD: {
+		"name": "Iron Sword",
+		"solid": false,
+		"color": Color(0.8, 0.8, 0.85, 1.0),
+		"hardness": 0.0,
+		"faces": { "all": "iron_block" }
+	},
+	BlockType.GOLD_SWORD: {
+		"name": "Gold Sword",
+		"solid": false,
+		"color": Color(0.95, 0.85, 0.3, 1.0),
+		"hardness": 0.0,
+		"faces": { "all": "gold_block" }
+	},
+	BlockType.SHIELD: {
+		"name": "Shield",
+		"solid": false,
+		"color": Color(0.6, 0.45, 0.3, 1.0),
+		"hardness": 0.0,
+		"faces": { "all": "oak_planks" }
 	},
 }
 
