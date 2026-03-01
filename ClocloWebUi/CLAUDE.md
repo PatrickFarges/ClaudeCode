@@ -34,6 +34,15 @@ pip install -r requirements.txt
   - Décodage sortie : `atob()` → `Uint8Array` → `term.write(bytes)` pour UTF-8 correct (pas `atob` direct qui donne du latin1 cassé)
 - **`static/style.css` (~170 lignes) :** Thème Tokyo Night (#1a1b26), layout flexbox, sidebar 320px
 - **`start.bat` :** Lanceur Windows qui utilise explicitement Python 3.12 pour éviter les conflits de PATH
+- **`start_minimized.vbs` :** Wrapper VBScript qui lance `start.bat` en fenêtre minimisée (utilisé par l'auto-démarrage Windows)
+
+## Auto-démarrage Windows
+
+ClocloWebUi se lance automatiquement au démarrage de Windows, fenêtre minimisée.
+- **Clé registre :** `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\ClocloWebUi`
+- **Valeur :** `wscript.exe "D:\Program\ClaudeCode\ClocloWebUi\start_minimized.vbs"`
+- Le VBScript lance `start.bat` avec le style fenêtre `7` (minimisée)
+- Pour désactiver : supprimer la clé via `regedit` ou `reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v ClocloWebUi /f`
 
 ## Problèmes résolus durant le développement
 
