@@ -13,14 +13,20 @@ python claudelauncher_v7.0.py
 
 **Dépendances :** PyQt6 >= 6.6.0, requests >= 2.31.0, Pillow >= 10.0.0
 
-## Architecture (fichier unique `claudelauncher_v7.0.py`, ~2400 lignes, 5 classes)
+## Architecture (fichier unique `claudelauncher_v7.0.py`, ~2900 lignes, 5 classes)
 
 - **`ImageDownloader(QThread)`** : téléchargement asynchrone images SteamGridDB, cache local MD5 dans `~/.claudelauncher/images/`, recherche intelligente avec variantes du nom
 - **`CustomImageDownloader(QThread)`** : téléchargement d'images personnalisées depuis URL avec cache MD5
 - **`WebImageSearcher(QThread)`** : recherche d'images web multi-sources (SteamGridDB + DuckDuckGo), dialogue de sélection visuelle avec miniatures
 - **`ProgramScanner(QThread)`** : scan multi-sources (Registry Windows, Steam `.acf`, Epic Games manifests, dossiers custom, fichiers custom .bat/.exe/.lnk, tous les disques), classification jeux vs apps (blacklist, publishers, chemins)
 - **`ClaudeLauncher(QMainWindow)`** : UI 4 onglets (Jeux, Applications, Favoris, Plus utilisés), persistance JSON dans `~/.claudelauncher/` (13 fichiers config), lancement programmes, menu contextuel (renommer, favoris, masquer, tags, images, forcer catégorie, modifier exe/arguments), barre de recherche par nom/tag, carrousel d'images personnalisées
+- **Auto-élévation UAC** : `main()` vérifie `IsUserAnAdmin()`, relance en admin si nécessaire via `ShellExecuteW("runas")`
+- **Auto-démarrage Windows** : tâche planifiée `ClaudeLauncher_Startup` créée via `schtasks` au premier lancement (logon trigger + `RunLevel=HighestAvailable`)
 
 ## Config runtime
 
 `~/.claudelauncher/` — `favorites.json`, `launch_stats.json`, `hidden_programs.json`, `api_keys.json` (clé SteamGridDB), `overrides.json`, `custom_exes.json`, `custom_args.json`, `last_tab.json`, `custom_tags.json`, `custom_images.json`, `custom_files.json`, etc.
+
+## Tâche planifiée Windows
+
+- **Nom :** `ClaudeLauncher_Startup` — suppression manuelle : `schtasks /Delete /TN ClaudeLauncher_Startup /F`
