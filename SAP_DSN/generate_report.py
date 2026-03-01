@@ -181,7 +181,7 @@ TOP 20 DES TABLES/VUES SAP DANS LES SOLUTIONS DES TECHNICIENS
                                |             | → Configuration des features DSN
                                |             | → Très utilisé pour blocs 51, 52, 81
 ─────────────────────────────────────────────────────────────────────────────────
- V_T5F1M                       | 24          | MDC (Modèle De Calcul) URSSAF
+ V_T5F1M                       | 24          | MDC (Modèle De Charge) URSSAF
                                |             | → Paramétrage des MDC pour cotisations
                                |             | → Clé pour blocs 23, 78, 81
 ─────────────────────────────────────────────────────────────────────────────────
@@ -259,7 +259,7 @@ TABLES À VÉRIFIER (dans cet ordre) :
      → Vérifier si le code composant existe et est correct
      → Utilisé pour les blocs 22, 23, 78, 82
 
-  3. V_T5F1M — MDC (Modèle De Calcul)
+  3. V_T5F1M — MDC (Modèle De Charge)
      → Vérifier que le MDC est paramétré pour la bonne caisse
      → Vérifier les WT associées au MDC
 
@@ -638,7 +638,7 @@ Terme                  | Signification
 DSN                    | Déclaration Sociale Nominative
 OPS                    | Organisme de Protection Sociale
 CTP                    | Code Type de Personnel (URSSAF)
-MDC                    | Modèle De Calcul (cotisations)
+MDC                    | Modèle De Charge (cotisations)
 WT / Rubrique          | Wage Type / Rubrique de paie
 SIRET / SIREN          | Identifiants établissement / entreprise
 NIC                    | Numéro Interne de Classement
@@ -674,7 +674,7 @@ Sur les 1887 fichiers Excel analysés couvrant 5 ans de tickets SAP (2019-2023) 
 • Les 3 tables les plus critiques :
   1. V_T5FDSNCOTIS2 — Mapping cotisations DSN
   2. V_T5F99FX — Features DSN étendues
-  3. V_T5F1M — MDC (Modèle De Calcul)
+  3. V_T5F1M — MDC (Modèle De Charge)
 
 • Les problèmes les plus récurrents :
   - Rétroactivité/rappels qui génèrent des doublons
