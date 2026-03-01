@@ -66,6 +66,8 @@ Format JSON : palette + RLE layer-first. `KEEP`=terrain intact, `AIR`=creuser. P
 
 - **`scripts/convert_schem.py`** (~940 lignes) : convertisseur `.schem` → JSON ClaudeCraft, parseur NBT maison, 260+ mappings blocs
 - **`scripts/structure_viewer.py`** (v2.0.0, ~2600 lignes) : **éditeur + visualiseur 3D** PyQt6/PyOpenGL — 73 types de blocs, palette couleurs latérale, placement/suppression clic (raycasting AABB), undo/redo (Ctrl+Z/Y), curseur 3D transparent, export JSON. Toggle "Editer" (Ctrl+E) avec feedback visuel (texte vert + bordure verte viewport). Modes : visu (charge .json/.schem/.litematic/.glb/.obj) + éditeur (Ctrl+N nouveau, Ctrl+E toggle)
+- **`scripts/bedrock_to_glb.py`** (v1.1.0, ~730 lignes) : convertisseur Minecraft Bedrock Edition → GLB. Extrait `geometry.humanoid.custom` depuis `mobs.json`, génère mesh skinné (28 bones, 288 vertices, 144 triangles), 4 animations bakées (walk, idle, attack, mine). 2 matériaux (base opaque + overlay BLEND pour hat/sleeves/pants/jacket). Box UV Bedrock, scale 1/16. Copie 10 skins PNG. `--no-overlay` pour exclure les couches overlay
+- **`scripts/character_viewer.py`** (v1.1.0, ~910 lignes) : visualiseur de personnage GLB PyQt6/PyOpenGL — skin swap (liste avec preview face), animation playback (sélecteur, play/pause, vitesse), squelette (bones jaunes + joints rouges), wireframe. Caméra orbitale (souris), grille, 2 lumières (key + fill). Rendu CPU skinning, alpha blend pour overlays transparents
 - **`scripts/minecraft_import.py`** (~700 lignes) : extracteur client.jar → 8 JSON (2390 blocs, 1283 items, 1396 recettes, etc.) dans `minecraft_data/` (gitignored)
 
 ## Packs de textures (`TexturesPack/`)
@@ -81,6 +83,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 - `Audio/` : ~334 fichiers (dont `Forest/` 11 MP3 ambiance par heure)
 - `BlockPNJ/` : 18 modèles GLB Kenney.nl (PNJ villageois)
 - `assets/Animals/GLB/` : 6 GLB animés Quaternius (CC0) — *(non utilisés depuis v12.0.0, conservés pour usage futur éventuel)*
+- `assets/PlayerModel/` : modèle joueur Bedrock converti — `steve.glb` (28 bones, 4 anims), `skins/` (10 PNG 64×64 : steve, alex, ari, kai, noor, etc.)
 - `assets/Deco/` : apple.glb (nourriture)
 - `assets/Lobbys/` : .schem Minecraft à convertir
 
