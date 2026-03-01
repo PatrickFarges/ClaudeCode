@@ -1,153 +1,257 @@
-====================================================================================================
-RAPPORT D'ANALYSE DSN UNIFIÉ - TICKETS SAP EuHReka (2019-2023)
-Généré le 01/03/2026 à 06:55
-Sources : Tickets Julio (par année) + SAP Tickets (par client)
-====================================================================================================
+"""
+Fusion des deux sources de tickets DSN et génération du rapport unifié
+v1.0
+"""
+APP_VERSION = "1.0"
 
+import json
+import re
+from collections import defaultdict
+from datetime import datetime
+
+OUTPUT_DIR = r"D:\Program\ClaudeCode\SAP_DSN"
+
+
+def load_tickets(path):
+    with open(path, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+
+def main():
+    # Charger les deux sources
+    tickets_julio = load_tickets(f'{OUTPUT_DIR}/dsn_tickets_raw.json')
+    tickets_clients = load_tickets(f'{OUTPUT_DIR}/dsn_tickets_clients_raw.json')
+
+    # Fusionner en ajoutant la source
+    for t in tickets_julio:
+        t['source'] = 'Julio (par année)'
+    for t in tickets_clients:
+        t['source'] = 'SAP Ticket (par client)'
+
+    all_tickets = tickets_julio + tickets_clients
+
+    # Dédupliquer par nom de fichier (certains tickets peuvent apparaître dans les deux)
+    seen = set()
+    unique_tickets = []
+    dupes = 0
+    for t in all_tickets:
+        fname = t['filename']
+        if fname not in seen:
+            seen.add(fname)
+            unique_tickets.append(t)
+        else:
+            dupes += 1
+
+    print(f"Source 1 (Julio/année) : {len(tickets_julio)} tickets DSN")
+    print(f"Source 2 (SAP/client)  : {len(tickets_clients)} tickets DSN")
+    print(f"Doublons éliminés      : {dupes}")
+    print(f"Total unique           : {len(unique_tickets)}")
+
+    # Sauvegarder le JSON fusionné
+    with open(f'{OUTPUT_DIR}/dsn_tickets_ALL.json', 'w', encoding='utf-8') as f:
+        json.dump(unique_tickets, f, ensure_ascii=False, indent=2, default=str)
+
+    # === ANALYSE COMPLÈTE ===
+    table_pattern = re.compile(
+        r'\b(V_T5F\w+|T5F\w+|V_T596\w*|T596\w*|V_T511\w*|T511\w*|'
+        r'V_T512\w*|T512\w*|V_T530\w*|T530\w*|V_T554\w*|T554\w*|'
+        r'V_T52\w+|Y00BA_\w+|ZFRPY_\w+|ZESPY_\w+|'
+        r'RPLDSNF\d|RPUDSNF\d)\b', re.IGNORECASE)
+
+    bloc_counter = defaultdict(int)
+    table_counter = defaultdict(int)
+    code_counter = defaultdict(int)
+    problems_by_bloc = defaultdict(list)
+    tickets_by_year = defaultdict(int)
+    tickets_by_client = defaultdict(int)
+    problem_keywords = defaultdict(int)
+    tables_per_bloc = defaultdict(lambda: defaultdict(int))
+
+    problem_kw_list = [
+        'taux at', 'taux pas', 'taux dupliqu', 'cotisation', 'quotit',
+        'erreur', 'ko', 'anomali', 'manquant', 'doublon', 'split',
+        'transfer', 'mutation', 'retro', 'rappel', 'r.gularisa',
+        'apprenti', 'temps partiel', 'cdd', 'sortie', 'entr.e',
+        'handicap', 'prevoyance', 'retraite', 'fillon', 'urssaf',
+        'fractionn', 'annule', 'remplace', 'n.ant',
+        'net social', 'net imposable', 'brut', 'plafond',
+        'csg', 'crds', 'ijss', 'arr.t', 'maladie', 'maternit',
+        'ccn', 'idcc', 'convention', 'bulletin',
+        'cumul', 'processing class', 'classe de cumul',
+        'stagiaire', 'ppv', 'prime partage',
+    ]
+
+    for t in unique_tickets:
+        # Année
+        for year in ['2019', '2020', '2021', '2022', '2023', '2024']:
+            if year in t.get('file', ''):
+                tickets_by_year[year] += 1
+                break
+
+        # Client
+        client = t.get('client', '')
+        if client:
+            tickets_by_client[client] += 1
+
+        # Blocs
+        for bloc in t.get('blocs_mentioned', []):
+            bloc_counter[bloc] += 1
+            if t.get('problem') or t.get('solution'):
+                problems_by_bloc[bloc].append({
+                    'file': t['filename'],
+                    'client': t.get('client', ''),
+                    'problem': (t.get('problem', '') or '')[:500],
+                    'solution': (t.get('solution', '') or '')[:500],
+                })
+
+        # Tables
+        for table in t.get('tables_mentioned', []):
+            table_counter[table] += 1
+
+        # Codes DSN
+        for code in t.get('dsn_codes', []):
+            code_counter[code] += 1
+
+        # Tables dans la solution
+        sol = t.get('solution', '') or ''
+        found_tables = table_pattern.findall(sol)
+        blocs = t.get('blocs_mentioned', [])
+        for tbl in found_tables:
+            tbl_upper = tbl.upper().replace('/N', '')
+            for bloc in blocs:
+                tables_per_bloc[bloc][tbl_upper] += 1
+
+        # Mots-clés problème
+        combined_lower = (t.get('problem', '') + ' ' + t.get('solution', '') + ' ' + t.get('filename', '')).lower()
+        for kw in problem_kw_list:
+            if re.search(kw, combined_lower):
+                problem_keywords[kw] += 1
+
+    # === GÉNÉRATION DU RAPPORT UNIFIÉ ===
+    r = []
+    r.append("=" * 100)
+    r.append("RAPPORT D'ANALYSE DSN UNIFIÉ - TICKETS SAP EuHReka (2019-2023)")
+    r.append(f"Généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')}")
+    r.append("Sources : Tickets Julio (par année) + SAP Tickets (par client)")
+    r.append("=" * 100)
+
+    r.append(f"""
 STATISTIQUES GÉNÉRALES
-==================================================
+{'='*50}
 - Source 1 (Julio, par année)  : 1887 fichiers scannés → 832 tickets DSN
 - Source 2 (SAP, par client)   : 1271 fichiers scannés → 920 tickets DSN
 - Total fichiers scannés       : 3158
-- Doublons éliminés            : 194
-- TOTAL TICKETS DSN UNIQUES    : 1558
+- Doublons éliminés            : {dupes}
+- TOTAL TICKETS DSN UNIQUES    : {len(unique_tickets)}
 
 RÉPARTITION PAR ANNÉE (quand identifiable)
+""")
+    for year in sorted(tickets_by_year.keys()):
+        r.append(f"  {year} : {tickets_by_year[year]} tickets DSN")
 
-  2019 : 88 tickets DSN
-  2020 : 182 tickets DSN
-  2021 : 336 tickets DSN
-  2022 : 408 tickets DSN
-  2023 : 449 tickets DSN
-  2024 : 67 tickets DSN
-
+    r.append(f"""
 RÉPARTITION PAR CLIENT (source 2)
+""")
+    for client, count in sorted(tickets_by_client.items(), key=lambda x: x[1], reverse=True):
+        if client:
+            r.append(f"  {client:20s}: {count} tickets DSN")
 
-  CORNING             : 340 tickets DSN
-  AKZO NOBEL          : 241 tickets DSN
-  ASTELLAS            : 117 tickets DSN
-  LONZA               : 24 tickets DSN
-  LEO PHARMA          : 19 tickets DSN
-  ALCON               : 8 tickets DSN
-  BUNGE               : 5 tickets DSN
-  ABBVIE              : 2 tickets DSN
-  RECKITT             : 2 tickets DSN
+    r.append("")
+    r.append("=" * 100)
+    r.append("SECTION 1 : LES PROBLÈMES DSN LES PLUS FRÉQUENTS")
+    r.append("=" * 100)
 
-====================================================================================================
-SECTION 1 : LES PROBLÈMES DSN LES PLUS FRÉQUENTS
-====================================================================================================
-
+    r.append("""
 TOP 15 DES BLOCS DSN PROBLÉMATIQUES
-────────────────────────────────────
-  1. Bloc 81 : 128 tickets
-  2. Bloc 23 : 125 tickets
-  3. Bloc 78 : 110 tickets
-  4. Bloc 20 : 73 tickets
-  5. Bloc 51 : 51 tickets
-  6. Bloc 52 : 44 tickets
-  7. Bloc 50 : 40 tickets
-  8. Bloc 22 : 37 tickets
-  9. Bloc 15 : 30 tickets
- 10. Bloc 40 : 25 tickets
- 11. Bloc 54 : 25 tickets
- 12. Bloc 79 : 24 tickets
- 13. Bloc 82 : 23 tickets
- 14. Bloc 70 : 22 tickets
- 15. Bloc 53 : 16 tickets
+────────────────────────────────────""")
+    for i, (bloc, count) in enumerate(sorted(bloc_counter.items(), key=lambda x: x[1], reverse=True)[:15], 1):
+        r.append(f" {i:2d}. Bloc {bloc:3s}: {count} tickets")
 
+    r.append("""
 TYPES DE PROBLÈMES LES PLUS RÉCURRENTS
-───────────────────────────────────────
-  1. ko                            : 164 occurrences
-  2. retro                         : 66 occurrences
-  3. apprenti                      : 64 occurrences
-  4. cotisation                    : 61 occurrences
-  5. retraite                      : 61 occurrences
-  6. bulletin                      : 58 occurrences
-  7. n.ant                         : 51 occurrences
-  8. urssaf                        : 46 occurrences
-  9. entr.e                        : 45 occurrences
- 10. brut                          : 41 occurrences
- 11. net social                    : 32 occurrences
- 12. arr.t                         : 26 occurrences
- 13. cumul                         : 22 occurrences
- 14. fillon                        : 20 occurrences
- 15. maladie                       : 19 occurrences
- 16. split                         : 18 occurrences
- 17. csg                           : 17 occurrences
- 18. prevoyance                    : 16 occurrences
- 19. ijss                          : 15 occurrences
- 20. manquant                      : 15 occurrences
+───────────────────────────────────────""")
+    for i, (kw, count) in enumerate(sorted(problem_keywords.items(), key=lambda x: x[1], reverse=True)[:20], 1):
+        r.append(f" {i:2d}. {kw:30s}: {count} occurrences")
 
-====================================================================================================
-SECTION 2 : TABLES SAP LES PLUS UTILISÉES POUR RÉSOUDRE LES PROBLÈMES DSN
-====================================================================================================
+    r.append("")
+    r.append("=" * 100)
+    r.append("SECTION 2 : TABLES SAP LES PLUS UTILISÉES POUR RÉSOUDRE LES PROBLÈMES DSN")
+    r.append("=" * 100)
 
+    # Tables dans les solutions uniquement
+    solution_tables = defaultdict(int)
+    for t in unique_tickets:
+        sol = t.get('solution', '') or ''
+        found = table_pattern.findall(sol)
+        for tbl in found:
+            tbl_upper = tbl.upper().replace('/N', '')
+            solution_tables[tbl_upper] += 1
+
+    table_descriptions = {
+        'V_T5FDSNCOTIS2': 'Table CENTRALE : mapping cotisations DSN\n'
+                          '                               |             | → Lie les rubriques de paie (WT) aux codes\n'
+                          '                               |             |   cotisation DSN (blocs 23, 78, 81)',
+        'Y00BA_VIE_FIWTSA': 'Vue EuHReka : assignation des rubriques (WT)',
+        'V_T5F99FX': 'Feature DSN mapping étendu (blocs 51, 52, 81)',
+        'V_T5F1M': 'MDC (Modèle De Charge) URSSAF\n'
+                   '                               |             | → Clé pour blocs 23, 78, 81',
+        'V_T5F1C1': 'Table de customizing cotisations 1',
+        'V_T596M': 'Assignation destinataires DSN (SIRET → OPS)',
+        'V_T511K': 'Rubriques de paie (Wage Types) - caractéristiques',
+        'Y00BA_PE01': 'Vue EuHReka Personnel Events',
+        'V_T596NV': 'Groupement SIRET pour DSN (blocs 15, 20, 60, 70)',
+        'T554S': 'Règles d\'absence / counting rules (bloc 60)',
+        'Y00BA_OH11': 'Transaction EuHReka customizing paie central',
+        'Y00BA_PE03_CUSTOMER': 'Vue EuHReka paramétrage client spécifique',
+        'V_T5FDSNCODCO': 'Codes composants DSN (blocs 22, 23, 78, 82)',
+        'Y00BA_VIE_T512WC': 'Vue EuHReka : calcul des rubriques',
+        'Y00BA_VIE_COMPAN': 'Vue EuHReka : paramètres société',
+        'V_T512T': 'Textes des rubriques de paie',
+        'Y00BA_VIE_ASSI3': 'Vue EuHReka : assignation spécifique',
+        'V_T511P': 'Taux et constantes des rubriques (similaire V_T511K)',
+        'Y00BA_VIE_FISADF': 'Vue EuHReka : fiscal / SAP DF',
+        'V_T5F1C': 'Paramétrage cotisations',
+        'V_T554C': 'Règles de comptage absences',
+        'V_T52EL': 'Éléments de paie',
+        'V_T596C': 'Codes caisses',
+        'V_T5F1C3': 'Paramétrage cotisations 3',
+        'V_T5F1H': 'Paramétrage établissement H',
+        'V_T5FDSNMTOMC': 'Mapping montant DSN',
+        'V_T5F99FMAP': 'Feature mapping DSN',
+        'V_T5F1BAP_DSN': 'BAP DSN (Business Application Platform)',
+        'V_T5FDSNPAVAL': 'Paramétrage PAS validation',
+        'V_T5F1G': 'Paramétrage groupement cotisations',
+    }
+
+    r.append("""
 TOP 25 DES TABLES/VUES SAP DANS LES SOLUTIONS DES TECHNICIENS
 ──────────────────────────────────────────────────────────────
 
  Table/Vue                    | Occurrences | Description
-─────────────────────────────────────────────────────────────────────────────────
- V_T5FDSNCOTIS2                |  143        | Table CENTRALE : mapping cotisations DSN
-                               |             | → Lie les rubriques de paie (WT) aux codes
-                               |             |   cotisation DSN (blocs 23, 78, 81)
-─────────────────────────────────────────────────────────────────────────────────
- Y00BA_PE02                    |   64        | 
-─────────────────────────────────────────────────────────────────────────────────
- Y00BA_VIE_FIWTSA              |   54        | Vue EuHReka : assignation des rubriques (WT)
-─────────────────────────────────────────────────────────────────────────────────
- Y00BA_VIE_ASSI3               |   45        | Vue EuHReka : assignation spécifique
-─────────────────────────────────────────────────────────────────────────────────
- V_T511K                       |   41        | Rubriques de paie (Wage Types) - caractéristiques
-─────────────────────────────────────────────────────────────────────────────────
- Y00BA_PE01                    |   37        | Vue EuHReka Personnel Events
-─────────────────────────────────────────────────────────────────────────────────
- V_T5F99FX                     |   37        | Feature DSN mapping étendu (blocs 51, 52, 81)
-─────────────────────────────────────────────────────────────────────────────────
- V_T5F1M                       |   34        | MDC (Modèle De Charge) URSSAF
-                               |             | → Clé pour blocs 23, 78, 81
-─────────────────────────────────────────────────────────────────────────────────
- V_T511P                       |   33        | Taux et constantes des rubriques (similaire V_T511K)
-─────────────────────────────────────────────────────────────────────────────────
- Y00BA_OH11                    |   32        | Transaction EuHReka customizing paie central
-─────────────────────────────────────────────────────────────────────────────────
- Y00BA_PE03_CUSTOMER           |   30        | Vue EuHReka paramétrage client spécifique
-─────────────────────────────────────────────────────────────────────────────────
- V_T5F1C1                      |   28        | Table de customizing cotisations 1
-─────────────────────────────────────────────────────────────────────────────────
- V_T5F1C                       |   25        | Paramétrage cotisations
-─────────────────────────────────────────────────────────────────────────────────
- V_T596M                       |   24        | Assignation destinataires DSN (SIRET → OPS)
-─────────────────────────────────────────────────────────────────────────────────
- V_T5FDSNCODCO                 |   24        | Codes composants DSN (blocs 22, 23, 78, 82)
-─────────────────────────────────────────────────────────────────────────────────
- T5F99FX                       |   23        | 
-─────────────────────────────────────────────────────────────────────────────────
- Y00BA_TAB_STY02               |   22        | 
-─────────────────────────────────────────────────────────────────────────────────
- V_T596NV                      |   22        | Groupement SIRET pour DSN (blocs 15, 20, 60, 70)
-─────────────────────────────────────────────────────────────────────────────────
- V_T512T                       |   22        | Textes des rubriques de paie
-─────────────────────────────────────────────────────────────────────────────────
- Y00BA_VIE_STY02               |   19        | 
-─────────────────────────────────────────────────────────────────────────────────
- V_T5F1C4                      |   18        | 
-─────────────────────────────────────────────────────────────────────────────────
- V_T512Z                       |   18        | 
-─────────────────────────────────────────────────────────────────────────────────
- V_T5F1G                       |   18        | Paramétrage groupement cotisations
-─────────────────────────────────────────────────────────────────────────────────
- V_T5F1C5                      |   17        | 
-─────────────────────────────────────────────────────────────────────────────────
- T554S                         |   17        | Règles d'absence / counting rules (bloc 60)
-─────────────────────────────────────────────────────────────────────────────────
+─────────────────────────────────────────────────────────────────────────────────""")
+    for tbl, count in sorted(solution_tables.items(), key=lambda x: x[1], reverse=True)[:25]:
+        desc = table_descriptions.get(tbl, '')
+        r.append(f" {tbl:30s}| {count:4d}        | {desc}")
+        r.append("─────────────────────────────────────────────────────────────────────────────────")
 
-====================================================================================================
-SECTION 3 : GUIDE DE RÉSOLUTION PAR TYPE DE PROBLÈME
-====================================================================================================
+    r.append("")
+    r.append("=" * 100)
+    r.append("SECTION 3 : GUIDE DE RÉSOLUTION PAR TYPE DE PROBLÈME")
+    r.append("=" * 100)
 
+    # Compter les tickets par catégorie de problème pour le rapport
+    cat_counts = {}
+    cat_counts['cotis_78_23_81'] = bloc_counter.get('78', 0) + bloc_counter.get('23', 0) + bloc_counter.get('81', 0)
+    cat_counts['remun_50_51_52'] = bloc_counter.get('50', 0) + bloc_counter.get('51', 0) + bloc_counter.get('52', 0)
+    cat_counts['versement_20'] = bloc_counter.get('20', 0)
+    cat_counts['contrat_40'] = bloc_counter.get('40', 0)
+    cat_counts['absence_60'] = bloc_counter.get('60', 0)
+    cat_counts['bloc_22'] = bloc_counter.get('22', 0)
+
+    r.append(f"""
 ═══════════════════════════════════════════════════════════════════════════════
 PROBLÈME 1 : COTISATIONS DSN INCORRECTES (Blocs 23/78/81)
-C'est LE problème n°1 — 363 tickets combinés
+C'est LE problème n°1 — {cat_counts['cotis_78_23_81']} tickets combinés
 ═══════════════════════════════════════════════════════════════════════════════
 
 SYMPTÔMES :
@@ -192,7 +296,7 @@ RÉSOLUTION TYPIQUE :
 
 ═══════════════════════════════════════════════════════════════════════════════
 PROBLÈME 2 : RÉMUNÉRATION INCORRECTE (Blocs 50/51/52)
-135 tickets
+{cat_counts['remun_50_51_52']} tickets
 ═══════════════════════════════════════════════════════════════════════════════
 
 SYMPTÔMES :
@@ -229,7 +333,7 @@ RÉSOLUTION TYPIQUE :
 
 ═══════════════════════════════════════════════════════════════════════════════
 PROBLÈME 3 : VERSEMENTS OPS INCORRECTS (Bloc 20)
-73 tickets
+{cat_counts['versement_20']} tickets
 ═══════════════════════════════════════════════════════════════════════════════
 
 SYMPTÔMES :
@@ -288,7 +392,7 @@ RÉSOLUTION TYPIQUE :
 
 ═══════════════════════════════════════════════════════════════════════════════
 PROBLÈME 5 : ARRÊTS DE TRAVAIL / ABSENCES (Bloc 60)
-13 tickets
+{cat_counts['absence_60']} tickets
 ═══════════════════════════════════════════════════════════════════════════════
 
 SYMPTÔMES :
@@ -379,7 +483,7 @@ TABLES À VÉRIFIER :
 
 ═══════════════════════════════════════════════════════════════════════════════
 PROBLÈME 10 : AUTRE ÉLÉMENT DE REVENU BRUT (Bloc 22)
-37 tickets (souvent lié à des indemnités nouvelles)
+{cat_counts['bloc_22']} tickets (souvent lié à des indemnités nouvelles)
 ═══════════════════════════════════════════════════════════════════════════════
 
 SYMPTÔMES :
@@ -401,57 +505,30 @@ RÉSOLUTION TYPIQUE pour ajouter un nouvel élément :
   b) Paramétrer le mapping dans V_T5FDSNCOTIS2
   c) Ajouter le code composant dans V_T5FDSNCODCO
   d) Tester avec RPLDSNF0
+""")
 
+    r.append("")
+    r.append("=" * 100)
+    r.append("SECTION 4 : TABLES SAP ESSENTIELLES PAR BLOC DSN")
+    r.append("=" * 100)
 
-====================================================================================================
-SECTION 4 : TABLES SAP ESSENTIELLES PAR BLOC DSN
-====================================================================================================
-
+    r.append("""
 Ce tableau montre les tables les plus utilisées dans les solutions par bloc :
 
 Bloc DSN     | Tables principales (par fréquence)
-─────────────┼──────────────────────────────────────────────────────────────
-Bloc 1       | T5FDSNREM(2), V_T5FDSNCOTIS2(1)
-Bloc 4       | Y00BA_VIE_T512WC(2), V_T5F99FX(1)
-Bloc 06      | T5F1P(2), V_T5F1P(1)
-Bloc 7       | V_T596NV(1), V_T596M(1)
-Bloc 07      | V_T5F99FX(1), V_T5FWG(1)
-Bloc 11      | V_T5F1P(4), V_T5F99FMAP(3), V_T5F99FX(3), Y00BA_PE03_CUSTOMER(2)
-Bloc 13      | T5FDSNCOTIS(5), V_T5FDSNCOTIS2(5)
-Bloc 14      | T5FDSNCOTIS(5), V_T5FDSNCOTIS2(5)
-Bloc 15      | V_T596NV(9), V_T596M(9), V_T5FSCPA(8), V_T5FCPA(8), V_T5F1BAP_DSN(5), V_T5F1G(5), V_T5FDSNCOTIS2(4), V_T5F7B(3)
-Bloc 16      | T5F1P(2), V_T5F1P(1)
-Bloc 20      | V_T5FDSNCOTIS2(15), V_T596M(10), Y00BA_VIE_ASSI3(7), V_T512T(6), V_T596NV(5), V_T5FPR(5), Y00BA_PE02(5), V_T512Z(4)
-Bloc 22      | V_T5FDSNCOTIS2(18), V_T512T(9), V_T596C(9), ZFRPY_VIE_SBD_2C(8), Y00BA_TAB_STY02(8), V_T5FDSNCODCO(8), V_T512Z(7), V_T52EL(7)
-Bloc 23      | V_T5FDSNCOTIS2(38), V_T5FDSNCODCO(18), V_T512T(11), V_T5F1M(10), ZFRPY_PRO_RE_BNY_DSN_TAB_CHECK(10), Y00BA_OH11(9), V_T512Z(9), V_T52EL(9)
-Bloc 30      | T5F1P(4), V_T5F1P(2), V_T5F99FMAP(2), V_T5FDSNCOTIS2(2), V_T5FADR(1), V_T596NV(1), V_T5F99FX(1), V_T5FWG(1)
-Bloc 40      | T5F1P(4), T511K(4), Y00BA_PE02(4), V_T5F1P(2), V_T5F1E(2), V_T5F1B(2), V_T5F1I(2), V_T5F1M(2)
-Bloc 44      | V_T5F1M(2), V_T5F1I(1), V_T5FDSNCOTIS2(1)
-Bloc 50      | T5F99FX(21), V_T5F99FX(8), T5F99X(8), T5FDSNCOTIS2(4), Y00BA_VIE_T512WC(3), V_T596J(3), V_T5FPR(3), Y00BA_VIE_ASSI3(3)
-Bloc 51      | T5F99FX(21), V_T5F99FX(14), V_T596C(9), T5F99X(8), ZFRPY_PRO_RE_BNY_DSN_TAB_CHECK(6), Y00BA_OH11(5), V_T5FPR(4), V_T5FDSNCOTIS2(4)
-Bloc 52      | T5F99FX(16), V_T5F99FX(10), V_T5FPR(4), V_T5F99FV(4), T5F99X(4), Y00BA_VIE_ASSI3(4), Y00BA_VIE_FIWTSA(4), Y00BA_PE02(4)
-Bloc 53      | T5F99FX(16), T5F99X(4), Y00BA_OH11(2), T5FDSNCOTIS2(2), V_T5F99FX(1), V_T5FWG(1)
-Bloc 54      | T5F99FX(19), T5FDSNREM(4), T5FDSNCOTIS2(4), V_T5FDSNCOTIS2(2), Y00BA_OH11(1), V_T5F99FX(1), V_T5FPR(1)
-Bloc 55      | T5F1P(2), V_T5FSCPA(2), V_T5F1BAP_DSN(2), V_T5F1P(1), T5FSCPA(1), T5FCPA(1), V_T5FCPA(1), V_T5FCP1P(1)
-Bloc 56      | Y00BA_VIE_T512WC(3), V_T5F99FX(1), V_T5FDSNPAS56C(1)
-Bloc 60      | T5F1P(4), V_T596NV(4), Y00BA_PE03_CUSTOMER(3), T554S(3), V_T5F1P(2), V_T5FADR(1), Y00BA_VIE_UEFC1(1), RPLDSNF0(1)
-Bloc 62      | V_T5F99FX(2), V_T5F30(1), V_T5FPR(1), V_T5FWG(1)
-Bloc 63      | V_T5F99FX(1), V_T5FWG(1)
-Bloc 65      | V_T5FDSNCOTIS2(5), V_T5F30_DSN(2), V_T530(1), V_T5F30(1), T5F1B(1), V_T5F1C(1)
-Bloc 66      | T5F1P(2), V_T5F1P(1)
-Bloc 70      | V_T5F1BAP_DSN(3), V_T596NV(2), V_T5FDSNOPSID(2), V_T596M(2), V_T5FDSNCOTIS2(2), T5F1P(2), V_T5F1P(1), V_T5FCPA(1)
-Bloc 71      | T5F1P(2), V_T5F1P(1)
-Bloc 73      | T5F1P(2), V_T5F1P(1)
-Bloc 78      | V_T5FDSNCOTIS2(44), T5F99FX(19), V_T596C(11), V_T512T(10), ZFRPY_PRO_RE_BNY_DSN_TAB_CHECK(10), Y00BA_OH11(9), V_T512Z(9), V_T52EL(7)
-Bloc 79      | V_T5FDSNCOTIS2(9), Y00BA_OH11(5), T5F99FX(4), V_T5F1BAP_DSN(3), V_T596NV(2), V_T5FDSNOPSID(2), V_T596M(2), T5F1P(2)
-Bloc 81      | V_T5FDSNCOTIS2(51), T5F99FX(19), V_T512T(10), V_T5F99FX(10), V_T512Z(9), Y00BA_OH11(9), V_T5F1M(8), ZFRPY_PRO_RE_BNY_DSN_TAB_CHECK(8)
-Bloc 82      | V_T5FDSNCODCO(10), T5F1P(4), V_T5FDSNCOTIS2(4), V_T5F1P(2), V_T5F1C1(1), V_T512T(1), V_T5F1C2(1), V_T5F1M(1)
-Bloc 89      | Y00BA_OH11(4), Y00BA_VIE_STY02(2), V_T512Z(2), V_T511(2), V_T5FDSNCOTIS2(2), V_T5F1G(2)
+─────────────┼──────────────────────────────────────────────────────────────""")
+    for bloc in sorted(tables_per_bloc.keys(), key=lambda x: int(x) if x.isdigit() else 999):
+        tables = sorted(tables_per_bloc[bloc].items(), key=lambda x: x[1], reverse=True)[:8]
+        if tables:
+            table_str = ', '.join(f'{t}({c})' for t, c in tables)
+            r.append(f"Bloc {bloc:3s}     | {table_str}")
 
-====================================================================================================
-SECTION 5 : PROCÉDURES DE RÉSOLUTION RAPIDE
-====================================================================================================
+    r.append("")
+    r.append("=" * 100)
+    r.append("SECTION 5 : PROCÉDURES DE RÉSOLUTION RAPIDE")
+    r.append("=" * 100)
 
+    r.append("""
 CHECKLIST UNIVERSELLE DE DIAGNOSTIC DSN
 ────────────────────────────────────────
 
@@ -511,12 +588,14 @@ COMMENT CORRIGER UNE DSN DÉJÀ ENVOYÉE
  2. Relancer RPLDSNF0 en mode "Annule et Remplace" (type 03)
  3. La table IT3331 stocke l'historique des DSN envoyées
  4. Le programme génère automatiquement le bon identifiant d'annulation
+""")
 
+    r.append("")
+    r.append("=" * 100)
+    r.append("SECTION 6 : TRANSACTIONS ET PROGRAMMES SAP CLÉS")
+    r.append("=" * 100)
 
-====================================================================================================
-SECTION 6 : TRANSACTIONS ET PROGRAMMES SAP CLÉS
-====================================================================================================
-
+    r.append("""
 Programme/Transaction | Description
 ──────────────────────┼─────────────────────────────────────────────────
 RPLDSNF0              | Programme principal de génération de la DSN
@@ -543,12 +622,14 @@ Y00BA_TAB_FIWTSA      | Table assignation WT EuHReka
 ZFRPY_VIE_SBD_2C      | Vue client FR spécifique
 ZESPY_VIE_ROC_00      | Vue client ROC (Read Only Customizing)
 Y00BA_VIE_UEFC1       | Vue EuHReka FC1
+""")
 
+    r.append("")
+    r.append("=" * 100)
+    r.append("SECTION 7 : GLOSSAIRE DSN / SAP")
+    r.append("=" * 100)
 
-====================================================================================================
-SECTION 7 : GLOSSAIRE DSN / SAP
-====================================================================================================
-
+    r.append("""
 Terme                  | Signification
 ───────────────────────┼──────────────────────────────────────────────
 DSN                    | Déclaration Sociale Nominative
@@ -572,25 +653,26 @@ Annule-Remplace        | Type 03 : renvoi complet d'une DSN corrigée
 Néant                  | Déclaration sans salarié
 Fractionnement         | Découpage d'une DSN en plusieurs fractions
 IT (Infotype)          | Structure SAP de données RH (IT0001 = org, etc.)
+""")
 
+    r.append("")
+    r.append("=" * 100)
+    r.append("CONCLUSION")
+    r.append("=" * 100)
 
-====================================================================================================
-CONCLUSION
-====================================================================================================
-
+    r.append(f"""
 Sur les 3158 fichiers Excel analysés couvrant 2 sources de tickets SAP (2019-2023) :
 
-• 1558 tickets DSN uniques identifiés (après dédoublonnage)
+• {len(unique_tickets)} tickets DSN uniques identifiés (après dédoublonnage)
   - Source Julio (par année) : 832 tickets
   - Source SAP (par client)  : 920 tickets
 
-• Clients les plus impactés par les problèmes DSN :
-  - CORNING: 340 tickets
-  - AKZO NOBEL: 241 tickets
-  - ASTELLAS: 117 tickets
-  - LONZA: 24 tickets
-  - LEO PHARMA: 19 tickets
+• Clients les plus impactés par les problèmes DSN :""")
+    for client, count in sorted(tickets_by_client.items(), key=lambda x: x[1], reverse=True)[:5]:
+        if client:
+            r.append(f"  - {client}: {count} tickets")
 
+    r.append(f"""
 • Le problème n°1 reste le paramétrage des COTISATIONS (blocs 23/78/81)
   → La table V_T5FDSNCOTIS2 est LA table centrale à maîtriser
 
@@ -616,3 +698,16 @@ Sur les 3158 fichiers Excel analysés couvrant 2 sources de tickets SAP (2019-20
 Ce rapport ne remplace pas l'expertise humaine, mais devrait permettre
 de diagnostiquer plus rapidement les problèmes DSN en sachant quelles
 tables vérifier en premier selon le type de problème.
+""")
+
+    # Sauvegarder le rapport
+    report_text = '\n'.join(r)
+    output_path = f'{OUTPUT_DIR}/RAPPORT_DSN_ANALYSE.txt'
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(report_text)
+    print(f"\nRapport unifié sauvegardé: {output_path}")
+    print(f"Taille: {len(report_text)} caractères")
+
+
+if __name__ == '__main__':
+    main()
