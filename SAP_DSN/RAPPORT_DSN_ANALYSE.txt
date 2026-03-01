@@ -112,8 +112,8 @@ TOP 20 DES TABLES/VUES SAP DANS LES SOLUTIONS DES TECHNICIENS
 ─────────────────────────────────────────────────────────────────────────────────
  Y00BA_VIE_ASSI3               | 13          | Vue EuHReka : assignation spécifique
 ─────────────────────────────────────────────────────────────────────────────────
- V_T511P                       | 12          | Processing classes des WT
-                               |             | → Clé pour que les WT remontent en DSN
+ V_T511P                       | 12          | Taux et constantes des rubriques de paie
+                               |             | → Similaire à V_T511K
 ─────────────────────────────────────────────────────────────────────────────────
  Y00BA_VIE_FISADF              | 12          | Vue EuHReka : fiscal / SAP DF
 ─────────────────────────────────────────────────────────────────────────────────
@@ -190,8 +190,9 @@ TABLES À VÉRIFIER :
      → Vérifier les rubriques de paie dans l'outil EuHReka
      → Vérifier les cumuls et processing classes
 
-  3. V_T511P — Processing classes
+  3. T512W / V_512W_O — Processing classes (classes de traitement)
      → La WT doit avoir la bonne processing class pour remonter en DSN
+     → Les classes de traitement sont dans T512W, PAS dans V_T511P
 
   4. V_T5F99FV — Features DSN
      → Vérification complémentaire du mapping
