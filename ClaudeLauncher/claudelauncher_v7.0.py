@@ -12,9 +12,12 @@ V7.1 :
 V7.2 :
 - Recherche d'images web (SteamGridDB + DuckDuckGo) avec terme personnalisé
 - Dialogue de sélection visuelle des images trouvées
+V7.3 :
+- Lancement automatique au démarrage de Windows (tâche planifiée avec élévation)
+- Lancement en mode administrateur (auto-élévation UAC)
 """
 
-APP_VERSION = "7.2"
+APP_VERSION = "7.3"
 
 import sys
 import os
@@ -23,6 +26,7 @@ import json
 import html
 import winreg
 import subprocess
+import ctypes
 from pathlib import Path
 from typing import List, Dict, Optional, Set
 from urllib.parse import quote
@@ -2744,8 +2748,6 @@ class ClaudeLauncher(QMainWindow):
     
     def _launch_elevated(self, path: str, args: str = "", working_dir: str = None):
         """Lance avec élévation"""
-        import ctypes
-        
         try:
             if not working_dir:
                 working_dir = os.path.dirname(path)
@@ -2758,7 +2760,114 @@ class ClaudeLauncher(QMainWindow):
                 f"Impossible de lancer avec admin :\n{str(e)}")
 
 
+def is_admin():
+    """Vérifie si le processus tourne avec les droits administrateur"""
+    try:
+        return ctypes.windll.shell32.IsUserAnAdmin()
+    except Exception:
+        return False
+
+
+def run_as_admin():
+    """Relance le script avec élévation UAC"""
+    script = os.path.abspath(sys.argv[0])
+    python_exe = sys.executable
+    params = f'"{script}"'
+    if len(sys.argv) > 1:
+        params += " " + " ".join(f'"{a}"' for a in sys.argv[1:])
+    ctypes.windll.shell32.ShellExecuteW(None, "runas", python_exe, params, None, 1)
+
+
+def setup_startup_task():
+    """Crée une tâche planifiée Windows pour lancer ClaudeLauncher au démarrage avec élévation"""
+    task_name = "ClaudeLauncher_Startup"
+    python_exe = sys.executable
+    script_path = os.path.abspath(sys.argv[0])
+
+    # Vérifie si la tâche existe déjà
+    check = subprocess.run(
+        ["schtasks", "/Query", "/TN", task_name],
+        capture_output=True, text=True
+    )
+    if check.returncode == 0:
+        return  # Tâche déjà configurée
+
+    # Crée la tâche planifiée avec élévation (HIGHEST) au logon de l'utilisateur
+    username = os.environ.get("USERNAME", "")
+    xml_content = f"""<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>Lance ClaudeLauncher au démarrage avec droits administrateur</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+      <UserId>{os.environ.get('USERDOMAIN', '')}\{username}</UserId>
+    </LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>{os.environ.get('USERDOMAIN', '')}\{username}</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>HighestAvailable</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>false</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <WakeToRun>false</WakeToRun>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Priority>7</Priority>
+  </Settings>
+  <Actions>
+    <Exec>
+      <Command>"{python_exe}"</Command>
+      <Arguments>"{script_path}"</Arguments>
+      <WorkingDirectory>{os.path.dirname(script_path)}</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>"""
+
+    # Écrire le XML temporaire et importer la tâche
+    xml_path = Path.home() / ".claudelauncher" / "startup_task.xml"
+    xml_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(xml_path, 'w', encoding='utf-16') as f:
+        f.write(xml_content)
+
+    result = subprocess.run(
+        ["schtasks", "/Create", "/TN", task_name, "/XML", str(xml_path), "/F"],
+        capture_output=True, text=True
+    )
+
+    # Nettoyage du fichier temporaire
+    try:
+        xml_path.unlink()
+    except Exception:
+        pass
+
+    if result.returncode == 0:
+        print(f"[ClaudeLauncher] Tâche planifiée '{task_name}' créée avec succès")
+    else:
+        print(f"[ClaudeLauncher] Erreur création tâche planifiée : {result.stderr}")
+
+
 def main():
+    # Auto-élévation : relance en admin si pas déjà élevé
+    if not is_admin():
+        run_as_admin()
+        sys.exit(0)
+
+    # Enregistrer la tâche planifiée de démarrage (si pas déjà fait)
+    setup_startup_task()
+
     app = QApplication(sys.argv)
     launcher = ClaudeLauncher()
     launcher.showMaximized()
