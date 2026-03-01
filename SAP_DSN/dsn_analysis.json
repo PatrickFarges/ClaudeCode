@@ -1,0 +1,503 @@
+{
+  "total_dsn_tickets": 832,
+  "tickets_by_year": {
+    "2019": 102,
+    "2020": 129,
+    "2021": 162,
+    "2022": 234,
+    "2023": 205
+  },
+  "top_blocs": {
+    "81": 69,
+    "78": 64,
+    "23": 62,
+    "51": 31,
+    "20": 31,
+    "22": 29,
+    "50": 20,
+    "40": 15,
+    "82": 15,
+    "52": 14,
+    "60": 13,
+    "79": 12,
+    "65": 11,
+    "54": 8,
+    "44": 7,
+    "53": 7,
+    "11": 6,
+    "15": 6,
+    "30": 6,
+    "56": 5
+  },
+  "top_tables": {
+    "RT": 805,
+    "CT": 804,
+    "IT0015": 312,
+    "V_T5F": 260,
+    "T5FDS": 150,
+    "T596": 52,
+    "V_512W": 49,
+    "T5F99": 45,
+    "T511K": 25,
+    "T5F1P": 22,
+    "T512W": 15,
+    "T512T": 14,
+    "IT0008": 13,
+    "IT0001": 10,
+    "T536A": 8,
+    "CRT": 7,
+    "T5F4": 7,
+    "IT0007": 7,
+    "T5F3G": 5,
+    "IT0002": 4,
+    "T5FDSNPAS": 4,
+    "T5FADR": 4,
+    "T5F99F0": 4,
+    "IT3331": 4,
+    "IT0014": 3,
+    "T5FGRP": 2,
+    "PA0001": 2,
+    "IT0105": 1,
+    "PA0002": 1,
+    "PA0007": 1
+  },
+  "top_dsn_codes": {
+    "S21.G00.79.001": 9,
+    "S21.G00.20.001": 8,
+    "S21.G00.55.003": 8,
+    "S21.G00.81.007": 8,
+    "S21.G00.30.025": 8,
+    "S20.G00.05.001": 7,
+    "S21.G00.11.009": 7,
+    "S21.G00.51.012": 7,
+    "S21.G00.30.004": 7,
+    "S21.G00.30.019": 7,
+    "S21.G00.78.004": 7,
+    "S21.G00.70.005": 7,
+    "S21.G00.15.003": 7,
+    "S21.G00.15.002": 7,
+    "S21.G00.73.002": 7,
+    "S21.G00.70.004": 7,
+    "S21.G00.15.001": 7,
+    "S21.G00.20.008": 7,
+    "S21.G00.60.002": 6,
+    "S21.G00.56.002": 6,
+    "S21.G00.56.006": 6,
+    "S21.G00.78.003": 6,
+    "S21.G00.78.002": 6,
+    "S21.G00.11.001": 6,
+    "S21.G00.06.001": 6,
+    "S21.G00.40.001": 6,
+    "S21.G00.78.001": 6,
+    "S21.G00.30.003": 6,
+    "S21.G00.51.011": 6,
+    "S21.G00.51": 6
+  },
+  "problems_by_bloc": {
+    "81": [
+      {
+        "file": "CHG0403683 DHRS_Test Evidence_ SSC FILLON 2019.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9ADB9Z | RevTrac Number(s)\n-in sequential order | 350571 | ED5K9ADL60 | ED5K9ADRWK | 361784 | send oonce | ED5K9ADRZY | Technical Team Testing Scenarios",
+        "solution": "*insert pre and post screenshot of the change done: | Change Logs | Pre-Change Screenshot | Post-Change Screenshot | V_T511K | ALCO | V_512W_D | POLE EMPLOI | CT63 --> 5 | BOTH STANDARD --> ALCO | Retraite | CT63 --> 5 | V_T5F1M | MDC URSSAF apprenti | F010 | falta que alco meta las cotizaciones | ALCO F010 Y MODFICAR LOS OTROS STRANDARD PARA OCTUBRE | MOEDEL | Nº | DE | AL | CAISE | CHA | F001 | 127 | 01.10.2019 | 31.12.9999 | 1000 | 11C0 | F001 | 128 | 01.01.2019 | 31.12.9999 | 1000 | 11D0 | F"
+      },
+      {
+        "file": "CHG0442580 DHRS_Test Evidence.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | RevTrac Number(s)\n-in sequential order | Technical Team Testing Scenarios | Test Scenario No. | Description | Input Data / Variant | Transaction / Program |",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot"
+      },
+      {
+        "file": "AMO_Test Evidence_CHG0415080_CT_CHARGES.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | MyHRW Company Solvay FR | DHRS INC/CHG | CHG0415080 | Customer Name | SOLVAY SA | Caller Ticket number | 8655503 | HRO Contact Name | Laurence Nauche | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | Mise en place de la fiche prévoyance | Guidelines for Caller | Transport Number(s)\n-in sequential order | DP9K9A11QA | RevTrac Number(s)\n-in sequential order | 353371 | Technical Team Testing Scenarios | Test Scenario No. | Descri",
+        "solution": "Société 6286 | Domaine | 3413 | SIRET | 31673264300028 | DSN (Bloc 81) | Code | Libellé | Montant DSN | Montant H99 | Ecart | Prévoyance | 126.46000000000001 | -126.46000000000001 | 41.52 | Rub. 6PD4, 6PI4, 7PD4, 7PI4 non parametrées en DSN en Janvier 2019 (Rub. Sans fiches de paramétrage) | 059 (Code 311799878) | Mutuelle | 312.91 | 312.91 | 42.79 | Rub. 6PD4, 6PI4, 7PD4, 7PI4 non parametrées en DSN en Février 2019 (Rub. Sans fiches de paramétrage) | 059 (Code AZ0001) | Retraite Sup | 42.15 | R"
+      },
+      {
+        "file": "CHG0506041 Finalisation Versement Retraite.xlsx",
+        "problem": "KO | la finalisation KO empêche de regrouper le bloc 20 sur la même ligne. | Salarié sorti en 2017, il a une paie additive donc le MDC est ok. | s'agissant d'un MDC avant fusion il est sur les codes 63/64 de la retraite bloc 81 | OK | Dans la table préparation des versements sur Décembre, on avait bien le 919 et 920 | et tout était ok en DSN | En Janvier, ils n'y sont plus même après génération du mois | Le même problème est présent sur plusieurs SIRET, merci de voir pour remettre à jour cette t",
+        "solution": "Before Fix | After fix | RPUDSNF1 | V2 fix | Before Fix | RPUDSNF1"
+      },
+      {
+        "file": "CHG0506041 DHRS_Test Evidence.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | RevTrac Number(s)\n-in sequential order | 379775 | SAP notes I | 379997 | SAP notes II | DP9K9A16X2 | 380028 | CUST | Technical Team Testing Scenarios | Test",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | V_T596M | all entries DUCS_DSN_919* delimited to point | 75 and 76 to 87 | 78 and 79  to 88"
+      }
+    ],
+    "23": [
+      {
+        "file": "CHG0403683 DHRS_Test Evidence_ SSC FILLON 2019.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9ADB9Z | RevTrac Number(s)\n-in sequential order | 350571 | ED5K9ADL60 | ED5K9ADRWK | 361784 | send oonce | ED5K9ADRZY | Technical Team Testing Scenarios",
+        "solution": "*insert pre and post screenshot of the change done: | Change Logs | Pre-Change Screenshot | Post-Change Screenshot | V_T511K | ALCO | V_512W_D | POLE EMPLOI | CT63 --> 5 | BOTH STANDARD --> ALCO | Retraite | CT63 --> 5 | V_T5F1M | MDC URSSAF apprenti | F010 | falta que alco meta las cotizaciones | ALCO F010 Y MODFICAR LOS OTROS STRANDARD PARA OCTUBRE | MOEDEL | Nº | DE | AL | CAISE | CHA | F001 | 127 | 01.10.2019 | 31.12.9999 | 1000 | 11C0 | F001 | 128 | 01.01.2019 | 31.12.9999 | 1000 | 11D0 | F"
+      },
+      {
+        "file": "CHG0617889 DHRS_Test Evidence.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AG6HO | RevTrac Number(s)\n-in sequential order | 411173 | Technical Team Testing Scenarios | Test Scenario No. | Description | Input Data / Variant | T",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | V_T5FDSNCOTIS2 | undo | CHG0617078 | bloc 23 code 626 | AVANT | APRES | bloc 23 code 926 | AVANT | APRES"
+      },
+      {
+        "file": "DHRS_Test Evidence_CHG0496683 V2.xlsx",
+        "problem": "TEST EVIDENCE FORM | Caller Name | Laetitia Fagueras | DHRS INC/CHG | CHG0496683 | Customer Name | Solvay FR | Caller Ticket number | 11099127 | HRO Contact Name | Laetitia Fagueras | Module | PY | Change Reason | Corrective Maintenance | Yes | Solution Desription | No | Look at the tab \"DHRS AS Change Logs & RT Content\"\n\nVoir Change Logs: SAP Notes; bloc 71, Bloc 52, Bloc 23 | N/A | Guidelines for tester | Lancer la paie et lancer la DSN 2020. Vérifier résultats de paie et DSN. | Transport Numb",
+        "solution": ""
+      },
+      {
+        "file": "CHG0550113 DHRS_Test Evidence V2.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AF5QM | RevTrac Number(s)\n-in sequential order | 393116 | ED5K9AF66E | ED5K9AF6XC | ED5K9AF6XY | ED5K9AF6ZS | Technical Team Testing Scenarios | Test S",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | /NOH11 | V_512W_O | /Ny00ba_pe02 | )6bu | review cumuls and proccesing classes"
+      },
+      {
+        "file": "CHG0550113 DHRS_Test Evidence V3.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AF5QM | RevTrac Number(s)\n-in sequential order | 393116 | ED5K9AF66E | ED5K9AF6XC | ED5K9AF6XY | ED5K9AF6ZS | ED5K9AF77N | ED5K9AF77T | Technical Team ",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | /NOH11 | V_512W_O | /Ny00ba_pe02 | )6bu | review cumuls and proccesing classes"
+      }
+    ],
+    "78": [
+      {
+        "file": "CHG0561637 DHRS_Test Evidence V4.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AFBFE | RevTrac Number(s)\n-in sequential order | 396392 | ED5K9AFF5W | ED5K9AFFC4 | ED5K9AFFCW | Technical Team Testing Scenarios | Test Scenario No. |",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | Y00BA_OH11 | copy WTs | adapts rules | skypped by the moment | V_T5F99FX"
+      },
+      {
+        "file": "CHG0550113 DHRS_Test Evidence V2.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AF5QM | RevTrac Number(s)\n-in sequential order | 393116 | ED5K9AF66E | ED5K9AF6XC | ED5K9AF6XY | ED5K9AF6ZS | Technical Team Testing Scenarios | Test S",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | /NOH11 | V_512W_O | /Ny00ba_pe02 | )6bu | review cumuls and proccesing classes"
+      },
+      {
+        "file": "CHG0550113 DHRS_Test Evidence V3.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AF5QM | RevTrac Number(s)\n-in sequential order | 393116 | ED5K9AF66E | ED5K9AF6XC | ED5K9AF6XY | ED5K9AF6ZS | ED5K9AF77N | ED5K9AF77T | Technical Team ",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | /NOH11 | V_512W_O | /Ny00ba_pe02 | )6bu | review cumuls and proccesing classes"
+      },
+      {
+        "file": "CHG0532190 DHRS_Test Evidence V6.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ETCK9A0KF3 | RevTrac Number(s)\n-in sequential order | 387904 | Products | ETCK9A0KF4 | ETCK9A0KF6 | ETCK9A0KN7 | 389092 | ALCO alsace/moselle DSN | ED5K9AF0",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | T554S | /Ny00ba_pe03_customer | FABS1 | is upto date | T5A4O | Y00BA_VIE_STY16C | is upto date | V_T554C | copy standard absence into grouping 80 | remove rubriques as they will enter them via IT2010 | delimit modifier 96 and algn new split with modifier 80 | Y00BA_TAB_COPWT1 | y00ba_oh11"
+      },
+      {
+        "file": "PLOERMEL BLOC 78.xlsx",
+        "problem": "SAP | DSN | Base déplaf | Base plaf | Base déplaf | Base plaf | 6000409 | 26604.39 | 36604.39 | 45959.55 | 53208.78 | 6000390 | 45002 | 40524 | 70852.28 | 85526.16 | 6000263 | 40488.79 | 40488.79 | 67347.95 | 80977.58",
+        "solution": ""
+      }
+    ],
+    "20": [
+      {
+        "file": "CHG0474694 HRO_Test Evidence_V3.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | DP9K9A15O1 | RevTrac Number(s)\n-in sequential order | 371382 | DP9K9A15O8 | Technical Team Testing Scenarios | Test Scenario No. | Description | Input Data ",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | V_T5FDSNOPSID | use reference | /NFI12 | V_T596NV"
+      },
+      {
+        "file": "CHG0506041 Finalisation Versement Retraite.xlsx",
+        "problem": "KO | la finalisation KO empêche de regrouper le bloc 20 sur la même ligne. | Salarié sorti en 2017, il a une paie additive donc le MDC est ok. | s'agissant d'un MDC avant fusion il est sur les codes 63/64 de la retraite bloc 81 | OK | Dans la table préparation des versements sur Décembre, on avait bien le 919 et 920 | et tout était ok en DSN | En Janvier, ils n'y sont plus même après génération du mois | Le même problème est présent sur plusieurs SIRET, merci de voir pour remettre à jour cette t",
+        "solution": "Before Fix | After fix | RPUDSNF1 | V2 fix | Before Fix | RPUDSNF1"
+      },
+      {
+        "file": "CHG0506041 DHRS_Test Evidence.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | RevTrac Number(s)\n-in sequential order | 379775 | SAP notes I | 379997 | SAP notes II | DP9K9A16X2 | 380028 | CUST | Technical Team Testing Scenarios | Test",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | V_T596M | all entries DUCS_DSN_919* delimited to point | 75 and 76 to 87 | 78 and 79  to 88"
+      },
+      {
+        "file": "CHG1980657 Test Evidence_Indemnité inflation AKN.xlsx",
+        "problem": "Analyse | Request 1 | DHRS TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | Contact Name | Module | PY | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AIB9T | RevTrac Number(s)\n-in sequential order | 448645 | INOVIN | CHG1986963_ | ED5K9AIBWO | 448878 | ED5K9AIBZB | Technical Team Tes",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | Request 1 | Request 1 | /ny00ba_oh11 | V_T512T | V_T512Z | V_T52EL | ZFRPY_VIE_SBD_2C | --> Y00BA_TAB_STY02 | ZESPY_VIE_ROC_00 | --> Y00BA_TAB_fiwtsa | V_T5FDSNCOTIS2 | V_T5FDSNCODCO | Analyse | Request 1"
+      },
+      {
+        "file": "CHG1980657 Test Evidence_Indemnite inflation AKN v2.xlsx",
+        "problem": "Analyse | Request 1 | DHRS TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | Contact Name | Module | PY | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AIB9T | RevTrac Number(s)\n-in sequential order | 448645 | INOVIN | CHG1986963_ | ED5K9AIBWO | 448878 | ED5K9AIBZB | ED5K9AIC7L | Techn",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | Request 1 | Request 1 | /ny00ba_oh11 | V_T512T | V_T512Z | V_T52EL | ZFRPY_VIE_SBD_2C | --> Y00BA_TAB_STY02 | ZESPY_VIE_ROC_00 | --> Y00BA_TAB_fiwtsa | V_T5FDSNCOTIS2 | V_T5FDSNCODCO | V_T512T | Analyse | Request 1"
+      }
+    ],
+    "22": [
+      {
+        "file": "CHG1980657 Test Evidence_Indemnité inflation AKN.xlsx",
+        "problem": "Analyse | Request 1 | DHRS TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | Contact Name | Module | PY | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AIB9T | RevTrac Number(s)\n-in sequential order | 448645 | INOVIN | CHG1986963_ | ED5K9AIBWO | 448878 | ED5K9AIBZB | Technical Team Tes",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | Request 1 | Request 1 | /ny00ba_oh11 | V_T512T | V_T512Z | V_T52EL | ZFRPY_VIE_SBD_2C | --> Y00BA_TAB_STY02 | ZESPY_VIE_ROC_00 | --> Y00BA_TAB_fiwtsa | V_T5FDSNCOTIS2 | V_T5FDSNCODCO | Analyse | Request 1"
+      },
+      {
+        "file": "CHG1988882 Test Evidence_Indemnité inflation Lonza.xlsx",
+        "problem": "Analyse | Request 1 | DHRS TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | Contact Name | Module | PY | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AIB9T | SAP note 3122366 | RevTrac Number(s)\n-in sequential order | 448646 | ED5K9AIBU8 | ED5K9AIBY9 | ED5K9AIBZH | Technical Team Tes",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | Request 1 | Request 1 | /ny00ba_oh11 | ZFRPY_VIE_SBD_2C | --> Y00BA_TAB_STY02 | ZESPY_VIE_ROC_00 | --> Y00BA_TAB_fiwtsa | V_512W_O | V_T5FDSNCODCO | V_T5FDSNCOTIS2 | Analyse | Request 1"
+      },
+      {
+        "file": "CHG1980657 Test Evidence_Indemnite inflation AKN v2.xlsx",
+        "problem": "Analyse | Request 1 | DHRS TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | Contact Name | Module | PY | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AIB9T | RevTrac Number(s)\n-in sequential order | 448645 | INOVIN | CHG1986963_ | ED5K9AIBWO | 448878 | ED5K9AIBZB | ED5K9AIC7L | Techn",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | Request 1 | Request 1 | /ny00ba_oh11 | V_T512T | V_T512Z | V_T52EL | ZFRPY_VIE_SBD_2C | --> Y00BA_TAB_STY02 | ZESPY_VIE_ROC_00 | --> Y00BA_TAB_fiwtsa | V_T5FDSNCOTIS2 | V_T5FDSNCODCO | V_T512T | Analyse | Request 1"
+      },
+      {
+        "file": "CHG1988882 Test Evidence_Indemnité inflation Lonza v2.xlsx",
+        "problem": "Analyse | Request 1 | DHRS TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | Contact Name | Module | PY | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AIB9T | SAP note 3122366 | RevTrac Number(s)\n-in sequential order | 448646 | ED5K9AIBU8 | ED5K9AIBY9 | ED5K9AIC5J | Technical Team Tes",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | Request 1 | Request 1 | /ny00ba_oh11 | ZFRPY_VIE_SBD_2C | --> Y00BA_TAB_STY02 | ZESPY_VIE_ROC_00 | --> Y00BA_TAB_fiwtsa | V_512W_O | V_T5FDSNCODCO | V_T5FDSNCOTIS2 | Analyse | Request 1"
+      },
+      {
+        "file": "CHG1980458 Test Evidence_Indemnité inflation LEO.xlsx",
+        "problem": "Analyse | Request 1 | DHRS TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | Contact Name | Module | PY | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AID5U | RevTrac Number(s)\n-in sequential order | 449397 | Technical Team Testing Scenarios | Test Scenario No. | Description | Input D",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | Request 1 | Request 1 | /ny00ba_oh11 | V_T512T | V_T512Z | V_T52EL | ZFRPY_VIE_SBD_2C | --> Y00BA_TAB_STY02 | Y00BA_VIE_T512WC | ZESPY_VIE_ROC_00 | --> Y00BA_TAB_fiwtsa | V_T5FDSNCOTIS2 | V_T5FDSNCODCO | Analyse | Request 1"
+      }
+    ],
+    "51": [
+      {
+        "file": "CHG0475434 DHRS_Test Evidence V2.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | DP9K9A15N1 | RevTrac Number(s)\n-in sequential order | 371146 | Technical Team Testing Scenarios | Test Scenario No. | Description | Input Data / Variant | T",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot"
+      },
+      {
+        "file": "CHG0550113 DHRS_Test Evidence V2.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AF5QM | RevTrac Number(s)\n-in sequential order | 393116 | ED5K9AF66E | ED5K9AF6XC | ED5K9AF6XY | ED5K9AF6ZS | Technical Team Testing Scenarios | Test S",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | /NOH11 | V_512W_O | /Ny00ba_pe02 | )6bu | review cumuls and proccesing classes"
+      },
+      {
+        "file": "CHG0550113 DHRS_Test Evidence V3.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AF5QM | RevTrac Number(s)\n-in sequential order | 393116 | ED5K9AF66E | ED5K9AF6XC | ED5K9AF6XY | ED5K9AF6ZS | ED5K9AF77N | ED5K9AF77T | Technical Team ",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | /NOH11 | V_512W_O | /Ny00ba_pe02 | )6bu | review cumuls and proccesing classes"
+      },
+      {
+        "file": "CHG1099895 DHRS_Test Evidence v2.xlsx",
+        "problem": "Analyse | DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | Contact Name | Module | PY | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AHIS0 | RevTrac Number(s)\n-in sequential order | 437225 | ED5K9AHIVT | ED5K9AHJ2H | Technical Team Testing Scenarios | Test Scenario No. | Descri",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | /Ny00ba_oh11 | V_512W_O | Analyse"
+      },
+      {
+        "file": "CHG2005898 DHRS_FR_Test Evidence DSN fin.xlsx",
+        "problem": "Analyse | Request 1 | DHRS TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | Contact Name | Module | PY | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AIBMY | RevTrac Number(s)\n-in sequential order | 448799 | Technical Team Testing Scenarios | Test Scenario No. | Description | Input D",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | Request 1 | Request 1 | V_T5F30 | V_T5F99FX | V_T5FPR | Analyse | Request 1"
+      }
+    ],
+    "50": [
+      {
+        "file": "CHG0613856  DHRS_Test Evidence.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AG454 | RevTrac Number(s)\n-in sequential order | 409913 | Technical Team Testing Scenarios | Test Scenario No. | Description | Input Data / Variant | T",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | y00ba_oh11"
+      },
+      {
+        "file": "DHRS - CHG2004332 COR - Correction PAS trop versé V2.xlsx",
+        "problem": "Analyse | Request 1 | DHRS TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | Contact Name | Module | PY | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AICM8 | RevTrac Number(s)\n-in sequential order | 448700 | ED5K9AICO9 | Technical Team Testing Scenarios | Test Scenario No. | Descript",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | Request 1 | Request 1 | Table: Y00BA_VIE_T512WC | undo the change | V_T5F99FX | Analyse | Request 1"
+      },
+      {
+        "file": "CHG0626521 DHRS_Test Evidence V3.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AGFBJ | RevTrac Number(s)\n-in sequential order | 416610 | ED5K9AGFRX | Technical Team Testing Scenarios | Test Scenario No. | Description | Input Data ",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | Y00BA_VIE_T512WC | /Ny00ba_oh11 | V_5F1C_C"
+      },
+      {
+        "file": "CHG1400720 DHRS_Test Evidence v2.xlsx",
+        "problem": "Analyse | DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | Contact Name | Module | PY | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AHUDI | RevTrac Number(s)\n-in sequential order | 441802 | ED5K9AHUGY | ED5K9AHUH0 | ED5K9AHUTM | Technical Team Testing Scenarios | Test Scenario",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | y00ba_OH11 | 2630 | Hrs. supplémentaires 125% | 2631 | Hrs. suppl non exo à 125% | 2640 | Hrs. supplémentaires 150% | 2641 | Hrs. suppl non exo à 150% | 2651 | Heures supplém 33% | 2653 | Hrs. suppl non exo à 133% | 2621 | Hrs complémentaires 10% | 2624 | Hrs. compl non exo à 110% | 2652 | Heures supplém 100% | 2654 | Hrs. suppl non exo à 100% | V_512W_O | demarquer cumuls /132 et /133 | )6E3 | )63E DSN Bloc 53 II | 2631 | Hrs. suppl"
+      },
+      {
+        "file": "Work Done 2022.xlsx",
+        "problem": "owner | Products | ALCO | Global form(global Infotypes) | Local form( country specific Infotypes) | Delete | Smartforms | Smartforms(if doesn´t work DFCT) | ENHC0010121 SCPO - euHReka France - HRX Improvements in new smartforms conversion\n+ multiple DFCTs | Delete | sin smart (PCIS/ENH) a Global to be reviewed with Jasper | Change | Pay elements Time constrain to be reviewed DCT/PY manager+PY SPOC\nPer Infotype+customer | Multiple DFCTs | Create records if future record exists | currently not sup",
+        "solution": ""
+      }
+    ],
+    "40": [
+      {
+        "file": "CHG0617677 DHRS_Test Evidence_P21V01 V2.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | DP9K9A1DOR | bloc 81 | RevTrac Number(s)\n-in sequential order | 411051 | SOL - CUST - CHG0617677 - DSN 2021 | DP9K9A1DVL | others | ETCK9A0R3N | 413019 | SA",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | S21.G00.06.015 | Field IDCCA of table T5F1P | S21.G00.11.022 | Field IDCCP of table T5F1P | V_T5F1P | S20.G00.07.004 | type 07-14 | RTSK0181957 | new contacts to be created on | V_T5FADR | V_T596NV | 07-14 | copy of 07-01"
+      },
+      {
+        "file": "CHG0624954 DHRS_Test Evidence.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | 412556 | NVS | Transport Number(s)\n-in sequential order | ETCK9A0RAA | RevTrac Number(s)\n-in sequential order | 413937 | ETCK9A0RB8 | ETCK9A0R9V | 413906 | ETCK9A0RB9 | ED5K9AGBCP | 414146 | Technica",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | S21.G00.06.015 | Field IDCCA of table T5F1P | S21.G00.11.022 | Field IDCCP of table T5F1P | V_T5F1P | CCN CHIMIE IDCC 44 pour FR04-FR12-FR13 ET FR22                      CNN COMMERCE DE GROS IDCC 573 pour FR07-FR09-FR11-FR14-FR19                                                      CCN IMPRIMERIE DE LABEUR IDCC 184 pour FR20"
+      },
+      {
+        "file": "CHG1697498 DHRS_FR_Test Evidence.xlsx",
+        "problem": "Analyse | Request 1 | DHRS TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | Contact Name | Module | PY | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AI63O | RevTrac Number(s)\n-in sequential order | 446404 | Technical Team Testing Scenarios | Test Scenario No. | Description | Input D",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | Request 1 | Request 1 | Analyse | Request 1"
+      },
+      {
+        "file": "CHG1878592 DHRS_FR_Test Evidence.xlsx",
+        "problem": "Analyse | Request 1 | DHRS TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | Contact Name | Module | PY | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AI70S | RevTrac Number(s)\n-in sequential order | 446791 | Technical Team Testing Scenarios | Test Scenario No. | Description | Input D",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | Request 1 | Request 1 | /Oy00ba_pe03_customer | FDSNB | V_5F1P_J | V_001P_ALL | V_T508A | copy from calendar FR to calendar EL | Y00BA_VIE_508A | copy from calendar FR to calendar EL | Analyse | Request 1"
+      },
+      {
+        "file": "CHG1426323 DHRS_Test Evidence.xlsx",
+        "problem": "Analyse | DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | Contact Name | Module | PY | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AHSMQ | RevTrac Number(s)\n-in sequential order | 441100 | Technical Team Testing Scenarios | Test Scenario No. | Description | Input Data / Varia",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | V_T5F1E | V_T5F1B | V_T5F1I | V_T5F1M | copy MDC F100 into F101 | include as 1st line the modified URS org | 06FCO | apres LER project | Amo Screenshots QAS | Analyse"
+      }
+    ],
+    "52": [
+      {
+        "file": "DHRS_Test Evidence_CHG0496683 V2.xlsx",
+        "problem": "TEST EVIDENCE FORM | Caller Name | Laetitia Fagueras | DHRS INC/CHG | CHG0496683 | Customer Name | Solvay FR | Caller Ticket number | 11099127 | HRO Contact Name | Laetitia Fagueras | Module | PY | Change Reason | Corrective Maintenance | Yes | Solution Desription | No | Look at the tab \"DHRS AS Change Logs & RT Content\"\n\nVoir Change Logs: SAP Notes; bloc 71, Bloc 52, Bloc 23 | N/A | Guidelines for tester | Lancer la paie et lancer la DSN 2020. Vérifier résultats de paie et DSN. | Transport Numb",
+        "solution": ""
+      },
+      {
+        "file": "CHG2005898 DHRS_FR_Test Evidence DSN fin.xlsx",
+        "problem": "Analyse | Request 1 | DHRS TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | Contact Name | Module | PY | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AIBMY | RevTrac Number(s)\n-in sequential order | 448799 | Technical Team Testing Scenarios | Test Scenario No. | Description | Input D",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | Request 1 | Request 1 | V_T5F30 | V_T5F99FX | V_T5FPR | Analyse | Request 1"
+      },
+      {
+        "file": "CHG0660074 DHRS_Test Evidence V4.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AGXSI | RevTrac Number(s)\n-in sequential order | 427253 | ED5K9AH5L4 | ED5K9AH7AU | Technical Team Testing Scenarios | Test Scenario No. | Description ",
+        "solution": "*insert pre and post screenshot of the change done: | Change Logs | Pre-Change Screenshot | Post-Change Screenshot | - Indemnité de congé reclassement (in WTC, rubrique 28A0 that we may only have to activate) | - Congés payés právis : we don't have anything in the WTC, in can be a WT in IT15 that we enter manually. | Libellé should be : \"Ind. CP sur préavis - non concurrence\" (or shorter) | - Article 700 du CPC : we don't have anything in WTC | It should be a WT in the net, and can be only in IT"
+      },
+      {
+        "file": "Work Done 2022.xlsx",
+        "problem": "owner | Products | ALCO | Global form(global Infotypes) | Local form( country specific Infotypes) | Delete | Smartforms | Smartforms(if doesn´t work DFCT) | ENHC0010121 SCPO - euHReka France - HRX Improvements in new smartforms conversion\n+ multiple DFCTs | Delete | sin smart (PCIS/ENH) a Global to be reviewed with Jasper | Change | Pay elements Time constrain to be reviewed DCT/PY manager+PY SPOC\nPer Infotype+customer | Multiple DFCTs | Create records if future record exists | currently not sup",
+        "solution": ""
+      },
+      {
+        "file": "CHG2254295 DHRS_FR_Test Evidence PEPA.xlsx",
+        "problem": "Analyse | Request 1 | n´existe pas maintenan | DHRS TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | Contact Name | Module | PY | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AIP8N | Prime PEPA | RevTrac Number(s)\n-in sequential order | 453730 | ED5K9AIPB1 | Technical Team Testing Sc",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | Request 1 | Request 1 | V_T512T | V_512W_D | V_T5F99FV | V_T5FWG | V_T5F99FX | y00ba_oh11 | split SV | Analyse | Request 1 | n´existe pas maintenan"
+      }
+    ],
+    "79": [
+      {
+        "file": "CHG0403683 DHRS_Test Evidence_ SSC FILLON 2019.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9ADB9Z | RevTrac Number(s)\n-in sequential order | 350571 | ED5K9ADL60 | ED5K9ADRWK | 361784 | send oonce | ED5K9ADRZY | Technical Team Testing Scenarios",
+        "solution": "*insert pre and post screenshot of the change done: | Change Logs | Pre-Change Screenshot | Post-Change Screenshot | V_T511K | ALCO | V_512W_D | POLE EMPLOI | CT63 --> 5 | BOTH STANDARD --> ALCO | Retraite | CT63 --> 5 | V_T5F1M | MDC URSSAF apprenti | F010 | falta que alco meta las cotizaciones | ALCO F010 Y MODFICAR LOS OTROS STRANDARD PARA OCTUBRE | MOEDEL | Nº | DE | AL | CAISE | CHA | F001 | 127 | 01.10.2019 | 31.12.9999 | 1000 | 11C0 | F001 | 128 | 01.01.2019 | 31.12.9999 | 1000 | 11D0 | F"
+      },
+      {
+        "file": "CHG0636625 DHRS_Test Evidence v2.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AGI4B | RevTrac Number(s)\n-in sequential order | 418223 | Technical Team Testing Scenarios | Test Scenario No. | Description | Input Data / Variant | T",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | V_T5F1BAP_DSN | V_T596NV | V_T5FDSNOPSID | V_T596M | V_T5FDSNCOTIS2"
+      },
+      {
+        "file": "CHG0636625 DHRS_Test Evidence v3.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AGI4B | RevTrac Number(s)\n-in sequential order | 418223 | ED5K9AGI7J | ED5K9AGI8Y | Technical Team Testing Scenarios | Test Scenario No. | Description ",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | V_T5F1BAP_DSN | V_T596NV | V_T5FDSNOPSID | V_T596M | V_T5FDSNCOTIS2"
+      },
+      {
+        "file": "CHG0624954 DHRS_Test Evidence.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | 412556 | NVS | Transport Number(s)\n-in sequential order | ETCK9A0RAA | RevTrac Number(s)\n-in sequential order | 413937 | ETCK9A0RB8 | ETCK9A0R9V | 413906 | ETCK9A0RB9 | ED5K9AGBCP | 414146 | Technica",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | S21.G00.06.015 | Field IDCCA of table T5F1P | S21.G00.11.022 | Field IDCCP of table T5F1P | V_T5F1P | CCN CHIMIE IDCC 44 pour FR04-FR12-FR13 ET FR22                      CNN COMMERCE DE GROS IDCC 573 pour FR07-FR09-FR11-FR14-FR19                                                      CCN IMPRIMERIE DE LABEUR IDCC 184 pour FR20"
+      },
+      {
+        "file": "CHG0620107 DHRS_Test Evidence v2.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AGCX4 | RevTrac Number(s)\n-in sequential order | 415162 | bloc 81 blocking issue | ED5K9AGDN7 | 415501 | AMO | Technical Team Testing Scenarios | Test ",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | V_T5FDSNCOTIS2 | create | delete | NEW | previous delimited | moved from B1 to b2 | delete | remove b2 | delete | delimit and move to B1 | delimiter | delete"
+      }
+    ],
+    "82": [
+      {
+        "file": "CHG1987909 Test Evidence - Taxe FCTA.xlsx",
+        "problem": "Analyse | Request 1 | MDC apprenti | Taxe apprentissage | Rubrique TA | Rubrique TA Additionnnelle | MDC utilisés | ORG | COTIS | NEW ORG | NEW COTIS | FR04 | 7920 à 0,68% | non | F891-F893-F881 | 1901 | 9501 | 1900 | 9580 | FR07 | 7920 à 0,68% | non | F801 | 1901 | 9501 | 1900 | 9580 | FR09 | 7920 à 0,68% | 7927 à 0,18% | F851-F852-F853 | 1901 | 9501 | 1900 | 9580 | FR11 | 7920 à 0,68% | non | F821-F831 | 1901 | 9501 | 1900 | 9580 | FR12 | 7920 à 0,68% | 7927 à 0,18% | F941-F951-F952 | 1901 | 9",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | Request 1 | Request 1 | V_T5F1C1 | V_T512T | V_T5F1C2 | V_T5F1M | V_T5FDSNCODCO | Analyse | Request 1 | MDC apprenti | Taxe apprentissage | Rubrique TA | Rubrique TA Additionnnelle | MDC utilisés | ORG | COTIS | NEW ORG | NEW COTIS | FR04 | 7920 à 0,68% | non | F891-F893-F881 | 1901 | 9501 | 1900 | 9580 | FR07 | 7920 à 0,68% | non | F801 | 1901 | 9501 | 1900 | 9580 | FR09 | 7920 à 0,68% | 7927 à 0,18% | F851-F852-F853 | 1901 | 9501 |"
+      },
+      {
+        "file": "CHG0617677 DHRS_Test Evidence_P21V01 V2.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | DP9K9A1DOR | bloc 81 | RevTrac Number(s)\n-in sequential order | 411051 | SOL - CUST - CHG0617677 - DSN 2021 | DP9K9A1DVL | others | ETCK9A0R3N | 413019 | SA",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | S21.G00.06.015 | Field IDCCA of table T5F1P | S21.G00.11.022 | Field IDCCP of table T5F1P | V_T5F1P | S20.G00.07.004 | type 07-14 | RTSK0181957 | new contacts to be created on | V_T5FADR | V_T596NV | 07-14 | copy of 07-01"
+      },
+      {
+        "file": "CHG0624954 DHRS_Test Evidence.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | 412556 | NVS | Transport Number(s)\n-in sequential order | ETCK9A0RAA | RevTrac Number(s)\n-in sequential order | 413937 | ETCK9A0RB8 | ETCK9A0R9V | 413906 | ETCK9A0RB9 | ED5K9AGBCP | 414146 | Technica",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | S21.G00.06.015 | Field IDCCA of table T5F1P | S21.G00.11.022 | Field IDCCP of table T5F1P | V_T5F1P | CCN CHIMIE IDCC 44 pour FR04-FR12-FR13 ET FR22                      CNN COMMERCE DE GROS IDCC 573 pour FR07-FR09-FR11-FR14-FR19                                                      CCN IMPRIMERIE DE LABEUR IDCC 184 pour FR20"
+      },
+      {
+        "file": "CHG0701746 DHRS_Test Evidence.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AGZAG | RevTrac Number(s)\n-in sequential order | 428033 | Technical Team Testing Scenarios | Test Scenario No. | Description | Input Data / Variant | T",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | V_t5fdsncodco"
+      },
+      {
+        "file": "CHG0758814 DHRS_Test Evidence.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AH1RR | CHG0740866 | NVS | RevTrac Number(s)\n-in sequential order | 429260 | WB | ED5K9AH22L | 429333 | CUST | Technical Team Testing Scenarios | Test ",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | V_T5FDSNCODCO"
+      }
+    ],
+    "60": [
+      {
+        "file": "CHG0520079 DHRS_Test Evidence V6.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ETCK9A0JN5 | RevTrac Number(s)\n-in sequential order | 385244 | products | ETCK9A0JN6 | ETCK9A0JNL | ETCK9A0JNM | ETCK9A0JNK | ETCK9A0JUL | ETCK9A0JUM | DP9K",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | y00ba_pe03_customer | T554S | copy standard one with new modifiers… and align with absence 1190 | absence 1140"
+      },
+      {
+        "file": "CHG0520079 DHRS_Test Evidence V9.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ETCK9A0JN5 | RevTrac Number(s)\n-in sequential order | 385244 | products | ETCK9A0JN6 | ETCK9A0JNL | ETCK9A0JNM | ETCK9A0JNK | ETCK9A0JUL | ETCK9A0JUM | DP9K",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | y00ba_pe03_customer | T554S | copy standard one with new modifiers… and align with absence 1190 | absence 1140"
+      },
+      {
+        "file": "CHG0520079 DHRS_analysis GIE AIFOR.xlsx",
+        "problem": "Matricule (0003) | Société (0001) id | Société (0001) | Catégorie absence/présence (2001) | Catégorie absence/présence (2001) | Date de modification de l'arrêt de travail (0424) | Date de début de l'arrêt de travail | Date de fin de l'arrêt de travail | Durée arrêt | 6235906 | 3471 | SOLVAY OPERATIONS FRANCE | 1190 | Maladie 2019 | 2020-03-13 00:00:00 | 2020-03-09 00:00:00 | 2020-04-09 00:00:00 | 32 | 63019096 | 6350 | POLYTECHNYL | 1190 | Maladie 2019 | 2020-03-06 00:00:00 | 2020-03-05 00:00:00",
+        "solution": ""
+      },
+      {
+        "file": "CHG0520079 DHRS_Test Evidence V2.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ETCK9A0JN5 | RevTrac Number(s)\n-in sequential order | 385244 | products | ETCK9A0JN6 | ETCK9A0JNL | ETCK9A0JNM | ETCK9A0JNK | ETCK9A0JUL | ETCK9A0JUM | DP9K",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | y00ba_pe03_customer | T554S | copy standard one with new modifiers… and align with absence 1190 | absence 1140"
+      },
+      {
+        "file": "CHG0617677 DHRS_Test Evidence_P21V01 V2.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | DP9K9A1DOR | bloc 81 | RevTrac Number(s)\n-in sequential order | 411051 | SOL - CUST - CHG0617677 - DSN 2021 | DP9K9A1DVL | others | ETCK9A0R3N | 413019 | SA",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | S21.G00.06.015 | Field IDCCA of table T5F1P | S21.G00.11.022 | Field IDCCP of table T5F1P | V_T5F1P | S20.G00.07.004 | type 07-14 | RTSK0181957 | new contacts to be created on | V_T5FADR | V_T596NV | 07-14 | copy of 07-01"
+      }
+    ],
+    "65": [
+      {
+        "file": "CHG0570599 DHRS_Test Evidence.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AFF0V | RevTrac Number(s)\n-in sequential order | 398444 | Technical Team Testing Scenarios | Test Scenario No. | Description | Input Data / Variant | T",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | V_T530 | V_T5F30"
+      },
+      {
+        "file": "CHG0550113 DHRS_Test Evidence V2.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AF5QM | RevTrac Number(s)\n-in sequential order | 393116 | ED5K9AF66E | ED5K9AF6XC | ED5K9AF6XY | ED5K9AF6ZS | Technical Team Testing Scenarios | Test S",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | /NOH11 | V_512W_O | /Ny00ba_pe02 | )6bu | review cumuls and proccesing classes"
+      },
+      {
+        "file": "CHG0550113 DHRS_Test Evidence V3.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AF5QM | RevTrac Number(s)\n-in sequential order | 393116 | ED5K9AF66E | ED5K9AF6XC | ED5K9AF6XY | ED5K9AF6ZS | ED5K9AF77N | ED5K9AF77T | Technical Team ",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | /NOH11 | V_512W_O | /Ny00ba_pe02 | )6bu | review cumuls and proccesing classes"
+      },
+      {
+        "file": "CHG1707176 DHRS_FR_Test Evidence V6.xlsx",
+        "problem": "1491-5003 | 1491-5021 | 1491-5341 | 1491-5801 | 1492-5004 | 1492-6064 | 1493-514A | 1493-514B | 1493-5181 | 1495-5121 | 1495-514A | 1495-514B | 1496-6361 | 1497-6361 | 1497-6362 | 1497-714A | 1497-714B | 1498-514A | 1498-514B | 1498-5301 | Analyse | Request 1 | DHRS TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | Contact Name | Module | PY | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix ",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | Request 1 | Request 1 | V_T5FDSNCOTIS2 | V_T5F30_DSN | T5F1B | V_T5F1C | V_T5FDSNCOTIS2 | Analyse | Request 1"
+      },
+      {
+        "file": "CHG1707176 DHRS_FR_Analysis.xlsx",
+        "problem": "Analyse | Request 1 | DHRS TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | Contact Name | Module | PY | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | RevTrac Number(s)\n-in sequential order | Technical Team Testing Scenarios | Test Scenario No. | Description | Input Data / Variant | Transa",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | Request 1 | Request 1 | Analyse | Request 1"
+      }
+    ],
+    "53": [
+      {
+        "file": "CHG0600804 DHRS_Test Evidence.xlsx",
+        "problem": "CTP 100 : no rate appears but it should. | CTP 100 : rates need to appear | CTP 100 : rates need to appear | CTP 100 : rates need to appear | CTP 430 : when extracting DSN, several lines appear. It should be only one. | CTP 705 needs to be deleted | CTP 705 needs to be deleted (it does not exist anymore) | CTP 726 should be included in CTP 727 | CTP 727 is only for Alsace/Moselle, FR00 is not | CTP 900 should be just one line with the right INSEE code. | DHRS  TEST EVIDENCE FORM | Caller Name | ",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot"
+      },
+      {
+        "file": "CHG1400720 DHRS_Test Evidence.xlsx",
+        "problem": "Analyse | DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | Contact Name | Module | PY | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AHUDI | RevTrac Number(s)\n-in sequential order | 441802 | ED5K9AHUGY | ED5K9AHUH0 | Technical Team Testing Scenarios | Test Scenario No. | Descri",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | y00ba_OH11 | 2630 | Hrs. supplémentaires 125% | 2631 | Hrs. suppl non exo à 125% | 2640 | Hrs. supplémentaires 150% | 2641 | Hrs. suppl non exo à 150% | 2651 | Heures supplém 33% | 2653 | Hrs. suppl non exo à 133% | 2621 | Hrs complémentaires 10% | 2624 | Hrs. compl non exo à 110% | 2652 | Heures supplém 100% | 2654 | Hrs. suppl non exo à 100% | V_512W_O | demarquer cumuls /132 et /133 | )6E3 | )63E DSN Bloc 53 II | 2631 | Hrs. suppl"
+      },
+      {
+        "file": "CHG1400720 DHRS_Test Evidence v2.xlsx",
+        "problem": "Analyse | DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | Contact Name | Module | PY | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AHUDI | RevTrac Number(s)\n-in sequential order | 441802 | ED5K9AHUGY | ED5K9AHUH0 | ED5K9AHUTM | Technical Team Testing Scenarios | Test Scenario",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | y00ba_OH11 | 2630 | Hrs. supplémentaires 125% | 2631 | Hrs. suppl non exo à 125% | 2640 | Hrs. supplémentaires 150% | 2641 | Hrs. suppl non exo à 150% | 2651 | Heures supplém 33% | 2653 | Hrs. suppl non exo à 133% | 2621 | Hrs complémentaires 10% | 2624 | Hrs. compl non exo à 110% | 2652 | Heures supplém 100% | 2654 | Hrs. suppl non exo à 100% | V_512W_O | demarquer cumuls /132 et /133 | )6E3 | )63E DSN Bloc 53 II | 2631 | Hrs. suppl"
+      },
+      {
+        "file": "CHG1664167_OPSFR Test Evidence v2.xlsx",
+        "problem": "Analyse | Request 1 | DHRS TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | Contact Name | Module | PY | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AHZSA | RevTrac Number(s)\n-in sequential order | 443937 | ED5K9AHZYY | Technical Team Testing Scenarios | Test Scenario No. | Descript",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | Request 1 | Request 1 | Analyse | Request 1"
+      },
+      {
+        "file": "Work Done 2022.xlsx",
+        "problem": "owner | Products | ALCO | Global form(global Infotypes) | Local form( country specific Infotypes) | Delete | Smartforms | Smartforms(if doesn´t work DFCT) | ENHC0010121 SCPO - euHReka France - HRX Improvements in new smartforms conversion\n+ multiple DFCTs | Delete | sin smart (PCIS/ENH) a Global to be reviewed with Jasper | Change | Pay elements Time constrain to be reviewed DCT/PY manager+PY SPOC\nPer Infotype+customer | Multiple DFCTs | Create records if future record exists | currently not sup",
+        "solution": ""
+      }
+    ],
+    "54": [
+      {
+        "file": "CHG0561637 DHRS_Test Evidence V4.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ED5K9AFBFE | RevTrac Number(s)\n-in sequential order | 396392 | ED5K9AFF5W | ED5K9AFFC4 | ED5K9AFFCW | Technical Team Testing Scenarios | Test Scenario No. |",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | Y00BA_OH11 | copy WTs | adapts rules | skypped by the moment | V_T5F99FX"
+      },
+      {
+        "file": "CHG0501476 DHRS_Test Evidence.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | DP9K9A16LD | RevTrac Number(s)\n-in sequential order | 377758 | Technical Team Testing Scenarios | Test Scenario No. | Description | Input Data / Variant | T",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | V_T5FPR"
+      },
+      {
+        "file": "CHG0617677 DHRS_Test Evidence ALCO+error fixing v2.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ETCK9A0RAF | RevTrac Number(s)\n-in sequential order | 413933 | ALCO | ETCK9A0RAL | DP9K9A1E5H | 414005 | SOL - FR - CUST - CHG0617677 - DSN 2021 bug fixing ",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot"
+      },
+      {
+        "file": "CHG0617677 DHRS_Test Evidence bloc 54 SAP.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | RevTrac Number(s)\n-in sequential order | Technical Team Testing Scenarios | Test Scenario No. | Description | Input Data / Variant | Transaction / Program |",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot"
+      },
+      {
+        "file": "CHG0617677 DHRS_Test Evidence corrections 21-01-2021.xlsx",
+        "problem": "DHRS  TEST EVIDENCE FORM | Caller Name | DHRS INC/CHG | Customer Name | Caller Ticket number | HRO Contact Name | Module | PA | Change Reason | Corrective Maintenance | Solution Desription | [high level description o what was done for the fix or change that was implemented] | Guidelines for Caller | Transport Number(s)\n-in sequential order | ETCK9A0RE6 | RevTrac Number(s)\n-in sequential order | 414711 | SAP notes | DP9K9A1EAL | 414790 | AMO | SOL - FR - CUST - CHG0617677 - DSN 2021 | Technical T",
+        "solution": "Change Logs | Pre-Change Screenshot | Post-Change Screenshot | SAP notes installed | Notes Description SP | 3000694 DSN: P21V01 Only one block 12 is created when feature FDRKT returns a table of values 89 | 2988630 PAS 2021: new field 'PARNO' at PAS cluster table for the total of 'Non-taxable remuneration'. 89 | 3006226 FREM: REMAT Prerequisite objects for SAP Note 3005591 (UDO) 89 | 3005591 DSN: Payroll - REM enhancement to consider for January 2021 the entries (REMAT) created at table T5FDSNRE"
+      }
+    ]
+  }
+}

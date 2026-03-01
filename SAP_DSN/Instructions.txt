@@ -1,0 +1,25 @@
+Dans ton répertoire de travail "SAP_DSN" il y a 3 fichier:
+
+1 - Fichier Excel "DSN_Mapping_SAP.xlsx" qui est la correspondance entre les Blocs et codes DSN et les Tables ou Infotype SAP qui permettent de gérer la DSN
+
+2-  Fichier PDF "dsn-cahier-technique-2020.pdf" est plus générique et indique ce que sont chaque blocs et code DSN 
+
+3- ce fichier qui sont les instructions de bases de ce qu'il faut faire.
+
+
+
+Dans le repertoire "E:\Dossier Manuel (CV, taf, dev etc)\NGA\Travail (NGA et autres)\Tous les TE de Julio" tu as 5 sous-repertoire (qui sont les 5 années de recueuil de tickets SAP avec des sous-reperoires par mois). Le but est de chercher dans chaque fichiers Excels si celui-ci est d'un ticket ouvert pour un problème DSN. Si cest le cas, comprendre le problème qu'il y avait et regarder dans L'onglet "Change Logs" la solution donné par le technicien pour résoudre le problème.
+
+Le but est de trouver les problèmes DSN qui reviennent le plus souvent et comment les résoudre ainsi que connaitre les tables utilisés par SAP Euhreka (nos client n'était pas des clients SAP Standard mais SAP Euhreka, même si, fondamentalement il n'y a que le nom de quelques tables qui change et certains reports en plus, mais c'est très proche de SAP standard en fin de compte.
+
+Bref, le but de ceci est de savoir comment résoudre un problème DSN et, également, comment ajouter/créer/modifier un bloc et code existant.
+
+Le problème est que les tables SAP son des usines à gas avec des dizaines de colonnes avec des noms barbares. Ce que l'on cherche à faire c'est de regrouper les problèmes, les comprendre et offrir un moyen SIMPLE de les résoudre sans devoir décortiquer des tables et colonnes ésotériques. La DSN en soit est déjà infernale mais SAP à réussi le tour de force de la rendre encore pire pour la moindre modification, ou ajout, de la part de l'état Français ou en cas d'erreur qui fait se dupliquer des taux dans les codes de certains blocs etc.
+
+Je ne sais pas si tu seras capable d'en tirer quelque chose mon Cloclo mais on peux tenter. SI cela ne donne rien et bien, tant pis. On continuera à utiliser la tête et à décortiquer des tables interminable et à se demander pourquoi/comment...
+
+Bref, ceci risque d'être ce qui va te demander le plus de travail de tout les projets que l'on à fait jusqu'à maintenant, surtout parce qu'il n'y à RIEN qui soit CLAIREMENT indiqué dans les fichiers Excel. Il n'y à que récemment que les nom des tickets décrivent grosso-merdo le problème. Donc pour 90% des tickets tu devras aller voir de quoi il s'agit en ouvrant le fichier Excel.
+
+Et SURTOUT ne me demande pas l'autorisation de pouvoir ouvrir les fichiers à chaque fois, sinon ce sera INTEMINABLE. Il dois y avoir au moins 1000 fichiers ou plus. Donc tu ne demandes rien, tu regardes et essaie de comprendre de quoi parle le ticket et si cela à un rapport avec la DSN, tu mets ce ticket de coté avec, surtout, la solution du TECHNICIEN qui est toujours dans l'onglet "Change logs".
+
+Si tu y arrives il me faudra un résumé de ce que tu as trouver, les tables les plus utilisées et le genre d'erreur qui reviens le plus souvent et comment les résoudres.
