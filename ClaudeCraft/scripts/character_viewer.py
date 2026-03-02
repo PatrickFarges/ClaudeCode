@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-character_viewer.py v1.0.0
+character_viewer.py v1.3.0
 Visualiseur de personnage GLB avec squelette, animations et skin swap
 
 Charge un modèle GLB (Bedrock → GLB converti) et permet de :
@@ -19,7 +19,7 @@ Changelog:
     v1.0.0 — Création initiale
 """
 
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.3.0"
 
 import sys
 import json
@@ -337,8 +337,9 @@ class SkeletalAnimator:
         glb = self.glb
         n_bones = len(glb.bones)
 
-        # Get animated bone rotations
+        # Get animated bone rotations and translations
         bone_rotations = {}
+        bone_translations = {}
         if self.current_anim and self.current_anim in glb.animations:
             anim = glb.animations[self.current_anim]
             for bname, channels in anim["channels"].items():
@@ -346,12 +347,16 @@ class SkeletalAnimator:
                     q = self._sample_channel(channels["rotation"], self.time)
                     if q:
                         bone_rotations[bname] = q
+                if "translation" in channels:
+                    v = self._sample_channel(channels["translation"], self.time)
+                    if v:
+                        bone_translations[bname] = v
 
         # Compute world transforms
         world_transforms = [None] * n_bones
         for bi in range(n_bones):
             bone = glb.bones[bi]
-            t = bone["translation"]
+            t = bone_translations.get(bone["name"], bone["translation"])
             r = bone_rotations.get(bone["name"], bone["rotation"])
             s = bone["scale"]
             local = mat4_trs(t, r, s)
@@ -389,6 +394,7 @@ class SkeletalAnimator:
         glb = self.glb
         n_bones = len(glb.bones)
         bone_rotations = {}
+        bone_translations = {}
         if self.current_anim and self.current_anim in glb.animations:
             anim = glb.animations[self.current_anim]
             for bname, channels in anim["channels"].items():
@@ -396,11 +402,15 @@ class SkeletalAnimator:
                     q = self._sample_channel(channels["rotation"], self.time)
                     if q:
                         bone_rotations[bname] = q
+                if "translation" in channels:
+                    v = self._sample_channel(channels["translation"], self.time)
+                    if v:
+                        bone_translations[bname] = v
 
         world_transforms = [None] * n_bones
         for bi in range(n_bones):
             bone = glb.bones[bi]
-            t = bone["translation"]
+            t = bone_translations.get(bone["name"], bone["translation"])
             r = bone_rotations.get(bone["name"], bone["rotation"])
             s = bone["scale"]
             local = mat4_trs(t, r, s)
@@ -940,17 +950,15 @@ def main():
     print(f"Loading GLB: {glb_path or DEFAULT_GLB}", flush=True)
     win = CharacterViewer(glb_path)
     print(f"Window created: {win.width()}x{win.height()}", flush=True)
-    win.show()
-    win.raise_()
-    win.activateWindow()
-    # Force geometry to center of screen
+    # Plein écran sur l'écran principal (1080p)
     screen = app.primaryScreen()
     if screen:
         geo = screen.availableGeometry()
-        x = (geo.width() - win.width()) // 2 + geo.x()
-        y = (geo.height() - win.height()) // 2 + geo.y()
-        win.move(x, y)
-        print(f"Window moved to ({x}, {y}), screen={geo.width()}x{geo.height()}", flush=True)
+        win.setGeometry(geo)
+        print(f"Window fullscreen on primary: {geo.width()}x{geo.height()} at ({geo.x()},{geo.y()})", flush=True)
+    win.show()
+    win.raise_()
+    win.activateWindow()
     print("Entering event loop...", flush=True)
     sys.exit(app.exec())
 

@@ -310,34 +310,65 @@ def build_skeleton_and_mesh(bones):
 
 # ─── Animation Baking ────────────────────────────────────────────────────────
 
-def bake_animations(bone_names, bone_map):
+def bake_animations(bone_names, bone_map, mesh_data=None):
     """Bake walk, idle, attack, mine animations to quaternion keyframes."""
     animations = []
 
     def make_anim(name, duration, fps, eval_fn):
-        """eval_fn(bone_name, t, duration) → (rx, ry, rz) degrees or None"""
+        """eval_fn(bone_name, t, duration) → (rx, ry, rz) degrees, or
+        {"rot": (rx,ry,rz), "pos": (tx,ty,tz)} for rotation+translation, or None"""
         n_frames = int(duration * fps) + 1
         timestamps = [i / fps for i in range(n_frames)]
-        channels = {}
+        channels = {}       # bone → [quaternions]
+        pos_channels = {}   # bone → [(tx,ty,tz)]
         for bname in bone_names:
             rots = []
-            animated = False
+            positions = []
+            has_rot = False
+            has_pos = False
             for t in timestamps:
                 r = eval_fn(bname, t, duration)
                 if r is not None:
-                    animated = True
-                    rots.append(euler_to_quat(r[0], r[1], r[2]))
+                    if isinstance(r, dict):
+                        # Dict with "rot" and/or "pos"
+                        rot = r.get("rot")
+                        pos = r.get("pos")
+                        if rot:
+                            has_rot = True
+                            rots.append(euler_to_quat(rot[0], rot[1], rot[2]))
+                        else:
+                            rots.append(quat_identity())
+                        if pos:
+                            has_pos = True
+                            positions.append(list(pos))
+                        else:
+                            positions.append(None)
+                    else:
+                        # Tuple/list = rotation only
+                        has_rot = True
+                        rots.append(euler_to_quat(r[0], r[1], r[2]))
+                        positions.append(None)
                 else:
                     rots.append(quat_identity())
-            if animated:
+                    positions.append(None)
+            if has_rot:
                 channels[bname] = rots
-        return {"name": name, "timestamps": timestamps, "channels": channels}
+            if has_pos:
+                # Fill None positions with the bone's local translation (rest pose)
+                lt = mesh_data["local_translations"].get(bname, [0, 0, 0])
+                for i in range(len(positions)):
+                    if positions[i] is None:
+                        positions[i] = list(lt)
+                pos_channels[bname] = positions
+        return {"name": name, "timestamps": timestamps,
+                "channels": channels, "pos_channels": pos_channels}
 
     # Walk (1s loop, ±40° arms, ±56° legs)
+    # Note: en glTF, +X rotation = membre vers l'arrière, -X = vers l'avant
     def walk_fn(bone, t, dur):
         a = math.cos(t / dur * 2 * math.pi) * 40
-        m = {"leftArm": [a, 0, 0], "rightArm": [-a, 0, 0],
-             "leftLeg": [-a * 1.4, 0, 0], "rightLeg": [a * 1.4, 0, 0]}
+        m = {"leftArm": [-a, 0, 0], "rightArm": [a, 0, 0],
+             "leftLeg": [a * 1.4, 0, 0], "rightLeg": [-a * 1.4, 0, 0]}
         return m.get(bone)
     animations.append(make_anim("walk", 1.0, 24, walk_fn))
 
@@ -354,12 +385,12 @@ def bake_animations(bone_names, bone_map):
         return None
     animations.append(make_anim("idle", 3.5, 24, idle_fn))
 
-    # Attack (0.4s, right arm swing)
+    # Attack (0.4s, right arm swing vers l'avant)
     def attack_fn(bone, t, dur):
         at = min(t / dur, 1.0)
         if bone == "rightArm":
             s = math.sin((1 - (1 - at) ** 4) * math.pi)
-            swing = -(s * 1.2 + math.sin(at * math.pi)) * 30
+            swing = (s * 1.2 + math.sin(at * math.pi)) * 30
             return [swing, 0, 0]
         if bone == "body":
             ry = math.sin(math.sqrt(at) * 2 * math.pi) * 11.46
@@ -367,13 +398,78 @@ def bake_animations(bone_names, bone_map):
         return None
     animations.append(make_anim("attack", 0.4, 24, attack_fn))
 
-    # Mine (0.6s loop, right arm pickaxe swing)
+    # Mine (0.6s loop, right arm pickaxe swing vers l'avant)
     def mine_fn(bone, t, dur):
         at = (t / dur) % 1.0
         if bone == "rightArm":
-            return [-math.sin(at * math.pi) * 80, 0, 0]
+            return [math.sin(at * math.pi) * 80, 0, 0]
         return None
     animations.append(make_anim("mine", 0.6, 24, mine_fn))
+
+    # Sit (pose statique : jambes à l'horizontale vers l'avant, bras posés)
+    # root descend de 12 unités Bedrock (= 0.75 blocs) pour poser le cul au sol
+    LEG_HEIGHT = 12.0 * SCALE  # 0.75 game units
+    def sit_fn(bone, t, dur):
+        if bone == "root":
+            return {"pos": (0, -LEG_HEIGHT, 0)}  # descendre au sol
+        if bone == "leftLeg":
+            return [90, 0, 0]   # jambe gauche horizontale vers l'avant
+        if bone == "rightLeg":
+            return [90, 0, 0]   # jambe droite horizontale vers l'avant
+        if bone == "leftArm":
+            return [30, 0, 5]   # bras posé sur les genoux
+        if bone == "rightArm":
+            return [30, 0, -5]  # bras posé sur les genoux
+        return None
+    animations.append(make_anim("sit", 2.0, 4, sit_fn))
+
+    # Sleep (pose statique : couché sur le dos)
+    # Rotation sur root = tout le perso bascule (legs sont children de root)
+    def sleep_fn(bone, t, dur):
+        if bone == "root":
+            return [90, 0, 0]   # tout le corps à l'horizontale (couché face vers le haut)
+        if bone == "leftArm":
+            return [0, 0, -5]   # bras légèrement écarté
+        if bone == "rightArm":
+            return [0, 0, 5]
+        if bone == "head":
+            return [-10, 0, 0]  # tête légèrement relevée (oreiller)
+        return None
+    animations.append(make_anim("sleep", 2.0, 4, sleep_fn))
+
+    # Attack2 (0.5s, double swing — bras droit et corps, plus ample)
+    def attack2_fn(bone, t, dur):
+        at = min(t / dur, 1.0)
+        if bone == "rightArm":
+            # Swing ample : monte puis frappe
+            if at < 0.3:
+                swing = -(at / 0.3) * 40  # arm-back wind-up
+            else:
+                progress = (at - 0.3) / 0.7
+                swing = -40 + progress * 140  # swing forward 100°
+            return [swing, 0, 0]
+        if bone == "body":
+            # Rotation du corps avec le coup
+            ry = math.sin(at * math.pi) * 18
+            return [0, ry, 0]
+        if bone == "leftArm":
+            # Le bras gauche recule légèrement pour l'élan
+            return [-math.sin(at * math.pi) * 15, 0, 0]
+        return None
+    animations.append(make_anim("attack2", 0.5, 24, attack2_fn))
+
+    # Cheer (1s, bras en l'air, petite oscillation)
+    def cheer_fn(bone, t, dur):
+        at = (t / dur) % 1.0
+        wave = math.sin(at * 4 * math.pi) * 8  # oscillation rapide
+        if bone == "leftArm":
+            return [-10, 0, -170 + wave]  # bras gauche en l'air
+        if bone == "rightArm":
+            return [-10, 0, 170 - wave]   # bras droit en l'air
+        if bone == "head":
+            return [-10 + math.sin(at * 2 * math.pi) * 5, 0, 0]  # tête levée
+        return None
+    animations.append(make_anim("cheer", 1.0, 24, cheer_fn))
 
     return animations
 
@@ -629,6 +725,28 @@ class GLBWriter:
                 ga["samplers"].append({"input": ts_acc, "output": rot_acc, "interpolation": "LINEAR"})
                 ga["channels"].append({"sampler": samp_idx, "target": {"node": node_idx, "path": "rotation"}})
 
+            # Translation channels
+            for bname, positions in anim.get("pos_channels", {}).items():
+                if bname not in bone_map or not positions:
+                    continue
+                node_idx = bone_node_start + bone_map[bname]
+
+                ts = anim["timestamps"]
+                ts_bytes = struct.pack(f"<{len(ts)}f", *ts)
+                ts_bv = self._add_bv(ts_bytes)
+                ts_acc = self._add_acc(ts_bv, 5126, len(ts), "SCALAR", [min(ts)], [max(ts)])
+
+                pos_flat = []
+                for p in positions:
+                    pos_flat.extend(p)
+                pos_bytes = struct.pack(f"<{len(pos_flat)}f", *pos_flat)
+                pos_bv = self._add_bv(pos_bytes)
+                pos_acc = self._add_acc(pos_bv, 5126, len(positions), "VEC3")
+
+                samp_idx = len(ga["samplers"])
+                ga["samplers"].append({"input": ts_acc, "output": pos_acc, "interpolation": "LINEAR"})
+                ga["channels"].append({"sampler": samp_idx, "target": {"node": node_idx, "path": "translation"}})
+
             if ga["samplers"]:
                 self.animations_gltf.append(ga)
 
@@ -720,7 +838,7 @@ def main():
     anims = []
     if not args.no_animations:
         print("Baking animations...")
-        anims = bake_animations(mesh_data["bone_names"], mesh_data["bone_map"])
+        anims = bake_animations(mesh_data["bone_names"], mesh_data["bone_map"], mesh_data)
         for a in anims:
             print(f"  {a['name']}: {len(a['channels'])} channels, {len(a['timestamps'])} frames")
 
