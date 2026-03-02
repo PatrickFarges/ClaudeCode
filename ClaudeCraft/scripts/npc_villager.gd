@@ -114,6 +114,7 @@ var current_task: Dictionary = {}
 var _mine_timer: float = 0.0
 var _mine_target: Vector3i = INVALID_POS
 var _build_timer: float = 0.0
+var _build_walk_timer: float = 0.0  # temps passé à marcher vers un bloc de construction
 var _path_block_type: int = 25  # type de bloc courant pour build_path (default COBBLESTONE)
 var _task_status: String = ""  # texte affiché
 
@@ -465,6 +466,7 @@ func _on_activity_changed(old_activity: int, new_activity: int):
 	_wall_impassable = false
 	_mine_timer = 0.0
 	_build_timer = 0.0
+	_build_walk_timer = 0.0
 	_at_mine_entrance = false
 
 	# Reprendre le wander timer
@@ -1161,8 +1163,21 @@ func _execute_build(delta):
 			Vector3(target_world.x, 0, target_world.z))
 		if dist < 3.0:
 			_arrived_at_target = true
+			_build_walk_timer = 0.0
 		else:
-			_walk_toward(target_world, delta)
+			# Téléport de construction : après 8s de marche, téléporter directement
+			# (le _walk_toward générique ne fonctionne pas bien dans les structures
+			# partiellement construites car les détours empêchent le stuck_time de monter)
+			_build_walk_timer += delta
+			if _build_walk_timer > 8.0:
+				global_position = Vector3(target_world.x, target_world.y + 1, target_world.z)
+				_arrived_at_target = true
+				_build_walk_timer = 0.0
+				_total_stuck_time = 0.0
+				_detour_count = 0
+				_wall_impassable = false
+			else:
+				_walk_toward(target_world, delta)
 			return
 
 	# Placer le bloc
@@ -1183,6 +1198,7 @@ func _execute_build(delta):
 			placed += 1
 		current_task["block_index"] = block_index + placed
 		_arrived_at_target = false  # Bouger vers le prochain bloc
+		_build_walk_timer = 0.0
 
 func _execute_build_path(delta):
 	_task_status = "[%s] Place" % village_manager.get_tool_tier_label("Marteau")
