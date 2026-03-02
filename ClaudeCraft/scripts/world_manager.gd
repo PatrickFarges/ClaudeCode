@@ -321,14 +321,13 @@ func _try_spawn_village(chunk_pos: Vector3i, chunk_data: Dictionary):
 
 		# Profession fixe selon l'index
 		var prof = VILLAGE_PROFESSIONS[i] if i < VILLAGE_PROFESSIONS.size() else 0
-		var model_index = VProfession.get_model_for_profession(prof, i)
 
 		var world_x = chunk_pos.x * Chunk.CHUNK_SIZE + lx + 0.5
 		var world_z = chunk_pos.z * Chunk.CHUNK_SIZE + lz + 0.5
 		var spawn_pos = Vector3(world_x, surface_y, world_z)
 
 		var npc = NpcVillagerScene.new()
-		npc.setup(model_index, spawn_pos, chunk_pos, prof)
+		npc.setup(i, spawn_pos, chunk_pos, prof)
 		if poi_manager:
 			npc.poi_manager = poi_manager
 		get_parent().call_deferred("add_child", npc)

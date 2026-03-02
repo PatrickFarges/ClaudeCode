@@ -36,26 +36,19 @@ static func _is_junk_block(bt: int) -> bool:
 			_junk_blocks[junk] = true
 	return _junk_blocks.has(bt)
 
-const MODEL_PATH = "res://BlockPNJ/Models/GLB format/"
-const MODEL_NAMES: Array[String] = [
-	"character-a", "character-b", "character-c", "character-d",
-	"character-e", "character-f", "character-g", "character-h",
-	"character-i", "character-j", "character-k", "character-l",
-	"character-m", "character-n", "character-o", "character-p",
-	"character-q", "character-r"
-]
-static var _model_scenes: Array[PackedScene] = []
+# Modèle Steve GLB unique — chaque villageois reçoit un skin de profession différent
+const STEVE_GLB_PATH = "res://assets/PlayerModel/steve.glb"
+static var _steve_scene: PackedScene = null
 
-static func _preload_models():
-	if _model_scenes.size() > 0:
+static func _preload_steve():
+	if _steve_scene:
 		return
-	for model_name in MODEL_NAMES:
-		var scene = load(MODEL_PATH + model_name + ".glb") as PackedScene
-		if scene:
-			_model_scenes.append(scene)
+	_steve_scene = load(STEVE_GLB_PATH) as PackedScene
+	if _steve_scene:
+		print("NpcVillager: modèle Steve GLB chargé")
 
 # === Identité ===
-var mob_type_index: int = 0
+var villager_index: int = 0
 var chunk_position: Vector3i = Vector3i.ZERO
 var _spawn_pos: Vector3 = Vector3.ZERO
 var profession: int = 0  # VProfession.Profession
@@ -139,8 +132,8 @@ var _mine_resume_pos: Vector3 = Vector3.ZERO  # position sauvegardée pour repre
 var _returning_to_surface: bool = false
 var _return_stuck_timer: float = 0.0
 
-func setup(model_index: int, pos: Vector3, chunk_pos: Vector3i, prof: int = 0):
-	mob_type_index = model_index
+func setup(idx: int, pos: Vector3, chunk_pos: Vector3i, prof: int = 0):
+	villager_index = idx
 	_spawn_pos = pos
 	chunk_position = chunk_pos
 	profession = prof
@@ -148,7 +141,7 @@ func setup(model_index: int, pos: Vector3, chunk_pos: Vector3i, prof: int = 0):
 
 func _ready():
 	position = _spawn_pos
-	_preload_models()
+	_preload_steve()
 	_create_model()
 	_create_collision()
 	_create_head_label()
@@ -159,14 +152,38 @@ func _ready():
 	village_manager = get_node_or_null("/root/VillageManager")
 
 func _create_model():
-	if mob_type_index < 0 or mob_type_index >= _model_scenes.size():
+	if not _steve_scene:
 		return
-	var model_instance = _model_scenes[mob_type_index].instantiate()
-	model_instance.scale = Vector3(0.7, 0.7, 0.7)
+	var model_instance = _steve_scene.instantiate()
+	# Steve GLB = 2 unités de haut (32px / 16 scale), 0.85 → ~1.7 unités = collision box
+	model_instance.scale = Vector3(0.85, 0.85, 0.85)
 	add_child(model_instance)
+	# Appliquer le skin de profession
+	var skin_path = VProfession.get_skin_for_profession(profession)
+	_apply_skin_texture(model_instance, skin_path)
 	_anim_player = _find_animation_player(model_instance)
 	if _anim_player:
 		_play_anim("idle")
+
+func _apply_skin_texture(model: Node, skin_path: String):
+	var tex = load(skin_path) as Texture2D
+	if not tex:
+		push_warning("NpcVillager: skin introuvable: " + skin_path)
+		return
+	_apply_skin_recursive(model, tex)
+
+func _apply_skin_recursive(node: Node, tex: Texture2D):
+	if node is MeshInstance3D:
+		var mi = node as MeshInstance3D
+		for i in range(mi.mesh.get_surface_count()):
+			var base_mat = mi.mesh.surface_get_material(i)
+			if base_mat is StandardMaterial3D:
+				var mat = base_mat.duplicate() as StandardMaterial3D
+				mat.albedo_texture = tex
+				mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+				mi.set_surface_override_material(i, mat)
+	for child in node.get_children():
+		_apply_skin_recursive(child, tex)
 
 func _find_animation_player(node: Node) -> AnimationPlayer:
 	if node is AnimationPlayer:

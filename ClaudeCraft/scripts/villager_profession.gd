@@ -38,97 +38,101 @@ const BT_IRON_TABLE = 23
 const BT_GOLD_TABLE = 24
 const BT_BARREL = 64
 
+# Chemin des skins de professions (textures 64×64 appliquées au modèle Steve)
+const SKINS_PATH = "res://assets/PlayerModel/skins/"
+const PROF_SKINS_PATH = "res://assets/PlayerModel/skins/professions/"
+
 # Mapping profession -> data
-# models: 2 indices parmi les 18 modèles character-a (0) à character-r (17)
+# skin: fichier PNG dans professions/ (appliqué au modèle Steve GLB)
 const PROFESSION_DATA = {
 	Profession.NONE: {
 		"workstation": -1,
-		"models": [0, 1],
+		"skin": "steve.png",  # skin de base dans skins/
 		"work_anim": "idle",
 		"name_fr": "Villageois",
 		"name_en": "Villager",
 	},
 	Profession.BUCHERON: {
 		"workstation": BT_CRAFTING_TABLE,
-		"models": [2, 3],
+		"skin": "lumberjack.png",
 		"work_anim": "attack",
 		"name_fr": "Bûcheron",
 		"name_en": "Lumberjack",
 	},
 	Profession.MENUISIER: {
 		"workstation": BT_CRAFTING_TABLE,
-		"models": [4, 5],
+		"skin": "carpenter.png",
 		"work_anim": "idle",
 		"name_fr": "Menuisier",
 		"name_en": "Carpenter",
 	},
 	Profession.FORGERON: {
 		"workstation": BT_FURNACE,
-		"models": [6, 7],
+		"skin": "blacksmith.png",
 		"work_anim": "attack",
 		"name_fr": "Forgeron",
 		"name_en": "Blacksmith",
 	},
 	Profession.BATISSEUR: {
 		"workstation": BT_STONE_TABLE,
-		"models": [8, 9],
+		"skin": "builder.png",
 		"work_anim": "idle",
 		"name_fr": "Bâtisseur",
 		"name_en": "Builder",
 	},
 	Profession.FERMIER: {
 		"workstation": BT_CRAFTING_TABLE,
-		"models": [10, 11],
+		"skin": "farmer.png",
 		"work_anim": "idle",
 		"name_fr": "Fermier",
 		"name_en": "Farmer",
 	},
 	Profession.BOULANGER: {
 		"workstation": BT_FURNACE,
-		"models": [12, 13],
+		"skin": "baker.png",
 		"work_anim": "attack",
 		"name_fr": "Boulanger",
 		"name_en": "Baker",
 	},
 	Profession.CHAMAN: {
 		"workstation": BT_GOLD_TABLE,
-		"models": [14, 15],
+		"skin": "shaman.png",
 		"work_anim": "idle",
 		"name_fr": "Chaman",
 		"name_en": "Shaman",
 	},
 	Profession.MINEUR: {
 		"workstation": BT_IRON_TABLE,
-		"models": [16, 17],
+		"skin": "miner.png",
 		"work_anim": "attack",
 		"name_fr": "Mineur",
 		"name_en": "Miner",
 	},
-	# === Phase 4 — Militaire (modèles temporaires, à remplacer par nouveaux GLB) ===
+	# === Phase 4 — Militaire ===
 	Profession.ESPION: {
 		"workstation": -1,
-		"models": [14, 15],  # temporaire: réutilise Chaman
+		"skin": "spy.png",
 		"work_anim": "idle",
 		"name_fr": "Espion",
 		"name_en": "Spy",
 	},
 	Profession.SOLDAT: {
 		"workstation": -1,
-		"models": [8, 9],  # temporaire: réutilise Bâtisseur
+		"skin": "soldier.png",
 		"work_anim": "attack",
 		"name_fr": "Soldat",
 		"name_en": "Soldier",
 	},
 	Profession.GARDE: {
 		"workstation": -1,
-		"models": [6, 7],  # temporaire: réutilise Forgeron
+		"skin": "guard.png",
 		"work_anim": "attack",
 		"name_fr": "Garde",
 		"name_en": "Guard",
 	},
 	Profession.CAPITAINE: {
 		"workstation": -1,
-		"models": [16, 17],  # temporaire: réutilise Mineur
+		"skin": "captain.png",
 		"work_anim": "attack",
 		"name_fr": "Capitaine",
 		"name_en": "Captain",
@@ -175,11 +179,14 @@ static func get_workstation_block(prof: int) -> int:
 		return PROFESSION_DATA[prof]["workstation"]
 	return -1
 
-static func get_model_for_profession(prof: int, seed_val: int) -> int:
+static func get_skin_for_profession(prof: int) -> String:
 	if PROFESSION_DATA.has(prof):
-		var models = PROFESSION_DATA[prof]["models"]
-		return models[seed_val % models.size()]
-	return 0
+		var skin_file = PROFESSION_DATA[prof]["skin"]
+		# NONE utilise le skin de base dans skins/, les autres dans professions/
+		if prof == Profession.NONE:
+			return SKINS_PATH + skin_file
+		return PROF_SKINS_PATH + skin_file
+	return SKINS_PATH + "steve.png"
 
 static func get_profession_name(prof: int) -> String:
 	if PROFESSION_DATA.has(prof):

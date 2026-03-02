@@ -14,11 +14,12 @@ Usage:
     python character_viewer.py path/to/model.glb
 
 Changelog:
+    v1.2.0 — Scan récursif sous-dossiers skins, labels avec préfixe dossier (professions/...)
     v1.1.0 — Fix faces noires : rendu alpha blend pour overlays, depth sort
     v1.0.0 — Création initiale
 """
 
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 
 import sys
 import json
@@ -838,9 +839,9 @@ class CharacterViewer(QMainWindow):
         # Embedded / default
         if DEFAULT_SKIN.exists():
             skin_files.append(DEFAULT_SKIN)
-        # Skins directory
+        # Skins directory (including subdirectories)
         if DEFAULT_SKINS.exists():
-            for f in sorted(DEFAULT_SKINS.glob("*.png")):
+            for f in sorted(DEFAULT_SKINS.rglob("*.png")):
                 if f not in skin_files:
                     skin_files.append(f)
         # Also check alongside GLB
@@ -850,7 +851,12 @@ class CharacterViewer(QMainWindow):
                 skin_files.append(f)
 
         for f in skin_files:
-            item = QListWidgetItem(f.stem)
+            # Show subfolder prefix for organized skins
+            if f.parent != DEFAULT_SKINS and f.parent.parent == DEFAULT_SKINS:
+                label = f"{f.parent.name}/{f.stem}"
+            else:
+                label = f.stem
+            item = QListWidgetItem(label)
             item.setData(Qt.ItemDataRole.UserRole, str(f))
             try:
                 pixmap = QPixmap(str(f))

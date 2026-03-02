@@ -2724,7 +2724,7 @@ func _find_villager_spawn_pos() -> Vector3:
 func _spawn_new_villager(spawn_pos: Vector3, prof: int):
 	if not world_manager:
 		return
-	var model_index = VProfession.get_model_for_profession(prof, villagers.size())
+	var villager_index = villagers.size()
 	var chunk_pos = Vector3i(
 		floori(spawn_pos.x / CHUNK_SIZE),
 		0,
@@ -2732,7 +2732,7 @@ func _spawn_new_villager(spawn_pos: Vector3, prof: int):
 	)
 	var NpcVillagerScript = preload("res://scripts/npc_villager.gd")
 	var npc = NpcVillagerScript.new()
-	npc.setup(model_index, spawn_pos, chunk_pos, prof)
+	npc.setup(villager_index, spawn_pos, chunk_pos, prof)
 	if world_manager.poi_manager:
 		npc.poi_manager = world_manager.poi_manager
 	world_manager.get_parent().call_deferred("add_child", npc)
