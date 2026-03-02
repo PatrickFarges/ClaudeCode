@@ -39,13 +39,32 @@ static func _is_junk_block(bt: int) -> bool:
 # Modèle Steve GLB unique — chaque villageois reçoit un skin de profession différent
 const STEVE_GLB_PATH = "res://assets/PlayerModel/steve.glb"
 static var _steve_scene: PackedScene = null
+static var _skin_cache: Dictionary = {}  # cache des ImageTexture par chemin
 
 static func _preload_steve():
 	if _steve_scene:
 		return
+	# Méthode 1 : load() classique (nécessite .import)
 	_steve_scene = load(STEVE_GLB_PATH) as PackedScene
 	if _steve_scene:
-		print("NpcVillager: modèle Steve GLB chargé")
+		print("NpcVillager: Steve GLB chargé via load()")
+		return
+	# Méthode 2 : chargement runtime via GLTFDocument (pas besoin d'import)
+	print("NpcVillager: load() échoué, chargement GLB via GLTFDocument...")
+	var gltf_doc = GLTFDocument.new()
+	var gltf_state = GLTFState.new()
+	var err = gltf_doc.append_from_file(STEVE_GLB_PATH, gltf_state)
+	if err == OK:
+		var scene = gltf_doc.generate_scene(gltf_state)
+		if scene:
+			# Convertir la scène en PackedScene pour la réutiliser
+			var packed = PackedScene.new()
+			packed.pack(scene)
+			_steve_scene = packed
+			scene.queue_free()
+			print("NpcVillager: Steve GLB chargé via GLTFDocument (%d nodes)" % [packed.get_state().get_node_count()])
+			return
+	push_error("NpcVillager: IMPOSSIBLE de charger steve.glb (err=%s)" % str(err))
 
 # === Identité ===
 var villager_index: int = 0
@@ -157,18 +176,45 @@ func _create_model():
 	var model_instance = _steve_scene.instantiate()
 	# Steve GLB = 2 unités de haut (32px / 16 scale), 0.85 → ~1.7 unités = collision box
 	model_instance.scale = Vector3(0.85, 0.85, 0.85)
+	# Le modèle Bedrock fait face à +Z, Godot avance en -Z → rotation 180°
+	model_instance.rotation.y = PI
 	add_child(model_instance)
 	# Appliquer le skin de profession
 	var skin_path = VProfession.get_skin_for_profession(profession)
 	_apply_skin_texture(model_instance, skin_path)
 	_anim_player = _find_animation_player(model_instance)
 	if _anim_player:
+		# Debug : lister les animations disponibles (1 seul print pour le premier villageois)
+		if villager_index == 0:
+			var anims: PackedStringArray = _anim_player.get_animation_list()
+			print("NpcVillager: AnimationPlayer trouvé, %d animations: %s" % [anims.size(), str(anims)])
 		_play_anim("idle")
+	else:
+		if villager_index == 0:
+			print("NpcVillager: AUCUN AnimationPlayer trouvé dans le modèle")
+
+static func _load_skin_texture(skin_path: String) -> Texture2D:
+	# Essayer le cache d'abord
+	if _skin_cache.has(skin_path):
+		return _skin_cache[skin_path]
+	# Essayer load() (fonctionne si Godot a importé le fichier)
+	var tex = load(skin_path) as Texture2D
+	if tex:
+		_skin_cache[skin_path] = tex
+		return tex
+	# Fallback : charger le PNG en runtime via Image (pas besoin d'import)
+	var img = Image.load_from_file(skin_path)
+	if img:
+		var itex = ImageTexture.create_from_image(img)
+		_skin_cache[skin_path] = itex
+		print("NpcVillager: skin chargé via Image: " + skin_path)
+		return itex
+	push_warning("NpcVillager: skin introuvable: " + skin_path)
+	return null
 
 func _apply_skin_texture(model: Node, skin_path: String):
-	var tex = load(skin_path) as Texture2D
+	var tex = _load_skin_texture(skin_path)
 	if not tex:
-		push_warning("NpcVillager: skin introuvable: " + skin_path)
 		return
 	_apply_skin_recursive(model, tex)
 
@@ -181,6 +227,7 @@ func _apply_skin_recursive(node: Node, tex: Texture2D):
 				var mat = base_mat.duplicate() as StandardMaterial3D
 				mat.albedo_texture = tex
 				mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+				mat.cull_mode = BaseMaterial3D.CULL_DISABLED  # Fix faces inversées
 				mi.set_surface_override_material(i, mat)
 	for child in node.get_children():
 		_apply_skin_recursive(child, tex)

@@ -341,13 +341,16 @@ def bake_animations(bone_names, bone_map):
         return m.get(bone)
     animations.append(make_anim("walk", 1.0, 24, walk_fn))
 
-    # Idle (3.5s loop, subtle arm bob ±2.9°)
+    # Idle (3.5s loop, subtle arm bob ±2.9°, jambes explicitement à 0°)
     def idle_fn(bone, t, dur):
         bob = math.cos(math.radians(t * 103.2)) * 2.865 + 2.865
         if bone == "leftArm":
             return [0, 0, -bob]
         if bone == "rightArm":
             return [0, 0, bob]
+        # Jambes forcées à 0° pour éviter de garder la pose walk
+        if bone in ("leftLeg", "rightLeg"):
+            return [0, 0, 0]
         return None
     animations.append(make_anim("idle", 3.5, 24, idle_fn))
 
