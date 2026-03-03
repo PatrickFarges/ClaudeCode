@@ -286,13 +286,13 @@ func _try_spawn_village(chunk_pos: Vector3i, chunk_data: Dictionary):
 
 	# L'aplanissement est désormais géré par le bâtisseur via VillageManager.flatten_plan
 
-	# Spawn 8 villageois groupés — professions FIXES et optimisées :
-	# 2 BUCHERON (récolte bois), 2 MINEUR (galerie souterraine),
-	# 1 FORGERON (craft outils/lingots), 1 BATISSEUR (chemins + cabanes),
-	# 1 MENUISIER (craft planches/meubles), 1 FERMIER (récolte diverse)
+	# Spawn 9 villageois groupés — professions FIXES et optimisées :
+	# 1 BUCHERON (récolte bois), 2 MINEUR (galerie souterraine),
+	# 1 FORGERON (craft outils/lingots), 2 BATISSEUR (aplanir + construire en parallèle),
+	# 1 MENUISIER (craft planches/meubles), 1 FERMIER (récolte diverse), 1 BOULANGER
 	var VILLAGE_PROFESSIONS = [
 		VProfession.Profession.BUCHERON,   # PNJ 0
-		VProfession.Profession.BUCHERON,   # PNJ 1
+		VProfession.Profession.BATISSEUR,  # PNJ 1
 		VProfession.Profession.MINEUR,     # PNJ 2
 		VProfession.Profession.MINEUR,     # PNJ 3
 		VProfession.Profession.FORGERON,   # PNJ 4

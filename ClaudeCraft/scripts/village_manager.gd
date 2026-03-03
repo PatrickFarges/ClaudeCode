@@ -65,6 +65,7 @@ var _mine_initialized: bool = false
 var _mine_gallery_center: Vector3i = Vector3i.ZERO  # centre de la galerie actuelle
 var _mine_gallery_y: int = 45      # profondeur galerie actuelle
 var _mine_expansion_dir: int = 0   # direction de la prochaine expansion (0-3)
+const MINE_MAX_EXPANSIONS = 50     # max d'extensions de la mine (évite croissance infinie)
 const MINE_PLAN_MAX_SIZE = 5000    # plafond du mine plan — empêche la croissance infinie
 const MINE_STOCK_PAUSE_STONE = 2000 # pause minage si pavé > seuil (200 trop bas — mine 417 blocs → 1346 pavés)
 const MINE_STOCK_PAUSE_COAL = 200  # pause minage si charbon > seuil
@@ -1092,6 +1093,25 @@ func _count_flatten_active() -> int:
 			count += 1
 	return count
 
+func _count_active_builds() -> int:
+	# Compte les tâches build en queue + en cours chez les villageois
+	var count = 0
+	for t in task_queue:
+		if t["type"] == "build":
+			count += 1
+	for v in villagers:
+		if is_instance_valid(v) and v.current_task.get("type", "") == "build":
+			count += 1
+	return count
+
+func _count_builders() -> int:
+	# Compte les bâtisseurs vivants
+	var count = 0
+	for v in villagers:
+		if is_instance_valid(v) and v.profession == VProfession.Profession.BATISSEUR:
+			count += 1
+	return count
+
 func _add_harvest_tasks(block_type: int, count: int):
 	# Tous les types de bois sont acceptables
 	var wood_types = [5, 32, 33, 34, 35, 36, 42]  # WOOD + toutes les essences
@@ -1600,8 +1620,10 @@ func _expand_mine():
 		mine_plan = mine_plan.slice(mine_front_index)
 		mine_front_index = 0
 
-	# Plafond : ne pas étendre si le plan est déjà trop gros
+	# Plafond : ne pas étendre si le plan est déjà trop gros ou trop d'expansions
 	if mine_plan.size() > MINE_PLAN_MAX_SIZE:
+		return
+	if _mine_expansion_dir >= MINE_MAX_EXPANSIONS:
 		return
 
 	_mine_expansion_dir += 1
@@ -1857,34 +1879,41 @@ func place_workstation_at(block_type: int, pos: Vector3i):
 # ============================================================
 
 func _try_queue_builds_for_phase(max_phase: int):
-	# Construire tous les blueprints dont la phase est <= max_phase et pas encore construits
+	# Construire autant de bâtiments que de bâtisseurs disponibles (en parallèle)
+	var slots = _count_builders() - _count_active_builds()
+	if slots <= 0:
+		return
+
 	var built_names: Dictionary = {}
 	for built in built_structures:
 		built_names[built["name"]] = true
 
+	var queued = 0
 	for i in range(BLUEPRINTS.size()):
+		if queued >= slots:
+			break
 		var bp = BLUEPRINTS[i]
 		if built_names.has(bp["name"]):
 			continue
 		var bp_phase = bp.get("phase", 0)
 		if bp_phase <= max_phase:
-			_try_queue_build(i)
-			return  # Un seul bâtiment à la fois
+			if _try_queue_build(i):
+				queued += 1
 
-func _try_queue_build(blueprint_index: int):
+func _try_queue_build(blueprint_index: int) -> bool:
 	if blueprint_index >= BLUEPRINTS.size():
-		return
+		return false
 
 	# Vérifier qu'on n'a pas déjà cette construction en queue
 	for t in task_queue:
 		if t["type"] == "build" and t.get("blueprint_index", -1) == blueprint_index:
-			return
+			return false
 
 	# Vérifier qu'un villageois ne construit pas déjà ce blueprint
 	for npc in villagers:
 		if is_instance_valid(npc) and npc.current_task.get("type", "") == "build" \
 			and npc.current_task.get("blueprint_index", -1) == blueprint_index:
-			return
+			return false
 
 	var bp = BLUEPRINTS[blueprint_index]
 
@@ -1934,13 +1963,13 @@ func _try_queue_build(blueprint_index: int):
 						# Pas de sable → envoyer le bâtisseur en récolter (1 seul)
 						if get_resource_count(4) < deficit:
 							_add_sand_harvest_tasks(1)
-		return
+		return false
 
 	# Trouver un emplacement
 	var origin = _find_build_site(bp)
 	if origin == Vector3i(-9999, -9999, -9999):
 		print("VillageManager: '%s' — pas de site valide trouvé" % bp["name"])
-		return
+		return false
 
 	# Consommer les matériaux
 	for bt in bp["materials"]:
@@ -1962,6 +1991,7 @@ func _try_queue_build(blueprint_index: int):
 		"required_profession": VProfession.Profession.BATISSEUR,
 	})
 	print("VillageManager: construction de '%s' à %s" % [bp["name"], str(origin)])
+	return true
 
 func _find_build_site(blueprint: Dictionary) -> Vector3i:
 	# Terrain aplani → origin.y = ref_y + 1 (garanti plat après flatten)
@@ -1994,6 +2024,34 @@ func _find_build_site(blueprint: Dictionary) -> Vector3i:
 				overlap = true
 				break
 		if overlap:
+			continue
+
+		# Pas de chevauchement avec les constructions en cours (queue + NPC actifs)
+		var in_progress_overlap = false
+		for t in task_queue:
+			if t["type"] == "build" and t.has("origin"):
+				var to = t["origin"]
+				var bi = t.get("blueprint_index", -1)
+				if bi >= 0 and bi < BLUEPRINTS.size():
+					var ts = BLUEPRINTS[bi]["size"]
+					if tx < to.x + ts.x + 4 and tx + size.x > to.x - 4 \
+						and tz < to.z + ts.z + 4 and tz + size.z > to.z - 4:
+						in_progress_overlap = true
+						break
+		if not in_progress_overlap:
+			for v in villagers:
+				if is_instance_valid(v) and v.current_task.get("type", "") == "build":
+					var ct = v.current_task
+					if ct.has("origin"):
+						var to = ct["origin"]
+						var bi = ct.get("blueprint_index", -1)
+						if bi >= 0 and bi < BLUEPRINTS.size():
+							var ts = BLUEPRINTS[bi]["size"]
+							if tx < to.x + ts.x + 4 and tx + size.x > to.x - 4 \
+								and tz < to.z + ts.z + 4 and tz + size.z > to.z - 4:
+								in_progress_overlap = true
+								break
+		if in_progress_overlap:
 			continue
 
 		# Pas de chevauchement avec les workstations
@@ -2683,12 +2741,19 @@ func _pick_needed_profession() -> int:
 		if is_instance_valid(v):
 			counts[v.profession] = counts.get(v.profession, 0) + 1
 
+	# Minimum de bâtisseurs selon la phase (plus de bâtiments à construire)
+	var min_builders = 1
+	if village_phase >= 3:
+		min_builders = 3
+	elif village_phase >= 2:
+		min_builders = 2
+
 	# Priorités : un fermier de plus si peu de nourriture, bûcheron si peu de bois, etc.
 	var needs: Array = [
 		[VProfession.Profession.FERMIER, 1],
 		[VProfession.Profession.BUCHERON, 2],
 		[VProfession.Profession.MINEUR, 2],
-		[VProfession.Profession.BATISSEUR, 1],
+		[VProfession.Profession.BATISSEUR, min_builders],
 		[VProfession.Profession.MENUISIER, 1],
 		[VProfession.Profession.FORGERON, 1],
 	]
