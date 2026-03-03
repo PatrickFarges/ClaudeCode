@@ -39,7 +39,7 @@ fog_sky_affect = 0.3
 
 [node name="WorldManager" type="Node3D" parent="." groups=["world_manager"]]
 script = ExtResource("1_world")
-render_distance = 5
+render_distance = 6
 chunk_load_per_frame = 2
 unload_distance_margin = 4
 

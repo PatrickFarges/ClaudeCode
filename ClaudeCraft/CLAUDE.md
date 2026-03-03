@@ -37,7 +37,7 @@ Jeu voxel type Minecraft en GDScript avec Godot 4.5+, style pastel. Évolue vers
 - **`passive_mob.gd`** : *(inactif — plus de spawn)* code encore présent mais non utilisé. Les animaux ont été retirés pour se concentrer sur la gestion de village
 
 ### Joueur et UI
-- **`player.gd`** : FPS CharacterBody3D, minage progressif (`BASE_MINING_TIME=5.0` × dureté/outil), hotbar 9 slots + outils + nourriture, arc (charge MC), placement blocs
+- **`player.gd`** : FPS CharacterBody3D, minage progressif (`BASE_MINING_TIME=5.0` × dureté/outil), hotbar 9 slots + outils + nourriture, arc (charge MC), placement blocs. **Zoom FOV** : Alt+Molette 70°→110° (step 5°), sprint ajoute +10° delta
 - **`hand_item_renderer.gd`** : bras FPS — 3 rendus (bloc texturé, outil extrudé 3D pixel par pixel, modèle GLB). Swing sinusoïdal MC, bobbing, rendu arc
 - **`tool_registry.gd`** : 18 outils, 5 tiers (bois→netherite), PICK_BOOST=2.0, CROSS_TOOL_MULT=1.3, listes blocs par type
 - **`craft_registry.gd`** : ~68 recettes, 6 catégories (Hand, Furnace, Wood/Stone/Iron/Gold Table). **Forge** : 3 recettes `_tool_tier` (bois/pierre/fer). **Torche** : 1 coal + 1 planks → 4 torches. **Armes** : Épée fer, Épée or, Bouclier
@@ -46,7 +46,7 @@ Jeu voxel type Minecraft en GDScript avec Godot 4.5+, style pastel. Évolue vers
 - **`locale.gd`** : traductions FR/EN
 
 ### Utilitaires
-- **`world_manager.gd`** : chunks render_distance=4, village 9 PNJ (professions fixes : 1 bûcheron, 2 mineurs, 1 forgeron, 2 bâtisseurs, 1 menuisier, 1 fermier, 1 boulanger), POI manager, déchargement Dictionary-set O(1). Ancien flatten cosmétique remplacé par le système bâtisseur. *(Pas de spawn animaux — retiré v12.0.0)*
+- **`world_manager.gd`** : chunks render_distance=6, village 9 PNJ (professions fixes : 1 bûcheron, 2 mineurs, 1 forgeron, 2 bâtisseurs, 1 menuisier, 1 fermier, 1 boulanger), POI manager, déchargement Dictionary-set O(1). Ancien flatten cosmétique remplacé par le système bâtisseur. *(Pas de spawn animaux — retiré v12.0.0)*
 - **`day_night_cycle.gd`** : cycle jour/nuit 600s, **vitesse du temps** 4 niveaux (Lent ×0.5 / Normal ×1 / Rapide ×2 / Très rapide ×10), Ctrl+Molette dans le HUD
 - **`save_manager.gd`** / **`health_ui.gd`** : sauvegarde, UI santé
 
@@ -89,7 +89,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 
 ## Direction du projet
 
-**Version actuelle : v15.2.1**
+**Version actuelle : v15.3.0**
 
 | Phase | Statut | Contenu |
 |-------|--------|---------|
@@ -126,6 +126,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 | 8.1.2 | Fait | v15.1.2 — **8 animations Steve** (walk, idle, attack, mine, sit, sleep, attack2, cheer). Fix animations inversées (moonwalk, attaque arrière). Support channels translation (sit au sol). Character viewer v1.3.0 : translation animée, fullscreen écran principal |
 | 8.2 | Fait | v15.2.0 — **Bâtisseurs parallèles**. `_try_queue_builds_for_phase` queue autant de bâtiments que de bâtisseurs disponibles (slots = builders - active_builds). Anti-chevauchement constructions en cours (queue + NPC actifs, marge 4 blocs). 2 bâtisseurs dès le spawn initial (1 bûcheron → 1 bâtisseur). Besoin en bâtisseurs dynamique par phase : 1 (Phase 0-1), 2 (Phase 2), 3 (Phase 3+). Déblocage Phase 4 accéléré |
 | 8.2.1 | Fait | v15.2.1 — **Fix file de construction + mine cap**. `_try_queue_build` retourne bool — les bâtiments chers (Taverne 1747 planches) ne bloquent plus les pas chers (Tour de guet 35 planches). Mine cap : max 50 expansions pour empêcher le plan de croître à 82000+ blocs dans les zones de grottes/chunks non chargés |
+| 8.3 | Fait | v15.3.0 — **Zoom FOV + render distance**. Alt+Molette : zoom FOV 70°→110° (step 5°, 9 paliers), sprint conserve le delta +10°. Render distance 5→6 (~85 chunks, +39%). Contrôles molette : Molette=hotbar, Ctrl+Molette=vitesse du temps, Alt+Molette=zoom FOV |
 | 9 | À venir | Système de faim actif, chaînes de production, combat PNJ visuel |
 
 **Packs GLB utilisés** : Steve GLB (modèle Bedrock converti, 28 bones, 4 anims) pour tous les PNJ avec skins par profession. Kenney.nl (18 modèles BlockPNJ — conservés mais plus utilisés). **PNJ futurs** : KayKit Adventurers (161 anims travail)

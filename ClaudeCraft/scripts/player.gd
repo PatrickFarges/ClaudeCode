@@ -20,6 +20,10 @@ var is_sprinting: bool = false
 const SPRINT_FOV = 80.0
 const NORMAL_FOV = 70.0
 const FOV_LERP_SPEED = 8.0
+const ZOOM_FOV_MIN = 70.0
+const ZOOM_FOV_MAX = 110.0
+const ZOOM_FOV_STEP = 5.0
+var zoom_fov: float = 70.0
 
 # ============================================================
 # INVENTAIRE
@@ -428,6 +432,16 @@ func _input(event):
 
 	# Molette souris
 	if event is InputEventMouseButton and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		# Alt+Molette = zoom FOV
+		if event.alt_pressed and event.pressed:
+			if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+				zoom_fov = maxf(ZOOM_FOV_MIN, zoom_fov - ZOOM_FOV_STEP)
+				get_viewport().set_input_as_handled()
+				return
+			elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+				zoom_fov = minf(ZOOM_FOV_MAX, zoom_fov + ZOOM_FOV_STEP)
+				get_viewport().set_input_as_handled()
+				return
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
 			selected_slot = (selected_slot - 1 + hotbar_slots.size()) % hotbar_slots.size()
 			_update_selected_block()
@@ -494,8 +508,8 @@ func _physics_process(delta):
 		velocity.x = move_toward(velocity.x, 0, current_speed)
 		velocity.z = move_toward(velocity.z, 0, current_speed)
 
-	# FOV dynamique
-	var target_fov = SPRINT_FOV if is_sprinting else NORMAL_FOV
+	# FOV dynamique (intègre le zoom Alt+Molette)
+	var target_fov = zoom_fov + (SPRINT_FOV - NORMAL_FOV) if is_sprinting else zoom_fov
 	camera.fov = lerpf(camera.fov, target_fov, FOV_LERP_SPEED * delta)
 
 	_handle_auto_step(direction)
