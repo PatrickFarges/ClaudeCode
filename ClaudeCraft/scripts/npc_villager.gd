@@ -1059,8 +1059,21 @@ func _execute_craft(delta):
 			var dist = Vector3(global_position.x, 0, global_position.z).distance_to(
 				Vector3(ws_pos.x, 0, ws_pos.z))
 			if dist > 2.5:
-				_walk_toward(ws_pos, delta)
-				return
+				# Si trop loin verticalement (coincé dans la mine), téléport direct
+				var vertical_diff = absf(global_position.y - ws_pos.y)
+				if vertical_diff > 6.0 or (_total_stuck_time > 10.0 and dist > 8.0):
+					global_position = ws_pos + Vector3(0, 1, 0)
+					_total_stuck_time = 0.0
+					_arrived_at_target = true
+				else:
+					_walk_toward(ws_pos, delta)
+					return
+			else:
+				# Aussi téléporter si coincé dans la mine mais proche en XZ
+				var vertical_diff = absf(global_position.y - ws_pos.y)
+				if vertical_diff > 6.0:
+					global_position = ws_pos + Vector3(0, 1, 0)
+					_total_stuck_time = 0.0
 		_arrived_at_target = true
 
 	# Arrivé au workstation → animation + craft
