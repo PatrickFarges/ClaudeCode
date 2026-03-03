@@ -20,8 +20,10 @@ var farm_label: Label
 var buildings_label: Label
 var objective_label: Label
 var stockpile_container: VBoxContainer
+var storage_container: VBoxContainer
 var villager_container: VBoxContainer
 var scroll: ScrollContainer
+var scroll_storage: ScrollContainer
 var scroll_villagers: ScrollContainer
 var _update_timer: float = 0.0
 
@@ -52,10 +54,10 @@ func _build_ui():
 	panel.anchor_top = 0.5
 	panel.anchor_right = 0.5
 	panel.anchor_bottom = 0.5
-	panel.offset_left = -330
-	panel.offset_top = -420
-	panel.offset_right = 330
-	panel.offset_bottom = 420
+	panel.offset_left = -340
+	panel.offset_top = -380
+	panel.offset_right = 340
+	panel.offset_bottom = 380
 	var style = StyleBoxFlat.new()
 	style.bg_color = Color(0.12, 0.12, 0.18, 0.95)
 	style.corner_radius_top_left = 8
@@ -139,13 +141,31 @@ func _build_ui():
 
 	# Scroll pour la liste des ressources
 	scroll = ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(0, 180)
+	scroll.custom_minimum_size = Vector2(0, 120)
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vbox.add_child(scroll)
 
 	stockpile_container = VBoxContainer.new()
 	stockpile_container.add_theme_constant_override("separation", 3)
 	scroll.add_child(stockpile_container)
+
+	vbox.add_child(_make_separator())
+
+	# Label "Stockage bâtiments"
+	var storage_label = Label.new()
+	storage_label.text = "Stockage bâtiments"
+	storage_label.add_theme_font_size_override("font_size", 17)
+	storage_label.add_theme_color_override("font_color", Color(0.9, 0.9, 0.7))
+	vbox.add_child(storage_label)
+
+	scroll_storage = ScrollContainer.new()
+	scroll_storage.custom_minimum_size = Vector2(0, 80)
+	scroll_storage.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_child(scroll_storage)
+
+	storage_container = VBoxContainer.new()
+	storage_container.add_theme_constant_override("separation", 3)
+	scroll_storage.add_child(storage_container)
 
 	vbox.add_child(_make_separator())
 
@@ -166,7 +186,7 @@ func _build_ui():
 
 	# Scroll pour la liste des villageois
 	scroll_villagers = ScrollContainer.new()
-	scroll_villagers.custom_minimum_size = Vector2(0, 280)
+	scroll_villagers.custom_minimum_size = Vector2(0, 190)
 	scroll_villagers.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vbox.add_child(scroll_villagers)
 
@@ -288,8 +308,8 @@ func _refresh_contents():
 			obj_text += "\n--- Militaire ---"
 			obj_text += "\nGuerre : " + war_mgr.get_war_status_text()
 			obj_text += "\nEnnemi : " + war_mgr.get_enemy_status_text()
-			var swords = village_manager.get_resource_count(BlockRegistry.BlockType.IRON_SWORD)
-			var shields = village_manager.get_resource_count(BlockRegistry.BlockType.SHIELD)
+			var swords = village_manager.get_total_resource(BlockRegistry.BlockType.IRON_SWORD)
+			var shields = village_manager.get_total_resource(BlockRegistry.BlockType.SHIELD)
 			obj_text += "\nÉpées : %d | Boucliers : %d" % [swords, shields]
 
 	objective_label.text = obj_text
@@ -344,6 +364,65 @@ func _refresh_contents():
 			row.add_child(count_label)
 
 			stockpile_container.add_child(row)
+
+	# === Stockage bâtiments ===
+	for child in storage_container.get_children():
+		child.queue_free()
+
+	var storage_info = village_manager.get_building_storage_info()
+	if storage_info.size() == 0:
+		var no_storage = Label.new()
+		no_storage.text = "  (aucun bâtiment avec stockage)"
+		no_storage.add_theme_font_size_override("font_size", 13)
+		no_storage.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
+		storage_container.add_child(no_storage)
+	else:
+		for bn in storage_info:
+			var si = storage_info[bn]
+			# En-tête bâtiment avec jauge
+			var header = HBoxContainer.new()
+			header.add_theme_constant_override("separation", 8)
+			var bn_label = Label.new()
+			bn_label.text = "%s" % bn
+			bn_label.add_theme_font_size_override("font_size", 14)
+			bn_label.add_theme_color_override("font_color", Color(0.9, 0.8, 0.5))
+			bn_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			header.add_child(bn_label)
+			var cap_label = Label.new()
+			cap_label.text = "%d / %d" % [si["used"], si["capacity"]]
+			cap_label.add_theme_font_size_override("font_size", 13)
+			if si["used"] >= si["capacity"]:
+				cap_label.add_theme_color_override("font_color", Color(1.0, 0.4, 0.4))
+			else:
+				cap_label.add_theme_color_override("font_color", Color(0.6, 0.8, 0.6))
+			header.add_child(cap_label)
+			storage_container.add_child(header)
+			# Items dans ce bâtiment
+			for bt in si["items"]:
+				var cnt = si["items"][bt]
+				if cnt <= 0:
+					continue
+				var item_row = HBoxContainer.new()
+				item_row.add_theme_constant_override("separation", 8)
+				var spacer = Control.new()
+				spacer.custom_minimum_size = Vector2(16, 0)
+				item_row.add_child(spacer)
+				var cr = ColorRect.new()
+				cr.custom_minimum_size = Vector2(12, 12)
+				cr.color = BlockRegistry.get_block_color(bt as BlockRegistry.BlockType)
+				item_row.add_child(cr)
+				var item_name = Label.new()
+				item_name.text = BlockRegistry.get_block_name(bt as BlockRegistry.BlockType)
+				item_name.add_theme_font_size_override("font_size", 13)
+				item_name.add_theme_color_override("font_color", Color(0.85, 0.85, 0.85))
+				item_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				item_row.add_child(item_name)
+				var item_count = Label.new()
+				item_count.text = "x%d" % cnt
+				item_count.add_theme_font_size_override("font_size", 13)
+				item_count.add_theme_color_override("font_color", Color(0.5, 1.0, 0.5))
+				item_row.add_child(item_count)
+				storage_container.add_child(item_row)
 
 	# === Liste des villageois ===
 	for child in villager_container.get_children():
@@ -481,7 +560,7 @@ func _refresh_contents():
 		row.add_child(tp_label)
 
 		btn.add_child(row)
-		btn.custom_minimum_size = Vector2(650, 28)
+		btn.custom_minimum_size = Vector2(660, 28)
 
 		# Connecter le clic au téléport
 		var npc_ref = npc
@@ -561,7 +640,7 @@ func _get_next_objective() -> String:
 			var pop = village_manager.villagers.size()
 			var cap = village_manager.get_population_cap()
 			if pop < cap:
-				var bread = village_manager.get_resource_count(BlockRegistry.BlockType.BREAD)
+				var bread = village_manager.get_total_resource(BlockRegistry.BlockType.BREAD)
 				return "Prochain villageois : %d pain nécessaire (a %d)" % [village_manager.BREAD_PER_VILLAGER, bread]
 			var built_names: Dictionary = {}
 			for built in village_manager.built_structures:

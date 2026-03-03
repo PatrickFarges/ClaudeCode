@@ -92,6 +92,8 @@ enum BlockType {
 	IRON_SWORD,
 	GOLD_SWORD,
 	SHIELD,
+	# === STOCKAGE (76) ===
+	CHEST,
 }
 
 const BLOCK_DATA = {
@@ -641,6 +643,14 @@ const BLOCK_DATA = {
 		"color": Color(0.6, 0.45, 0.3, 1.0),
 		"hardness": 0.0,
 		"faces": { "all": "oak_planks" }
+	},
+	# === STOCKAGE ===
+	BlockType.CHEST: {
+		"name": "Chest",
+		"solid": true,
+		"color": Color(0.6, 0.45, 0.3, 1.0),
+		"hardness": 1.2,
+		"faces": { "top": "barrel_top_open", "bottom": "oak_planks", "side": "barrel_side" }
 	},
 }
 

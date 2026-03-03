@@ -267,6 +267,13 @@ static func get_all_recipes() -> Array:
 			"station": "wood_table"
 		},
 		{
+			"name": "Coffre",
+			"inputs": [[BlockRegistry.BlockType.PLANKS, 8]],
+			"output_type": BlockRegistry.BlockType.CHEST,
+			"output_count": 1,
+			"station": "wood_table"
+		},
+		{
 			"name": "Bloc de charbon",
 			"inputs": [[BlockRegistry.BlockType.COAL_ORE, 8]],
 			"output_type": BlockRegistry.BlockType.COAL_BLOCK,

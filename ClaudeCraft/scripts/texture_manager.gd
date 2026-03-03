@@ -97,6 +97,8 @@ const TEXTURE_LIST: Array[String] = [
 	"wheat_stage7",      # 84
 	# === ECLAIRAGE ===
 	"torch",             # 85
+	# === STOCKAGE ===
+	"barrel_top_open",   # 86
 ]
 
 var _texture_array: Texture2DArray

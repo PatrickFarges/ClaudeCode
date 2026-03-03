@@ -13,6 +13,12 @@ const CHUNK_HEIGHT = 256
 # Dictionary { BlockType(int) -> int(count) }
 var stockpile: Dictionary = {}
 
+# === STOCKAGE BÂTIMENTS (coffres physiques) ===
+var building_storage: Dictionary = {}  # { name: { "items": {bt:count}, "chests": [Vector3i] } }
+var _storage_map: Dictionary = {}      # { building_name: [BlockType, ...] } — quels items chaque bâtiment stocke
+var _item_to_building: Dictionary = {} # { BlockType: building_name } — reverse lookup
+const CHEST_CAPACITY = 500             # items max par coffre
+
 # === PROGRESSION ===
 # Phase 0: mains nues -> bois -> planches -> crafting_table
 # Phase 1: age du bois (crafting_table) -> pierre -> furnace
@@ -120,7 +126,19 @@ const LEAF_CLEANUP_INTERVAL = 30.0  # toutes les 30 secondes (temps réel)
 
 func _ready():
 	_init_blueprints()
+	_init_storage_map()
 	print("VillageManager: initialisé")
+
+func _init_storage_map():
+	_storage_map = {
+		"Moulin": [BlockRegistry.BlockType.BREAD, BlockRegistry.BlockType.WHEAT_ITEM],
+		"Forge": [BlockRegistry.BlockType.IRON_INGOT, BlockRegistry.BlockType.GOLD_INGOT, BlockRegistry.BlockType.COPPER_INGOT],
+		"Caserne": [BlockRegistry.BlockType.IRON_SWORD, BlockRegistry.BlockType.GOLD_SWORD, BlockRegistry.BlockType.SHIELD],
+	}
+	_item_to_building = {}
+	for bn in _storage_map:
+		for bt in _storage_map[bn]:
+			_item_to_building[bt] = bn
 
 func _get_game_speed() -> float:
 	var dnc = get_tree().get_first_node_in_group("day_night_cycle")
@@ -504,6 +522,113 @@ func consume_any_planks(count: int) -> bool:
 	return remaining <= 0
 
 # ============================================================
+# STOCKAGE BÂTIMENTS (coffres physiques)
+# ============================================================
+
+func get_total_resource(block_type: int) -> int:
+	"""Compte un item dans le stockpile virtuel + tous les coffres de bâtiments."""
+	var total = stockpile.get(block_type, 0)
+	for bn in building_storage:
+		total += building_storage[bn]["items"].get(block_type, 0)
+	return total
+
+func consume_resources_anywhere(block_type: int, count: int) -> bool:
+	"""Consomme un item depuis le stockpile virtuel, puis depuis les coffres si besoin."""
+	if get_total_resource(block_type) < count:
+		return false
+	var remaining = count
+	# D'abord le stockpile virtuel
+	var in_stock = stockpile.get(block_type, 0)
+	if in_stock > 0:
+		var take = mini(in_stock, remaining)
+		stockpile[block_type] = in_stock - take
+		if stockpile[block_type] == 0:
+			stockpile.erase(block_type)
+		remaining -= take
+	# Puis les coffres de bâtiments
+	if remaining > 0:
+		for bn in building_storage:
+			var items = building_storage[bn]["items"]
+			var have = items.get(block_type, 0)
+			if have > 0:
+				var take = mini(have, remaining)
+				items[block_type] = have - take
+				if items[block_type] == 0:
+					items.erase(block_type)
+				remaining -= take
+				if remaining <= 0:
+					break
+	return remaining <= 0
+
+func _route_craft_output(block_type: int, count: int):
+	"""Route l'output d'un craft vers le coffre du bâtiment approprié, sinon stockpile virtuel."""
+	var building_name = _item_to_building.get(block_type, "")
+	if building_name != "" and building_storage.has(building_name):
+		var storage = building_storage[building_name]
+		var total_items = _get_building_total_items(building_name)
+		var capacity = storage["chests"].size() * CHEST_CAPACITY
+		var space = capacity - total_items
+		if space >= count:
+			storage["items"][block_type] = storage["items"].get(block_type, 0) + count
+			return
+		elif space > 0:
+			storage["items"][block_type] = storage["items"].get(block_type, 0) + space
+			add_resource(block_type, count - space)
+			return
+	add_resource(block_type, count)
+
+func _get_building_total_items(building_name: String) -> int:
+	if not building_storage.has(building_name):
+		return 0
+	var total = 0
+	for bt in building_storage[building_name]["items"]:
+		total += building_storage[building_name]["items"][bt]
+	return total
+
+func _is_building_full(building_name: String) -> bool:
+	"""Vérifie si le bâtiment a ses coffres pleins. False si pas de bâtiment (items vont au virtuel)."""
+	if not building_storage.has(building_name):
+		return false
+	var storage = building_storage[building_name]
+	var total = _get_building_total_items(building_name)
+	var capacity = storage["chests"].size() * CHEST_CAPACITY
+	return total >= capacity
+
+func _init_building_storage(building_name: String, chest_pos: Vector3i):
+	if not building_storage.has(building_name):
+		building_storage[building_name] = { "items": {}, "chests": [] }
+	building_storage[building_name]["chests"].append(chest_pos)
+	print("VillageManager: coffre placé dans '%s' à %s (capacité %d)" % [
+		building_name, str(chest_pos),
+		building_storage[building_name]["chests"].size() * CHEST_CAPACITY])
+
+func _find_chest_spot_in_building(origin: Vector3i, size: Vector3i) -> Vector3i:
+	"""Trouve un emplacement libre (air + sol solide) à l'intérieur d'un bâtiment."""
+	if not world_manager:
+		return Vector3i(-9999, -9999, -9999)
+	var margin = mini(2, mini(size.x, size.z) / 3)
+	for y_off in range(1, mini(size.y, 5)):
+		var check_y = origin.y + y_off
+		for dx in range(margin, size.x - margin):
+			for dz in range(margin, size.z - margin):
+				var pos = Vector3i(origin.x + dx, check_y, origin.z + dz)
+				var at = world_manager.get_block_at_position(Vector3(pos.x, pos.y, pos.z))
+				var below = world_manager.get_block_at_position(Vector3(pos.x, pos.y - 1, pos.z))
+				var above = world_manager.get_block_at_position(Vector3(pos.x, pos.y + 1, pos.z))
+				if at == BlockRegistry.BlockType.AIR and above == BlockRegistry.BlockType.AIR and BlockRegistry.is_solid(below):
+					return pos
+	return Vector3i(-9999, -9999, -9999)
+
+func get_building_storage_info() -> Dictionary:
+	"""Pour l'UI : retourne les infos de stockage par bâtiment."""
+	var info = {}
+	for bn in building_storage:
+		var total = _get_building_total_items(bn)
+		var cap = building_storage[bn]["chests"].size() * CHEST_CAPACITY
+		info[bn] = { "items": building_storage[bn]["items"].duplicate(), "capacity": cap, "used": total }
+	return info
+
+# ============================================================
 # ÉVALUATION DES BESOINS (boucle principale)
 # ============================================================
 
@@ -630,7 +755,7 @@ func _evaluate_phase_1():
 
 	# Crafter du pain si on a du blé
 	var wheat_count = get_resource_count(BlockRegistry.BlockType.WHEAT_ITEM)
-	if wheat_count >= 3:
+	if wheat_count >= 3 and not _is_building_full("Moulin"):
 		if not _has_task_of_type("craft", "Pain"):
 			_add_task({
 				"type": "craft",
@@ -731,7 +856,7 @@ func _evaluate_phase_2():
 	# Agriculture
 	_add_farming_tasks()
 	var wheat_count = get_resource_count(BlockRegistry.BlockType.WHEAT_ITEM)
-	if wheat_count >= 3:
+	if wheat_count >= 3 and not _is_building_full("Moulin"):
 		if not _has_task_of_type("craft", "Pain"):
 			_add_task({
 				"type": "craft",
@@ -859,7 +984,7 @@ func _evaluate_phase_3():
 	# Agriculture
 	_add_farming_tasks()
 	var wheat_count = get_resource_count(BlockRegistry.BlockType.WHEAT_ITEM)
-	if wheat_count >= 3:
+	if wheat_count >= 3 and not _is_building_full("Moulin"):
 		if not _has_task_of_type("craft", "Pain"):
 			_add_task({
 				"type": "craft",
@@ -950,16 +1075,16 @@ func _evaluate_phase_4():
 	var total_wood = get_total_wood()
 	var total_stone = get_total_stone()
 	var total_planks = get_total_planks()
-	var total_iron = get_resource_count(19)  # IRON_INGOT
+	var total_iron = get_total_resource(19)  # IRON_INGOT (stockpile + Forge)
 	var total_coal = get_resource_count(16)  # COAL_ORE
-	var total_bread = get_resource_count(BlockRegistry.BlockType.BREAD)
+	var total_bread = get_total_resource(BlockRegistry.BlockType.BREAD)
 
 	# === ÉCONOMIE DE BASE (continue comme Phase 3) ===
 	_add_farming_tasks()
 
 	# Pain
 	var wheat_count = get_resource_count(BlockRegistry.BlockType.WHEAT_ITEM)
-	if wheat_count >= 3:
+	if wheat_count >= 3 and not _is_building_full("Moulin"):
 		if not _has_task_of_type("craft", "Pain"):
 			_add_task({
 				"type": "craft",
@@ -1036,8 +1161,8 @@ func _evaluate_phase_4():
 		_try_queue_builds_for_phase(4)
 
 	# === FORGE D'ARMES (prioritaire en Phase 4) ===
-	var swords_count = get_resource_count(BlockRegistry.BlockType.IRON_SWORD)
-	if total_iron >= 2 and total_planks >= 1 and swords_count < 10:
+	var swords_count = get_total_resource(BlockRegistry.BlockType.IRON_SWORD)
+	if total_iron >= 2 and total_planks >= 1 and swords_count < 10 and not _is_building_full("Caserne"):
 		if not _has_task_of_type("craft", "Épée en fer"):
 			_add_task({
 				"type": "craft",
@@ -1047,8 +1172,8 @@ func _evaluate_phase_4():
 			})
 
 	# Boucliers
-	var shields_count = get_resource_count(BlockRegistry.BlockType.SHIELD)
-	if total_iron >= 1 and total_planks >= 2 and shields_count < 5:
+	var shields_count = get_total_resource(BlockRegistry.BlockType.SHIELD)
+	if total_iron >= 1 and total_planks >= 2 and shields_count < 5 and not _is_building_full("Caserne"):
 		if not _has_task_of_type("craft", "Bouclier"):
 			_add_task({
 				"type": "craft",
@@ -1781,7 +1906,7 @@ func try_craft(recipe_name: String) -> bool:
 						can = false
 						break
 				else:
-					if not has_resources(bt, needed):
+					if get_total_resource(bt) < needed:
 						can = false
 						break
 			if not can:
@@ -1798,7 +1923,7 @@ func try_craft(recipe_name: String) -> bool:
 				elif bt == 3 or bt == 25:
 					consume_any_stone(needed)
 				else:
-					consume_resources(bt, needed)
+					consume_resources_anywhere(bt, needed)
 
 			# Forge : upgrade tool tier
 			if recipe.has("_tool_tier"):
@@ -1806,8 +1931,8 @@ func try_craft(recipe_name: String) -> bool:
 				print("VillageManager: outils améliorés au tier %d (%s)" % [village_tool_tier, TOOL_TIER_NAMES.get(village_tool_tier, "?")])
 				return true
 
-			# Produire l'output
-			add_resource(recipe["output_type"], recipe["output_count"])
+			# Produire l'output → coffre du bâtiment si applicable, sinon stockpile virtuel
+			_route_craft_output(recipe["output_type"], recipe["output_count"])
 			print("VillageManager: crafté %s x%d" % [recipe_name, recipe["output_count"]])
 			return true
 
@@ -2077,6 +2202,16 @@ func _find_build_site(blueprint: Dictionary) -> Vector3i:
 func register_built_structure(name: String, origin: Vector3i, size: Vector3i):
 	built_structures.append({ "name": name, "origin": origin, "size": size })
 	print("VillageManager: structure '%s' terminée à %s" % [name, str(origin)])
+	# Placer un coffre si le bâtiment stocke des items
+	if _storage_map.has(name):
+		var chest_pos = _find_chest_spot_in_building(origin, size)
+		if chest_pos != Vector3i(-9999, -9999, -9999):
+			world_manager.place_block_at_position(Vector3(chest_pos.x, chest_pos.y, chest_pos.z), BlockRegistry.BlockType.CHEST)
+			_init_building_storage(name, chest_pos)
+		else:
+			# Pas de spot trouvé — init storage sans coffre physique (fallback)
+			_init_building_storage(name, origin + Vector3i(size.x / 2, 1, size.z / 2))
+			print("VillageManager: WARNING — pas de spot pour coffre dans '%s'" % name)
 	# Générer un chemin de 3 blocs de large entre le bâtiment et la plaza
 	_generate_road_to_plaza(origin, size, name)
 	# Relancer la construction des chemins si nécessaire
@@ -2706,11 +2841,11 @@ func _try_grow_village():
 	var cap = get_population_cap()
 	if pop >= cap:
 		return
-	if not has_resources(BlockRegistry.BlockType.BREAD, BREAD_PER_VILLAGER):
+	if get_total_resource(BlockRegistry.BlockType.BREAD) < BREAD_PER_VILLAGER:
 		return
 
-	# Consommer le pain
-	consume_resources(BlockRegistry.BlockType.BREAD, BREAD_PER_VILLAGER)
+	# Consommer le pain (stockpile virtuel + coffres bâtiments)
+	consume_resources_anywhere(BlockRegistry.BlockType.BREAD, BREAD_PER_VILLAGER)
 
 	# Choisir une profession selon les besoins
 	var prof = _pick_needed_profession()
@@ -2719,7 +2854,7 @@ func _try_grow_village():
 	var spawn_pos = _find_villager_spawn_pos()
 	if spawn_pos == Vector3.ZERO:
 		# Rembourser le pain si pas de spot
-		add_resource(BlockRegistry.BlockType.BREAD, BREAD_PER_VILLAGER)
+		_route_craft_output(BlockRegistry.BlockType.BREAD, BREAD_PER_VILLAGER)
 		return
 
 	# Spawn le nouveau villageois

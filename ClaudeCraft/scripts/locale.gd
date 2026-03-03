@@ -84,6 +84,7 @@ const BLOCK_NAMES = {
 	"Wheat":             {"fr": "Ble",                      "en": "Wheat"},
 	"Bread":             {"fr": "Pain",                     "en": "Bread"},
 	"Torch":             {"fr": "Torche",                   "en": "Torch"},
+	"Chest":             {"fr": "Coffre",                   "en": "Chest"},
 }
 
 # ============================================================
@@ -131,6 +132,7 @@ const RECIPE_NAMES = {
 	"Botte de foin":           {"fr": "Botte de foin",           "en": "Hay Block"},
 	"Bibliotheque":            {"fr": "Bibliotheque",            "en": "Bookshelf"},
 	"Tonneau":                 {"fr": "Tonneau",                 "en": "Barrel"},
+	"Coffre":                  {"fr": "Coffre",                  "en": "Chest"},
 	"Bloc de charbon":         {"fr": "Bloc de charbon",         "en": "Coal Block"},
 	"Bloc de cuivre":          {"fr": "Bloc de cuivre",          "en": "Copper Block"},
 	"Verre (lot)":             {"fr": "Verre (lot)",             "en": "Glass (bulk)"},
