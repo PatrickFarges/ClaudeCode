@@ -754,7 +754,7 @@ func _evaluate_phase_1():
 	_add_farming_tasks()
 
 	# Crafter du pain si on a du blé
-	var wheat_count = get_resource_count(BlockRegistry.BlockType.WHEAT_ITEM)
+	var wheat_count = get_total_resource(BlockRegistry.BlockType.WHEAT_ITEM)
 	if wheat_count >= 3 and not _is_building_full("Moulin"):
 		if not _has_task_of_type("craft", "Pain"):
 			_add_task({
@@ -851,11 +851,11 @@ func _evaluate_phase_2():
 	var total_stone = get_total_stone()
 	var total_coal = get_resource_count(16)   # COAL_ORE
 	var total_iron_ore = get_resource_count(17)  # IRON_ORE
-	var total_iron = get_resource_count(19)   # IRON_INGOT
+	var total_iron = get_total_resource(19)   # IRON_INGOT (stockpile + coffre Forge)
 
 	# Agriculture
 	_add_farming_tasks()
-	var wheat_count = get_resource_count(BlockRegistry.BlockType.WHEAT_ITEM)
+	var wheat_count = get_total_resource(BlockRegistry.BlockType.WHEAT_ITEM)
 	if wheat_count >= 3 and not _is_building_full("Moulin"):
 		if not _has_task_of_type("craft", "Pain"):
 			_add_task({
@@ -960,7 +960,7 @@ func _evaluate_phase_2():
 		_try_queue_builds_for_phase(2)
 
 	# Forge : outils en fer
-	if get_resource_count(19) >= 3 and get_total_planks() >= 3 and village_tool_tier < 3:
+	if get_total_resource(19) >= 3 and get_total_planks() >= 3 and village_tool_tier < 3:
 		if not _has_task_of_type("craft", "Outils en fer"):
 			_add_task({
 				"type": "craft",
@@ -983,7 +983,7 @@ func _evaluate_phase_3():
 
 	# Agriculture
 	_add_farming_tasks()
-	var wheat_count = get_resource_count(BlockRegistry.BlockType.WHEAT_ITEM)
+	var wheat_count = get_total_resource(BlockRegistry.BlockType.WHEAT_ITEM)
 	if wheat_count >= 3 and not _is_building_full("Moulin"):
 		if not _has_task_of_type("craft", "Pain"):
 			_add_task({
@@ -1083,7 +1083,7 @@ func _evaluate_phase_4():
 	_add_farming_tasks()
 
 	# Pain
-	var wheat_count = get_resource_count(BlockRegistry.BlockType.WHEAT_ITEM)
+	var wheat_count = get_total_resource(BlockRegistry.BlockType.WHEAT_ITEM)
 	if wheat_count >= 3 and not _is_building_full("Moulin"):
 		if not _has_task_of_type("craft", "Pain"):
 			_add_task({
@@ -1327,11 +1327,18 @@ func _add_farming_tasks():
 		})
 
 func get_next_task_for(prof: int) -> Dictionary:
-	# Cherche la première tâche compatible avec la profession du villageois
+	# D'abord chercher une tâche spécifiquement pour cette profession (spécialiste d'abord)
 	for i in range(task_queue.size()):
 		var task = task_queue[i]
 		var req = task.get("required_profession", -1)
-		if req == -1 or req == prof:
+		if req == prof:
+			task_queue.remove_at(i)
+			return task
+	# Sinon prendre une tâche générique (sans required_profession)
+	for i in range(task_queue.size()):
+		var task = task_queue[i]
+		var req = task.get("required_profession", -1)
+		if req == -1:
 			task_queue.remove_at(i)
 			return task
 	return {}
@@ -1689,7 +1696,7 @@ func is_mine_stock_full() -> bool:
 	# Seuils élevés : pavé 2000, charbon 200, fer 80 — le village consomme beaucoup
 	var cobble = get_resource_count(25)  # COBBLESTONE (vrai drop du mineur)
 	var coal = get_resource_count(16)
-	var iron = get_resource_count(17) + get_resource_count(19)  # IRON_ORE + IRON_INGOT
+	var iron = get_resource_count(17) + get_total_resource(19)  # IRON_ORE + IRON_INGOT (lingots dans coffre Forge)
 	return cobble > MINE_STOCK_PAUSE_STONE and coal > MINE_STOCK_PAUSE_COAL and iron > MINE_STOCK_PAUSE_IRON
 
 func get_next_mine_block() -> Vector3i:
