@@ -22,7 +22,7 @@ Changelog:
     v1.0.0 — Création initiale : mesh, squelette, 4 animations bakées
 """
 
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 
 import json
 import struct
@@ -314,6 +314,20 @@ def bake_animations(bone_names, bone_map, mesh_data=None):
     """Bake walk, idle, attack, mine animations to quaternion keyframes."""
     animations = []
 
+    # Bones qui doivent TOUJOURS avoir un track de rotation dans chaque animation
+    # pour éviter que Godot garde la pose de l'animation précédente.
+    # On utilise une rotation epsilon (0.01°) au lieu de 0° car Godot/GLTFDocument
+    # peut optimiser (ignorer) les tracks dont toutes les keyframes sont identity.
+    FORCE_TRACK_BONES = {"leftArm", "rightArm", "leftLeg", "rightLeg", "body", "head"}
+    EPSILON_QUAT = euler_to_quat(0.01, 0, 0)  # rotation invisible (0.01°)
+
+    def _all_identity(quats):
+        """True si toutes les rotations sont l'identité [0,0,0,1]."""
+        for q in quats:
+            if abs(q[0]) > 1e-7 or abs(q[1]) > 1e-7 or abs(q[2]) > 1e-7 or abs(q[3] - 1.0) > 1e-7:
+                return False
+        return True
+
     def make_anim(name, duration, fps, eval_fn):
         """eval_fn(bone_name, t, duration) → (rx, ry, rz) degrees, or
         {"rot": (rx,ry,rz), "pos": (tx,ty,tz)} for rotation+translation, or None"""
@@ -351,7 +365,12 @@ def bake_animations(bone_names, bone_map, mesh_data=None):
                 else:
                     rots.append(quat_identity())
                     positions.append(None)
-            if has_rot:
+            # Forcer les tracks pour les bones majeurs
+            if has_rot or bname in FORCE_TRACK_BONES:
+                # Si toutes les keyframes sont identity, remplacer par epsilon
+                # pour empêcher Godot d'optimiser le track (suppression silencieuse)
+                if _all_identity(rots) and bname in FORCE_TRACK_BONES:
+                    rots = [list(EPSILON_QUAT) for _ in rots]
                 channels[bname] = rots
             if has_pos:
                 # Fill None positions with the bone's local translation (rest pose)

@@ -197,3 +197,23 @@ static func get_work_anim(prof: int) -> String:
 	if PROFESSION_DATA.has(prof):
 		return PROFESSION_DATA[prof]["work_anim"]
 	return "idle"
+
+# Mapping profession → outil tenu en main
+# right/left: nom de texture item (sans .png, dans TexturesPack/.../item/)
+# left "shield" = cas spécial (entity texture)
+const PROFESSION_TOOLS = {
+	Profession.BUCHERON: {"right": "iron_axe"},
+	Profession.MENUISIER: {"right": "stone_axe"},
+	Profession.MINEUR: {"right": "iron_pickaxe"},
+	Profession.FERMIER: {"right": "stone_hoe"},
+	Profession.FORGERON: {"right": "stone_pickaxe"},
+	Profession.BATISSEUR: {"right": "stone_pickaxe"},
+	Profession.SOLDAT: {"right": "iron_sword"},
+	Profession.GARDE: {"right": "iron_sword"},
+	Profession.CAPITAINE: {"right": "iron_sword", "left": "shield"},
+}
+
+static func get_held_tools(prof: int) -> Dictionary:
+	if PROFESSION_TOOLS.has(prof):
+		return PROFESSION_TOOLS[prof]
+	return {}

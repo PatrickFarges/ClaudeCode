@@ -2,6 +2,7 @@ extends CharacterBody3D
 class_name NpcVillager
 
 const VProfession = preload("res://scripts/villager_profession.gd")
+const GC = preload("res://scripts/game_config.gd")
 
 const INVALID_POS = Vector3i(-9999, -9999, -9999)
 
@@ -40,6 +41,12 @@ static func _is_junk_block(bt: int) -> bool:
 const STEVE_GLB_PATH = "res://assets/PlayerModel/steve.glb"
 static var _steve_scene: PackedScene = null
 static var _skin_cache: Dictionary = {}  # cache des ImageTexture par chemin
+static var _tool_mesh_cache: Dictionary = {}  # cache des ArrayMesh par texture path
+
+# Constantes outils tenus par les PNJ
+const NPC_TOOL_SIZE = 0.30
+const NPC_TOOL_DEPTH = 0.03
+const NPC_TOOL_GRID = 16
 
 static func _preload_steve():
 	if _steve_scene:
@@ -82,6 +89,10 @@ var gravity_val: float = ProjectSettings.get_setting("physics/3d/default_gravity
 var world_manager = null
 var _anim_player: AnimationPlayer = null
 var _current_anim: String = ""
+var _skeleton: Skeleton3D = null
+var _model_instance: Node3D = null
+var _right_tool: MeshInstance3D = null  # outil main droite
+var _left_tool: MeshInstance3D = null   # outil main gauche
 var _jump_velocity: float = 5.0
 var _stuck_timer: float = 0.0
 var _last_pos: Vector3 = Vector3.ZERO
@@ -174,18 +185,20 @@ func _ready():
 func _create_model():
 	if not _steve_scene:
 		return
-	var model_instance = _steve_scene.instantiate()
+	_model_instance = _steve_scene.instantiate()
 	# Steve GLB = 2 unités de haut (32px / 16 scale), 0.85 → ~1.7 unités = collision box
-	model_instance.scale = Vector3(0.85, 0.85, 0.85)
-	# Le modèle Bedrock fait face à +Z, Godot avance en -Z → rotation 180°
-	model_instance.rotation.y = PI
-	add_child(model_instance)
+	_model_instance.scale = Vector3(0.85, 0.85, 0.85)
+	# Pas de rotation sur model_instance (casse les animations bone)
+	# Le facing est corrigé via +PI dans _face_target / _apply_movement
+	add_child(_model_instance)
 	# Appliquer le skin de profession
 	var skin_path = VProfession.get_skin_for_profession(profession)
-	_apply_skin_texture(model_instance, skin_path)
-	_anim_player = _find_animation_player(model_instance)
+	_apply_skin_texture(_model_instance, skin_path)
+	_anim_player = _find_animation_player(_model_instance)
 	if _anim_player:
-		# Debug : lister les animations disponibles (1 seul print pour le premier villageois)
+		# deterministic=true force le reset des bones sans track à la rest pose
+		# (par défaut AnimationPlayer est non-déterministe et garde la pose précédente)
+		_anim_player.deterministic = true
 		if villager_index == 0:
 			var anims: PackedStringArray = _anim_player.get_animation_list()
 			print("NpcVillager: AnimationPlayer trouvé, %d animations: %s" % [anims.size(), str(anims)])
@@ -193,6 +206,17 @@ func _create_model():
 	else:
 		if villager_index == 0:
 			print("NpcVillager: AUCUN AnimationPlayer trouvé dans le modèle")
+	# Outils tenus en main (attachés aux bones rightItem/leftItem)
+	_skeleton = _find_skeleton(_model_instance)
+	if _skeleton and villager_index == 0:
+		var bone_count = _skeleton.get_bone_count()
+		var bone_names = []
+		for i in range(bone_count):
+			bone_names.append(_skeleton.get_bone_name(i))
+		print("NpcVillager: Skeleton trouvé, %d bones: %s" % [bone_count, str(bone_names)])
+	elif villager_index == 0:
+		print("NpcVillager: AUCUN Skeleton3D trouvé dans le modèle")
+	_setup_held_tools()
 
 static func _load_skin_texture(skin_path: String) -> Texture2D:
 	# Essayer le cache d'abord
@@ -248,8 +272,143 @@ func _play_anim(anim_name: String):
 	if _anim_player.has_animation(anim_name):
 		var anim = _anim_player.get_animation(anim_name)
 		anim.loop_mode = Animation.LOOP_LINEAR
-		_anim_player.play(anim_name)
+		# Reset les bones à la rest pose avant de switcher (évite les jambes écartées)
+		if _skeleton:
+			_skeleton.reset_bone_poses()
+		_anim_player.play(anim_name, 0)  # blend=0 (instant switch)
+		_anim_player.seek(0.0, true)  # force update au frame 0
 		_current_anim = anim_name
+
+func _find_skeleton(node: Node) -> Skeleton3D:
+	if node is Skeleton3D:
+		return node
+	for child in node.get_children():
+		var found = _find_skeleton(child)
+		if found:
+			return found
+	return null
+
+func _setup_held_tools():
+	var tools = VProfession.get_held_tools(profession)
+	if tools.is_empty() or not _model_instance:
+		return
+	print("NpcVillager[%d]: setup tools %s (prof=%d)" % [villager_index, str(tools), profession])
+	# Main droite — position fixe de rightItem dans le modèle Steve
+	# Bedrock rightItem pivot: [-6, 15, 1] pixels → [-0.375, 0.9375, 0.0625] en unités Godot
+	if tools.has("right"):
+		var tex_path = GC.get_item_texture_path() + tools["right"] + ".png"
+		var mesh = _build_npc_tool_mesh(tex_path, Vector3(0, 0, -45))
+		if mesh:
+			_right_tool = _attach_tool_fixed(mesh, Vector3(-0.375, 0.9375, 0.0625))
+	# Main gauche — leftItem pivot: [6, 15, 1] → [0.375, 0.9375, 0.0625]
+	if tools.has("left"):
+		var left_name = tools["left"]
+		var tex_path: String
+		if left_name == "shield":
+			tex_path = GC.get_entity_texture_path() + "shield_base_nopattern.png"
+		else:
+			tex_path = GC.get_item_texture_path() + left_name + ".png"
+		var mesh = _build_npc_tool_mesh(tex_path, Vector3(0, 90, 0))
+		if mesh:
+			_left_tool = _attach_tool_fixed(mesh, Vector3(0.375, 0.9375, 0.0625))
+
+func _attach_tool_fixed(mesh: ArrayMesh, pos: Vector3) -> MeshInstance3D:
+	# Attacher l'outil comme enfant direct du modèle (position fixe, pas de bone tracking)
+	var mesh_inst = MeshInstance3D.new()
+	mesh_inst.mesh = mesh
+	mesh_inst.position = pos
+	mesh_inst.extra_cull_margin = 100.0
+	mesh_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_model_instance.add_child(mesh_inst)
+	print("NpcVillager: tool attaché à pos=%s, surfaces=%d" % [str(pos), mesh.get_surface_count()])
+	return mesh_inst
+
+static func _build_npc_tool_mesh(tex_path: String, rot_deg: Vector3 = Vector3.ZERO) -> ArrayMesh:
+	var cache_key = tex_path + str(rot_deg)
+	if _tool_mesh_cache.has(cache_key):
+		return _tool_mesh_cache[cache_key]
+	# Charger l'image
+	var img = Image.load_from_file(tex_path)
+	if not img:
+		var abs_path = ProjectSettings.globalize_path(tex_path)
+		img = Image.load_from_file(abs_path)
+	if not img:
+		push_warning("NpcVillager: Tool texture introuvable: " + tex_path)
+		return null
+	img.convert(Image.FORMAT_RGBA8)
+	if img.get_width() != NPC_TOOL_GRID or img.get_height() != NPC_TOOL_GRID:
+		img.resize(NPC_TOOL_GRID, NPC_TOOL_GRID, Image.INTERPOLATE_NEAREST)
+	# Rotation bakée dans les vertices
+	var rot_basis = Basis.from_euler(Vector3(
+		deg_to_rad(rot_deg.x), deg_to_rad(rot_deg.y), deg_to_rad(rot_deg.z)))
+	var mesh = ArrayMesh.new()
+	var pixel_size = NPC_TOOL_SIZE / float(NPC_TOOL_GRID)
+	var half = NPC_TOOL_SIZE * 0.5
+	var half_d = NPC_TOOL_DEPTH * 0.5
+	var color_quads: Dictionary = {}
+	for py in range(NPC_TOOL_GRID):
+		for px in range(NPC_TOOL_GRID):
+			var c = img.get_pixel(px, py)
+			if c.a < 0.5:
+				continue
+			var x0 = -half + px * pixel_size
+			var x1 = x0 + pixel_size
+			var y1 = half - py * pixel_size
+			var y0 = y1 - pixel_size
+			_npc_quad(color_quads, c, 1.0, rot_basis,
+				Vector3(x0, y0, half_d), Vector3(x1, y0, half_d),
+				Vector3(x1, y1, half_d), Vector3(x0, y1, half_d))
+			_npc_quad(color_quads, c, 1.0, rot_basis,
+				Vector3(x1, y0, -half_d), Vector3(x0, y0, -half_d),
+				Vector3(x0, y1, -half_d), Vector3(x1, y1, -half_d))
+			if px == 0 or img.get_pixel(px - 1, py).a < 0.5:
+				_npc_quad(color_quads, c, 0.7, rot_basis,
+					Vector3(x0, y0, -half_d), Vector3(x0, y0, half_d),
+					Vector3(x0, y1, half_d), Vector3(x0, y1, -half_d))
+			if px == NPC_TOOL_GRID - 1 or img.get_pixel(px + 1, py).a < 0.5:
+				_npc_quad(color_quads, c, 0.7, rot_basis,
+					Vector3(x1, y0, half_d), Vector3(x1, y0, -half_d),
+					Vector3(x1, y1, -half_d), Vector3(x1, y1, half_d))
+			if py == NPC_TOOL_GRID - 1 or img.get_pixel(px, py + 1).a < 0.5:
+				_npc_quad(color_quads, c, 0.85, rot_basis,
+					Vector3(x0, y0, half_d), Vector3(x0, y0, -half_d),
+					Vector3(x1, y0, -half_d), Vector3(x1, y0, half_d))
+			if py == 0 or img.get_pixel(px, py - 1).a < 0.5:
+				_npc_quad(color_quads, c, 0.85, rot_basis,
+					Vector3(x0, y1, -half_d), Vector3(x0, y1, half_d),
+					Vector3(x1, y1, half_d), Vector3(x1, y1, -half_d))
+	for key in color_quads:
+		var quads = color_quads[key]
+		var st = SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		var mat = StandardMaterial3D.new()
+		mat.albedo_color = key
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		st.set_material(mat)
+		for q in quads:
+			var n = Vector3(0, 0, 1)
+			st.set_normal(n); st.add_vertex(q[0])
+			st.set_normal(n); st.add_vertex(q[1])
+			st.set_normal(n); st.add_vertex(q[2])
+			st.set_normal(n); st.add_vertex(q[0])
+			st.set_normal(n); st.add_vertex(q[2])
+			st.set_normal(n); st.add_vertex(q[3])
+		st.commit(mesh)
+	_tool_mesh_cache[cache_key] = mesh
+	return mesh
+
+static func _npc_quad(dict: Dictionary, base_color: Color, shade: float, rot: Basis, v0: Vector3, v1: Vector3, v2: Vector3, v3: Vector3):
+	var c = Color(base_color.r * shade, base_color.g * shade, base_color.b * shade, 1.0)
+	if not dict.has(c):
+		dict[c] = []
+	dict[c].append([rot * v0, rot * v1, rot * v2, rot * v3])
+
+func _set_tools_visible(vis: bool):
+	if _right_tool:
+		_right_tool.visible = vis
+	if _left_tool:
+		_left_tool.visible = vis
 
 func _create_collision():
 	var col = CollisionShape3D.new()
@@ -473,6 +632,9 @@ func _on_activity_changed(old_activity: int, new_activity: int):
 	if new_activity == VProfession.Activity.WANDER or new_activity == VProfession.Activity.GATHER:
 		_pick_new_wander()
 
+	# Show/hide outils tenus selon l'activité
+	_set_tools_visible(new_activity == VProfession.Activity.WORK)
+
 # ============================================================
 # COMPORTEMENTS
 # ============================================================
@@ -562,7 +724,7 @@ func _behavior_work(delta):
 
 	var dir_to_poi = poi_world - global_position
 	if dir_to_poi.length_squared() > 0.01:
-		rotation.y = atan2(dir_to_poi.x, dir_to_poi.z)
+		rotation.y = atan2(dir_to_poi.x, dir_to_poi.z) + PI
 
 	is_moving = false
 	_decelerate()
@@ -1439,6 +1601,7 @@ func _behavior_return_to_surface(delta):
 		_target_stuck_timer = 0.0
 		_total_stuck_time = 0.0
 		_detour_count = 0
+		_set_tools_visible(false)
 		_pick_new_wander()
 		return
 
@@ -1453,12 +1616,13 @@ func _behavior_return_to_surface(delta):
 		has_target = false
 		_total_stuck_time = 0.0
 		_detour_count = 0
+		_set_tools_visible(false)
 		_pick_new_wander()
 
 func _face_target(target: Vector3):
 	var dir = target - global_position
 	if dir.length_squared() > 0.01:
-		rotation.y = atan2(dir.x, dir.z)
+		rotation.y = atan2(dir.x, dir.z) + PI
 
 func _show_harvest_label(text: String, pos: Vector3i):
 	var label = Label3D.new()
@@ -1831,7 +1995,7 @@ func _apply_movement(delta):
 
 	# Rotation vers la direction de déplacement
 	if wander_direction.length_squared() > 0.01:
-		rotation.y = atan2(wander_direction.x, wander_direction.z)
+		rotation.y = atan2(wander_direction.x, wander_direction.z) + PI
 
 	# Détection de blocage (wander classique, pas en mode cible)
 	if not has_target:
