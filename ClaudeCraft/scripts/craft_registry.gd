@@ -148,6 +148,13 @@ static func get_all_recipes() -> Array:
 			"station": "furnace"
 		},
 		{
+			"name": "Sable",
+			"inputs": [[BlockRegistry.BlockType.COBBLESTONE, 2]],
+			"output_type": BlockRegistry.BlockType.SAND,
+			"output_count": 1,
+			"station": "furnace"
+		},
+		{
 			"name": "Lingot de cuivre",
 			"inputs": [[BlockRegistry.BlockType.COPPER_ORE, 1], [BlockRegistry.BlockType.COAL_ORE, 1]],
 			"output_type": BlockRegistry.BlockType.COPPER_INGOT,

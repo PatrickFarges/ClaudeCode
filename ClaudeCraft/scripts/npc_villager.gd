@@ -1091,7 +1091,7 @@ func _execute_craft(delta):
 	if success:
 		_show_harvest_label("[Craft] " + recipe_name, Vector3i(int(global_position.x), int(global_position.y) + 1, int(global_position.z)))
 		# Répéter le craft pour les recettes batch (Planches, Pain) — max 8 fois
-		var repeatable = recipe_name == "Planches" or recipe_name == "Pain" or recipe_name == "Verre" or recipe_name == "Lingot de fer"
+		var repeatable = recipe_name == "Planches" or recipe_name == "Pain" or recipe_name == "Verre" or recipe_name == "Lingot de fer" or recipe_name == "Sable"
 		if repeatable:
 			var repeats = current_task.get("_repeats", 0) + 1
 			current_task["_repeats"] = repeats

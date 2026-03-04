@@ -124,6 +124,7 @@ const RECIPE_NAMES = {
 	"Planches de cerisier":    {"fr": "Planches de cerisier",    "en": "Cherry Planks"},
 	"Pierre lisse":            {"fr": "Pierre lisse",            "en": "Smooth Stone"},
 	"Verre":                   {"fr": "Verre",                   "en": "Glass"},
+	"Sable":                   {"fr": "Sable",                   "en": "Sand"},
 	"Lingot de cuivre":        {"fr": "Lingot de cuivre",        "en": "Copper Ingot"},
 	"Diamant":                 {"fr": "Diamant",                 "en": "Diamond"},
 	"Brique (argile)":         {"fr": "Brique (argile)",         "en": "Brick (clay)"},

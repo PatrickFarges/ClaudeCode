@@ -944,15 +944,21 @@ func _evaluate_phase_2():
 		if not _path_built and get_total_stone() >= 5:
 			_try_queue_path()
 
-		# Verre : récolter du sable si nécessaire, puis crafter
+		# Verre : crafter du sable depuis le pavé, puis crafter le verre
 		var glass_count = get_resource_count(61)  # GLASS
 		var sand_count = get_resource_count(4)    # SAND
 		var coal_count = get_resource_count(16)   # COAL_ORE
 		if glass_count < 10:
-			# Pas assez de sable → envoyer le bâtisseur en récolter (1 seul à la fois)
-			if sand_count < 2:
-				_add_sand_harvest_tasks(1)
-			# Crafter si on a les ingrédients
+			# Pas assez de sable → crafter depuis le pavé (2 pavé → 1 sable)
+			if sand_count < 4 and get_total_stone() >= 2:
+				if not _has_task_of_type("craft", "Sable"):
+					_add_task({
+						"type": "craft",
+						"recipe_name": "Sable",
+						"priority": 11,
+						"required_profession": VProfession.Profession.FORGERON,
+					})
+			# Crafter le verre si on a les ingrédients
 			if sand_count >= 1 and coal_count >= 1:
 				if not _has_task_of_type("craft", "Verre"):
 					_add_task({
@@ -1037,13 +1043,19 @@ func _evaluate_phase_3():
 				"required_profession": VProfession.Profession.BATISSEUR,
 			})
 	else:
-		# Verre : récolter du sable si nécessaire, puis crafter
+		# Verre : crafter du sable depuis le pavé, puis crafter le verre
 		var glass_count_p3 = get_resource_count(61)
 		var sand_count_p3 = get_resource_count(4)
 		var coal_count_p3 = get_resource_count(16)
 		if glass_count_p3 < 10:
-			if sand_count_p3 < 2:
-				_add_sand_harvest_tasks(1)
+			if sand_count_p3 < 4 and get_total_stone() >= 2:
+				if not _has_task_of_type("craft", "Sable"):
+					_add_task({
+						"type": "craft",
+						"recipe_name": "Sable",
+						"priority": 11,
+						"required_profession": VProfession.Profession.FORGERON,
+					})
 			if sand_count_p3 >= 1 and coal_count_p3 >= 1:
 				if not _has_task_of_type("craft", "Verre"):
 					_add_task({
@@ -1142,8 +1154,14 @@ func _evaluate_phase_4():
 	var glass_count = get_resource_count(61)
 	var sand_count = get_resource_count(4)
 	if glass_count < 10:
-		if sand_count < 2:
-			_add_sand_harvest_tasks(1)
+		if sand_count < 4 and get_total_stone() >= 2:
+			if not _has_task_of_type("craft", "Sable"):
+				_add_task({
+					"type": "craft",
+					"recipe_name": "Sable",
+					"priority": 11,
+					"required_profession": VProfession.Profession.FORGERON,
+				})
 		if sand_count >= 1 and total_coal >= 1:
 			if not _has_task_of_type("craft", "Verre"):
 				_add_task({
@@ -2097,7 +2115,7 @@ func _try_queue_build(blueprint_index: int) -> bool:
 					_add_harvest_tasks(5, mini(ceili(float(deficit) / 4.0), 4))
 				elif bt == 3 or bt == 25:  # Stone/Cobble -> mine en galerie
 					_add_mine_gallery_tasks(2)
-				elif bt == 61:  # Glass -> crafter du verre (sable + charbon → fourneau)
+				elif bt == 61:  # Glass -> crafter du sable + verre (pavé → sable → verre)
 					if get_resource_count(4) >= 1 and get_resource_count(16) >= 1:  # SAND + COAL_ORE
 						if not _has_task_of_type("craft", "Verre"):
 							_add_task({
@@ -2106,10 +2124,15 @@ func _try_queue_build(blueprint_index: int) -> bool:
 								"priority": 10,
 								"required_profession": VProfession.Profession.FORGERON,
 							})
-					else:
-						# Pas de sable → envoyer le bâtisseur en récolter (1 seul)
-						if get_resource_count(4) < deficit:
-							_add_sand_harvest_tasks(1)
+					# Crafter du sable depuis le pavé
+					if get_resource_count(4) < deficit and get_total_stone() >= 2:
+						if not _has_task_of_type("craft", "Sable"):
+							_add_task({
+								"type": "craft",
+								"recipe_name": "Sable",
+								"priority": 9,
+								"required_profession": VProfession.Profession.FORGERON,
+							})
 		return false
 
 	# Trouver un emplacement
