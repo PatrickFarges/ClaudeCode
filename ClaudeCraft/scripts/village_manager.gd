@@ -586,8 +586,14 @@ func _get_building_total_items(building_name: String) -> int:
 	return total
 
 func _is_building_full(building_name: String) -> bool:
-	"""Vérifie si le bâtiment a ses coffres pleins. False si pas de bâtiment (items vont au virtuel)."""
+	"""Vérifie si le bâtiment a ses coffres pleins. Cap 200 en stockpile si bâtiment pas construit."""
 	if not building_storage.has(building_name):
+		# Pas de bâtiment → cap 200 items dans le stockpile virtuel
+		if _storage_map.has(building_name):
+			var total = 0
+			for bt in _storage_map[building_name]:
+				total += stockpile.get(bt, 0)
+			return total >= 200
 		return false
 	var storage = building_storage[building_name]
 	var total = _get_building_total_items(building_name)
@@ -1752,11 +1758,20 @@ func _expand_mine():
 		mine_plan = mine_plan.slice(mine_front_index)
 		mine_front_index = 0
 
-	# Plafond : ne pas étendre si le plan est déjà trop gros ou trop d'expansions
+	# Plafond : ne pas étendre si le plan est déjà trop gros
 	if mine_plan.size() > MINE_PLAN_MAX_SIZE:
 		return
+	# Si cap d'expansions atteint mais mine épuisée → reset pour descendre plus profond
 	if _mine_expansion_dir >= MINE_MAX_EXPANSIONS:
-		return
+		if mine_front_index >= mine_plan.size() or mine_plan.size() == 0:
+			# Mine entièrement minée — nouveau cycle d'expansions plus profond
+			_mine_expansion_dir = 0
+			_mine_gallery_y = maxi(_mine_gallery_y - 5, 15)
+			mine_plan.clear()
+			mine_front_index = 0
+			print("VillageManager: mine réinitialisée — nouveau niveau y=%d" % _mine_gallery_y)
+		else:
+			return
 
 	_mine_expansion_dir += 1
 	var branch_len = 10
