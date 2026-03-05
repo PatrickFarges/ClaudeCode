@@ -1,16 +1,17 @@
 extends CanvasLayer
 
 # Inventaire du village — ouvert avec F1
-# Affiche le stockpile partagé du village, la phase actuelle, le tier d'outils,
-# la population, la faim, les fermes, les bâtiments et le prochain objectif.
-# Clic sur un villageois = téléportation du joueur à côté de lui.
+# Deux panneaux côte à côte :
+#   Gauche : statut village + liste villageois (clic = téléport)
+#   Droite : toutes les ressources (stockpile 2 colonnes) + stockage bâtiments
 
 var is_open: bool = false
 var village_manager = null
 var village_id: int = 0
 
 var background: ColorRect
-var panel: PanelContainer
+var panel_left: PanelContainer
+var panel_right: PanelContainer
 var title_label: Label
 var phase_label: Label
 var tier_label: Label
@@ -19,13 +20,18 @@ var tasks_label: Label
 var farm_label: Label
 var buildings_label: Label
 var objective_label: Label
-var stockpile_container: VBoxContainer
+var stockpile_container: GridContainer
 var storage_container: VBoxContainer
 var villager_container: VBoxContainer
-var scroll: ScrollContainer
-var scroll_storage: ScrollContainer
+var scroll_right: ScrollContainer
 var scroll_villagers: ScrollContainer
 var _update_timer: float = 0.0
+
+# Largeurs des panneaux
+const LEFT_W = 460
+const RIGHT_W = 560
+const PANEL_H = 760
+const GAP = 12
 
 func _ready():
 	visible = false
@@ -40,24 +46,7 @@ func _process(delta):
 		_update_timer = 0.0
 		_refresh_contents()
 
-func _build_ui():
-	# Fond semi-transparent
-	background = ColorRect.new()
-	background.color = Color(0, 0, 0, 0.6)
-	background.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(background)
-
-	# Panneau centré à l'écran
-	panel = PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.anchor_left = 0.5
-	panel.anchor_top = 0.5
-	panel.anchor_right = 0.5
-	panel.anchor_bottom = 0.5
-	panel.offset_left = -340
-	panel.offset_top = -380
-	panel.offset_right = 340
-	panel.offset_bottom = 380
+func _make_panel_style() -> StyleBoxFlat:
 	var style = StyleBoxFlat.new()
 	style.bg_color = Color(0.12, 0.12, 0.18, 0.95)
 	style.corner_radius_top_left = 8
@@ -69,138 +58,192 @@ func _build_ui():
 	style.border_width_right = 2
 	style.border_width_bottom = 2
 	style.border_color = Color(0.4, 0.5, 0.9, 0.8)
-	panel.add_theme_stylebox_override("panel", style)
-	add_child(panel)
+	style.content_margin_left = 10
+	style.content_margin_right = 10
+	style.content_margin_top = 8
+	style.content_margin_bottom = 8
+	return style
 
-	var vbox = VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 5)
-	panel.add_child(vbox)
+func _build_ui():
+	# Fond semi-transparent
+	background = ColorRect.new()
+	background.color = Color(0, 0, 0, 0.6)
+	background.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(background)
+
+	# Calcul position : les deux panneaux centrés ensemble
+	var total_w = LEFT_W + GAP + RIGHT_W
+	var start_x = -total_w / 2
+
+	# === PANNEAU GAUCHE : Statut + Villageois ===
+	panel_left = PanelContainer.new()
+	panel_left.set_anchors_preset(Control.PRESET_CENTER)
+	panel_left.anchor_left = 0.5
+	panel_left.anchor_top = 0.5
+	panel_left.anchor_right = 0.5
+	panel_left.anchor_bottom = 0.5
+	panel_left.offset_left = start_x
+	panel_left.offset_top = -PANEL_H / 2
+	panel_left.offset_right = start_x + LEFT_W
+	panel_left.offset_bottom = PANEL_H / 2
+	panel_left.add_theme_stylebox_override("panel", _make_panel_style())
+	add_child(panel_left)
+
+	var vbox_left = VBoxContainer.new()
+	vbox_left.add_theme_constant_override("separation", 4)
+	panel_left.add_child(vbox_left)
 
 	# Titre
 	title_label = Label.new()
 	title_label.text = "Gestion du Village"
-	title_label.add_theme_font_size_override("font_size", 24)
+	title_label.add_theme_font_size_override("font_size", 22)
 	title_label.add_theme_color_override("font_color", Color(0.9, 0.85, 0.5))
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vbox.add_child(title_label)
+	vbox_left.add_child(title_label)
 
-	vbox.add_child(_make_separator())
+	vbox_left.add_child(_make_separator())
 
 	# Phase
 	phase_label = Label.new()
-	phase_label.add_theme_font_size_override("font_size", 16)
+	phase_label.add_theme_font_size_override("font_size", 15)
 	phase_label.add_theme_color_override("font_color", Color(0.7, 0.85, 1.0))
-	vbox.add_child(phase_label)
+	vbox_left.add_child(phase_label)
 
 	# Tier
 	tier_label = Label.new()
-	tier_label.add_theme_font_size_override("font_size", 15)
+	tier_label.add_theme_font_size_override("font_size", 14)
 	tier_label.add_theme_color_override("font_color", Color(0.7, 0.85, 1.0))
-	vbox.add_child(tier_label)
+	vbox_left.add_child(tier_label)
 
 	# Population
 	pop_label = Label.new()
-	pop_label.add_theme_font_size_override("font_size", 15)
+	pop_label.add_theme_font_size_override("font_size", 14)
 	pop_label.add_theme_color_override("font_color", Color(0.7, 0.9, 0.7))
-	vbox.add_child(pop_label)
+	vbox_left.add_child(pop_label)
 
 	# Tâches
 	tasks_label = Label.new()
-	tasks_label.add_theme_font_size_override("font_size", 14)
+	tasks_label.add_theme_font_size_override("font_size", 13)
 	tasks_label.add_theme_color_override("font_color", Color(0.7, 0.8, 0.7))
-	vbox.add_child(tasks_label)
+	vbox_left.add_child(tasks_label)
 
 	# Fermes
 	farm_label = Label.new()
-	farm_label.add_theme_font_size_override("font_size", 14)
+	farm_label.add_theme_font_size_override("font_size", 13)
 	farm_label.add_theme_color_override("font_color", Color(0.85, 0.8, 0.4))
-	vbox.add_child(farm_label)
+	vbox_left.add_child(farm_label)
 
 	# Bâtiments
 	buildings_label = Label.new()
-	buildings_label.add_theme_font_size_override("font_size", 14)
+	buildings_label.add_theme_font_size_override("font_size", 13)
 	buildings_label.add_theme_color_override("font_color", Color(0.75, 0.7, 0.9))
 	buildings_label.autowrap_mode = TextServer.AUTOWRAP_WORD
-	vbox.add_child(buildings_label)
+	vbox_left.add_child(buildings_label)
 
 	# Prochain objectif
 	objective_label = Label.new()
-	objective_label.add_theme_font_size_override("font_size", 14)
+	objective_label.add_theme_font_size_override("font_size", 13)
 	objective_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.5))
 	objective_label.autowrap_mode = TextServer.AUTOWRAP_WORD
-	vbox.add_child(objective_label)
+	vbox_left.add_child(objective_label)
 
-	vbox.add_child(_make_separator())
-
-	# Label "Ressources"
-	var res_label = Label.new()
-	res_label.text = "Ressources"
-	res_label.add_theme_font_size_override("font_size", 17)
-	res_label.add_theme_color_override("font_color", Color(0.9, 0.9, 0.7))
-	vbox.add_child(res_label)
-
-	# Scroll pour la liste des ressources
-	scroll = ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(0, 120)
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	vbox.add_child(scroll)
-
-	stockpile_container = VBoxContainer.new()
-	stockpile_container.add_theme_constant_override("separation", 3)
-	scroll.add_child(stockpile_container)
-
-	vbox.add_child(_make_separator())
-
-	# Label "Stockage bâtiments"
-	var storage_label = Label.new()
-	storage_label.text = "Stockage bâtiments"
-	storage_label.add_theme_font_size_override("font_size", 17)
-	storage_label.add_theme_color_override("font_color", Color(0.9, 0.9, 0.7))
-	vbox.add_child(storage_label)
-
-	scroll_storage = ScrollContainer.new()
-	scroll_storage.custom_minimum_size = Vector2(0, 80)
-	scroll_storage.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	vbox.add_child(scroll_storage)
-
-	storage_container = VBoxContainer.new()
-	storage_container.add_theme_constant_override("separation", 3)
-	scroll_storage.add_child(storage_container)
-
-	vbox.add_child(_make_separator())
+	vbox_left.add_child(_make_separator())
 
 	# Label "Villageois" + instruction
 	var vill_header = HBoxContainer.new()
 	var vill_label = Label.new()
 	vill_label.text = "Villageois"
-	vill_label.add_theme_font_size_override("font_size", 17)
+	vill_label.add_theme_font_size_override("font_size", 16)
 	vill_label.add_theme_color_override("font_color", Color(0.9, 0.9, 0.7))
 	vill_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	vill_header.add_child(vill_label)
 	var tp_hint = Label.new()
 	tp_hint.text = "(clic = teleport)"
-	tp_hint.add_theme_font_size_override("font_size", 12)
+	tp_hint.add_theme_font_size_override("font_size", 11)
 	tp_hint.add_theme_color_override("font_color", Color(0.5, 0.6, 0.8))
 	vill_header.add_child(tp_hint)
-	vbox.add_child(vill_header)
+	vbox_left.add_child(vill_header)
 
 	# Scroll pour la liste des villageois
 	scroll_villagers = ScrollContainer.new()
-	scroll_villagers.custom_minimum_size = Vector2(0, 190)
 	scroll_villagers.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	vbox.add_child(scroll_villagers)
+	vbox_left.add_child(scroll_villagers)
 
 	villager_container = VBoxContainer.new()
-	villager_container.add_theme_constant_override("separation", 4)
+	villager_container.add_theme_constant_override("separation", 3)
 	scroll_villagers.add_child(villager_container)
 
 	# Hint
 	var hint = Label.new()
 	hint.text = "F1 pour fermer"
-	hint.add_theme_font_size_override("font_size", 12)
+	hint.add_theme_font_size_override("font_size", 11)
 	hint.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vbox.add_child(hint)
+	vbox_left.add_child(hint)
+
+	# === PANNEAU DROIT : Ressources + Stockage ===
+	panel_right = PanelContainer.new()
+	panel_right.set_anchors_preset(Control.PRESET_CENTER)
+	panel_right.anchor_left = 0.5
+	panel_right.anchor_top = 0.5
+	panel_right.anchor_right = 0.5
+	panel_right.anchor_bottom = 0.5
+	panel_right.offset_left = start_x + LEFT_W + GAP
+	panel_right.offset_top = -PANEL_H / 2
+	panel_right.offset_right = start_x + LEFT_W + GAP + RIGHT_W
+	panel_right.offset_bottom = PANEL_H / 2
+	panel_right.add_theme_stylebox_override("panel", _make_panel_style())
+	add_child(panel_right)
+
+	# Scroll global pour tout le panneau droit
+	scroll_right = ScrollContainer.new()
+	scroll_right.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll_right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel_right.add_child(scroll_right)
+
+	var vbox_right = VBoxContainer.new()
+	vbox_right.add_theme_constant_override("separation", 6)
+	vbox_right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll_right.add_child(vbox_right)
+
+	# Titre ressources
+	var res_title = Label.new()
+	res_title.text = "Ressources du Village"
+	res_title.add_theme_font_size_override("font_size", 22)
+	res_title.add_theme_color_override("font_color", Color(0.9, 0.85, 0.5))
+	res_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox_right.add_child(res_title)
+
+	vbox_right.add_child(_make_separator())
+
+	# Label section stockpile
+	var stockpile_label = Label.new()
+	stockpile_label.text = "Stockpile"
+	stockpile_label.add_theme_font_size_override("font_size", 16)
+	stockpile_label.add_theme_color_override("font_color", Color(0.9, 0.9, 0.7))
+	vbox_right.add_child(stockpile_label)
+
+	# Grid 2 colonnes pour les ressources
+	stockpile_container = GridContainer.new()
+	stockpile_container.columns = 2
+	stockpile_container.add_theme_constant_override("h_separation", 16)
+	stockpile_container.add_theme_constant_override("v_separation", 3)
+	stockpile_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox_right.add_child(stockpile_container)
+
+	vbox_right.add_child(_make_separator())
+
+	# Label section stockage bâtiments
+	var storage_label = Label.new()
+	storage_label.text = "Stockage bâtiments"
+	storage_label.add_theme_font_size_override("font_size", 16)
+	storage_label.add_theme_color_override("font_color", Color(0.9, 0.9, 0.7))
+	vbox_right.add_child(storage_label)
+
+	storage_container = VBoxContainer.new()
+	storage_container.add_theme_constant_override("separation", 3)
+	storage_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox_right.add_child(storage_container)
 
 func _make_separator() -> HSeparator:
 	var sep = HSeparator.new()
@@ -249,7 +292,6 @@ func _refresh_contents():
 	var built_count = village_manager.built_structures.size()
 	var total_blueprints = village_manager.BLUEPRINTS.size()
 	if built_count > 0:
-		# Compter par type
 		var name_counts: Dictionary = {}
 		for built in village_manager.built_structures:
 			var n = built["name"]
@@ -262,7 +304,6 @@ func _refresh_contents():
 				parts.append(n)
 		buildings_label.text = "Bâtiments (%d/%d) : %s" % [built_count, total_blueprints, ", ".join(parts)]
 	else:
-		# Vérifier si un bâtiment est en construction
 		var building_in_progress = ""
 		for npc in village_manager.villagers:
 			if is_instance_valid(npc) and npc.current_task.get("type", "") == "build":
@@ -276,7 +317,6 @@ func _refresh_contents():
 		if building_in_progress != "":
 			buildings_label.text = "Bâtiments (0/%d) : en construction — %s" % [total_blueprints, building_in_progress]
 		else:
-			# Montrer ce qui manque pour le prochain bâtiment
 			var next_bp = _get_next_building_info()
 			if next_bp != "":
 				buildings_label.text = "Bâtiments (0/%d) : %s" % [total_blueprints, next_bp]
@@ -314,44 +354,57 @@ func _refresh_contents():
 
 	objective_label.text = obj_text
 
-	# Nettoyer les entrées précédentes
+	# === PANNEAU DROIT : Ressources ===
+	_refresh_stockpile()
+	_refresh_storage()
+
+	# === Villageois ===
+	_refresh_villagers()
+
+func _refresh_stockpile():
 	for child in stockpile_container.get_children():
 		child.queue_free()
 
-	# Afficher chaque ressource du stockpile
-	var sorted_resources = []
+	# Collecter toutes les ressources (stockpile + bâtiments agrégés)
+	var all_resources: Dictionary = {}
+
+	# Stockpile virtuel
 	for bt in village_manager.stockpile:
 		var count = village_manager.stockpile[bt]
 		if count > 0:
-			sorted_resources.append([bt, count])
+			all_resources[bt] = all_resources.get(bt, 0) + count
+
+	# Trier par quantité décroissante
+	var sorted_resources = []
+	for bt in all_resources:
+		sorted_resources.append([bt, all_resources[bt]])
 
 	if sorted_resources.size() == 0:
 		var empty_label = Label.new()
 		empty_label.text = "  (aucune ressource)"
-		empty_label.add_theme_font_size_override("font_size", 14)
+		empty_label.add_theme_font_size_override("font_size", 13)
 		empty_label.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
 		stockpile_container.add_child(empty_label)
 	else:
-		# Trier par quantité décroissante
 		sorted_resources.sort_custom(func(a, b): return a[1] > b[1])
 
 		for res in sorted_resources:
 			var bt = res[0]
 			var count = res[1]
 			var row = HBoxContainer.new()
-			row.add_theme_constant_override("separation", 10)
+			row.add_theme_constant_override("separation", 6)
+			row.custom_minimum_size = Vector2(240, 0)
 
 			# Icône couleur du bloc
 			var color_rect = ColorRect.new()
 			color_rect.custom_minimum_size = Vector2(14, 14)
-			var block_color = BlockRegistry.get_block_color(bt as BlockRegistry.BlockType)
-			color_rect.color = block_color
+			color_rect.color = BlockRegistry.get_block_color(bt as BlockRegistry.BlockType)
 			row.add_child(color_rect)
 
 			# Nom du bloc
 			var name_label = Label.new()
 			name_label.text = BlockRegistry.get_block_name(bt as BlockRegistry.BlockType)
-			name_label.add_theme_font_size_override("font_size", 14)
+			name_label.add_theme_font_size_override("font_size", 13)
 			name_label.add_theme_color_override("font_color", Color(0.9, 0.9, 0.9))
 			name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			row.add_child(name_label)
@@ -359,13 +412,13 @@ func _refresh_contents():
 			# Quantité
 			var count_label = Label.new()
 			count_label.text = "x%d" % count
-			count_label.add_theme_font_size_override("font_size", 14)
+			count_label.add_theme_font_size_override("font_size", 13)
 			count_label.add_theme_color_override("font_color", Color(0.5, 1.0, 0.5))
 			row.add_child(count_label)
 
 			stockpile_container.add_child(row)
 
-	# === Stockage bâtiments ===
+func _refresh_storage():
 	for child in storage_container.get_children():
 		child.queue_free()
 
@@ -397,22 +450,28 @@ func _refresh_contents():
 				cap_label.add_theme_color_override("font_color", Color(0.6, 0.8, 0.6))
 			header.add_child(cap_label)
 			storage_container.add_child(header)
-			# Items dans ce bâtiment
-			for bt in si["items"]:
-				var cnt = si["items"][bt]
+
+			# Items dans ce bâtiment — en grille 2 colonnes
+			var items_grid = GridContainer.new()
+			items_grid.columns = 2
+			items_grid.add_theme_constant_override("h_separation", 12)
+			items_grid.add_theme_constant_override("v_separation", 2)
+			for item_bt in si["items"]:
+				var cnt = si["items"][item_bt]
 				if cnt <= 0:
 					continue
 				var item_row = HBoxContainer.new()
-				item_row.add_theme_constant_override("separation", 8)
+				item_row.add_theme_constant_override("separation", 6)
+				item_row.custom_minimum_size = Vector2(230, 0)
 				var spacer = Control.new()
-				spacer.custom_minimum_size = Vector2(16, 0)
+				spacer.custom_minimum_size = Vector2(12, 0)
 				item_row.add_child(spacer)
 				var cr = ColorRect.new()
 				cr.custom_minimum_size = Vector2(12, 12)
-				cr.color = BlockRegistry.get_block_color(bt as BlockRegistry.BlockType)
+				cr.color = BlockRegistry.get_block_color(item_bt as BlockRegistry.BlockType)
 				item_row.add_child(cr)
 				var item_name = Label.new()
-				item_name.text = BlockRegistry.get_block_name(bt as BlockRegistry.BlockType)
+				item_name.text = BlockRegistry.get_block_name(item_bt as BlockRegistry.BlockType)
 				item_name.add_theme_font_size_override("font_size", 13)
 				item_name.add_theme_color_override("font_color", Color(0.85, 0.85, 0.85))
 				item_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -422,9 +481,10 @@ func _refresh_contents():
 				item_count.add_theme_font_size_override("font_size", 13)
 				item_count.add_theme_color_override("font_color", Color(0.5, 1.0, 0.5))
 				item_row.add_child(item_count)
-				storage_container.add_child(item_row)
+				items_grid.add_child(item_row)
+			storage_container.add_child(items_grid)
 
-	# === Liste des villageois ===
+func _refresh_villagers():
 	for child in villager_container.get_children():
 		child.queue_free()
 
@@ -475,11 +535,11 @@ func _refresh_contents():
 		btn.add_theme_stylebox_override("hover", btn_style_hover)
 
 		var row = HBoxContainer.new()
-		row.add_theme_constant_override("separation", 8)
+		row.add_theme_constant_override("separation", 6)
 
 		# Pastille couleur selon activité
 		var dot = ColorRect.new()
-		dot.custom_minimum_size = Vector2(12, 12)
+		dot.custom_minimum_size = Vector2(10, 10)
 		match npc.current_activity:
 			VProfession.Activity.WORK:
 				dot.color = Color(1.0, 0.9, 0.3)  # jaune
@@ -498,14 +558,14 @@ func _refresh_contents():
 
 		var prof_label = Label.new()
 		prof_label.text = prof_name
-		prof_label.add_theme_font_size_override("font_size", 14)
+		prof_label.add_theme_font_size_override("font_size", 13)
 		prof_label.add_theme_color_override("font_color", Color(1.0, 0.95, 0.7))
-		prof_label.custom_minimum_size = Vector2(110, 0)
+		prof_label.custom_minimum_size = Vector2(100, 0)
 		row.add_child(prof_label)
 
 		# Barre de faim
 		var hunger_bar = ProgressBar.new()
-		hunger_bar.custom_minimum_size = Vector2(50, 12)
+		hunger_bar.custom_minimum_size = Vector2(40, 10)
 		hunger_bar.max_value = npc.HUNGER_MAX
 		hunger_bar.value = npc.hunger
 		hunger_bar.show_percentage = false
@@ -547,7 +607,7 @@ func _refresh_contents():
 				_:
 					task_text = "Idle"
 		task_label.text = task_text
-		task_label.add_theme_font_size_override("font_size", 13)
+		task_label.add_theme_font_size_override("font_size", 12)
 		task_label.add_theme_color_override("font_color", Color(0.75, 0.75, 0.75))
 		task_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(task_label)
@@ -555,12 +615,12 @@ func _refresh_contents():
 		# Icône téléport
 		var tp_label = Label.new()
 		tp_label.text = ">"
-		tp_label.add_theme_font_size_override("font_size", 14)
+		tp_label.add_theme_font_size_override("font_size", 13)
 		tp_label.add_theme_color_override("font_color", Color(0.5, 0.6, 0.9))
 		row.add_child(tp_label)
 
 		btn.add_child(row)
-		btn.custom_minimum_size = Vector2(660, 28)
+		btn.custom_minimum_size = Vector2(LEFT_W - 30, 26)
 
 		# Connecter le clic au téléport
 		var npc_ref = npc
@@ -574,17 +634,14 @@ func _teleport_to_villager(npc):
 	var player = get_tree().get_first_node_in_group("player")
 	if not player:
 		return
-	# Téléporter le joueur à 3 blocs du PNJ, face à lui
 	var npc_pos = npc.global_position
 	var offset = Vector3(3, 2, 0)
 	player.global_position = npc_pos + offset
-	# Fermer l'UI après téléport
 	close_inventory()
 
 func _get_next_building_info() -> String:
 	if not village_manager:
 		return ""
-	# Trouver le prochain bâtiment à construire et montrer les matériaux manquants
 	var built_names: Dictionary = {}
 	for built in village_manager.built_structures:
 		built_names[built["name"]] = true
@@ -592,20 +649,19 @@ func _get_next_building_info() -> String:
 		if built_names.has(bp["name"]):
 			continue
 		if bp.get("phase", 0) <= village_manager.village_phase:
-			# Ce blueprint est le prochain — vérifier les matériaux
 			var missing = []
 			for bt in bp["materials"]:
 				var needed = bp["materials"][bt]
 				var have = 0
 				if bt == 11:  # PLANKS
 					have = village_manager.get_total_planks()
-				elif bt == 3 or bt == 25:  # STONE/COBBLESTONE interchangeables
+				elif bt == 3 or bt == 25:  # STONE/COBBLESTONE
 					have = village_manager.get_total_stone()
 				else:
 					have = village_manager.get_resource_count(bt)
 				if have < needed:
-					var name = BlockRegistry.get_block_name(bt as BlockRegistry.BlockType)
-					missing.append("%s %d/%d" % [name, have, needed])
+					var bname = BlockRegistry.get_block_name(bt as BlockRegistry.BlockType)
+					missing.append("%s %d/%d" % [bname, have, needed])
 			if missing.size() > 0:
 				return "prochain: %s (manque %s)" % [bp["name"], ", ".join(missing)]
 			else:
