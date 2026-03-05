@@ -1,4 +1,4 @@
-[gd_scene load_steps=15 format=3 uid="uid://d3k8p4r5m1qhw"]
+[gd_scene load_steps=16 format=3 uid="uid://d3k8p4r5m1qhw"]
 
 [ext_resource type="Script" path="res://scripts/world_manager.gd" id="1_world"]
 [ext_resource type="PackedScene" uid="uid://c2yqr8n3m0qhv" path="res://scenes/player.tscn" id="2_player"]
@@ -13,6 +13,7 @@
 [ext_resource type="Script" path="res://scripts/pause_menu.gd" id="11_pause"]
 [ext_resource type="Script" path="res://scripts/save_manager.gd" id="12_save"]
 [ext_resource type="Script" path="res://scripts/village_inventory_ui.gd" id="13_village_inv"]
+[ext_resource type="Script" path="res://scripts/settings_menu.gd" id="14_settings"]
 
 [sub_resource type="Environment" id="Environment_1"]
 background_mode = 1
@@ -46,7 +47,7 @@ unload_distance_margin = 4
 [node name="Player" parent="." instance=ExtResource("2_player")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 80, 0)
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." groups=["world_environment"]]
 environment = SubResource("Environment_1")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
@@ -86,3 +87,7 @@ script = ExtResource("12_save")
 
 [node name="VillageInventoryUI" type="CanvasLayer" parent="."]
 script = ExtResource("13_village_inv")
+
+[node name="SettingsMenu" type="CanvasLayer" parent="."]
+process_mode = 3
+script = ExtResource("14_settings")

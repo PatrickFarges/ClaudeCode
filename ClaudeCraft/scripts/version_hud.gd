@@ -5,16 +5,24 @@ extends Control
 var biome_label: Label
 var time_label: Label
 var speed_label: Label
+var render_label: Label
 var target_label: Label
 
-const VERSION = "v16.3.0"
+const VERSION = "v16.4.0"
 
 var audio_manager = null
 var player = null
 var day_night_cycle = null
-# Freeze désactivé pour le moment (Engine.time_scale=0 cause des problèmes)
-#var _frozen: bool = false
-#var _saved_time_scale: float = 1.0
+
+# === Render presets ===
+var _render_preset: int = 0
+var _env: Environment = null
+const RENDER_NAMES = ["Vanilla", "Global Illumination", "Cloclo Style"]
+const RENDER_COLORS = [
+	Color(0.7, 0.7, 0.7, 0.7),    # Vanilla — gris
+	Color(0.4, 0.9, 0.5, 0.7),    # GI — vert
+	Color(0.9, 0.6, 1.0, 0.7),    # Cloclo Style — violet
+]
 
 const SPEED_COLORS = [
 	Color(0.5, 0.7, 1.0, 0.7),   # Lent — bleu
@@ -58,12 +66,24 @@ func _ready():
 	speed_label.add_theme_constant_override("shadow_offset_x", 1)
 	speed_label.add_theme_constant_override("shadow_offset_y", 1)
 	speed_label.add_theme_font_size_override("font_size", 13)
-	speed_label.text = "⏩ Normal (Ctrl+Molette)"
+	speed_label.text = "Normal (Ctrl+Molette)"
 	add_child(speed_label)
 
-	# Label bloc ciblé
+	# Label render preset (sous la vitesse)
+	render_label = Label.new()
+	render_label.position = Vector2(0, 119)
+	render_label.size = Vector2(350, 23)
+	render_label.add_theme_color_override("font_color", RENDER_COLORS[0])
+	render_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
+	render_label.add_theme_constant_override("shadow_offset_x", 1)
+	render_label.add_theme_constant_override("shadow_offset_y", 1)
+	render_label.add_theme_font_size_override("font_size", 13)
+	render_label.text = "Rendu : Vanilla (F2)"
+	add_child(render_label)
+
+	# Label bloc ciblé (décalé plus bas)
 	target_label = Label.new()
-	target_label.position = Vector2(0, 119)
+	target_label.position = Vector2(0, 142)
 	target_label.size = Vector2(300, 23)
 	target_label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.7))
 	target_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
@@ -77,6 +97,24 @@ func _ready():
 	player = get_tree().get_first_node_in_group("player")
 	day_night_cycle = get_tree().get_first_node_in_group("day_night_cycle")
 
+	# Récupérer l'Environment pour les presets de rendu
+	for child in get_tree().current_scene.get_children():
+		if child is WorldEnvironment:
+			_env = child.environment
+			break
+
+	# Charger les settings sauvegardés (ou Cloclo Style par défaut)
+	if _env:
+		var settings_menu = get_tree().current_scene.get_node_or_null("SettingsMenu")
+		if settings_menu:
+			settings_menu.load_settings()
+		# Si aucun settings sauvegardé, appliquer Cloclo Style par défaut
+		if _render_preset == 0:
+			_render_preset = 2
+			_apply_cinematic()
+			render_label.text = "Rendu : %s (F2)" % RENDER_NAMES[_render_preset]
+			render_label.add_theme_color_override("font_color", RENDER_COLORS[_render_preset])
+
 func _input(event):
 	# Ctrl gauche + molette souris = changer la vitesse du temps
 	if event is InputEventMouseButton and event.pressed and event.ctrl_pressed:
@@ -85,6 +123,12 @@ func _input(event):
 			get_viewport().set_input_as_handled()
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			_change_speed(-1)
+			get_viewport().set_input_as_handled()
+
+	# F2 = cycler les presets de rendu
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_F2:
+			_cycle_render_preset()
 			get_viewport().set_input_as_handled()
 
 func _change_speed(direction: int):
@@ -98,10 +142,127 @@ func _update_speed_label():
 	if not day_night_cycle:
 		return
 	var idx = day_night_cycle.speed_index
-	var name = day_night_cycle.get_speed_name()
+	var sname = day_night_cycle.get_speed_name()
 	var bars = ["▰▱▱▱", "▰▰▱▱", "▰▰▰▱", "▰▰▰▰"]
-	speed_label.text = "⏩ %s %s" % [bars[idx], name]
+	speed_label.text = "%s %s" % [bars[idx], sname]
 	speed_label.add_theme_color_override("font_color", SPEED_COLORS[idx])
+
+# === Render presets ===
+
+func _cycle_render_preset():
+	if not _env:
+		print("RenderPresets: pas d'Environment trouvé!")
+		return
+	_render_preset = (_render_preset + 1) % RENDER_NAMES.size()
+	match _render_preset:
+		0:
+			_apply_vanilla()
+		1:
+			_apply_gi()
+		2:
+			_apply_cinematic()
+	render_label.text = "Rendu : %s (F2)" % RENDER_NAMES[_render_preset]
+	render_label.add_theme_color_override("font_color", RENDER_COLORS[_render_preset])
+	print("Render preset: %s" % RENDER_NAMES[_render_preset])
+
+func _apply_vanilla():
+	_env.sdfgi_enabled = false
+	_env.ssil_enabled = false
+	_env.glow_enabled = false
+	_env.volumetric_fog_enabled = false
+
+	_env.tonemap_mode = 2
+	_env.tonemap_white = 6.0
+	_env.tonemap_exposure = 1.0
+
+	_env.ssao_enabled = true
+	_env.ssao_radius = 2.0
+	_env.ssao_intensity = 1.5
+	_env.ssao_power = 1.5
+	_env.ssao_detail = 0.5
+	_env.ssao_sharpness = 0.5
+
+	_env.fog_enabled = true
+	_env.fog_density = 0.012
+	_env.fog_aerial_perspective = 0.6
+	_env.fog_light_color = Color(0.7, 0.85, 0.95, 1)
+	_env.fog_light_energy = 1.0
+
+	_env.ambient_light_source = 2
+	_env.ambient_light_color = Color(1, 1, 1, 1)
+	_env.ambient_light_energy = 0.5
+
+func _apply_gi():
+	_apply_vanilla()
+
+	_env.sdfgi_enabled = true
+	_env.sdfgi_use_occlusion = true
+	_env.sdfgi_cascades = 4
+	_env.sdfgi_min_cell_size = 0.5
+	_env.sdfgi_energy = 1.0
+	_env.sdfgi_normal_bias = 1.1
+	_env.sdfgi_probe_bias = 1.1
+	_env.sdfgi_bounce_feedback = 0.5
+
+	_env.ambient_light_energy = 0.25
+
+func _apply_cinematic():
+	# SDFGI
+	_env.sdfgi_enabled = true
+	_env.sdfgi_use_occlusion = true
+	_env.sdfgi_cascades = 4
+	_env.sdfgi_min_cell_size = 0.5
+	_env.sdfgi_energy = 1.2
+	_env.sdfgi_normal_bias = 1.1
+	_env.sdfgi_probe_bias = 1.1
+	_env.sdfgi_bounce_feedback = 0.6
+
+	# SSIL
+	_env.ssil_enabled = true
+	_env.ssil_radius = 5.0
+	_env.ssil_intensity = 1.0
+	_env.ssil_normal_rejection = 1.0
+
+	# Tonemap ACES
+	_env.tonemap_mode = 3
+	_env.tonemap_white = 6.0
+	_env.tonemap_exposure = 1.05
+
+	# SSAO renforcé
+	_env.ssao_enabled = true
+	_env.ssao_radius = 3.0
+	_env.ssao_intensity = 2.5
+	_env.ssao_power = 2.0
+	_env.ssao_detail = 0.8
+	_env.ssao_sharpness = 0.6
+
+	# Glow
+	_env.glow_enabled = true
+	_env.glow_intensity = 0.8
+	_env.glow_strength = 1.0
+	_env.glow_bloom = 0.1
+	_env.glow_blend_mode = 2
+	_env.glow_hdr_threshold = 1.0
+
+	# Volumetric Fog
+	_env.volumetric_fog_enabled = true
+	_env.volumetric_fog_density = 0.014
+	_env.volumetric_fog_albedo = Color(0.85, 0.9, 0.95, 1)
+	_env.volumetric_fog_emission = Color(0.0, 0.0, 0.0, 1)
+	_env.volumetric_fog_anisotropy = 0.6
+	_env.volumetric_fog_gi_inject = 1.0
+
+	# Fog distance
+	_env.fog_enabled = true
+	_env.fog_density = 0.006
+	_env.fog_aerial_perspective = 0.65
+	_env.fog_light_color = Color(0.75, 0.88, 0.97, 1)
+	_env.fog_light_energy = 1.1
+
+	# Ambient réduit
+	_env.ambient_light_source = 2
+	_env.ambient_light_color = Color(1, 1, 1, 1)
+	_env.ambient_light_energy = 0.15
 
 func _process(_delta):
 	fps_label.text = Locale.tr_ui("fps") % Engine.get_frames_per_second()
@@ -109,10 +270,10 @@ func _process(_delta):
 	# Biome
 	if audio_manager:
 		var biome_names = {
-			0: "🏜️ " + Locale.tr_ui("biome_desert"),
-			1: "🌲 " + Locale.tr_ui("biome_forest"),
-			2: "⛰️ " + Locale.tr_ui("biome_mountain"),
-			3: "🌾 " + Locale.tr_ui("biome_plains"),
+			0: Locale.tr_ui("biome_desert"),
+			1: Locale.tr_ui("biome_forest"),
+			2: Locale.tr_ui("biome_mountain"),
+			3: Locale.tr_ui("biome_plains"),
 		}
 		var biome_id = audio_manager.current_biome
 		biome_label.text = biome_names.get(biome_id, "???")
@@ -124,12 +285,12 @@ func _process(_delta):
 		var speed_txt = ""
 		if day_night_cycle.speed_index != 1:
 			speed_txt = " [x%s]" % str(day_night_cycle.get_speed_multiplier())
-		time_label.text = "🕐 " + day_night_cycle.get_time_string() + speed_txt
+		time_label.text = day_night_cycle.get_time_string() + speed_txt
 	else:
 		time_label.text = ""
 
 	# Bloc ciblé
 	if player and player.look_block_type != BlockRegistry.BlockType.AIR:
-		target_label.text = "🎯 " + BlockRegistry.get_block_name(player.look_block_type)
+		target_label.text = BlockRegistry.get_block_name(player.look_block_type)
 	else:
 		target_label.text = ""
