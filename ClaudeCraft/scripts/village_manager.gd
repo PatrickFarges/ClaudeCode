@@ -461,65 +461,57 @@ func get_resource_count(block_type: int) -> int:
 	return stockpile.get(block_type, 0)
 
 func get_total_wood() -> int:
-	# Compte tous les types de bûches
+	# Compte tous les types de bûches (stockpile + coffres)
 	var total = 0
 	for bt in [5, 32, 33, 34, 35, 36, 42]:  # WOOD, SPRUCE_LOG, BIRCH_LOG, JUNGLE_LOG, ACACIA_LOG, DARK_OAK_LOG, CHERRY_LOG
-		total += stockpile.get(bt, 0)
+		total += get_total_resource(bt)
 	return total
 
 func get_total_planks() -> int:
 	var total = 0
 	for bt in [11, 37, 38, 39, 40, 41, 43]:  # PLANKS + variantes
-		total += stockpile.get(bt, 0)
+		total += get_total_resource(bt)
 	return total
 
 func get_total_stone() -> int:
-	return stockpile.get(3, 0) + stockpile.get(25, 0)  # STONE + COBBLESTONE
+	return get_total_resource(3) + get_total_resource(25)  # STONE + COBBLESTONE
+
+func _consume_types_anywhere(types: Array, count: int) -> bool:
+	var remaining = count
+	# D'abord le stockpile virtuel
+	for bt in types:
+		var have = stockpile.get(bt, 0)
+		if have > 0:
+			var take = mini(have, remaining)
+			stockpile[bt] = have - take
+			if stockpile[bt] == 0:
+				stockpile.erase(bt)
+			remaining -= take
+			if remaining <= 0:
+				return true
+	# Ensuite les coffres de bâtiments
+	for bt in types:
+		for bn in building_storage:
+			var items = building_storage[bn]["items"]
+			var have = items.get(bt, 0)
+			if have > 0:
+				var take = mini(have, remaining)
+				items[bt] = have - take
+				if items[bt] == 0:
+					items.erase(bt)
+				remaining -= take
+				if remaining <= 0:
+					return true
+	return remaining <= 0
 
 func consume_any_stone(count: int) -> bool:
-	var stone_types = [25, 3]  # COBBLESTONE d'abord (drop mineur), puis STONE
-	var remaining = count
-	for bt in stone_types:
-		var have = stockpile.get(bt, 0)
-		if have > 0:
-			var take = mini(have, remaining)
-			stockpile[bt] = have - take
-			if stockpile[bt] == 0:
-				stockpile.erase(bt)
-			remaining -= take
-			if remaining <= 0:
-				return true
-	return remaining <= 0
+	return _consume_types_anywhere([25, 3], count)  # COBBLESTONE d'abord, puis STONE
 
 func consume_any_wood(count: int) -> bool:
-	var wood_types = [5, 32, 33, 34, 35, 36, 42]
-	var remaining = count
-	for bt in wood_types:
-		var have = stockpile.get(bt, 0)
-		if have > 0:
-			var take = mini(have, remaining)
-			stockpile[bt] = have - take
-			if stockpile[bt] == 0:
-				stockpile.erase(bt)
-			remaining -= take
-			if remaining <= 0:
-				return true
-	return remaining <= 0
+	return _consume_types_anywhere([5, 32, 33, 34, 35, 36, 42], count)
 
 func consume_any_planks(count: int) -> bool:
-	var plank_types = [11, 37, 38, 39, 40, 41, 43]
-	var remaining = count
-	for bt in plank_types:
-		var have = stockpile.get(bt, 0)
-		if have > 0:
-			var take = mini(have, remaining)
-			stockpile[bt] = have - take
-			if stockpile[bt] == 0:
-				stockpile.erase(bt)
-			remaining -= take
-			if remaining <= 0:
-				return true
-	return remaining <= 0
+	return _consume_types_anywhere([11, 37, 38, 39, 40, 41, 43], count)
 
 # ============================================================
 # STOCKAGE BÂTIMENTS (coffres physiques)
