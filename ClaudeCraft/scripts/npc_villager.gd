@@ -44,8 +44,8 @@ static var _skin_cache: Dictionary = {}  # cache des ImageTexture par chemin
 static var _tool_mesh_cache: Dictionary = {}  # cache des ArrayMesh par texture path
 
 # Constantes outils tenus par les PNJ
-const NPC_TOOL_SIZE = 0.30
-const NPC_TOOL_DEPTH = 0.03
+const NPC_TOOL_SIZE = 0.70
+const NPC_TOOL_DEPTH = 0.04
 const NPC_TOOL_GRID = 16
 
 static func _preload_steve():
@@ -206,7 +206,7 @@ func _create_model():
 	else:
 		if villager_index == 0:
 			print("NpcVillager: AUCUN AnimationPlayer trouvé dans le modèle")
-	# Outils tenus en main (attachés aux bones rightItem/leftItem)
+	# Outils tenus en main (BoneAttachment3D sur rightArm/leftArm)
 	_skeleton = _find_skeleton(_model_instance)
 	if _skeleton and villager_index == 0:
 		var bone_count = _skeleton.get_bone_count()
@@ -290,17 +290,20 @@ func _find_skeleton(node: Node) -> Skeleton3D:
 
 func _setup_held_tools():
 	var tools = VProfession.get_held_tools(profession)
-	if tools.is_empty() or not _model_instance:
+	if tools.is_empty() or not _model_instance or not _skeleton:
 		return
 	print("NpcVillager[%d]: setup tools %s (prof=%d)" % [villager_index, str(tools), profession])
-	# Main droite — position fixe de rightItem dans le modèle Steve
-	# Bedrock rightItem pivot: [-6, 15, 1] pixels → [-0.375, 0.9375, 0.0625] en unités Godot
+	# Main droite — BoneAttachment3D sur rightItem (bone enfant de rightArm, bout de la main)
+	# Ry(-90°) vue de profil + Rz(180°) flip pour que la lame pointe vers le bas (-Y = loin de l'épaule)
+	# Offset Y = -half pour que le grip (bas original de la texture) soit dans la main
+	var tool_offset_y = -NPC_TOOL_SIZE * 0.5
 	if tools.has("right"):
 		var tex_path = GC.get_item_texture_path() + tools["right"] + ".png"
-		var mesh = _build_npc_tool_mesh(tex_path, Vector3(0, 0, -45))
+		var mesh = _build_npc_tool_mesh(tex_path, Vector3(180, 90, 0))
 		if mesh:
-			_right_tool = _attach_tool_fixed(mesh, Vector3(-0.375, 0.9375, 0.0625))
-	# Main gauche — leftItem pivot: [6, 15, 1] → [0.375, 0.9375, 0.0625]
+			_right_tool = _attach_tool_to_bone(mesh, "rightItem",
+				Vector3(0.0, tool_offset_y - 0.1, 0.0), Vector3(-45, 0, 0))
+	# Main gauche — BoneAttachment3D sur leftItem (miroir)
 	if tools.has("left"):
 		var left_name = tools["left"]
 		var tex_path: String
@@ -308,19 +311,28 @@ func _setup_held_tools():
 			tex_path = GC.get_entity_texture_path() + "shield_base_nopattern.png"
 		else:
 			tex_path = GC.get_item_texture_path() + left_name + ".png"
-		var mesh = _build_npc_tool_mesh(tex_path, Vector3(0, 90, 0))
+		var mesh = _build_npc_tool_mesh(tex_path, Vector3(180, -90, 0))
 		if mesh:
-			_left_tool = _attach_tool_fixed(mesh, Vector3(0.375, 0.9375, 0.0625))
+			_left_tool = _attach_tool_to_bone(mesh, "leftItem",
+				Vector3(0.0, tool_offset_y - 0.1, 0.0), Vector3(45, 0, 0))
 
-func _attach_tool_fixed(mesh: ArrayMesh, pos: Vector3) -> MeshInstance3D:
-	# Attacher l'outil comme enfant direct du modèle (position fixe, pas de bone tracking)
+func _attach_tool_to_bone(mesh: ArrayMesh, bone_name: String, offset: Vector3, rot_deg: Vector3 = Vector3.ZERO) -> MeshInstance3D:
+	var bone_idx = _skeleton.find_bone(bone_name)
+	if bone_idx < 0:
+		push_warning("NpcVillager: bone '%s' introuvable dans le skeleton" % bone_name)
+		return null
+	var attachment = BoneAttachment3D.new()
+	attachment.bone_name = bone_name
+	attachment.bone_idx = bone_idx
+	_skeleton.add_child(attachment)
 	var mesh_inst = MeshInstance3D.new()
 	mesh_inst.mesh = mesh
-	mesh_inst.position = pos
+	mesh_inst.position = offset
+	mesh_inst.rotation_degrees = rot_deg
 	mesh_inst.extra_cull_margin = 100.0
 	mesh_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_model_instance.add_child(mesh_inst)
-	print("NpcVillager: tool attaché à pos=%s, surfaces=%d" % [str(pos), mesh.get_surface_count()])
+	attachment.add_child(mesh_inst)
+	print("NpcVillager: tool attaché au bone '%s' (idx=%d), offset=%s, rot=%s" % [bone_name, bone_idx, str(offset), str(rot_deg)])
 	return mesh_inst
 
 static func _build_npc_tool_mesh(tex_path: String, rot_deg: Vector3 = Vector3.ZERO) -> ArrayMesh:

@@ -7,11 +7,14 @@ var time_label: Label
 var speed_label: Label
 var target_label: Label
 
-const VERSION = "v16.1.0"
+const VERSION = "v16.2.0"
 
 var audio_manager = null
 var player = null
 var day_night_cycle = null
+# Freeze désactivé pour le moment (Engine.time_scale=0 cause des problèmes)
+#var _frozen: bool = false
+#var _saved_time_scale: float = 1.0
 
 const SPEED_COLORS = [
 	Color(0.5, 0.7, 1.0, 0.7),   # Lent — bleu

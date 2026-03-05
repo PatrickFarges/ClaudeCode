@@ -1,0 +1,23 @@
+Notes rotation outils tenus PNJ — ClaudeCraft v16.2.0
+=====================================================
+
+MEILLEURE POSITION (2026-03-05, itération 2):
+- Rotation baked (main droite): Vector3(180, 90, 0)
+- Rotation baked (main gauche): Vector3(180, -90, 0)
+- Rotation node (main droite): Vector3(-35, 0, 0)
+- Rotation node (main gauche): Vector3(35, 0, 0)
+- Offset Y: -NPC_TOOL_SIZE * 0.5 = -0.35
+- Bone: rightItem / leftItem (BoneAttachment3D)
+- NPC_TOOL_SIZE: 0.70, NPC_TOOL_DEPTH: 0.04
+- Résultat: tranchant vers le bas ✓, taille correcte ✓,
+  manche quasi dans le prolongement du bras ✓
+  Reste: petit bout de manche dépasse dans le bras, grip trop haut
+
+Les 4 orientations possibles (mesh plat visible de côté):
+A. (0, 90, 0)    → (0, y, -x)  — blade up+back  [testé: mauvais]
+B. (0, -90, 0)   → (0, y, x)   — blade up+front  [testé: mauvais]
+C. (0, -90, 180) → (0, -y, x)  — blade down+front, cutting edge UP [testé: presque]
+D. (180, 90, 0)  → (0, -y, -x) — blade down+back, cutting edge DOWN [✓ BEST]
+
+Le Rx sur le node (pas baké) ajuste l'angle du manche dans le prolongement du bras.
+Le offset Y contrôle où la main "tient" le manche (plus négatif = plus bas sur le manche).
