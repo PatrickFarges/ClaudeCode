@@ -1,14 +1,14 @@
 # ClaudeCraft
 
-Jeu voxel type Minecraft en GDScript avec Godot 4.5+, style pastel. Évolue vers un jeu de gestion/colonie inspiré de **The Settlers**.
+Jeu voxel type Minecraft en GDScript avec Godot 4.6+, style pastel. Évolue vers un jeu de gestion/colonie inspiré de **The Settlers**.
 
 ## Lancer
 
-1. Ouvrir le projet dans Godot 4.5+
+1. Ouvrir le projet dans Godot 4.6+
 2. Ouvrir `scenes/main.tscn`
 3. F5 pour lancer
 
-**Config Godot :** Physics JoltPhysics3D, résolution 1920x1080 fullscreen, cible 60 FPS.
+**Config Godot :** Godot 4.6.1, Physics JoltPhysics3D, résolution 1920x1080 fullscreen, cible 60 FPS.
 
 ## Architecture GDScript (`scripts/`)
 

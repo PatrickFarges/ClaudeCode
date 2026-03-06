@@ -39,7 +39,7 @@ Monorepo contenant plusieurs sous-projets indépendants liés aux outils RH/paie
 | **ComparePDF** | `ComparePDF/` | Comparaison de bulletins de paie PDF PRE vs POST → rapport Excel (Python/Tkinter) |
 | **CompareSAPTable** | `CompareSAPTable/` | Comparaison de tables SAP et schémas PCR → rapport Excel (Python/Tkinter) |
 | **ClaudeLauncher** | `ClaudeLauncher/` | Lanceur de jeux/applications style Steam/Playnite (Python/PyQt6) |
-| **ClaudeCraft** | `ClaudeCraft/` | Jeu voxel type Minecraft en GDScript/Godot 4.5+, style pastel, évoluant vers The Settlers |
+| **ClaudeCraft** | `ClaudeCraft/` | Jeu voxel type Minecraft en GDScript/Godot 4.6+, style pastel, évoluant vers The Settlers |
 | **WagetypeCatalog** | `WagetypeCatalog/` | Catalogage des rubriques de paie SAP EuHReka (données uniquement) |
 | **ClocloWebUi** | `ClocloWebUi/` | Interface web pour piloter plusieurs sessions Claude Code en parallèle (Python/aiohttp) |
 

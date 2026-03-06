@@ -125,6 +125,7 @@ var _leaf_cleanup_timer: float = 0.0
 const LEAF_CLEANUP_INTERVAL = 30.0  # toutes les 30 secondes (temps réel)
 
 func _ready():
+	add_to_group("village_manager")
 	_init_blueprints()
 	_init_storage_map()
 	print("VillageManager: initialisé")
@@ -811,19 +812,21 @@ func _evaluate_phase_1():
 				"required_profession": VProfession.Profession.BATISSEUR,
 			})
 
-	# Aplanissement AVANT toute construction
+	# Aplanissement (en parallèle avec la construction si 2+ bâtisseurs)
 	if not _flatten_complete and flatten_plan.size() > 0:
-		if _count_flatten_active() < 2:
+		# Un seul bâtisseur aplanit — l'autre est libre pour construire
+		if _count_flatten_active() < 1:
 			_add_task({
 				"type": "flatten",
 				"priority": 2,
 				"required_profession": VProfession.Profession.BATISSEUR,
 			})
-	else:
-		# Construire le chemin en croix si on a de la pierre
-		if not _path_built and get_total_stone() >= 5:
-			_try_queue_path()
-		# Construire les bâtiments de phase 1
+
+	# Construire le chemin en croix si on a de la pierre
+	if (_flatten_complete or _count_builders() >= 2) and not _path_built and get_total_stone() >= 5:
+		_try_queue_path()
+	# Construire les bâtiments de phase 1 (même pendant l'aplanissement si bâtisseurs dispo)
+	if _flatten_complete or _count_builders() >= 2:
 		_try_queue_builds_for_phase(1)
 
 	# Forge : outils en pierre
@@ -923,44 +926,21 @@ func _evaluate_phase_2():
 				"required_profession": VProfession.Profession.BATISSEUR,
 			})
 
-	# Aplanissement AVANT toute construction
+	# Aplanissement (en parallèle avec la construction si 2+ bâtisseurs)
 	if not _flatten_complete and flatten_plan.size() > 0:
-		if _count_flatten_active() < 2:
+		# Un seul bâtisseur aplanit — l'autre est libre pour construire
+		if _count_flatten_active() < 1:
 			_add_task({
 				"type": "flatten",
 				"priority": 2,
 				"required_profession": VProfession.Profession.BATISSEUR,
 			})
-	else:
-		# Chemin si pas encore fait
-		if not _path_built and get_total_stone() >= 5:
-			_try_queue_path()
 
-		# Verre : crafter du sable depuis le pavé, puis crafter le verre
-		var glass_count = get_resource_count(61)  # GLASS
-		var sand_count = get_resource_count(4)    # SAND
-		var coal_count = get_resource_count(16)   # COAL_ORE
-		if glass_count < 10:
-			# Pas assez de sable → crafter depuis le pavé (2 pavé → 1 sable)
-			if sand_count < 4 and get_total_stone() >= 2:
-				if not _has_task_of_type("craft", "Sable"):
-					_add_task({
-						"type": "craft",
-						"recipe_name": "Sable",
-						"priority": 11,
-						"required_profession": VProfession.Profession.FORGERON,
-					})
-			# Crafter le verre si on a les ingrédients
-			if sand_count >= 1 and coal_count >= 1:
-				if not _has_task_of_type("craft", "Verre"):
-					_add_task({
-						"type": "craft",
-						"recipe_name": "Verre",
-						"priority": 12,
-						"required_profession": VProfession.Profession.FORGERON,
-					})
-
-		# Construire les bâtiments de phase 1 et 2
+	# Verre proactif + chemin + builds (même pendant l'aplanissement si bâtisseurs dispo)
+	_craft_glass_for_builds(2)
+	if (_flatten_complete or _count_builders() >= 2) and not _path_built and get_total_stone() >= 5:
+		_try_queue_path()
+	if _flatten_complete or _count_builders() >= 2:
 		_try_queue_builds_for_phase(2)
 
 	# Forge : outils en fer
@@ -1026,49 +1006,33 @@ func _evaluate_phase_3():
 	# Mineurs en continu — is_mine_stock_full() les pause si stock saturé
 	_add_mine_gallery_tasks(2)
 
-	# Aplanissement AVANT toute construction
+	# Aplanissement (en parallèle avec la construction si 2+ bâtisseurs)
 	if not _flatten_complete and flatten_plan.size() > 0:
-		if _count_flatten_active() < 2:
+		# Un seul bâtisseur aplanit — l'autre est libre pour construire
+		if _count_flatten_active() < 1:
 			_add_task({
 				"type": "flatten",
 				"priority": 2,
 				"required_profession": VProfession.Profession.BATISSEUR,
 			})
-	else:
-		# Verre : crafter du sable depuis le pavé, puis crafter le verre
-		var glass_count_p3 = get_resource_count(61)
-		var sand_count_p3 = get_resource_count(4)
-		var coal_count_p3 = get_resource_count(16)
-		if glass_count_p3 < 10:
-			if sand_count_p3 < 4 and get_total_stone() >= 2:
-				if not _has_task_of_type("craft", "Sable"):
-					_add_task({
-						"type": "craft",
-						"recipe_name": "Sable",
-						"priority": 11,
-						"required_profession": VProfession.Profession.FORGERON,
-					})
-			if sand_count_p3 >= 1 and coal_count_p3 >= 1:
-				if not _has_task_of_type("craft", "Verre"):
-					_add_task({
-						"type": "craft",
-						"recipe_name": "Verre",
-						"priority": 12,
-						"required_profession": VProfession.Profession.FORGERON,
-					})
 
-		# Fondre le fer (continu en phase 3)
-		var total_iron_ore_p3 = get_resource_count(17)
-		if total_iron_ore_p3 >= 1 and coal_count_p3 >= 1:
-			if not _has_task_of_type("craft", "Lingot de fer"):
-				_add_task({
-					"type": "craft",
-					"recipe_name": "Lingot de fer",
-					"priority": 14,
-					"required_profession": VProfession.Profession.FORGERON,
-				})
+	# Verre proactif + fondre fer + chemin + builds (même pendant l'aplanissement)
+	_craft_glass_for_builds(3)
 
-		# Construire tous les bâtiments
+	var coal_count_p3 = get_resource_count(16)
+	var total_iron_ore_p3 = get_resource_count(17)
+	if total_iron_ore_p3 >= 1 and coal_count_p3 >= 1:
+		if not _has_task_of_type("craft", "Lingot de fer"):
+			_add_task({
+				"type": "craft",
+				"recipe_name": "Lingot de fer",
+				"priority": 14,
+				"required_profession": VProfession.Profession.FORGERON,
+			})
+
+	if (_flatten_complete or _count_builders() >= 2) and not _path_built and get_total_stone() >= 5:
+		_try_queue_path()
+	if _flatten_complete or _count_builders() >= 2:
 		_try_queue_builds_for_phase(3)
 
 	# Transition Phase 3 → Phase 4 : château quand 5+ bâtiments et outils fer
@@ -1142,38 +1106,23 @@ func _evaluate_phase_4():
 				"required_profession": VProfession.Profession.FORGERON,
 			})
 
-	# Verre
-	var glass_count = get_resource_count(61)
-	var sand_count = get_resource_count(4)
-	if glass_count < 10:
-		if sand_count < 4 and get_total_stone() >= 2:
-			if not _has_task_of_type("craft", "Sable"):
-				_add_task({
-					"type": "craft",
-					"recipe_name": "Sable",
-					"priority": 11,
-					"required_profession": VProfession.Profession.FORGERON,
-				})
-		if sand_count >= 1 and total_coal >= 1:
-			if not _has_task_of_type("craft", "Verre"):
-				_add_task({
-					"type": "craft",
-					"recipe_name": "Verre",
-					"priority": 12,
-					"required_profession": VProfession.Profession.FORGERON,
-				})
+	# Verre proactif pour les bâtiments
+	_craft_glass_for_builds(4)
 
 	# === CONSTRUCTION CHÂTEAU ===
-	# Aplanissement
+	# Aplanissement (en parallèle avec la construction si 2+ bâtisseurs)
 	if not _flatten_complete and flatten_plan.size() > 0:
-		if _count_flatten_active() < 2:
+		# Un seul bâtisseur aplanit — l'autre est libre pour construire
+		if _count_flatten_active() < 1:
 			_add_task({
 				"type": "flatten",
 				"priority": 2,
 				"required_profession": VProfession.Profession.BATISSEUR,
 			})
-	else:
-		# Construire tous les bâtiments phases 1-4
+
+	if (_flatten_complete or _count_builders() >= 2) and not _path_built and get_total_stone() >= 5:
+		_try_queue_path()
+	if _flatten_complete or _count_builders() >= 2:
 		_try_queue_builds_for_phase(4)
 
 	# === FORGE D'ARMES (prioritaire en Phase 4) ===
@@ -1222,6 +1171,39 @@ func _has_task_of_type(type: String, recipe_name: String = "") -> bool:
 					continue
 				return true
 	return false
+
+func _craft_glass_for_builds(max_phase: int):
+	# Calculer le besoin total en verre des bâtiments non construits de cette phase
+	var built_names: Dictionary = {}
+	for built in built_structures:
+		built_names[built["name"]] = true
+	var glass_needed = 0
+	for bp in BLUEPRINTS:
+		if built_names.has(bp["name"]):
+			continue
+		if bp.get("phase", 0) <= max_phase:
+			glass_needed += bp["materials"].get(61, 0)  # GLASS
+	# Crafter proactivement : seuil = besoin total des bâtiments non construits
+	var glass_count = get_resource_count(61)
+	var sand_count = get_resource_count(4)
+	var coal_count = get_resource_count(16)
+	if glass_count < glass_needed:
+		if sand_count < 8 and get_total_stone() >= 2:
+			if not _has_task_of_type("craft", "Sable"):
+				_add_task({
+					"type": "craft",
+					"recipe_name": "Sable",
+					"priority": 11,
+					"required_profession": VProfession.Profession.FORGERON,
+				})
+		if sand_count >= 1 and coal_count >= 1:
+			if not _has_task_of_type("craft", "Verre"):
+				_add_task({
+					"type": "craft",
+					"recipe_name": "Verre",
+					"priority": 12,
+					"required_profession": VProfession.Profession.FORGERON,
+				})
 
 func _count_flatten_active() -> int:
 	# Compte les tâches flatten en queue + en cours chez les villageois
@@ -2227,7 +2209,24 @@ func _find_build_site(blueprint: Dictionary) -> Vector3i:
 		if ws_overlap:
 			continue
 
-		# origin.y = ref_y + 1 (terrain plat garanti)
+		# Si flatten en cours, vérifier que la zone est à peu près plate
+		# Tolérance +4 blocs car le flatten va nettoyer le reste en parallèle
+		if not _flatten_complete:
+			var is_ok = true
+			var sample_points = [
+				Vector2i(tx, tz), Vector2i(tx + size.x - 1, tz),
+				Vector2i(tx, tz + size.z - 1), Vector2i(tx + size.x - 1, tz + size.z - 1),
+				Vector2i(tx + size.x / 2, tz + size.z / 2)
+			]
+			for sp in sample_points:
+				var sy = _find_surface_y(sp.x, sp.y)
+				if sy > ref_y + 4:
+					is_ok = false
+					break
+			if not is_ok:
+				continue
+
+		# origin.y = ref_y + 1 (terrain plat garanti ou vérifié)
 		var site = Vector3i(tx, ref_y + 1, tz)
 		var dist = abs(tx + size.x / 2 - cx) + abs(tz + size.z / 2 - cz)
 		if dist < best_dist:
