@@ -8,7 +8,7 @@ var speed_label: Label
 var render_label: Label
 var target_label: Label
 
-const VERSION = "v16.5.0"
+const VERSION = "v16.6.0"
 
 var audio_manager = null
 var player = null
@@ -170,6 +170,7 @@ func _apply_vanilla():
 	_env.ssil_enabled = false
 	_env.glow_enabled = false
 	_env.volumetric_fog_enabled = false
+	_env.adjustment_enabled = false
 
 	_env.tonemap_mode = 2
 	_env.tonemap_white = 6.0
@@ -212,57 +213,63 @@ func _apply_cinematic():
 	_env.sdfgi_use_occlusion = true
 	_env.sdfgi_cascades = 4
 	_env.sdfgi_min_cell_size = 0.5
-	_env.sdfgi_energy = 1.2
+	_env.sdfgi_energy = 1.4
 	_env.sdfgi_normal_bias = 1.1
 	_env.sdfgi_probe_bias = 1.1
-	_env.sdfgi_bounce_feedback = 0.6
+	_env.sdfgi_bounce_feedback = 0.7
 
 	# SSIL
 	_env.ssil_enabled = true
 	_env.ssil_radius = 5.0
-	_env.ssil_intensity = 1.0
+	_env.ssil_intensity = 0.8
 	_env.ssil_normal_rejection = 1.0
 
-	# Tonemap ACES
-	_env.tonemap_mode = 3
-	_env.tonemap_white = 6.0
-	_env.tonemap_exposure = 1.05
+	# Tonemap Filmic — preserve mieux les couleurs que ACES
+	_env.tonemap_mode = 2
+	_env.tonemap_white = 5.0
+	_env.tonemap_exposure = 1.2
 
-	# SSAO renforcé
+	# SSAO adouci (moins de noirceur)
 	_env.ssao_enabled = true
-	_env.ssao_radius = 3.0
-	_env.ssao_intensity = 2.5
-	_env.ssao_power = 2.0
-	_env.ssao_detail = 0.8
-	_env.ssao_sharpness = 0.6
+	_env.ssao_radius = 2.5
+	_env.ssao_intensity = 1.8
+	_env.ssao_power = 1.5
+	_env.ssao_detail = 0.6
+	_env.ssao_sharpness = 0.5
 
 	# Glow
 	_env.glow_enabled = true
-	_env.glow_intensity = 0.8
-	_env.glow_strength = 1.0
-	_env.glow_bloom = 0.1
+	_env.glow_intensity = 0.6
+	_env.glow_strength = 0.8
+	_env.glow_bloom = 0.08
 	_env.glow_blend_mode = 2
 	_env.glow_hdr_threshold = 1.0
 
-	# Volumetric Fog
+	# Volumetric Fog — quasi invisible, juste pour les god rays subtils
 	_env.volumetric_fog_enabled = true
-	_env.volumetric_fog_density = 0.014
+	_env.volumetric_fog_density = 0.001
 	_env.volumetric_fog_albedo = Color(0.85, 0.9, 0.95, 1)
 	_env.volumetric_fog_emission = Color(0.0, 0.0, 0.0, 1)
-	_env.volumetric_fog_anisotropy = 0.6
+	_env.volumetric_fog_anisotropy = 0.8
 	_env.volumetric_fog_gi_inject = 1.0
 
-	# Fog distance
+	# Fog distance — subtil, profondeur seulement a l'horizon
 	_env.fog_enabled = true
-	_env.fog_density = 0.006
-	_env.fog_aerial_perspective = 0.65
+	_env.fog_density = 0.002
+	_env.fog_aerial_perspective = 0.35
 	_env.fog_light_color = Color(0.75, 0.88, 0.97, 1)
-	_env.fog_light_energy = 1.1
+	_env.fog_light_energy = 0.7
 
-	# Ambient réduit
+	# Ambient releve pour des couleurs plus vivantes
 	_env.ambient_light_source = 2
 	_env.ambient_light_color = Color(1, 1, 1, 1)
-	_env.ambient_light_energy = 0.15
+	_env.ambient_light_energy = 0.35
+
+	# Color grading — vibrance pour des couleurs vivantes
+	_env.adjustment_enabled = true
+	_env.adjustment_saturation = 1.5
+	_env.adjustment_contrast = 1.12
+	_env.adjustment_brightness = 1.0
 
 func _process(_delta):
 	fps_label.text = Locale.tr_ui("fps") % Engine.get_frames_per_second()

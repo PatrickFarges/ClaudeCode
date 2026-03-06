@@ -94,6 +94,13 @@ enum BlockType {
 	SHIELD,
 	# === STOCKAGE (76) ===
 	CHEST,
+	# === VEGETATION DECORATIVE (77-82) ===
+	SHORT_GRASS,
+	FERN,
+	DEAD_BUSH,
+	DANDELION,
+	POPPY,
+	CORNFLOWER,
 }
 
 const BLOCK_DATA = {
@@ -652,6 +659,49 @@ const BLOCK_DATA = {
 		"hardness": 1.2,
 		"faces": { "top": "barrel_top_open", "bottom": "oak_planks", "side": "barrel_side" }
 	},
+	# === VEGETATION DECORATIVE ===
+	BlockType.SHORT_GRASS: {
+		"name": "Short Grass",
+		"solid": false,
+		"color": Color(0.5, 0.8, 0.4, 1.0),
+		"hardness": 0.0,
+		"faces": { "all": "short_grass" }
+	},
+	BlockType.FERN: {
+		"name": "Fern",
+		"solid": false,
+		"color": Color(0.4, 0.7, 0.35, 1.0),
+		"hardness": 0.0,
+		"faces": { "all": "fern" }
+	},
+	BlockType.DEAD_BUSH: {
+		"name": "Dead Bush",
+		"solid": false,
+		"color": Color(0.7, 0.55, 0.3, 1.0),
+		"hardness": 0.0,
+		"faces": { "all": "dead_bush" }
+	},
+	BlockType.DANDELION: {
+		"name": "Dandelion",
+		"solid": false,
+		"color": Color(1.0, 0.95, 0.3, 1.0),
+		"hardness": 0.0,
+		"faces": { "all": "dandelion" }
+	},
+	BlockType.POPPY: {
+		"name": "Poppy",
+		"solid": false,
+		"color": Color(0.9, 0.2, 0.2, 1.0),
+		"hardness": 0.0,
+		"faces": { "all": "poppy" }
+	},
+	BlockType.CORNFLOWER: {
+		"name": "Cornflower",
+		"solid": false,
+		"color": Color(0.35, 0.5, 0.9, 1.0),
+		"hardness": 0.0,
+		"faces": { "all": "cornflower" }
+	},
 }
 
 static func get_block_color(block_type: BlockType) -> Color:
@@ -676,6 +726,18 @@ static func get_face_texture(block_type: BlockType, face: String) -> String:
 	if faces.has("all"):
 		return faces["all"]
 	return "dirt"
+
+const CROSS_MESH_BLOCKS: Dictionary = {
+	BlockType.SHORT_GRASS: true,
+	BlockType.FERN: true,
+	BlockType.DEAD_BUSH: true,
+	BlockType.DANDELION: true,
+	BlockType.POPPY: true,
+	BlockType.CORNFLOWER: true,
+}
+
+static func is_cross_mesh(block_type) -> bool:
+	return CROSS_MESH_BLOCKS.has(block_type)
 
 const WORKSTATION_BLOCKS: Dictionary = {
 	BlockType.CRAFTING_TABLE: true,
@@ -713,5 +775,9 @@ static func get_block_tint(block_type: BlockType, face: String = "all") -> Color
 			return Color(0.3, 0.55, 0.25, 1.0)
 		BlockType.CHERRY_LEAVES:
 			return Color(0.9, 0.6, 0.7, 1.0)
+		BlockType.SHORT_GRASS:
+			return Color(0.4, 1.0, 0.35, 1.0)
+		BlockType.FERN:
+			return Color(0.3, 0.9, 0.25, 1.0)
 		_:
 			return Color(1.0, 1.0, 1.0, 1.0)

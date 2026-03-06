@@ -14,10 +14,10 @@ Jeu voxel type Minecraft en GDScript avec Godot 4.6+, style pastel. Évolue vers
 
 ### Monde et rendu
 - **`game_config.gd`** : config centrale (`const GC = preload()` partout). `ACTIVE_PACK` = "Faithful32". Fonctions `get_block_texture_path()`, `get_item_texture_path()`. Système d'aliases textures (8 aliases cross-pack)
-- **`block_registry.gd`** : 77 types de blocs (enum 0-76, dont IRON_SWORD/GOLD_SWORD/SHIELD/CHEST), couleurs pastel, dureté, textures par face, `is_workstation()`, `get_block_tint()`. Inclut agriculture (FARMLAND, WHEAT_STAGE_0→3, WHEAT_ITEM, BREAD), éclairage (TORCH) et stockage (CHEST)
-- **`chunk.gd`** : 16×16×256 blocs, greedy meshing, AO, collision ConcavePolygon, UV corrigés, rendu torches (OmniLight3D, max 16/chunk)
+- **`block_registry.gd`** : 83 types de blocs (enum 0-82, dont IRON_SWORD/GOLD_SWORD/SHIELD/CHEST), couleurs pastel, dureté, textures par face, `is_workstation()`, `is_cross_mesh()`, `get_block_tint()`. Inclut agriculture (FARMLAND, WHEAT_STAGE_0→3, WHEAT_ITEM, BREAD), éclairage (TORCH), stockage (CHEST) et végétation décorative cross-mesh (SHORT_GRASS, FERN, DEAD_BUSH, DANDELION, POPPY, CORNFLOWER)
+- **`chunk.gd`** : 16×16×256 blocs, greedy meshing, AO, collision ConcavePolygon, UV corrigés, rendu torches (OmniLight3D, max 16/chunk), flora mesh séparé (cross billboards pour herbe/fleurs, shader cull_disabled, pas de collision)
 - **`chunk_generator.gd`** : génération procédurale threadée (4 workers, Mutex), 6 noises, arbres par biome, minerais souterrains, structures passe 4. **Grottes compactes** : tunnels spaghetti `abs(v1)+abs(v2) < 0.15` (~5% air), grandes salles très rares (`abs(v3) < 0.03`), bedrock solide y=0-7. **Minerais en veines** (indépendant des grottes, calibré Simplex réel) : charbon 6.3% (y<80), fer 5.2% (y<55), cuivre 3.1% (y<50), or rare (y<30), diamant très rare (y<16)
-- **`texture_manager.gd`** : Texture2DArray (87 layers), auto-détection résolution, fallback aliases, `_force_opaque()`
+- **`texture_manager.gd`** : Texture2DArray (93 layers), auto-détection résolution, fallback aliases, `_force_opaque()`, matériau cross-mesh séparé (`get_cross_material()`, shader `cull_disabled` pour végétation)
 - **`structure_manager.gd`** : Autoload — structures JSON depuis `res://structures/`, RLE, thread-safe
 
 ### Village autonome (The Settlers)
@@ -89,7 +89,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 
 ## Direction du projet
 
-**Version actuelle : v16.1.0**
+**Version actuelle : v16.6.0**
 
 | Phase | Statut | Contenu |
 |-------|--------|---------|
@@ -132,6 +132,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 | 9.2 | Fait | v16.0.2 — **Fix mine/production**. Mine auto-reset : quand 200 expansions atteintes ET plan vide, reset compteur et descend 5 blocs. `MINE_MAX_EXPANSIONS` 50→200. `_is_building_full()` cap 200 items en stockpile quand bâtiment pas encore construit (fix 8238 pains) |
 | 9.3 | Fait | v16.0.3 — **Fix sable introuvable**. Recette "Sable" (2 pavé → 1 sable, fourneau) remplace la recherche de sable en surface (6 PNJ bloqués sur "Cherche sable..." pendant des jours, désert hors de portée des chunks chargés). Craft batch ×8. Supprime la dépendance au biome désert |
 | 9.4 | WIP | v16.1.0 — **Outils tenus + fix animations PNJ**. Mesh extrudé 3D pixel-par-pixel, position fixe sur le modèle (pas encore de bone tracking — à améliorer : taille ×2-3 et position bras). **Fix moonwalk** : `+PI` sur les 3 `atan2` de rotation. **Fix jambes écartées** : `AnimationPlayer.deterministic=true` + `reset_bone_poses()` + epsilon rotation (0.01°) dans le GLB pour forcer les tracks bones majeurs (Godot optimise les tracks identity). `PROFESSION_TOOLS` mapping dans `villager_profession.gd`, `_build_npc_tool_mesh()` + `_attach_tool_fixed()` + `_set_tools_visible()` dans `npc_villager.gd`. bedrock_to_glb v1.2.0 : `FORCE_TRACK_BONES` + `EPSILON_QUAT`. **TODO** : agrandir outils ×2-3, positionner sur le bras, bone tracking si possible |
+| 9.5 | Fait | v16.6.0 — **Végétation décorative cross-mesh**. 6 nouveaux types de blocs (SHORT_GRASS, FERN, DEAD_BUSH, DANDELION, POPPY, CORNFLOWER). Cross billboards : 2 quads verticaux en X au centre du bloc, shader cull_disabled + alpha_scissor. Flora mesh séparé par chunk (comme water mesh). Génération par biome : herbe ~25-30% sur GRASS/DARK_GRASS, fougères ~8% en forêt, fleurs ~2% (pissenlit/coquelicot/bleuet), buissons morts ~8% sur sable. Textures Faithful32 (32×32 avec transparence alpha). Pas de collision, hardness 0 (casse instantanée). Junk filter PNJ mis à jour. Surface detection village ignore la végétation |
 | 10 | À venir | Système de faim actif, chaînes de production, combat PNJ visuel |
 
 **Packs GLB utilisés** : Steve GLB (modèle Bedrock converti, 28 bones, 4 anims) pour tous les PNJ avec skins par profession. Kenney.nl (18 modèles BlockPNJ — conservés mais plus utilisés). **PNJ futurs** : KayKit Adventurers (161 anims travail)

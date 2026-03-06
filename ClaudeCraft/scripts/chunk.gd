@@ -7,7 +7,18 @@ const CHUNK_HEIGHT = 256
 # Shared material (un seul pour tous les chunks)
 static var _shared_material: Material = null
 static var _shared_water_material: StandardMaterial3D = null
+static var _shared_cross_material: Material = null
 const WATER_TYPE: int = 15  # BlockRegistry.BlockType.WATER
+
+# Cross mesh block types (vegetation) — skipped by greedy mesher, rendered as X quads
+const CROSS_TYPES: Dictionary = {
+	77: true,  # SHORT_GRASS
+	78: true,  # FERN
+	79: true,  # DEAD_BUSH
+	80: true,  # DANDELION
+	81: true,  # POPPY
+	82: true,  # CORNFLOWER
+}
 
 var chunk_position: Vector3i
 var blocks: PackedByteArray
@@ -15,6 +26,7 @@ var y_min: int = 0
 var y_max: int = 0
 var mesh_instance: MeshInstance3D
 var water_mesh_instance: MeshInstance3D
+var flora_mesh_instance: MeshInstance3D
 var collision_shape: CollisionShape3D
 var static_body: StaticBody3D
 var is_mesh_built: bool = false
@@ -41,6 +53,14 @@ var _water_normals: PackedVector3Array = PackedVector3Array()
 var _water_colors: PackedColorArray = PackedColorArray()
 var _water_indices: PackedInt32Array = PackedInt32Array()
 
+# Flora mesh arrays (cross billboards)
+var _flora_vertices: PackedVector3Array = PackedVector3Array()
+var _flora_normals: PackedVector3Array = PackedVector3Array()
+var _flora_colors: PackedColorArray = PackedColorArray()
+var _flora_indices: PackedInt32Array = PackedInt32Array()
+var _flora_uvs: PackedVector2Array = PackedVector2Array()
+var _flora_custom0: PackedFloat32Array = PackedFloat32Array()
+
 func _init(pos: Vector3i, block_data: PackedByteArray, p_y_min: int = 0, p_y_max: int = CHUNK_HEIGHT - 1):
 	chunk_position = pos
 	blocks = block_data
@@ -51,6 +71,11 @@ static func _get_shared_material() -> Material:
 	if not _shared_material:
 		_shared_material = TextureManager.get_shared_material()
 	return _shared_material
+
+static func _get_cross_material() -> Material:
+	if not _shared_cross_material:
+		_shared_cross_material = TextureManager.get_cross_material()
+	return _shared_cross_material
 
 static func _get_water_material() -> StandardMaterial3D:
 	if not _shared_water_material:
@@ -109,12 +134,19 @@ func _compute_mesh_arrays():
 	_water_normals = PackedVector3Array()
 	_water_colors = PackedColorArray()
 	_water_indices = PackedInt32Array()
+	_flora_vertices = PackedVector3Array()
+	_flora_normals = PackedVector3Array()
+	_flora_colors = PackedColorArray()
+	_flora_indices = PackedInt32Array()
+	_flora_uvs = PackedVector2Array()
+	_flora_custom0 = PackedFloat32Array()
 
 	if y_min <= y_max:
 		_greedy_mesh_y_faces()
 		_greedy_mesh_z_faces()
 		_greedy_mesh_x_faces()
 		_build_water_mesh()
+		_build_flora_mesh()
 
 func _apply_mesh_data():
 	if _mesh_thread:
@@ -124,7 +156,7 @@ func _apply_mesh_data():
 	if not is_inside_tree():
 		return
 
-	if _vertices.size() == 0 and _water_vertices.size() == 0:
+	if _vertices.size() == 0 and _water_vertices.size() == 0 and _flora_vertices.size() == 0:
 		is_mesh_built = true
 		return
 
@@ -177,6 +209,27 @@ func _apply_mesh_data():
 		water_mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(water_mesh_instance)
 
+	# Flora mesh (cross billboards, no collision)
+	if _flora_vertices.size() > 0:
+		var flora_arrays: Array = []
+		flora_arrays.resize(Mesh.ARRAY_MAX)
+		flora_arrays[Mesh.ARRAY_VERTEX] = _flora_vertices
+		flora_arrays[Mesh.ARRAY_NORMAL] = _flora_normals
+		flora_arrays[Mesh.ARRAY_COLOR] = _flora_colors
+		flora_arrays[Mesh.ARRAY_INDEX] = _flora_indices
+		flora_arrays[Mesh.ARRAY_TEX_UV] = _flora_uvs
+		flora_arrays[Mesh.ARRAY_CUSTOM0] = _flora_custom0
+
+		var flora_mesh: ArrayMesh = ArrayMesh.new()
+		var flags = Mesh.ARRAY_CUSTOM_R_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT
+		flora_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, flora_arrays, [], {}, flags)
+
+		flora_mesh_instance = MeshInstance3D.new()
+		flora_mesh_instance.mesh = flora_mesh
+		flora_mesh_instance.material_override = _get_cross_material()
+		flora_mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(flora_mesh_instance)
+
 	# Torches : scanner et spawner les lumières
 	_spawn_torch_lights()
 
@@ -194,6 +247,12 @@ func _apply_mesh_data():
 	_water_normals = PackedVector3Array()
 	_water_colors = PackedColorArray()
 	_water_indices = PackedInt32Array()
+	_flora_vertices = PackedVector3Array()
+	_flora_normals = PackedVector3Array()
+	_flora_colors = PackedColorArray()
+	_flora_indices = PackedInt32Array()
+	_flora_uvs = PackedVector2Array()
+	_flora_custom0 = PackedFloat32Array()
 
 # Rebuild synchrone (pour casse/placement de blocs)
 func _rebuild_mesh():
@@ -206,6 +265,9 @@ func _rebuild_mesh():
 	if water_mesh_instance:
 		water_mesh_instance.queue_free()
 		water_mesh_instance = null
+	if flora_mesh_instance:
+		flora_mesh_instance.queue_free()
+		flora_mesh_instance = null
 	if static_body:
 		static_body.queue_free()
 		static_body = null
@@ -221,6 +283,9 @@ func _deferred_rebuild():
 	if water_mesh_instance:
 		water_mesh_instance.queue_free()
 		water_mesh_instance = null
+	if flora_mesh_instance:
+		flora_mesh_instance.queue_free()
+		flora_mesh_instance = null
 	if static_body:
 		static_body.queue_free()
 		static_body = null
@@ -288,9 +353,9 @@ func _greedy_mesh_y_faces():
 			for z in range(CHUNK_SIZE):
 				var idx: int = x_off + z * 256 + y
 				var bt: int = blocks[idx]
-				if bt != 0 and bt != WATER_TYPE and bt != TORCH_TYPE:
+				if bt != 0 and bt != WATER_TYPE and bt != TORCH_TYPE and not CROSS_TYPES.has(bt):
 					var nb: int = blocks[idx + 1] if y + 1 < CHUNK_HEIGHT else 0
-					if nb == 0 or nb == WATER_TYPE or nb == TORCH_TYPE:
+					if nb == 0 or nb == WATER_TYPE or nb == TORCH_TYPE or CROSS_TYPES.has(nb):
 						mask[x][z] = bt
 						has_faces = true
 					else:
@@ -321,9 +386,9 @@ func _greedy_mesh_y_faces():
 			for z in range(CHUNK_SIZE):
 				var idx: int = x_off + z * 256 + y
 				var bt: int = blocks[idx]
-				if bt != 0 and bt != WATER_TYPE and bt != TORCH_TYPE:
+				if bt != 0 and bt != WATER_TYPE and bt != TORCH_TYPE and not CROSS_TYPES.has(bt):
 					var nb: int = blocks[idx - 1] if y - 1 >= 0 else 0
-					if nb == 0 or nb == WATER_TYPE or nb == TORCH_TYPE:
+					if nb == 0 or nb == WATER_TYPE or nb == TORCH_TYPE or CROSS_TYPES.has(nb):
 						mask[x][z] = bt
 						has_faces = true
 					else:
@@ -371,9 +436,9 @@ func _greedy_mesh_z_faces():
 			for iy in range(y_range):
 				var y: int = y_min + iy
 				var bt: int = blocks[xz_off + y]
-				if bt != 0 and bt != WATER_TYPE and bt != TORCH_TYPE:
+				if bt != 0 and bt != WATER_TYPE and bt != TORCH_TYPE and not CROSS_TYPES.has(bt):
 					var nb: int = blocks[xzp_off + y] if z + 1 < CHUNK_SIZE else 0
-					if nb == 0 or nb == WATER_TYPE or nb == TORCH_TYPE:
+					if nb == 0 or nb == WATER_TYPE or nb == TORCH_TYPE or CROSS_TYPES.has(nb):
 						mask[x][iy] = bt
 						has_faces = true
 					else:
@@ -406,9 +471,9 @@ func _greedy_mesh_z_faces():
 			for iy in range(y_range):
 				var y: int = y_min + iy
 				var bt: int = blocks[xz_off + y]
-				if bt != 0 and bt != WATER_TYPE and bt != TORCH_TYPE:
+				if bt != 0 and bt != WATER_TYPE and bt != TORCH_TYPE and not CROSS_TYPES.has(bt):
 					var nb: int = blocks[xzm_off + y] if z - 1 >= 0 else 0
-					if nb == 0 or nb == WATER_TYPE or nb == TORCH_TYPE:
+					if nb == 0 or nb == WATER_TYPE or nb == TORCH_TYPE or CROSS_TYPES.has(nb):
 						mask[x][iy] = bt
 						has_faces = true
 					else:
@@ -458,9 +523,9 @@ func _greedy_mesh_x_faces():
 			for iy in range(y_range):
 				var y: int = y_min + iy
 				var bt: int = blocks[x_off + z_off + y]
-				if bt != 0 and bt != WATER_TYPE and bt != TORCH_TYPE:
+				if bt != 0 and bt != WATER_TYPE and bt != TORCH_TYPE and not CROSS_TYPES.has(bt):
 					var nb: int = blocks[xp_off + z_off + y] if x + 1 < CHUNK_SIZE else 0
-					if nb == 0 or nb == WATER_TYPE or nb == TORCH_TYPE:
+					if nb == 0 or nb == WATER_TYPE or nb == TORCH_TYPE or CROSS_TYPES.has(nb):
 						mask[z][iy] = bt
 						has_faces = true
 					else:
@@ -491,9 +556,9 @@ func _greedy_mesh_x_faces():
 			for iy in range(y_range):
 				var y: int = y_min + iy
 				var bt: int = blocks[x_off + z_off + y]
-				if bt != 0 and bt != WATER_TYPE and bt != TORCH_TYPE:
+				if bt != 0 and bt != WATER_TYPE and bt != TORCH_TYPE and not CROSS_TYPES.has(bt):
 					var nb: int = blocks[xm_off + z_off + y] if x - 1 >= 0 else 0
-					if nb == 0 or nb == WATER_TYPE or nb == TORCH_TYPE:
+					if nb == 0 or nb == WATER_TYPE or nb == TORCH_TYPE or CROSS_TYPES.has(nb):
 						mask[z][iy] = bt
 						has_faces = true
 					else:
@@ -565,6 +630,78 @@ func _emit_quad(v0: Vector3, v1: Vector3, v2: Vector3, v3: Vector3, normal: Vect
 	_collision_faces.append(v2)
 	_collision_faces.append(v3)
 	_collision_faces.append(v0)
+
+# ============================================================
+# FLORA MESH — cross billboards (2 quads en X par bloc)
+# ============================================================
+
+func _build_flora_mesh():
+	if y_min > y_max:
+		return
+	for x in range(CHUNK_SIZE):
+		var x_off: int = x * 4096
+		for z in range(CHUNK_SIZE):
+			var xz_off: int = x_off + z * 256
+			for y in range(y_min, y_max + 1):
+				var bt: int = blocks[xz_off + y]
+				if CROSS_TYPES.has(bt):
+					_emit_cross_quad(x, y, z, bt)
+
+func _emit_cross_quad(x: int, y: int, z: int, bt: int):
+	var tex_name: String = BlockRegistry.get_face_texture(bt, "all")
+	var layer: float = float(TextureManager.get_layer_index(tex_name))
+	var tint: Color = BlockRegistry.get_block_tint(bt, "all")
+	var base: int = _flora_vertices.size()
+
+	# Quad 1 : diagonale (0,0) -> (1,1) dans le plan XZ
+	var fx: float = float(x)
+	var fy: float = float(y)
+	var fz: float = float(z)
+
+	_flora_vertices.append(Vector3(fx, fy, fz))
+	_flora_vertices.append(Vector3(fx + 1.0, fy, fz + 1.0))
+	_flora_vertices.append(Vector3(fx + 1.0, fy + 1.0, fz + 1.0))
+	_flora_vertices.append(Vector3(fx, fy + 1.0, fz))
+
+	# Quad 2 : diagonale (1,0) -> (0,1) dans le plan XZ
+	_flora_vertices.append(Vector3(fx + 1.0, fy, fz))
+	_flora_vertices.append(Vector3(fx, fy, fz + 1.0))
+	_flora_vertices.append(Vector3(fx, fy + 1.0, fz + 1.0))
+	_flora_vertices.append(Vector3(fx + 1.0, fy + 1.0, fz))
+
+	# Normales vers le haut pour un eclairage uniforme (style MC)
+	for i in range(8):
+		_flora_normals.append(Vector3.UP)
+
+	# Couleur / tint
+	for i in range(8):
+		_flora_colors.append(tint)
+
+	# UVs (V inverse) — 2 quads identiques
+	for i in range(2):
+		_flora_uvs.append(Vector2(0, 1))
+		_flora_uvs.append(Vector2(1, 1))
+		_flora_uvs.append(Vector2(1, 0))
+		_flora_uvs.append(Vector2(0, 0))
+
+	# Layer index
+	for i in range(8):
+		_flora_custom0.append(layer)
+
+	# Indices — 2 quads = 4 triangles
+	_flora_indices.append(base)
+	_flora_indices.append(base + 1)
+	_flora_indices.append(base + 2)
+	_flora_indices.append(base + 2)
+	_flora_indices.append(base + 3)
+	_flora_indices.append(base)
+
+	_flora_indices.append(base + 4)
+	_flora_indices.append(base + 5)
+	_flora_indices.append(base + 6)
+	_flora_indices.append(base + 6)
+	_flora_indices.append(base + 7)
+	_flora_indices.append(base + 4)
 
 # ============================================================
 # WATER MESH — top faces only (greedy)
@@ -706,7 +843,7 @@ func _is_block_solid(x: int, y: int, z: int) -> bool:
 	if x < 0 or x >= CHUNK_SIZE or y < 0 or y >= CHUNK_HEIGHT or z < 0 or z >= CHUNK_SIZE:
 		return false
 	var bt: int = blocks[x * 4096 + z * 256 + y]
-	return bt != 0 and bt != WATER_TYPE and bt != TORCH_TYPE
+	return bt != 0 and bt != WATER_TYPE and bt != TORCH_TYPE and not CROSS_TYPES.has(bt)
 
 func _calculate_ao_for_face(direction: Vector3, x: int, y: int, z: int) -> Array:
 	var ao = [1.0, 1.0, 1.0, 1.0]

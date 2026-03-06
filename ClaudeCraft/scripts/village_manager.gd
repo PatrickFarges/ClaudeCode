@@ -217,7 +217,7 @@ func _find_ground_y(wx: int, wz: int) -> int:
 	# Utilisé pour le flatten au lieu de _find_surface_y qui renvoie le sommet des arbres
 	var leaf_set = { 6: true, 44: true, 45: true, 46: true, 47: true, 48: true, 49: true }
 	var trunk_set = { 5: true, 32: true, 33: true, 34: true, 35: true, 36: true, 42: true }
-	var flora_set = { 7: true }  # TALL_GRASS etc.
+	var flora_set = { 77: true, 78: true, 79: true, 80: true, 81: true, 82: true }  # Cross mesh vegetation
 	var chunk_pos = Vector3i(floori(float(wx) / CHUNK_SIZE), 0, floori(float(wz) / CHUNK_SIZE))
 	var start_y = 120
 	if world_manager.chunks.has(chunk_pos):
@@ -1991,7 +1991,7 @@ func _find_surface_y(wx: int, wz: int) -> int:
 		start_y = mini(world_manager.chunks[chunk_pos].y_max + 1, CHUNK_HEIGHT - 1)
 	for y in range(start_y, 0, -1):
 		var bt = world_manager.get_block_at_position(Vector3(wx, y, wz))
-		if bt != BlockRegistry.BlockType.AIR and bt != BlockRegistry.BlockType.WATER:
+		if bt != BlockRegistry.BlockType.AIR and bt != BlockRegistry.BlockType.WATER and not BlockRegistry.is_cross_mesh(bt):
 			return y
 	return -1
 

@@ -99,11 +99,28 @@ const TEXTURE_LIST: Array[String] = [
 	"torch",             # 85
 	# === STOCKAGE ===
 	"barrel_top_open",   # 86
+	# === VEGETATION DECORATIVE ===
+	"short_grass",       # 87
+	"fern",              # 88
+	"dead_bush",         # 89
+	"dandelion",         # 90
+	"poppy",             # 91
+	"cornflower",        # 92
 ]
+
+const CROSS_MESH_TEXTURES: Dictionary = {
+	"short_grass": true,
+	"fern": true,
+	"dead_bush": true,
+	"dandelion": true,
+	"poppy": true,
+	"cornflower": true,
+}
 
 var _texture_array: Texture2DArray
 var _layer_map: Dictionary = {}
 var _shared_material: ShaderMaterial
+var _cross_material: ShaderMaterial
 var _tex_resolution: int = 16
 
 func _ready():
@@ -135,8 +152,8 @@ func _ready():
 		img.convert(Image.FORMAT_RGBA8)
 		if img.get_width() != _tex_resolution or img.get_height() != _tex_resolution:
 			img.resize(_tex_resolution, _tex_resolution, Image.INTERPOLATE_NEAREST)
-		# Forcer alpha opaque sauf pour les textures qui ont besoin de transparence (glass)
-		if tex_name != "glass":
+		# Forcer alpha opaque sauf pour les textures qui ont besoin de transparence
+		if tex_name != "glass" and not CROSS_MESH_TEXTURES.has(tex_name):
 			_force_opaque(img)
 		images.append(img)
 
@@ -149,6 +166,12 @@ func _ready():
 	_shared_material = ShaderMaterial.new()
 	_shared_material.shader = shader
 	_shared_material.set_shader_parameter("block_textures", _texture_array)
+
+	# Materiau pour les cross meshes (vegetation) — cull_disabled
+	var cross_shader = load("res://shaders/block_texture_array_cross.gdshader") as Shader
+	_cross_material = ShaderMaterial.new()
+	_cross_material.shader = cross_shader
+	_cross_material.set_shader_parameter("block_textures", _texture_array)
 
 func _force_opaque(img: Image) -> void:
 	for y in range(img.get_height()):
@@ -175,6 +198,9 @@ func get_layer_index(texture_name: String) -> int:
 
 func get_shared_material() -> ShaderMaterial:
 	return _shared_material
+
+func get_cross_material() -> ShaderMaterial:
+	return _cross_material
 
 func get_texture_resolution() -> int:
 	return _tex_resolution

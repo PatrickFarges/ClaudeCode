@@ -33,6 +33,12 @@ static func _is_junk_block(bt: int) -> bool:
 			BlockRegistry.BlockType.PODZOL,
 			BlockRegistry.BlockType.MOSS_BLOCK,
 			BlockRegistry.BlockType.FARMLAND,
+			BlockRegistry.BlockType.SHORT_GRASS,
+			BlockRegistry.BlockType.FERN,
+			BlockRegistry.BlockType.DEAD_BUSH,
+			BlockRegistry.BlockType.DANDELION,
+			BlockRegistry.BlockType.POPPY,
+			BlockRegistry.BlockType.CORNFLOWER,
 		]:
 			_junk_blocks[junk] = true
 	return _junk_blocks.has(bt)

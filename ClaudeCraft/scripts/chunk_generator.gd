@@ -350,7 +350,7 @@ func _place_all_vegetation(blocks: Array, heightmap: Array, biome_map: Array, ch
 				continue
 
 			match biome:
-				0:  # DESERT — Cactus espacés + acacias rares
+				0:  # DESERT — Cactus espacés + acacias rares + buissons morts
 					if _hash_2d(wx, wz, 150) < 1:  # ~0.7% — cactus bien espacés
 						var h = 1 + _hash_2d(wx, wz, 3)  # 1-3 blocs de haut
 						for i in range(h):
@@ -358,13 +358,33 @@ func _place_all_vegetation(blocks: Array, heightmap: Array, biome_map: Array, ch
 								blocks[x][z][height + i] = BlockRegistry.BlockType.CACTUS
 					elif _hash_2d(wx, wz, 40) < 1:  # ~2.5% acacia (plus d'arbres)
 						_place_acacia_tree(blocks, x, z, height, wx, wz)
+					elif height < CHUNK_HEIGHT and _hash_2d(wx + 5, wz + 3, 12) < 1:
+						# Buisson mort sur sable (~8%)
+						if blocks[x][z][height - 1] == BlockRegistry.BlockType.SAND:
+							blocks[x][z][height] = BlockRegistry.BlockType.DEAD_BUSH
 
-				1:  # FOREST — Chenes + chenes noirs
+				1:  # FOREST — Chenes + chenes noirs + fougeres + fleurs
 					if _hash_2d(wx, wz, 9) < 1:  # ~11% density
 						if _hash_2d(wx * 3, wz * 5, 10) < 3:  # 30% dark oak
 							_place_dark_oak_tree(blocks, x, z, height, wx, wz)
 						else:
 							_place_oak_tree(blocks, x, z, height, wx, wz)
+					elif height < CHUNK_HEIGHT and blocks[x][z][height] == BlockRegistry.BlockType.AIR:
+						var surface = blocks[x][z][height - 1]
+						if surface == BlockRegistry.BlockType.DARK_GRASS or surface == BlockRegistry.BlockType.GRASS:
+							var flora_hash = _hash_2d(wx + 11, wz + 7, 100)
+							if flora_hash < 25:
+								# Herbe courte ~25%
+								blocks[x][z][height] = BlockRegistry.BlockType.SHORT_GRASS
+							elif flora_hash < 33:
+								# Fougere ~8%
+								blocks[x][z][height] = BlockRegistry.BlockType.FERN
+							elif flora_hash < 35:
+								# Coquelicot ~2%
+								blocks[x][z][height] = BlockRegistry.BlockType.POPPY
+							elif flora_hash < 37:
+								# Bleuet ~2%
+								blocks[x][z][height] = BlockRegistry.BlockType.CORNFLOWER
 					# Podzol en foret dense (~15%)
 					if height > SEA_LEVEL and _hash_2d(wx + 7, wz + 3, 20) < 3:
 						if blocks[x][z][height - 1] == BlockRegistry.BlockType.DARK_GRASS:
@@ -374,9 +394,25 @@ func _place_all_vegetation(blocks: Array, heightmap: Array, biome_map: Array, ch
 					if height < 120 and _hash_2d(wx, wz, 15) < 1:
 						_place_pine_tree(blocks, x, z, height, wx, wz)
 
-				3:  # PLAINS — Bouleaux epars
+				3:  # PLAINS — Bouleaux epars + herbe + fleurs
 					if _hash_2d(wx, wz, 25) < 1:  # ~4% density
 						_place_birch_tree(blocks, x, z, height, wx, wz)
+					elif height < CHUNK_HEIGHT and blocks[x][z][height] == BlockRegistry.BlockType.AIR:
+						var surface = blocks[x][z][height - 1]
+						if surface == BlockRegistry.BlockType.GRASS:
+							var flora_hash = _hash_2d(wx + 11, wz + 7, 100)
+							if flora_hash < 30:
+								# Herbe courte ~30%
+								blocks[x][z][height] = BlockRegistry.BlockType.SHORT_GRASS
+							elif flora_hash < 32:
+								# Pissenlit ~2%
+								blocks[x][z][height] = BlockRegistry.BlockType.DANDELION
+							elif flora_hash < 34:
+								# Coquelicot ~2%
+								blocks[x][z][height] = BlockRegistry.BlockType.POPPY
+							elif flora_hash < 36:
+								# Marguerite (cornflower) ~2%
+								blocks[x][z][height] = BlockRegistry.BlockType.CORNFLOWER
 
 func _place_oak_tree(blocks: Array, x: int, z: int, ground_y: int, wx: int = 0, wz: int = 0):
 	var trunk_height = 4 + _hash_2d(wx * 7, wz * 13, 3)  # 4-6
