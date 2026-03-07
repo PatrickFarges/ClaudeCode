@@ -38,15 +38,21 @@ const TEXTURE_ALIASES: Dictionary = {
 	"podzol_side": "podzol_top",
 }
 
-## Resout le chemin absolu d'une texture bloc, avec fallback alias
+## Resout le chemin d'une texture bloc, avec fallback alias
+## Retourne un chemin res:// (plus fiable pour Image.load que les chemins absolus)
 static func resolve_block_texture(tex_name: String) -> String:
 	var base = get_block_texture_path()
 	var path = base + tex_name + ".png"
+	if FileAccess.file_exists(path):
+		return path
+	# Essayer avec le chemin absolu (fallback)
 	var abs_path = ProjectSettings.globalize_path(path)
 	if FileAccess.file_exists(abs_path):
 		return abs_path
 	if TEXTURE_ALIASES.has(tex_name):
 		var alias_path = base + TEXTURE_ALIASES[tex_name] + ".png"
+		if FileAccess.file_exists(alias_path):
+			return alias_path
 		var abs_alias = ProjectSettings.globalize_path(alias_path)
 		if FileAccess.file_exists(abs_alias):
 			return abs_alias

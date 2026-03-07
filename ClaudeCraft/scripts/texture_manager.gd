@@ -155,6 +155,19 @@ func _ready():
 		# Forcer alpha opaque sauf pour les textures qui ont besoin de transparence
 		if tex_name != "glass" and not CROSS_MESH_TEXTURES.has(tex_name):
 			_force_opaque(img)
+		else:
+			# Verifier que les textures cross-mesh ont bien de la transparence
+			if CROSS_MESH_TEXTURES.has(tex_name):
+				var has_alpha = false
+				for py in range(img.get_height()):
+					for px in range(img.get_width()):
+						if img.get_pixel(px, py).a < 0.5:
+							has_alpha = true
+							break
+					if has_alpha:
+						break
+				if not has_alpha:
+					print("[TextureManager] ATTENTION: %s n'a pas de transparence!" % tex_name)
 		images.append(img)
 
 	# Construire le Texture2DArray
@@ -183,9 +196,9 @@ func _force_opaque(img: Image) -> void:
 func _detect_resolution(tex_path: String) -> int:
 	for tex_name in TEXTURE_LIST:
 		var path = tex_path + tex_name + ".png"
-		var abs_path = ProjectSettings.globalize_path(path)
 		var img := Image.new()
-		if img.load(abs_path) == OK:
+		# Essayer res:// d'abord, puis chemin absolu
+		if img.load(path) == OK or img.load(ProjectSettings.globalize_path(path)) == OK:
 			var size = img.get_width()
 			if size >= 16:
 				return size

@@ -281,12 +281,14 @@ func _generate_chunk_data(chunk_pos: Vector3i) -> Dictionary:
 		for wz2 in range(CHUNK_SIZE):
 			var biome = biome_map[wx2][wz2]
 			for wy in range(SEA_LEVEL, 0, -1):
-				if blocks[wx2][wz2][wy] == BlockRegistry.BlockType.AIR:
+				var existing = blocks[wx2][wz2][wy]
+				if existing == BlockRegistry.BlockType.AIR or BlockRegistry.is_cross_mesh(existing):
+					# Remplacer air ET vegetation submergee par de l'eau
 					blocks[wx2][wz2][wy] = BlockRegistry.BlockType.WATER
 					# Glace en surface dans les biomes froids
 					if wy == SEA_LEVEL and biome == 2:
 						blocks[wx2][wz2][wy] = BlockRegistry.BlockType.ICE
-				elif blocks[wx2][wz2][wy] != BlockRegistry.BlockType.WATER:
+				elif existing != BlockRegistry.BlockType.WATER:
 					break
 
 	# ============================================================

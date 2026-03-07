@@ -673,9 +673,11 @@ func _emit_cross_quad(x: int, y: int, z: int, bt: int):
 	for i in range(8):
 		_flora_normals.append(Vector3.UP)
 
-	# Couleur / tint
+	# Couleur / tint — layer index encode dans l'alpha du vertex color
+	# (contourne un probleme de CUSTOM0 non transmis au shader flora)
+	var tint_with_layer := Color(tint.r, tint.g, tint.b, layer / 255.0)
 	for i in range(8):
-		_flora_colors.append(tint)
+		_flora_colors.append(tint_with_layer)
 
 	# UVs (V inverse) — 2 quads identiques
 	for i in range(2):
@@ -684,7 +686,7 @@ func _emit_cross_quad(x: int, y: int, z: int, bt: int):
 		_flora_uvs.append(Vector2(1, 0))
 		_flora_uvs.append(Vector2(0, 0))
 
-	# Layer index
+	# Layer index (CUSTOM0 — conserve pour compatibilite)
 	for i in range(8):
 		_flora_custom0.append(layer)
 
@@ -722,8 +724,30 @@ func _build_water_mesh():
 				var idx: int = x_off + z * 256 + y
 				var bt: int = blocks[idx]
 				if bt == WATER_TYPE and (y + 1 >= CHUNK_HEIGHT or blocks[idx + 1] == 0):
-					mask[x][z] = bt
-					has_faces = true
+					# Anti-damier : ne pas rendre l'eau en surface si un voisin
+					# au meme niveau est un bloc solide (= rive)
+					var at_shore: bool = false
+					if x > 0:
+						var nb: int = blocks[(x - 1) * 4096 + z * 256 + y]
+						if nb != 0 and nb != WATER_TYPE:
+							at_shore = true
+					if not at_shore and x < CHUNK_SIZE - 1:
+						var nb: int = blocks[(x + 1) * 4096 + z * 256 + y]
+						if nb != 0 and nb != WATER_TYPE:
+							at_shore = true
+					if not at_shore and z > 0:
+						var nb: int = blocks[x_off + (z - 1) * 256 + y]
+						if nb != 0 and nb != WATER_TYPE:
+							at_shore = true
+					if not at_shore and z < CHUNK_SIZE - 1:
+						var nb: int = blocks[x_off + (z + 1) * 256 + y]
+						if nb != 0 and nb != WATER_TYPE:
+							at_shore = true
+					if not at_shore:
+						mask[x][z] = bt
+						has_faces = true
+					else:
+						mask[x][z] = -1
 				else:
 					mask[x][z] = -1
 

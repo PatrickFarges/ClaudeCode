@@ -16,7 +16,9 @@ void fragment() {
 	vec4 tex_sample = texture(block_textures, vec3(UV, tex_layer));
 	// COLOR (vertex color) sert de tint multiplicatif (AO, direction, teinte)
 	ALBEDO = tex_sample.rgb * COLOR.rgb;
-	ALPHA = tex_sample.a;
+	// Alpha binaire : opaque (1.0) ou discard (0.0) — evite la semi-transparence
+	// residuelle sur les textures comme la glace (alpha=190/255 dans le PNG)
+	ALPHA = step(0.5, tex_sample.a);
 	ALPHA_SCISSOR_THRESHOLD = 0.5;
 	ROUGHNESS = roughness_value;
 	METALLIC = 0.0;
