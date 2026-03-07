@@ -300,13 +300,13 @@ func _apply_enb_sombre():
 	_env.tonemap_white = 4.5
 	_env.tonemap_exposure = 0.9
 
-	# SSAO fort — ombres de contact marquées
+	# SSAO modéré — ombres de contact sans noircir les creux
 	_env.ssao_enabled = true
-	_env.ssao_radius = 3.0
-	_env.ssao_intensity = 3.0
-	_env.ssao_power = 2.0
-	_env.ssao_detail = 0.7
-	_env.ssao_sharpness = 0.7
+	_env.ssao_radius = 2.5
+	_env.ssao_intensity = 1.8
+	_env.ssao_power = 1.5
+	_env.ssao_detail = 0.5
+	_env.ssao_sharpness = 0.5
 
 	# Glow subtil — juste les highlights
 	_env.glow_enabled = true
@@ -331,10 +331,10 @@ func _apply_enb_sombre():
 	_env.fog_light_color = Color(0.6, 0.7, 0.8, 1)
 	_env.fog_light_energy = 0.5
 
-	# Ambient réduit — les ombres restent sombres
+	# Ambient — assez pour lire les détails dans l'ombre
 	_env.ambient_light_source = 2
 	_env.ambient_light_color = Color(0.85, 0.9, 1.0, 1)
-	_env.ambient_light_energy = 0.2
+	_env.ambient_light_energy = 0.3
 
 	# Color grading — saturation forte, contraste élevé, légèrement assombri
 	_env.adjustment_enabled = true
@@ -365,13 +365,13 @@ func _apply_reshade_epique():
 	_env.tonemap_white = 4.0
 	_env.tonemap_exposure = 1.0
 
-	# SSAO marqué
+	# SSAO modéré — profondeur sans noircir
 	_env.ssao_enabled = true
-	_env.ssao_radius = 2.5
-	_env.ssao_intensity = 2.5
-	_env.ssao_power = 1.8
-	_env.ssao_detail = 0.6
-	_env.ssao_sharpness = 0.6
+	_env.ssao_radius = 2.0
+	_env.ssao_intensity = 1.5
+	_env.ssao_power = 1.3
+	_env.ssao_detail = 0.5
+	_env.ssao_sharpness = 0.5
 
 	# Glow — chaleur dorée dans les highlights
 	_env.glow_enabled = true
@@ -396,10 +396,10 @@ func _apply_reshade_epique():
 	_env.fog_light_color = Color(0.55, 0.65, 0.8, 1)
 	_env.fog_light_energy = 0.6
 
-	# Ambient bas — contraste ombres/lumière
+	# Ambient — ombres lisibles mais profondes
 	_env.ambient_light_source = 2
 	_env.ambient_light_color = Color(0.8, 0.85, 1.0, 1)
-	_env.ambient_light_energy = 0.18
+	_env.ambient_light_energy = 0.28
 
 	# Color grading — verts profonds, contraste élevé, ombres froides highlights chaudes
 	_env.adjustment_enabled = true
