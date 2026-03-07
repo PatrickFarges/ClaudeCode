@@ -275,6 +275,10 @@ func _try_spawn_village(chunk_pos: Vector3i, chunk_data: Dictionary):
 	if center_surface_y < 0:
 		return
 
+	# Teleporter le joueur a la surface (spawn initial a y=80 peut etre sous le terrain)
+	if player:
+		player.global_position.y = center_surface_y + 2.0
+
 	var village_center = Vector3(
 		chunk_pos.x * Chunk.CHUNK_SIZE + center_x + 0.5,
 		center_surface_y,
