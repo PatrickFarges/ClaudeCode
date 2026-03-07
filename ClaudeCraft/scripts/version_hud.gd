@@ -13,7 +13,8 @@ const VERSION = "v17.0.0"
 var audio_manager = null
 var player = null
 var day_night_cycle = null
-var _pending_preset: int = -1  # preset à appliquer au premier _process
+var _pending_preset: int = -1  # preset à appliquer après warmup
+var _warmup_frames: int = 0    # compteur de frames avant application
 
 # === Render presets ===
 var _render_preset: int = 0
@@ -426,18 +427,22 @@ func _apply_reshade_epique():
 	_env.adjustment_brightness = 0.88
 
 func _process(_delta):
-	# Appliquer le preset sauvegardé (même _env que F2, pas de re-fetch)
+	# Appliquer le preset sauvegardé après warmup (le renderer a besoin de
+	# quelques frames avec de la géométrie pour que SSAO/SDFGI fonctionnent)
 	if _pending_preset >= 0 and _env:
-		_render_preset = _pending_preset
-		_pending_preset = -1
-		match _render_preset:
-			0: _apply_vanilla()
-			1: _apply_gi()
-			2: _apply_cinematic()
-			3: _apply_enb_sombre()
-			4: _apply_reshade_epique()
-		render_label.text = "Rendu : %s (F2)" % RENDER_NAMES[_render_preset]
-		render_label.add_theme_color_override("font_color", RENDER_COLORS[_render_preset])
+		_warmup_frames += 1
+		if _warmup_frames >= 15:
+			_render_preset = _pending_preset
+			_pending_preset = -1
+			_warmup_frames = 0
+			match _render_preset:
+				0: _apply_vanilla()
+				1: _apply_gi()
+				2: _apply_cinematic()
+				3: _apply_enb_sombre()
+				4: _apply_reshade_epique()
+			render_label.text = "Rendu : %s (F2)" % RENDER_NAMES[_render_preset]
+			render_label.add_theme_color_override("font_color", RENDER_COLORS[_render_preset])
 
 	fps_label.text = Locale.tr_ui("fps") % Engine.get_frames_per_second()
 
