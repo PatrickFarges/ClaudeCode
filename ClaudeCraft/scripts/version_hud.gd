@@ -106,7 +106,11 @@ func _ready():
 			break
 
 	# Charger le preset de rendu sauvegardé (ou Cloclo Style par défaut)
+	# Attendre 2 frames supplémentaires pour que la scène soit 100% initialisée
+	# (sinon les valeurs par défaut de l'Environment écrasent notre preset)
 	if _env:
+		await get_tree().process_frame
+		await get_tree().process_frame
 		var saved_preset = 2  # Cloclo Style par défaut
 		var cfg = ConfigFile.new()
 		if cfg.load("user://settings.cfg") == OK and cfg.has_section_key("game", "render_preset"):
