@@ -180,9 +180,25 @@ func _cycle_render_preset():
 	render_label.add_theme_color_override("font_color", RENDER_COLORS[_render_preset])
 	print("Render preset: %s" % RENDER_NAMES[_render_preset])
 
-func _apply_vanilla():
+func _reset_env():
+	# Reset TOUTES les propriétés post-process à un état neutre
+	# (évite que les valeurs de main.tscn ou d'un preset précédent persistent)
 	_env.sdfgi_enabled = false
 	_env.ssil_enabled = false
+	_env.glow_enabled = false
+	_env.volumetric_fog_enabled = false
+	_env.adjustment_enabled = false
+	_env.ssao_enabled = false
+	_env.fog_enabled = false
+	_env.fog_sky_affect = 0.0
+	_env.tonemap_mode = 0
+	_env.tonemap_white = 1.0
+	_env.tonemap_exposure = 1.0
+	_env.ambient_light_source = 0
+	_env.ambient_light_energy = 0.0
+
+func _apply_vanilla():
+	_reset_env()
 	_env.glow_enabled = false
 	_env.volumetric_fog_enabled = false
 	_env.adjustment_enabled = false
@@ -223,6 +239,7 @@ func _apply_gi():
 	_env.ambient_light_energy = 0.25
 
 func _apply_cinematic():
+	_reset_env()
 	# SDFGI
 	_env.sdfgi_enabled = true
 	_env.sdfgi_use_occlusion = true
@@ -287,6 +304,7 @@ func _apply_cinematic():
 	_env.adjustment_brightness = 1.0
 
 func _apply_enb_sombre():
+	_reset_env()
 	# Inspiré ENB Series Skyrim — lumière dorée chaude, couleurs riches, ambiance golden hour
 	# SDFGI avec bounce élevé pour illumination indirecte chaude
 	_env.sdfgi_enabled = true
@@ -352,6 +370,7 @@ func _apply_enb_sombre():
 	_env.adjustment_brightness = 0.97
 
 func _apply_reshade_epique():
+	_reset_env()
 	# Inspiré ReShade presets — cinématique dramatique, couleurs profondes, ambiance épique
 	# SDFGI avec énergie modérée
 	_env.sdfgi_enabled = true
