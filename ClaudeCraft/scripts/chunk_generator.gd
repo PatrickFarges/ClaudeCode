@@ -790,8 +790,10 @@ func _get_block(y: int, surface: int, biome: int) -> int:
 			return BlockRegistry.BlockType.STONE
 
 func _hash_2d(x: int, z: int, modulo: int) -> int:
-	var hash_val = abs((x * 374761393 + z * 668265263) >> 13)
-	return hash_val % modulo
+	var h = x * 374761393 + z * 668265263
+	h = (h ^ (h >> 13)) * 1274126177
+	h = h ^ (h >> 16)
+	return abs(h) % modulo
 
 func _on_chunk_generated(chunk_data: Dictionary):
 	emit_signal("chunk_generated", chunk_data)
