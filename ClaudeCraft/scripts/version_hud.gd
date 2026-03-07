@@ -13,6 +13,7 @@ const VERSION = "v17.0.0"
 var audio_manager = null
 var player = null
 var day_night_cycle = null
+var _pending_preset: int = -1  # preset à appliquer au premier _process
 
 # === Render presets ===
 var _render_preset: int = 0
@@ -105,31 +106,19 @@ func _ready():
 			_env = child.environment
 			break
 
-	# Charger le preset de rendu sauvegardé (ou Cloclo Style par défaut)
-	# Attendre 2 frames supplémentaires pour que la scène soit 100% initialisée
-	# (sinon les valeurs par défaut de l'Environment écrasent notre preset)
-	if _env:
-		await get_tree().process_frame
-		await get_tree().process_frame
-		var saved_preset = 2  # Cloclo Style par défaut
-		var cfg = ConfigFile.new()
-		if cfg.load("user://settings.cfg") == OK and cfg.has_section_key("game", "render_preset"):
-			saved_preset = int(cfg.get_value("game", "render_preset"))
-			if saved_preset < 0 or saved_preset >= RENDER_NAMES.size():
-				saved_preset = 2
-		_render_preset = saved_preset
-		match _render_preset:
-			0: _apply_vanilla()
-			1: _apply_gi()
-			2: _apply_cinematic()
-			3: _apply_enb_sombre()
-			4: _apply_reshade_epique()
-		render_label.text = "Rendu : %s (F2)" % RENDER_NAMES[_render_preset]
-		render_label.add_theme_color_override("font_color", RENDER_COLORS[_render_preset])
-		# Charger aussi la vitesse du temps
-		var settings_menu = get_tree().current_scene.get_node_or_null("SettingsMenu")
-		if settings_menu:
-			settings_menu.load_settings()
+	# Charger le preset sauvegardé — application différée au premier _process
+	# (l'Environment de la scène n'est pas encore stable dans _ready)
+	var saved_preset = 2  # Cloclo Style par défaut
+	var cfg = ConfigFile.new()
+	if cfg.load("user://settings.cfg") == OK and cfg.has_section_key("game", "render_preset"):
+		saved_preset = int(cfg.get_value("game", "render_preset"))
+		if saved_preset < 0 or saved_preset >= RENDER_NAMES.size():
+			saved_preset = 2
+	_pending_preset = saved_preset
+	# Charger aussi la vitesse du temps
+	var settings_menu = get_tree().current_scene.get_node_or_null("SettingsMenu")
+	if settings_menu:
+		settings_menu.load_settings()
 
 func _input(event):
 	# Ctrl gauche + molette souris = changer la vitesse du temps
@@ -422,6 +411,25 @@ func _apply_reshade_epique():
 	_env.adjustment_brightness = 0.88
 
 func _process(_delta):
+	# Appliquer le preset différé (premier frame où l'Environment est stable)
+	if _pending_preset >= 0:
+		# Re-fetcher _env car la référence de _ready() peut être obsolète
+		for child in get_tree().current_scene.get_children():
+			if child is WorldEnvironment:
+				_env = child.environment
+				break
+		if _env:
+			_render_preset = _pending_preset
+			match _render_preset:
+				0: _apply_vanilla()
+				1: _apply_gi()
+				2: _apply_cinematic()
+				3: _apply_enb_sombre()
+				4: _apply_reshade_epique()
+			render_label.text = "Rendu : %s (F2)" % RENDER_NAMES[_render_preset]
+			render_label.add_theme_color_override("font_color", RENDER_COLORS[_render_preset])
+		_pending_preset = -1
+
 	fps_label.text = Locale.tr_ui("fps") % Engine.get_frames_per_second()
 
 	# Biome
