@@ -278,69 +278,69 @@ func _apply_cinematic():
 	_env.adjustment_brightness = 1.0
 
 func _apply_enb_sombre():
-	# Inspiré ENB Series Skyrim — ombres profondes, couleurs riches, contraste marqué
-	# SDFGI avec bounce élevé pour illumination indirecte réaliste
+	# Inspiré ENB Series Skyrim — lumière dorée chaude, couleurs riches, ambiance golden hour
+	# SDFGI avec bounce élevé pour illumination indirecte chaude
 	_env.sdfgi_enabled = true
 	_env.sdfgi_use_occlusion = true
 	_env.sdfgi_cascades = 4
 	_env.sdfgi_min_cell_size = 0.5
-	_env.sdfgi_energy = 0.8
+	_env.sdfgi_energy = 1.1
 	_env.sdfgi_normal_bias = 1.1
 	_env.sdfgi_probe_bias = 1.1
-	_env.sdfgi_bounce_feedback = 0.4
+	_env.sdfgi_bounce_feedback = 0.6
 
-	# SSIL réduit — pas de lumière parasite
+	# SSIL — lumière indirecte pour remplir les ombres
 	_env.ssil_enabled = true
-	_env.ssil_radius = 4.0
-	_env.ssil_intensity = 0.5
+	_env.ssil_radius = 5.0
+	_env.ssil_intensity = 0.7
 	_env.ssil_normal_rejection = 1.0
 
-	# Tonemap ACES — contraste cinématique
-	_env.tonemap_mode = 3
+	# Tonemap Filmic — comme ReShade mais avec tonalité chaude
+	_env.tonemap_mode = 2
 	_env.tonemap_white = 5.0
-	_env.tonemap_exposure = 1.0
+	_env.tonemap_exposure = 1.05
 
-	# SSAO modéré — ombres de contact sans noircir les creux
+	# SSAO doux
 	_env.ssao_enabled = true
-	_env.ssao_radius = 2.5
-	_env.ssao_intensity = 1.8
-	_env.ssao_power = 1.5
+	_env.ssao_radius = 2.0
+	_env.ssao_intensity = 1.5
+	_env.ssao_power = 1.3
 	_env.ssao_detail = 0.5
 	_env.ssao_sharpness = 0.5
 
-	# Glow subtil — juste les highlights
+	# Glow chaud — lueur dorée sur les highlights
 	_env.glow_enabled = true
-	_env.glow_intensity = 0.4
-	_env.glow_strength = 0.6
-	_env.glow_bloom = 0.03
+	_env.glow_intensity = 0.6
+	_env.glow_strength = 0.8
+	_env.glow_bloom = 0.06
 	_env.glow_blend_mode = 2
-	_env.glow_hdr_threshold = 1.2
+	_env.glow_hdr_threshold = 0.9
 
-	# Volumetric fog léger
+	# Volumetric fog doré
 	_env.volumetric_fog_enabled = true
 	_env.volumetric_fog_density = 0.002
-	_env.volumetric_fog_albedo = Color(0.75, 0.8, 0.85, 1)
+	_env.volumetric_fog_albedo = Color(0.9, 0.82, 0.7, 1)
 	_env.volumetric_fog_emission = Color(0.0, 0.0, 0.0, 1)
-	_env.volumetric_fog_anisotropy = 0.7
-	_env.volumetric_fog_gi_inject = 0.8
+	_env.volumetric_fog_anisotropy = 0.8
+	_env.volumetric_fog_gi_inject = 1.0
 
-	# Fog distance — profondeur atmosphérique
+	# Fog distance — brume chaude ambrée
 	_env.fog_enabled = true
-	_env.fog_density = 0.004
+	_env.fog_density = 0.003
 	_env.fog_aerial_perspective = 0.5
-	_env.fog_light_color = Color(0.6, 0.7, 0.8, 1)
-	_env.fog_light_energy = 0.5
+	_env.fog_light_color = Color(0.85, 0.75, 0.6, 1)
+	_env.fog_light_energy = 0.7
 
-	# Ambient — relève les ombres sans casser le contraste
+	# Ambient chaud — tons dorés dans les ombres
 	_env.ambient_light_source = 2
-	_env.ambient_light_color = Color(0.85, 0.9, 1.0, 1)
-	_env.ambient_light_energy = 0.38
+	_env.ambient_light_color = Color(1.0, 0.92, 0.8, 1)
+	_env.ambient_light_energy = 0.32
 
-	# Color grading — saturation forte, contraste élevé
+	# Color grading — saturation forte, contraste, warmth
 	_env.adjustment_enabled = true
-	_env.adjustment_saturation = 1.6
-	_env.adjustment_contrast = 1.2
-	_env.adjustment_brightness = 0.95
+	_env.adjustment_saturation = 1.5
+	_env.adjustment_contrast = 1.18
+	_env.adjustment_brightness = 0.97
 
 func _apply_reshade_epique():
 	# Inspiré ReShade presets — cinématique dramatique, couleurs profondes, ambiance épique
