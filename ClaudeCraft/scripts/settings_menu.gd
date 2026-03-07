@@ -133,15 +133,15 @@ func _build_ui():
 
 	var render_row = HBoxContainer.new()
 	render_row.add_theme_constant_override("separation", 8)
-	var render_names = ["Vanilla", "Global Illumination", "Cloclo Style"]
+	var render_names = ["Vanilla", "Global Illumination", "Cloclo Style", "ENB Sombre", "ReShade Epique"]
 	var hud = get_tree().current_scene.get_node_or_null("VersionHUD")
 	var current_render = hud._render_preset if hud else 2
 	_render_buttons = []
-	for i in range(3):
+	for i in range(render_names.size()):
 		var btn = Button.new()
 		btn.text = render_names[i]
 		btn.add_theme_font_size_override("font_size", 14)
-		btn.custom_minimum_size = Vector2(200, 32)
+		btn.custom_minimum_size = Vector2(160, 32)
 		btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		if i == current_render:
 			btn.add_theme_color_override("font_color", Color(0.9, 0.6, 1.0))
@@ -294,6 +294,8 @@ func _set_render(idx: int):
 			0: hud._apply_vanilla()
 			1: hud._apply_gi()
 			2: hud._apply_cinematic()
+			3: hud._apply_enb_sombre()
+			4: hud._apply_reshade_epique()
 		hud.render_label.text = "Rendu : %s (F2)" % hud.RENDER_NAMES[idx]
 		hud.render_label.add_theme_color_override("font_color", hud.RENDER_COLORS[idx])
 	_update_render_buttons(idx)
@@ -357,5 +359,7 @@ func load_settings():
 				0: hud._apply_vanilla()
 				1: hud._apply_gi()
 				2: hud._apply_cinematic()
+				3: hud._apply_enb_sombre()
+				4: hud._apply_reshade_epique()
 			hud.render_label.text = "Rendu : %s (F2)" % hud.RENDER_NAMES[idx]
 			hud.render_label.add_theme_color_override("font_color", hud.RENDER_COLORS[idx])

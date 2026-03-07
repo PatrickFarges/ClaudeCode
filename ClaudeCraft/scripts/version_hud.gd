@@ -17,11 +17,13 @@ var day_night_cycle = null
 # === Render presets ===
 var _render_preset: int = 0
 var _env: Environment = null
-const RENDER_NAMES = ["Vanilla", "Global Illumination", "Cloclo Style"]
+const RENDER_NAMES = ["Vanilla", "Global Illumination", "Cloclo Style", "ENB Sombre", "ReShade Epique"]
 const RENDER_COLORS = [
 	Color(0.7, 0.7, 0.7, 0.7),    # Vanilla — gris
 	Color(0.4, 0.9, 0.5, 0.7),    # GI — vert
 	Color(0.9, 0.6, 1.0, 0.7),    # Cloclo Style — violet
+	Color(1.0, 0.7, 0.3, 0.7),    # ENB Sombre — or
+	Color(0.3, 0.8, 1.0, 0.7),    # ReShade Epique — cyan
 ]
 
 const SPEED_COLORS = [
@@ -161,6 +163,10 @@ func _cycle_render_preset():
 			_apply_gi()
 		2:
 			_apply_cinematic()
+		3:
+			_apply_enb_sombre()
+		4:
+			_apply_reshade_epique()
 	render_label.text = "Rendu : %s (F2)" % RENDER_NAMES[_render_preset]
 	render_label.add_theme_color_override("font_color", RENDER_COLORS[_render_preset])
 	print("Render preset: %s" % RENDER_NAMES[_render_preset])
@@ -270,6 +276,136 @@ func _apply_cinematic():
 	_env.adjustment_saturation = 1.5
 	_env.adjustment_contrast = 1.12
 	_env.adjustment_brightness = 1.0
+
+func _apply_enb_sombre():
+	# Inspiré ENB Series Skyrim — ombres profondes, couleurs riches, contraste marqué
+	# SDFGI avec bounce élevé pour illumination indirecte réaliste
+	_env.sdfgi_enabled = true
+	_env.sdfgi_use_occlusion = true
+	_env.sdfgi_cascades = 4
+	_env.sdfgi_min_cell_size = 0.5
+	_env.sdfgi_energy = 0.8
+	_env.sdfgi_normal_bias = 1.1
+	_env.sdfgi_probe_bias = 1.1
+	_env.sdfgi_bounce_feedback = 0.4
+
+	# SSIL réduit — pas de lumière parasite
+	_env.ssil_enabled = true
+	_env.ssil_radius = 4.0
+	_env.ssil_intensity = 0.5
+	_env.ssil_normal_rejection = 1.0
+
+	# Tonemap ACES — contraste cinématique, noirs profonds
+	_env.tonemap_mode = 3
+	_env.tonemap_white = 4.5
+	_env.tonemap_exposure = 0.9
+
+	# SSAO fort — ombres de contact marquées
+	_env.ssao_enabled = true
+	_env.ssao_radius = 3.0
+	_env.ssao_intensity = 3.0
+	_env.ssao_power = 2.0
+	_env.ssao_detail = 0.7
+	_env.ssao_sharpness = 0.7
+
+	# Glow subtil — juste les highlights
+	_env.glow_enabled = true
+	_env.glow_intensity = 0.4
+	_env.glow_strength = 0.6
+	_env.glow_bloom = 0.03
+	_env.glow_blend_mode = 2
+	_env.glow_hdr_threshold = 1.2
+
+	# Volumetric fog léger
+	_env.volumetric_fog_enabled = true
+	_env.volumetric_fog_density = 0.002
+	_env.volumetric_fog_albedo = Color(0.75, 0.8, 0.85, 1)
+	_env.volumetric_fog_emission = Color(0.0, 0.0, 0.0, 1)
+	_env.volumetric_fog_anisotropy = 0.7
+	_env.volumetric_fog_gi_inject = 0.8
+
+	# Fog distance — profondeur atmosphérique
+	_env.fog_enabled = true
+	_env.fog_density = 0.004
+	_env.fog_aerial_perspective = 0.5
+	_env.fog_light_color = Color(0.6, 0.7, 0.8, 1)
+	_env.fog_light_energy = 0.5
+
+	# Ambient réduit — les ombres restent sombres
+	_env.ambient_light_source = 2
+	_env.ambient_light_color = Color(0.85, 0.9, 1.0, 1)
+	_env.ambient_light_energy = 0.2
+
+	# Color grading — saturation forte, contraste élevé, légèrement assombri
+	_env.adjustment_enabled = true
+	_env.adjustment_saturation = 1.6
+	_env.adjustment_contrast = 1.25
+	_env.adjustment_brightness = 0.92
+
+func _apply_reshade_epique():
+	# Inspiré ReShade presets — cinématique dramatique, couleurs profondes, ambiance épique
+	# SDFGI avec énergie modérée
+	_env.sdfgi_enabled = true
+	_env.sdfgi_use_occlusion = true
+	_env.sdfgi_cascades = 4
+	_env.sdfgi_min_cell_size = 0.5
+	_env.sdfgi_energy = 1.0
+	_env.sdfgi_normal_bias = 1.1
+	_env.sdfgi_probe_bias = 1.1
+	_env.sdfgi_bounce_feedback = 0.5
+
+	# SSIL
+	_env.ssil_enabled = true
+	_env.ssil_radius = 5.0
+	_env.ssil_intensity = 0.6
+	_env.ssil_normal_rejection = 1.0
+
+	# Tonemap Filmic — rendu film, noirs doux mais profonds
+	_env.tonemap_mode = 2
+	_env.tonemap_white = 4.0
+	_env.tonemap_exposure = 1.0
+
+	# SSAO marqué
+	_env.ssao_enabled = true
+	_env.ssao_radius = 2.5
+	_env.ssao_intensity = 2.5
+	_env.ssao_power = 1.8
+	_env.ssao_detail = 0.6
+	_env.ssao_sharpness = 0.6
+
+	# Glow — chaleur dorée dans les highlights
+	_env.glow_enabled = true
+	_env.glow_intensity = 0.5
+	_env.glow_strength = 0.7
+	_env.glow_bloom = 0.05
+	_env.glow_blend_mode = 2
+	_env.glow_hdr_threshold = 0.9
+
+	# Volumetric fog — brume atmosphérique type forêt enchantée
+	_env.volumetric_fog_enabled = true
+	_env.volumetric_fog_density = 0.003
+	_env.volumetric_fog_albedo = Color(0.7, 0.75, 0.8, 1)
+	_env.volumetric_fog_emission = Color(0.0, 0.0, 0.0, 1)
+	_env.volumetric_fog_anisotropy = 0.85
+	_env.volumetric_fog_gi_inject = 1.2
+
+	# Fog distance — brume lointaine bleutée
+	_env.fog_enabled = true
+	_env.fog_density = 0.006
+	_env.fog_aerial_perspective = 0.7
+	_env.fog_light_color = Color(0.55, 0.65, 0.8, 1)
+	_env.fog_light_energy = 0.6
+
+	# Ambient bas — contraste ombres/lumière
+	_env.ambient_light_source = 2
+	_env.ambient_light_color = Color(0.8, 0.85, 1.0, 1)
+	_env.ambient_light_energy = 0.18
+
+	# Color grading — verts profonds, contraste élevé, ombres froides highlights chaudes
+	_env.adjustment_enabled = true
+	_env.adjustment_saturation = 1.45
+	_env.adjustment_contrast = 1.3
+	_env.adjustment_brightness = 0.88
 
 func _process(_delta):
 	fps_label.text = Locale.tr_ui("fps") % Engine.get_frames_per_second()
