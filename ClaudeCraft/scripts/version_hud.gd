@@ -105,17 +105,27 @@ func _ready():
 			_env = child.environment
 			break
 
-	# Charger les settings sauvegardés (ou Cloclo Style par défaut)
+	# Charger le preset de rendu sauvegardé (ou Cloclo Style par défaut)
 	if _env:
+		var saved_preset = 2  # Cloclo Style par défaut
+		var cfg = ConfigFile.new()
+		if cfg.load("user://settings.cfg") == OK and cfg.has_section_key("game", "render_preset"):
+			saved_preset = int(cfg.get_value("game", "render_preset"))
+			if saved_preset < 0 or saved_preset >= RENDER_NAMES.size():
+				saved_preset = 2
+		_render_preset = saved_preset
+		match _render_preset:
+			0: _apply_vanilla()
+			1: _apply_gi()
+			2: _apply_cinematic()
+			3: _apply_enb_sombre()
+			4: _apply_reshade_epique()
+		render_label.text = "Rendu : %s (F2)" % RENDER_NAMES[_render_preset]
+		render_label.add_theme_color_override("font_color", RENDER_COLORS[_render_preset])
+		# Charger aussi la vitesse du temps
 		var settings_menu = get_tree().current_scene.get_node_or_null("SettingsMenu")
 		if settings_menu:
 			settings_menu.load_settings()
-		# Si aucun settings sauvegardé, appliquer Cloclo Style par défaut
-		if _render_preset == 0:
-			_render_preset = 2
-			_apply_cinematic()
-			render_label.text = "Rendu : %s (F2)" % RENDER_NAMES[_render_preset]
-			render_label.add_theme_color_override("font_color", RENDER_COLORS[_render_preset])
 
 func _input(event):
 	# Ctrl gauche + molette souris = changer la vitesse du temps
