@@ -99,18 +99,39 @@ func _generate_chunk_data(chunk_pos: Vector3i) -> Dictionary:
 	terrain_noise.fractal_lacunarity = 2.0
 	terrain_noise.fractal_gain = 0.45
 
-	var elevation_noise = FastNoiseLite.new()
-	elevation_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
-	elevation_noise.seed = seed_base + 5555
-	elevation_noise.frequency = 0.003
-	elevation_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
-	elevation_noise.fractal_octaves = 3
-	elevation_noise.fractal_gain = 0.4
+	# Domain warping — deforme les coordonnees pour un terrain organique
+	var warp_noise1 = FastNoiseLite.new()
+	warp_noise1.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	warp_noise1.seed = seed_base + 7777
+	warp_noise1.frequency = 0.003
+
+	var warp_noise2 = FastNoiseLite.new()
+	warp_noise2.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	warp_noise2.seed = seed_base + 8877
+	warp_noise2.frequency = 0.003
+
+	# Continentalness — grande echelle, cotes vs interieur vs montagnes
+	var continental_noise = FastNoiseLite.new()
+	continental_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	continental_noise.seed = seed_base + 1111
+	continental_noise.frequency = 0.0008
+	continental_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
+	continental_noise.fractal_octaves = 3
+	continental_noise.fractal_gain = 0.4
+
+	# Erosion — vallees et passes dans les montagnes
+	var erosion_noise = FastNoiseLite.new()
+	erosion_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	erosion_noise.seed = seed_base + 2222
+	erosion_noise.frequency = 0.0015
+	erosion_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
+	erosion_noise.fractal_octaves = 3
+	erosion_noise.fractal_gain = 0.4
 
 	var temp_noise = FastNoiseLite.new()
 	temp_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
 	temp_noise.seed = seed_base + 9012
-	temp_noise.frequency = 0.006
+	temp_noise.frequency = 0.0015
 	temp_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
 	temp_noise.fractal_octaves = 2
 	temp_noise.fractal_gain = 0.4
@@ -118,7 +139,7 @@ func _generate_chunk_data(chunk_pos: Vector3i) -> Dictionary:
 	var humid_noise = FastNoiseLite.new()
 	humid_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
 	humid_noise.seed = seed_base + 3456
-	humid_noise.frequency = 0.008
+	humid_noise.frequency = 0.0015
 	humid_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
 	humid_noise.fractal_octaves = 2
 	humid_noise.fractal_gain = 0.4
@@ -174,17 +195,22 @@ func _generate_chunk_data(chunk_pos: Vector3i) -> Dictionary:
 			var wx = chunk_pos.x * CHUNK_SIZE + x
 			var wz = chunk_pos.z * CHUNK_SIZE + z
 
-			var n = (terrain_noise.get_noise_2d(wx, wz) + 1.0) / 2.0
+			# Domain warping — coordonnees deformees pour terrain organique
+			var warp_x = warp_noise1.get_noise_2d(wx, wz) * 50.0
+			var warp_z = warp_noise2.get_noise_2d(wx, wz) * 50.0
+			var n = (terrain_noise.get_noise_2d(wx + warp_x, wz + warp_z) + 1.0) / 2.0
 			n = clampf(n, 0.0, 1.0)
 
-			var elev = (elevation_noise.get_noise_2d(wx, wz) + 1.0) / 2.0
-			elev = clampf(elev, 0.0, 1.0)
+			var continental = (continental_noise.get_noise_2d(wx, wz) + 1.0) / 2.0
+			continental = clampf(continental, 0.0, 1.0)
+			var erosion = (erosion_noise.get_noise_2d(wx, wz) + 1.0) / 2.0
+			erosion = clampf(erosion, 0.0, 1.0)
 
 			var t = (temp_noise.get_noise_2d(wx, wz) + 1.0) / 2.0
 			var h = (humid_noise.get_noise_2d(wx, wz) + 1.0) / 2.0
-			var biome = _get_biome(t, h)
 
-			var height = _get_continuous_height(n, elev)
+			var height = _get_terrain_height(n, continental, erosion)
+			var biome = _get_biome(t, h, height)
 
 			heightmap[x][z] = height
 			biome_map[x][z] = biome
@@ -679,17 +705,26 @@ func _apply_structures(blocks: Array, chunk_pos: Vector3i) -> Vector2i:
 # TERRAIN
 # ============================================================
 
-func _get_continuous_height(noise: float, elevation: float) -> int:
-	var base_height = SEA_LEVEL - 2.0 + noise * 10.0
-	var hill_factor = _smoothstep(0.25, 0.55, elevation)
-	var hill_height = noise * 22.0 * hill_factor
-	var mountain_factor = _smoothstep(0.5, 0.8, elevation)
-	var mountain_noise = pow(noise, 1.8)
-	var mountain_height = mountain_noise * 80.0 * mountain_factor
-	var total = base_height + hill_height + mountain_height
+func _get_terrain_height(noise: float, continental: float, erosion: float) -> int:
+	# Base terrain pres du niveau de la mer
+	var base = SEA_LEVEL - 2.0 + noise * 8.0
+	# Zones continentales legerement plus hautes
+	var inland = _smoothstep(0.3, 0.6, continental) * 12.0
+	# Anti-erosion : 1.0 = terrain intact (pics), 0.0 = erode/plat (vallees)
+	var anti_erosion = 1.0 - _smoothstep(0.2, 0.7, erosion)
+	# Collines — moderees en zones continentales, reduites par l'erosion
+	var hill_factor = _smoothstep(0.2, 0.5, continental) * (0.4 + 0.6 * anti_erosion)
+	var hills = noise * 22.0 * hill_factor
+	# Montagnes — seulement en zones tres continentales avec faible erosion
+	var mountain_factor = _smoothstep(0.55, 0.85, continental) * anti_erosion
+	var mountain_height = pow(noise, 1.5) * 100.0 * mountain_factor
+	var total = base + inland + hills + mountain_height
 	return int(clampf(total, 5.0, CHUNK_HEIGHT - 20.0))
 
-func _get_biome(temp: float, humid: float) -> int:
+func _get_biome(temp: float, humid: float, height: int = 0) -> int:
+	# Haute altitude = montagne quel que soit le climat
+	if height > 110:
+		return 2  # MOUNTAIN
 	if temp > 0.65 and humid < 0.35:
 		return 0  # DESERT
 	elif temp > 0.45 and humid > 0.55:
