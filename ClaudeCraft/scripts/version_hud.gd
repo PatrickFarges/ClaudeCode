@@ -295,10 +295,10 @@ func _apply_enb_sombre():
 	_env.ssil_intensity = 0.5
 	_env.ssil_normal_rejection = 1.0
 
-	# Tonemap ACES — contraste cinématique, noirs profonds
+	# Tonemap ACES — contraste cinématique
 	_env.tonemap_mode = 3
-	_env.tonemap_white = 4.5
-	_env.tonemap_exposure = 0.9
+	_env.tonemap_white = 5.0
+	_env.tonemap_exposure = 1.0
 
 	# SSAO modéré — ombres de contact sans noircir les creux
 	_env.ssao_enabled = true
@@ -331,16 +331,16 @@ func _apply_enb_sombre():
 	_env.fog_light_color = Color(0.6, 0.7, 0.8, 1)
 	_env.fog_light_energy = 0.5
 
-	# Ambient — assez pour lire les détails dans l'ombre
+	# Ambient — relève les ombres sans casser le contraste
 	_env.ambient_light_source = 2
 	_env.ambient_light_color = Color(0.85, 0.9, 1.0, 1)
-	_env.ambient_light_energy = 0.3
+	_env.ambient_light_energy = 0.38
 
-	# Color grading — saturation forte, contraste élevé, légèrement assombri
+	# Color grading — saturation forte, contraste élevé
 	_env.adjustment_enabled = true
 	_env.adjustment_saturation = 1.6
-	_env.adjustment_contrast = 1.25
-	_env.adjustment_brightness = 0.92
+	_env.adjustment_contrast = 1.2
+	_env.adjustment_brightness = 0.95
 
 func _apply_reshade_epique():
 	# Inspiré ReShade presets — cinématique dramatique, couleurs profondes, ambiance épique
