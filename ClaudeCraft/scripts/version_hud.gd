@@ -106,8 +106,8 @@ func _ready():
 			_env = child.environment
 			break
 
-	# Charger le preset sauvegardé — application différée via Timer
-	# (l'Environment de la scène n'est pas stable avant ~0.3s)
+	# Charger le preset sauvegardé — application différée au premier _process
+	# (utilise le même _env que F2 qui fonctionne correctement)
 	var saved_preset = 2  # Cloclo Style par défaut
 	var cfg = ConfigFile.new()
 	if cfg.load("user://settings.cfg") == OK and cfg.has_section_key("game", "render_preset"):
@@ -115,16 +115,6 @@ func _ready():
 		if saved_preset < 0 or saved_preset >= RENDER_NAMES.size():
 			saved_preset = 2
 	_pending_preset = saved_preset
-	var startup_timer = Timer.new()
-	startup_timer.wait_time = 0.3
-	startup_timer.one_shot = true
-	startup_timer.timeout.connect(_apply_startup_preset)
-	add_child(startup_timer)
-	startup_timer.start()
-	# Charger aussi la vitesse du temps
-	var settings_menu = get_tree().current_scene.get_node_or_null("SettingsMenu")
-	if settings_menu:
-		settings_menu.load_settings()
 
 func _input(event):
 	# Ctrl gauche + molette souris = changer la vitesse du temps
@@ -435,14 +425,11 @@ func _apply_reshade_epique():
 	_env.adjustment_contrast = 1.3
 	_env.adjustment_brightness = 0.88
 
-func _apply_startup_preset():
-	# Re-fetcher _env frais depuis la scène (la référence de _ready peut être obsolète)
-	for child in get_tree().current_scene.get_children():
-		if child is WorldEnvironment:
-			_env = child.environment
-			break
-	if _env and _pending_preset >= 0:
+func _process(_delta):
+	# Appliquer le preset sauvegardé (même _env que F2, pas de re-fetch)
+	if _pending_preset >= 0 and _env:
 		_render_preset = _pending_preset
+		_pending_preset = -1
 		match _render_preset:
 			0: _apply_vanilla()
 			1: _apply_gi()
@@ -451,9 +438,7 @@ func _apply_startup_preset():
 			4: _apply_reshade_epique()
 		render_label.text = "Rendu : %s (F2)" % RENDER_NAMES[_render_preset]
 		render_label.add_theme_color_override("font_color", RENDER_COLORS[_render_preset])
-	_pending_preset = -1
 
-func _process(_delta):
 	fps_label.text = Locale.tr_ui("fps") % Engine.get_frames_per_second()
 
 	# Biome
