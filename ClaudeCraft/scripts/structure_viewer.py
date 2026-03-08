@@ -24,12 +24,15 @@ Usage :
   python structure_viewer.py "chemin/vers/structure.json"
 
 Changelog :
+  v2.1.0 — Grille etendue (+20 cases au-dela des axes), outil de selection
+            rectangulaire (toutes couches), menu deroulant Selectionner avec
+            Supprimer/Copier/Coller/Inverser, selection 3D avec preview temps reel
   v2.0.0 — Editeur 3D complet (palette 73 blocs, placement/suppression,
             raycasting AABB, curseur 3D, undo/redo, toggle Editer vert + bordure)
   v1.0.0 — Visualiseur 3D (voxel + mesh, navigateur fichiers, export JSON)
 """
 
-APP_VERSION = "2.0.0"
+APP_VERSION = "2.1.0"
 
 import sys
 import os
@@ -52,7 +55,8 @@ try:
         QApplication, QMainWindow, QFileDialog, QMessageBox,
         QToolBar, QLabel, QProgressDialog, QSplitter, QTextEdit,
         QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy,
-        QListWidget, QListWidgetItem, QPushButton
+        QListWidget, QListWidgetItem, QPushButton,
+        QToolButton, QMenu
     )
     from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal
     from PyQt6.QtGui import QAction, QKeySequence, QSurfaceFormat, QColor
@@ -1182,6 +1186,15 @@ class VoxelGLWidget(QOpenGLWidget):
         self._undo_stack = []  # list of (action, data) for undo
         self._redo_stack = []  # list of (action, data) for redo
 
+        # Selection mode
+        self.selection_mode = False
+        self.selection_box = None  # (min_x, min_y, min_z, max_x, max_y, max_z) inclusive
+        self.selection_inverted = False
+        self._sel_dragging = False
+        self._sel_screen_start = None  # (x, y) screen coords
+        self._sel_screen_end = None
+        self._clipboard = None  # {(dx,dy,dz): block_name} relative coords
+
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setMinimumSize(640, 480)
         self.setMouseTracking(True)  # pour le curseur 3D
@@ -1322,6 +1335,275 @@ class VoxelGLWidget(QOpenGLWidget):
         self.doneCurrent()
         self.editor_changed.emit()
         self.update()
+
+    # ---- Selection ----
+
+    def _get_selection_plane(self):
+        """Determine projection plane based on camera angle.
+        Returns (plane_axis, plane_value, span_axis, span_min, span_max)."""
+        abs_rot_x = abs(self.rot_x)
+        rot_y_mod = self.rot_y % 360
+        sx, sy, sz = self.editor_size
+
+        if abs_rot_x > 50:
+            # Top view — project onto Y=0, span Y
+            return 'Y', 0.0, 1, 0, sy
+        elif abs_rot_x < 30:
+            if (rot_y_mod < 45 or rot_y_mod > 315) or (135 < rot_y_mod < 225):
+                # Front/back view — project onto Z plane, span Z
+                return 'Z', sz / 2.0, 2, 0, sz
+            else:
+                # Side view — project onto X plane, span X
+                return 'X', sx / 2.0, 0, 0, sx
+        else:
+            # 3D angled — default to top-down (span Y)
+            return 'Y', 0.0, 1, 0, sy
+
+    def _raycast_to_plane(self, mx, my, plane_axis, plane_value):
+        """Raycast from screen coords to a world plane. Returns (x,y,z) or None."""
+        self.makeCurrent()
+        try:
+            modelview = glGetDoublev(GL_MODELVIEW_MATRIX)
+            projection = glGetDoublev(GL_PROJECTION_MATRIX)
+            viewport = glGetIntegerv(GL_VIEWPORT)
+            wy = viewport[3] - my
+            near = gluUnProject(mx, wy, 0.0, modelview, projection, viewport)
+            far = gluUnProject(mx, wy, 1.0, modelview, projection, viewport)
+        except Exception:
+            self.doneCurrent()
+            return None
+        self.doneCurrent()
+
+        origin = np.array(near, dtype=np.float64)
+        direction = np.array(far, dtype=np.float64) - origin
+        axis_idx = {'X': 0, 'Y': 1, 'Z': 2}[plane_axis]
+
+        if abs(direction[axis_idx]) < 1e-10:
+            return None
+        t = (plane_value - origin[axis_idx]) / direction[axis_idx]
+        if t < 0:
+            return None
+        hit = origin + t * direction
+        return (hit[0], hit[1], hit[2])
+
+    def _compute_selection_box(self, sx1, sy1, sx2, sy2):
+        """Compute 3D selection box from 2D screen rectangle."""
+        plane_axis, plane_val, span_axis, span_min, span_max = self._get_selection_plane()
+
+        corners_2d = [(sx1, sy1), (sx2, sy1), (sx2, sy2), (sx1, sy2)]
+        hits = []
+        for cx, cy in corners_2d:
+            h = self._raycast_to_plane(cx, cy, plane_axis, plane_val)
+            if h:
+                hits.append(h)
+
+        if len(hits) < 2:
+            return None
+
+        xs = [h[0] for h in hits]
+        ys = [h[1] for h in hits]
+        zs = [h[2] for h in hits]
+
+        min_x = int(math.floor(min(xs)))
+        max_x = int(math.floor(max(xs)))
+        min_y = int(math.floor(min(ys)))
+        max_y = int(math.floor(max(ys)))
+        min_z = int(math.floor(min(zs)))
+        max_z = int(math.floor(max(zs)))
+
+        # Span full range on the depth axis
+        if span_axis == 0:  # X
+            min_x, max_x = span_min, span_max - 1
+        elif span_axis == 1:  # Y
+            min_y, max_y = span_min, span_max - 1
+        else:  # Z
+            min_z, max_z = span_min, span_max - 1
+
+        return (min_x, min_y, min_z, max_x, max_y, max_z)
+
+    def get_selected_blocks(self):
+        """Return dict of {(x,y,z): block_name} for blocks in the selection."""
+        if not self.selection_box:
+            return {}
+        x0, y0, z0, x1, y1, z1 = self.selection_box
+        result = {}
+        if not self.selection_inverted:
+            for pos, name in self.editor_blocks.items():
+                if x0 <= pos[0] <= x1 and y0 <= pos[1] <= y1 and z0 <= pos[2] <= z1:
+                    result[pos] = name
+        else:
+            for pos, name in self.editor_blocks.items():
+                if not (x0 <= pos[0] <= x1 and y0 <= pos[1] <= y1 and z0 <= pos[2] <= z1):
+                    result[pos] = name
+        return result
+
+    def delete_selected(self):
+        """Delete all blocks in the selection."""
+        selected = self.get_selected_blocks()
+        if not selected:
+            return
+        for pos in selected:
+            self._undo_stack.append(("remove", pos, self.editor_blocks[pos]))
+        self._redo_stack.clear()
+        for pos in selected:
+            del self.editor_blocks[pos]
+        self.makeCurrent()
+        self._rebuild_editor_display_list()
+        self.doneCurrent()
+        self.selection_box = None
+        self.selection_inverted = False
+        self.editor_changed.emit()
+        self.update()
+
+    def copy_selected(self):
+        """Copy selected blocks to clipboard (relative coords)."""
+        selected = self.get_selected_blocks()
+        if not selected:
+            return
+        min_x = min(p[0] for p in selected)
+        min_y = min(p[1] for p in selected)
+        min_z = min(p[2] for p in selected)
+        self._clipboard = {}
+        for (x, y, z), name in selected.items():
+            self._clipboard[(x - min_x, y - min_y, z - min_z)] = name
+
+    def paste_clipboard(self):
+        """Paste clipboard at cursor position."""
+        if not self._clipboard:
+            return
+        if self.cursor_pos:
+            ox, oy, oz = self.cursor_pos
+        elif self.selection_box:
+            ox, oy, oz = self.selection_box[0], self.selection_box[1], self.selection_box[2]
+        else:
+            ox, oy, oz = 0, 0, 0
+
+        for (dx, dy, dz), name in self._clipboard.items():
+            x, y, z = ox + dx, oy + dy, oz + dz
+            if 0 <= y < self.editor_size[1]:
+                key = (x, y, z)
+                old = self.editor_blocks.get(key)
+                self._undo_stack.append(("place", key, old))
+                self.editor_blocks[key] = name
+        self._redo_stack.clear()
+        self.makeCurrent()
+        self._rebuild_editor_display_list()
+        self.doneCurrent()
+        self.editor_changed.emit()
+        self.update()
+
+    def invert_selection(self):
+        """Invert the current selection."""
+        if self.selection_box:
+            self.selection_inverted = not self.selection_inverted
+            self.update()
+
+    def clear_selection(self):
+        """Clear the current selection."""
+        self.selection_box = None
+        self.selection_inverted = False
+        self._sel_dragging = False
+        self._sel_screen_start = None
+        self._sel_screen_end = None
+        self.update()
+
+    def _draw_selection_box_3d(self):
+        """Draw the 3D selection highlight box."""
+        if not self.selection_box:
+            return
+        x0, y0, z0, x1, y1, z1 = self.selection_box
+        # Convert inclusive to exclusive for rendering
+        x1 += 1; y1 += 1; z1 += 1
+
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        glDepthMask(GL_FALSE)
+        glDisable(GL_CULL_FACE)
+
+        # Semi-transparent fill
+        if self.selection_inverted:
+            glColor4f(1.0, 0.4, 0.2, 0.08)
+        else:
+            glColor4f(0.2, 0.6, 1.0, 0.08)
+        glBegin(GL_QUADS)
+        # Top
+        glVertex3f(x0,y1,z0); glVertex3f(x0,y1,z1); glVertex3f(x1,y1,z1); glVertex3f(x1,y1,z0)
+        # Bottom
+        glVertex3f(x0,y0,z0); glVertex3f(x1,y0,z0); glVertex3f(x1,y0,z1); glVertex3f(x0,y0,z1)
+        # South (+Z)
+        glVertex3f(x0,y0,z1); glVertex3f(x1,y0,z1); glVertex3f(x1,y1,z1); glVertex3f(x0,y1,z1)
+        # North (-Z)
+        glVertex3f(x0,y0,z0); glVertex3f(x0,y1,z0); glVertex3f(x1,y1,z0); glVertex3f(x1,y0,z0)
+        # West (-X)
+        glVertex3f(x0,y0,z0); glVertex3f(x0,y0,z1); glVertex3f(x0,y1,z1); glVertex3f(x0,y1,z0)
+        # East (+X)
+        glVertex3f(x1,y0,z0); glVertex3f(x1,y1,z0); glVertex3f(x1,y1,z1); glVertex3f(x1,y0,z1)
+        glEnd()
+
+        glDepthMask(GL_TRUE)
+
+        # Wireframe border
+        if self.selection_inverted:
+            glColor4f(1.0, 0.5, 0.2, 0.9)
+        else:
+            glColor4f(0.2, 0.8, 1.0, 0.9)
+        glLineWidth(2.0)
+        glBegin(GL_LINES)
+        for a, b in [
+            ((x0,y0,z0),(x1,y0,z0)), ((x1,y0,z0),(x1,y0,z1)),
+            ((x1,y0,z1),(x0,y0,z1)), ((x0,y0,z1),(x0,y0,z0)),
+            ((x0,y1,z0),(x1,y1,z0)), ((x1,y1,z0),(x1,y1,z1)),
+            ((x1,y1,z1),(x0,y1,z1)), ((x0,y1,z1),(x0,y1,z0)),
+            ((x0,y0,z0),(x0,y1,z0)), ((x1,y0,z0),(x1,y1,z0)),
+            ((x1,y0,z1),(x1,y1,z1)), ((x0,y0,z1),(x0,y1,z1)),
+        ]:
+            glVertex3f(*a); glVertex3f(*b)
+        glEnd()
+
+        glEnable(GL_CULL_FACE)
+        glDisable(GL_BLEND)
+
+    def _draw_selection_rect_2d(self):
+        """Draw 2D selection rectangle overlay during drag."""
+        if not self._sel_screen_start or not self._sel_screen_end:
+            return
+
+        glMatrixMode(GL_PROJECTION)
+        glPushMatrix()
+        glLoadIdentity()
+        w, h = self.width(), self.height()
+        glOrtho(0, w, h, 0, -1, 1)
+        glMatrixMode(GL_MODELVIEW)
+        glPushMatrix()
+        glLoadIdentity()
+
+        glDisable(GL_DEPTH_TEST)
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+
+        x1, y1 = self._sel_screen_start
+        x2, y2 = self._sel_screen_end
+
+        # Fill
+        glColor4f(0.2, 0.6, 1.0, 0.15)
+        glBegin(GL_QUADS)
+        glVertex2f(x1, y1); glVertex2f(x2, y1); glVertex2f(x2, y2); glVertex2f(x1, y2)
+        glEnd()
+
+        # Border
+        glColor4f(0.2, 0.8, 1.0, 0.9)
+        glLineWidth(2.0)
+        glBegin(GL_LINE_LOOP)
+        glVertex2f(x1, y1); glVertex2f(x2, y1); glVertex2f(x2, y2); glVertex2f(x1, y2)
+        glEnd()
+
+        glDisable(GL_BLEND)
+        glEnable(GL_DEPTH_TEST)
+
+        glMatrixMode(GL_PROJECTION)
+        glPopMatrix()
+        glMatrixMode(GL_MODELVIEW)
+        glPopMatrix()
 
     def to_structure_data(self):
         """Convertit les blocs editeur en StructureData pour export."""
@@ -1651,6 +1933,14 @@ class VoxelGLWidget(QOpenGLWidget):
         if self.editor_mode:
             self._draw_cursor()
 
+        # Selection box 3D
+        if self.selection_box and self.editor_mode:
+            self._draw_selection_box_3d()
+
+        # 2D selection rectangle (during drag)
+        if self._sel_dragging and self._sel_screen_start and self._sel_screen_end:
+            self._draw_selection_rect_2d()
+
         # Mesh 3D (GLB/OBJ)
         if self.mesh_display_list:
             glDisable(GL_CULL_FACE)
@@ -1713,18 +2003,20 @@ class VoxelGLWidget(QOpenGLWidget):
             glEnd()
 
     def _draw_editor_grid(self):
-        """Dessine une grille au sol pour l'editeur."""
+        """Dessine une grille au sol pour l'editeur, etendue 20 cases au-dela des axes."""
         sx, _, sz = self.editor_size
-        # Grille principale
+        ext = 20  # extension au-dela des axes
+
+        # Grille principale (etendue)
         glColor4f(0.25, 0.25, 0.35, 0.5)
         glLineWidth(1.0)
         glBegin(GL_LINES)
-        for x in range(sx + 1):
-            glVertex3f(x, 0, 0)
-            glVertex3f(x, 0, sz)
-        for z in range(sz + 1):
-            glVertex3f(0, 0, z)
-            glVertex3f(sx, 0, z)
+        for x in range(-ext, sx + ext + 1):
+            glVertex3f(x, 0, -ext)
+            glVertex3f(x, 0, sz + ext)
+        for z in range(-ext, sz + ext + 1):
+            glVertex3f(-ext, 0, z)
+            glVertex3f(sx + ext, 0, z)
         glEnd()
 
         # Axes sur la grille (plus epais)
@@ -1732,10 +2024,10 @@ class VoxelGLWidget(QOpenGLWidget):
         glBegin(GL_LINES)
         # X rouge
         glColor3f(0.8, 0.2, 0.2)
-        glVertex3f(0, 0.01, 0); glVertex3f(sx, 0.01, 0)
+        glVertex3f(-ext, 0.01, 0); glVertex3f(sx + ext, 0.01, 0)
         # Z bleu
         glColor3f(0.2, 0.4, 0.8)
-        glVertex3f(0, 0.01, 0); glVertex3f(0, 0.01, sz)
+        glVertex3f(0, 0.01, -ext); glVertex3f(0, 0.01, sz + ext)
         glEnd()
 
     def _draw_grid(self):
@@ -1920,12 +2212,38 @@ class VoxelGLWidget(QOpenGLWidget):
         self._press_pos = event.position()  # position initiale du clic
         self.last_pos = event.position()
         self._mouse_moved = False
+
+        # Selection mode: left click starts selection drag
+        if (self.selection_mode and self.editor_mode
+                and event.button() == Qt.MouseButton.LeftButton):
+            self._sel_dragging = True
+            self._sel_screen_start = (event.position().x(), event.position().y())
+            self._sel_screen_end = self._sel_screen_start
+            self.selection_box = None
+            self.selection_inverted = False
+            return
+
         if event.button() == Qt.MouseButton.RightButton:
             self.right_pressed = True
         elif event.button() == Qt.MouseButton.LeftButton:
             self.left_pressed = True
 
     def mouseReleaseEvent(self, event):
+        # Selection mode: finalize selection on left release
+        if event.button() == Qt.MouseButton.LeftButton and self._sel_dragging:
+            self._sel_dragging = False
+            if self._sel_screen_start and self._sel_screen_end:
+                box = self._compute_selection_box(
+                    self._sel_screen_start[0], self._sel_screen_start[1],
+                    self._sel_screen_end[0], self._sel_screen_end[1])
+                if box:
+                    self.selection_box = box
+                    self.selection_inverted = False
+            self._sel_screen_start = None
+            self._sel_screen_end = None
+            self.update()
+            return
+
         if event.button() == Qt.MouseButton.RightButton:
             # Clic droit sans drag en mode editeur = supprimer bloc
             if self.editor_mode and not self._mouse_moved:
@@ -1953,6 +2271,19 @@ class VoxelGLWidget(QOpenGLWidget):
             self.left_pressed = False
 
     def mouseMoveEvent(self, event):
+        # Selection drag: update rectangle
+        if self._sel_dragging:
+            self._sel_screen_end = (event.position().x(), event.position().y())
+            # Preview the selection box in real-time
+            if self._sel_screen_start and self._sel_screen_end:
+                box = self._compute_selection_box(
+                    self._sel_screen_start[0], self._sel_screen_start[1],
+                    self._sel_screen_end[0], self._sel_screen_end[1])
+                if box:
+                    self.selection_box = box
+            self.update()
+            return
+
         if not self.last_pos:
             self.last_pos = event.position()
             return
@@ -2019,6 +2350,23 @@ class VoxelGLWidget(QOpenGLWidget):
             elif key == Qt.Key.Key_Y and self.editor_mode:
                 self.redo()
                 return
+            elif key == Qt.Key.Key_C and self.editor_mode and self.selection_box:
+                self.copy_selected()
+                return
+            elif key == Qt.Key.Key_V and self.editor_mode and self._clipboard:
+                self.paste_clipboard()
+                return
+            elif key == Qt.Key.Key_I and self.editor_mode and self.selection_box:
+                self.invert_selection()
+                return
+
+        if key == Qt.Key.Key_Delete and self.editor_mode and self.selection_box:
+            self.delete_selected()
+            return
+
+        if key == Qt.Key.Key_Escape and self.selection_box:
+            self.clear_selection()
+            return
 
         if key == Qt.Key.Key_R:
             # Reset camera
@@ -2500,6 +2848,47 @@ class StructureViewer(QMainWindow):
 
         toolbar.addSeparator()
 
+        # Selection dropdown button
+        self.sel_button = QToolButton(self)
+        self.sel_button.setText("Selectionner")
+        self.sel_button.setCheckable(True)
+        self.sel_button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+        self.sel_button.clicked.connect(self._toggle_selection_mode)
+
+        sel_menu = QMenu(self.sel_button)
+        sel_menu.setStyleSheet("""
+            QMenu {
+                background-color: #313244; color: #cdd6f4; border: 1px solid #45475a;
+                padding: 4px; font-size: 12px;
+            }
+            QMenu::item { padding: 6px 24px; }
+            QMenu::item:selected { background-color: #45475a; }
+            QMenu::separator { height: 1px; background: #45475a; margin: 4px 8px; }
+        """)
+
+        act_sel_toggle = sel_menu.addAction("Selectionner")
+        act_sel_toggle.setShortcut(QKeySequence("S"))
+        act_sel_toggle.triggered.connect(self._toggle_selection_mode)
+        sel_menu.addSeparator()
+        act_sel_delete = sel_menu.addAction("Supprimer")
+        act_sel_delete.setShortcut(QKeySequence("Delete"))
+        act_sel_delete.triggered.connect(self._selection_delete)
+        act_sel_copy = sel_menu.addAction("Copier")
+        act_sel_copy.setShortcut(QKeySequence("Ctrl+C"))
+        act_sel_copy.triggered.connect(self._selection_copy)
+        act_sel_paste = sel_menu.addAction("Coller")
+        act_sel_paste.setShortcut(QKeySequence("Ctrl+V"))
+        act_sel_paste.triggered.connect(self._selection_paste)
+        sel_menu.addSeparator()
+        act_sel_invert = sel_menu.addAction("Inverser")
+        act_sel_invert.setShortcut(QKeySequence("Ctrl+I"))
+        act_sel_invert.triggered.connect(self._selection_invert)
+
+        self.sel_button.setMenu(sel_menu)
+        toolbar.addWidget(self.sel_button)
+
+        toolbar.addSeparator()
+
         # Reset vue
         act_reset = QAction("Reset vue (R)", self)
         act_reset.triggered.connect(self._reset_view)
@@ -2576,6 +2965,11 @@ class StructureViewer(QMainWindow):
     def _set_editor_ui(self, active):
         """Met a jour l'interface pour refléter l'etat du mode editeur."""
         self.act_edit.setChecked(active)
+        self.sel_button.setEnabled(active)
+        if not active:
+            self.gl_widget.selection_mode = False
+            self.sel_button.setChecked(False)
+            self.gl_widget.clear_selection()
         if active:
             self.setWindowTitle(f"ClaudeCraft Editeur v{APP_VERSION} — Mode edition")
             self.statusBar().showMessage("MODE EDITION — Clic gauche: placer | Clic droit: supprimer | Ctrl+Z: annuler | Ctrl+Y: refaire")
@@ -2696,6 +3090,41 @@ class StructureViewer(QMainWindow):
         self.gl_widget.rot_x = 90.0
         self.gl_widget.rot_y = 0.0
         self.gl_widget.update()
+
+    def _toggle_selection_mode(self):
+        """Toggle selection mode on/off."""
+        if not self.gl_widget.editor_mode:
+            return
+        self.gl_widget.selection_mode = not self.gl_widget.selection_mode
+        self.sel_button.setChecked(self.gl_widget.selection_mode)
+        if self.gl_widget.selection_mode:
+            self.statusBar().showMessage(
+                "MODE SELECTION — Clic gauche + drag: selectionner | Delete: supprimer | "
+                "Ctrl+C: copier | Ctrl+V: coller | Ctrl+I: inverser | Echap: annuler selection")
+        else:
+            self.gl_widget.clear_selection()
+            self.statusBar().showMessage("MODE EDITION — Clic gauche: placer | Clic droit: supprimer")
+
+    def _selection_delete(self):
+        if self.gl_widget.editor_mode and self.gl_widget.selection_box:
+            self.gl_widget.delete_selected()
+
+    def _selection_copy(self):
+        if self.gl_widget.editor_mode and self.gl_widget.selection_box:
+            self.gl_widget.copy_selected()
+            count = len(self.gl_widget._clipboard) if self.gl_widget._clipboard else 0
+            self.statusBar().showMessage(f"{count} blocs copies dans le presse-papier")
+
+    def _selection_paste(self):
+        if self.gl_widget.editor_mode and self.gl_widget._clipboard:
+            self.gl_widget.paste_clipboard()
+            self.statusBar().showMessage(f"{len(self.gl_widget._clipboard)} blocs colles")
+
+    def _selection_invert(self):
+        if self.gl_widget.editor_mode and self.gl_widget.selection_box:
+            self.gl_widget.invert_selection()
+            state = "inversee" if self.gl_widget.selection_inverted else "normale"
+            self.statusBar().showMessage(f"Selection {state}")
 
     def _toggle_info_panel(self):
         self.info_panel.setVisible(not self.info_panel.isVisible())
