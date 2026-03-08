@@ -24,6 +24,9 @@ Usage :
   python structure_viewer.py "chemin/vers/structure.json"
 
 Changelog :
+  v2.3.0 — Sauvegarde rapide (Ctrl+S / F5) : ecrase le fichier courant sans
+            dialogue. Nouveau modele → dialogue Exporter. Bouton Sauvegarder
+            separe du bouton Exporter JSON
   v2.2.0 — Occlusion ambiante Minecraft-style (F1) : assombrissement per-vertex
             aux coins/aretes. Lumiere directionnelle SW 45° (F2) : ombres realistes.
             Boutons AO/Lumiere dans la toolbar, toggleables (vert quand actif)
@@ -35,7 +38,7 @@ Changelog :
   v1.0.0 — Visualiseur 3D (voxel + mesh, navigateur fichiers, export JSON)
 """
 
-APP_VERSION = "2.2.0"
+APP_VERSION = "2.3.0"
 
 import sys
 import os
@@ -3002,9 +3005,14 @@ class StructureViewer(QMainWindow):
 
         toolbar.addSeparator()
 
-        # Exporter JSON
+        # Sauvegarder (rapide)
+        act_save = QAction("Sauvegarder", self)
+        act_save.setShortcut(QKeySequence("Ctrl+S"))
+        act_save.triggered.connect(self.quick_save)
+        toolbar.addAction(act_save)
+
+        # Exporter JSON (sous un nouveau nom)
         act_export = QAction("Exporter JSON", self)
-        act_export.setShortcut(QKeySequence("Ctrl+S"))
         act_export.triggered.connect(self.export_json)
         toolbar.addAction(act_export)
 
@@ -3334,7 +3342,9 @@ class StructureViewer(QMainWindow):
         self.load_file(path)
 
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_Escape:
+        if event.key() == Qt.Key.Key_F5:
+            self.quick_save()
+        elif event.key() == Qt.Key.Key_Escape:
             self.close()
         else:
             super().keyPressEvent(event)
@@ -3544,15 +3554,15 @@ class StructureViewer(QMainWindow):
         html += "</td></tr></table>"
         self.info_panel.setHtml(html)
 
-    def export_json(self):
-        # Mode editeur : convertir les blocs editeur en StructureData
+    def _get_exportable_structure(self):
+        """Retourne la StructureData courante ou None avec message d'erreur."""
         if self.gl_widget.editor_mode:
             s = self.gl_widget.to_structure_data()
             if s is None:
                 QMessageBox.information(self, "Info", "Aucun bloc a exporter.")
-                return
+            return s
         elif self.current_structure:
-            s = self.current_structure
+            return self.current_structure
         else:
             if self.current_mesh:
                 QMessageBox.information(self, "Info",
@@ -3560,17 +3570,10 @@ class StructureViewer(QMainWindow):
                     "Le modele 3D charge ne peut pas etre converti en structure voxel.")
             else:
                 QMessageBox.information(self, "Info", "Aucune structure chargee.")
-            return
+            return None
 
-        default_path = os.path.join(
-            os.path.dirname(_SCRIPT_DIR), "structures", s.name + ".json")
-
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Exporter en JSON ClaudeCraft", default_path, "JSON (*.json)")
-        if not path:
-            return
-
-        # Aplatir en 1D
+    def _save_structure_to(self, s, path):
+        """Ecrit une StructureData en JSON ClaudeCraft au chemin donne."""
         sx, sy, sz = s.size
         flat = []
         for y in range(sy):
@@ -3579,7 +3582,6 @@ class StructureViewer(QMainWindow):
                     flat.append(s.blocks[y][z][x])
 
         rle = encode_rle(flat)
-
         output = {
             "name": s.name,
             "size": list(s.size),
@@ -3590,9 +3592,43 @@ class StructureViewer(QMainWindow):
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(output, f, separators=(',', ':'))
 
+        self.current_path = path
         file_size = os.path.getsize(path)
         self.statusBar().showMessage(
-            f"Exporte vers {os.path.basename(path)} ({file_size:,} octets)")
+            f"Sauvegarde vers {os.path.basename(path)} ({file_size:,} octets)")
+
+    def quick_save(self):
+        """Sauvegarde rapide : ecrase le fichier courant ou ouvre le dialogue si nouveau."""
+        s = self._get_exportable_structure()
+        if s is None:
+            return
+
+        # Fichier deja connu et au format JSON → sauvegarde directe
+        if self.current_path and self.current_path.lower().endswith('.json'):
+            self._save_structure_to(s, self.current_path)
+            return
+
+        # Nouveau modele ou format non-JSON → dialogue Exporter
+        self.export_json()
+
+    def export_json(self):
+        """Exporter sous un nouveau nom (dialogue fichier)."""
+        s = self._get_exportable_structure()
+        if s is None:
+            return
+
+        if self.current_path and self.current_path.lower().endswith('.json'):
+            default_path = self.current_path
+        else:
+            default_path = os.path.join(
+                os.path.dirname(_SCRIPT_DIR), "structures", s.name + ".json")
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Exporter en JSON ClaudeCraft", default_path, "JSON (*.json)")
+        if not path:
+            return
+
+        self._save_structure_to(s, path)
 
     # ---- Drag and Drop ----
 
