@@ -59,7 +59,7 @@ try:
         QToolButton, QMenu
     )
     from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal
-    from PyQt6.QtGui import QAction, QKeySequence, QSurfaceFormat, QColor
+    from PyQt6.QtGui import QAction, QKeySequence, QSurfaceFormat, QColor, QPainter, QFont
     from PyQt6.QtOpenGLWidgets import QOpenGLWidget
 except ImportError:
     print("ERREUR : PyQt6 requis. Installer avec : pip install PyQt6")
@@ -1957,6 +1957,37 @@ class VoxelGLWidget(QOpenGLWidget):
                 glDisable(GL_POLYGON_OFFSET_LINE)
 
             glEnable(GL_CULL_FACE)
+
+        # North label ("N") projected to screen
+        if self.editor_mode:
+            self._draw_north_label()
+
+    def _draw_north_label(self):
+        """Draw 'N' label at the North end (-Z) of the blue axis using QPainter."""
+        try:
+            modelview = glGetDoublev(GL_MODELVIEW_MATRIX)
+            projection = glGetDoublev(GL_PROJECTION_MATRIX)
+            viewport = glGetIntegerv(GL_VIEWPORT)
+            ext = 20
+            result = gluProject(0, 0.5, -ext - 1.5, modelview, projection, viewport)
+            if not result or result[2] < 0 or result[2] > 1:
+                return  # Behind camera
+            sx = result[0]
+            sy = viewport[3] - result[1]  # Flip Y for screen coords
+        except Exception:
+            return
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        font = QFont("Tahoma", 13)
+        font.setBold(True)
+        painter.setFont(font)
+        painter.setPen(QColor(80, 140, 255))
+        fm = painter.fontMetrics()
+        tw = fm.horizontalAdvance("N")
+        th = fm.height()
+        painter.drawText(int(sx) - tw // 2, int(sy) + th // 3, "N")
+        painter.end()
 
     # ---- Dessin des helpers ----
 
