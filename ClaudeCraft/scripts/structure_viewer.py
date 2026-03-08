@@ -24,6 +24,9 @@ Usage :
   python structure_viewer.py "chemin/vers/structure.json"
 
 Changelog :
+  v2.2.0 — Occlusion ambiante Minecraft-style (F1) : assombrissement per-vertex
+            aux coins/aretes. Lumiere directionnelle SW 45° (F2) : ombres realistes.
+            Boutons AO/Lumiere dans la toolbar, toggleables (vert quand actif)
   v2.1.0 — Grille etendue (+20 cases au-dela des axes), outil de selection
             rectangulaire (toutes couches), menu deroulant Selectionner avec
             Supprimer/Copier/Coller/Inverser, selection 3D avec preview temps reel
@@ -32,7 +35,7 @@ Changelog :
   v1.0.0 — Visualiseur 3D (voxel + mesh, navigateur fichiers, export JSON)
 """
 
-APP_VERSION = "2.1.0"
+APP_VERSION = "2.2.0"
 
 import sys
 import os
@@ -171,6 +174,54 @@ EDITOR_PALETTE = [name for name in BLOCK_COLORS if name not in ("AIR", "KEEP", N
 
 # Blocs non-solides (transparents pour le face culling)
 _TRANSPARENT = {"AIR", "WATER"}
+
+# Lumiere directionnelle depuis le Sud-Ouest a 45° d'elevation
+# SW = (-X, +Z), elevation 45° → direction vers la lumiere = (-0.5, 0.707, 0.5), norme = 1.0
+_LIGHT_DIR_SW45 = (-0.5, 0.70711, 0.5)
+
+# Courbe de luminosite AO (index = nb voisins occluants, 0=aucun → 3=maximum)
+_AO_CURVE = (1.0, 0.82, 0.65, 0.45)
+
+# Offsets AO par face et par sommet : pour chaque face, 4 tuples de (side1, side2, corner)
+# Chaque offset est relatif au bloc (x, y, z), decale d'un pas dans la direction de la normale
+_AO_OFFSETS = {
+    "top": [  # normal +Y, sommets dans le plan XZ a y+1
+        ((-1,1, 0), ( 0,1,-1), (-1,1,-1)),  # V0 (x, y+1, z)
+        ((-1,1, 0), ( 0,1, 1), (-1,1, 1)),  # V1 (x, y+1, z+1)
+        (( 1,1, 0), ( 0,1, 1), ( 1,1, 1)),  # V2 (x+1, y+1, z+1)
+        (( 1,1, 0), ( 0,1,-1), ( 1,1,-1)),  # V3 (x+1, y+1, z)
+    ],
+    "bottom": [  # normal -Y
+        ((-1,-1, 0), ( 0,-1,-1), (-1,-1,-1)),
+        (( 1,-1, 0), ( 0,-1,-1), ( 1,-1,-1)),
+        (( 1,-1, 0), ( 0,-1, 1), ( 1,-1, 1)),
+        ((-1,-1, 0), ( 0,-1, 1), (-1,-1, 1)),
+    ],
+    "north": [  # normal -Z
+        ((-1, 0,-1), ( 0,-1,-1), (-1,-1,-1)),
+        ((-1, 0,-1), ( 0, 1,-1), (-1, 1,-1)),
+        (( 1, 0,-1), ( 0, 1,-1), ( 1, 1,-1)),
+        (( 1, 0,-1), ( 0,-1,-1), ( 1,-1,-1)),
+    ],
+    "south": [  # normal +Z
+        (( 1, 0, 1), ( 0,-1, 1), ( 1,-1, 1)),
+        (( 1, 0, 1), ( 0, 1, 1), ( 1, 1, 1)),
+        ((-1, 0, 1), ( 0, 1, 1), (-1, 1, 1)),
+        ((-1, 0, 1), ( 0,-1, 1), (-1,-1, 1)),
+    ],
+    "west": [  # normal -X
+        ((-1, 0, 1), (-1,-1, 0), (-1,-1, 1)),
+        ((-1, 0, 1), (-1, 1, 0), (-1, 1, 1)),
+        ((-1, 0,-1), (-1, 1, 0), (-1, 1,-1)),
+        ((-1, 0,-1), (-1,-1, 0), (-1,-1,-1)),
+    ],
+    "east": [  # normal +X
+        (( 1, 0,-1), ( 1,-1, 0), ( 1,-1,-1)),
+        (( 1, 0,-1), ( 1, 1, 0), ( 1, 1,-1)),
+        (( 1, 0, 1), ( 1, 1, 0), ( 1, 1, 1)),
+        (( 1, 0, 1), ( 1,-1, 0), ( 1,-1, 1)),
+    ],
+}
 
 
 # ============================================================
@@ -1186,6 +1237,10 @@ class VoxelGLWidget(QOpenGLWidget):
         self._undo_stack = []  # list of (action, data) for undo
         self._redo_stack = []  # list of (action, data) for redo
 
+        # Rendering modes
+        self.ao_enabled = False
+        self.light_enabled = False
+
         # Selection mode
         self.selection_mode = False
         self.selection_box = None  # (min_x, min_y, min_z, max_x, max_y, max_z) inclusive
@@ -1507,6 +1562,36 @@ class VoxelGLWidget(QOpenGLWidget):
         self._sel_screen_end = None
         self.update()
 
+    # ---- Rendering modes ----
+
+    def toggle_ao(self):
+        """Toggle ambient occlusion."""
+        self.ao_enabled = not self.ao_enabled
+        self._rebuild_all()
+        self.update()
+
+    def toggle_light(self):
+        """Toggle directional light from SW at 45°."""
+        self.light_enabled = not self.light_enabled
+        self._rebuild_all()
+        self.update()
+
+    def _rebuild_all(self):
+        """Rebuild display lists for current mode."""
+        self.makeCurrent()
+        if self.editor_mode:
+            self._rebuild_editor_display_list()
+        elif self.structure:
+            self._rebuild_display_list()
+        self.doneCurrent()
+
+    @staticmethod
+    def _vertex_ao(s1, s2, corner):
+        """Compute AO level for a vertex. Returns 0-3 (3=no occlusion, 0=full)."""
+        if s1 and s2:
+            return 3
+        return s1 + s2 + corner
+
     def _draw_selection_box_3d(self):
         """Draw the 3D selection highlight box."""
         if not self.selection_box:
@@ -1656,7 +1741,11 @@ class VoxelGLWidget(QOpenGLWidget):
             "west": (-1, 0, 0), "east": (1, 0, 0),
         }
 
-        for (x, y, z), block_name in self.editor_blocks.items():
+        blocks = self.editor_blocks
+        use_ao = self.ao_enabled
+        use_light = self.light_enabled
+
+        for (x, y, z), block_name in blocks.items():
             base_color = BLOCK_COLORS.get(block_name, (0.7, 0.7, 0.75))
             if base_color is None:
                 continue
@@ -1664,17 +1753,36 @@ class VoxelGLWidget(QOpenGLWidget):
             for face_name, (normal, verts_fn) in self.FACE_DEFS.items():
                 dx, dy, dz = adj_dirs[face_name]
                 neighbor = (x + dx, y + dy, z + dz)
-                if neighbor in self.editor_blocks:
+                if neighbor in blocks:
                     continue
 
-                brightness = self.FACE_BRIGHTNESS[face_name]
-                r = min(1.0, base_color[0] * brightness)
-                g = min(1.0, base_color[1] * brightness)
-                b = min(1.0, base_color[2] * brightness)
+                # Base brightness: directional light or face-based
+                if use_light:
+                    brightness = max(0.25, normal[0] * _LIGHT_DIR_SW45[0]
+                                     + normal[1] * _LIGHT_DIR_SW45[1]
+                                     + normal[2] * _LIGHT_DIR_SW45[2])
+                else:
+                    brightness = self.FACE_BRIGHTNESS[face_name]
 
-                glColor3f(r, g, b)
-                for vx, vy, vz in verts_fn(x, y, z):
-                    glVertex3f(vx, vy, vz)
+                if use_ao:
+                    ao_data = _AO_OFFSETS[face_name]
+                    for vi, (vx, vy, vz) in enumerate(verts_fn(x, y, z)):
+                        s1o, s2o, co = ao_data[vi]
+                        s1 = (x+s1o[0], y+s1o[1], z+s1o[2]) in blocks
+                        s2 = (x+s2o[0], y+s2o[1], z+s2o[2]) in blocks
+                        c  = (x+co[0],  y+co[1],  z+co[2])  in blocks
+                        ao_val = self._vertex_ao(s1, s2, c)
+                        final = brightness * _AO_CURVE[ao_val]
+                        glColor3f(min(1.0, base_color[0] * final),
+                                  min(1.0, base_color[1] * final),
+                                  min(1.0, base_color[2] * final))
+                        glVertex3f(vx, vy, vz)
+                else:
+                    glColor3f(min(1.0, base_color[0] * brightness),
+                              min(1.0, base_color[1] * brightness),
+                              min(1.0, base_color[2] * brightness))
+                    for vx, vy, vz in verts_fn(x, y, z):
+                        glVertex3f(vx, vy, vz)
                 face_count += 1
 
         glEnd()
@@ -2138,38 +2246,68 @@ class VoxelGLWidget(QOpenGLWidget):
             "west": (-1, 0, 0), "east": (1, 0, 0),
         }
 
+        use_ao = self.ao_enabled
+        use_light = self.light_enabled
+        blocks_3d = s.blocks
+        palette = s.palette
+        pal_len = len(palette)
+
+        def _is_solid(bx, by, bz):
+            if bx < 0 or bx >= sx or by < 0 or by >= sy or bz < 0 or bz >= sz:
+                return False
+            idx = blocks_3d[by][bz][bx]
+            return idx > 0 and (idx >= pal_len or palette[idx] not in _TRANSPARENT)
+
         for y in range(sy):
             for z in range(sz):
                 for x in range(sx):
-                    block_idx = s.blocks[y][z][x]
+                    block_idx = blocks_3d[y][z][x]
                     if block_idx == 0:
                         continue
 
-                    block_name = s.palette[block_idx] if block_idx < len(s.palette) else "STONE"
+                    block_name = palette[block_idx] if block_idx < pal_len else "STONE"
                     base_color = BLOCK_COLORS.get(block_name)
                     if base_color is None:
                         base_color = (0.7, 0.7, 0.75)
 
                     for face_name, (normal, verts_fn) in self.FACE_DEFS.items():
                         dx, dy, dz = adj_dirs[face_name]
-                        nx, ny, nz = x + dx, y + dy, z + dz
+                        anx, any_, anz = x + dx, y + dy, z + dz
 
                         # Ne dessiner que si le bloc adjacent est transparent
-                        if 0 <= nx < sx and 0 <= ny < sy and 0 <= nz < sz:
-                            adj_idx = s.blocks[ny][nz][nx]
-                            adj_name = s.palette[adj_idx] if adj_idx < len(s.palette) else "AIR"
+                        if 0 <= anx < sx and 0 <= any_ < sy and 0 <= anz < sz:
+                            adj_idx = blocks_3d[any_][anz][anx]
+                            adj_name = palette[adj_idx] if adj_idx < pal_len else "AIR"
                             if adj_name not in _TRANSPARENT:
                                 continue
 
-                        # Couleur avec variation par face
-                        brightness = self.FACE_BRIGHTNESS[face_name]
-                        r = min(1.0, base_color[0] * brightness)
-                        g = min(1.0, base_color[1] * brightness)
-                        b = min(1.0, base_color[2] * brightness)
+                        # Luminosite de base
+                        if use_light:
+                            brightness = max(0.25, normal[0] * _LIGHT_DIR_SW45[0]
+                                             + normal[1] * _LIGHT_DIR_SW45[1]
+                                             + normal[2] * _LIGHT_DIR_SW45[2])
+                        else:
+                            brightness = self.FACE_BRIGHTNESS[face_name]
 
-                        glColor3f(r, g, b)
-                        for vx, vy, vz in verts_fn(x, y, z):
-                            glVertex3f(vx, vy, vz)
+                        if use_ao:
+                            ao_data = _AO_OFFSETS[face_name]
+                            for vi, (vx, vy, vz) in enumerate(verts_fn(x, y, z)):
+                                s1o, s2o, co = ao_data[vi]
+                                s1 = _is_solid(x+s1o[0], y+s1o[1], z+s1o[2])
+                                s2 = _is_solid(x+s2o[0], y+s2o[1], z+s2o[2])
+                                c  = _is_solid(x+co[0],  y+co[1],  z+co[2])
+                                ao_val = self._vertex_ao(s1, s2, c)
+                                final = brightness * _AO_CURVE[ao_val]
+                                glColor3f(min(1.0, base_color[0] * final),
+                                          min(1.0, base_color[1] * final),
+                                          min(1.0, base_color[2] * final))
+                                glVertex3f(vx, vy, vz)
+                        else:
+                            glColor3f(min(1.0, base_color[0] * brightness),
+                                      min(1.0, base_color[1] * brightness),
+                                      min(1.0, base_color[2] * brightness))
+                            for vx, vy, vz in verts_fn(x, y, z):
+                                glVertex3f(vx, vy, vz)
                         face_count += 1
 
         glEnd()
@@ -2390,6 +2528,13 @@ class VoxelGLWidget(QOpenGLWidget):
             elif key == Qt.Key.Key_I and self.editor_mode and self.selection_box:
                 self.invert_selection()
                 return
+
+        if key == Qt.Key.Key_F1:
+            self.toggle_ao()
+            return
+        elif key == Qt.Key.Key_F2:
+            self.toggle_light()
+            return
 
         if key == Qt.Key.Key_Delete and self.editor_mode and self.selection_box:
             self.delete_selected()
@@ -2940,6 +3085,18 @@ class StructureViewer(QMainWindow):
         act_wire.triggered.connect(self._toggle_wireframe)
         toolbar.addAction(act_wire)
 
+        # Occlusion ambiante
+        self.act_ao = QAction("AO (F1)", self)
+        self.act_ao.setCheckable(True)
+        self.act_ao.triggered.connect(self._toggle_ao)
+        toolbar.addAction(self.act_ao)
+
+        # Lumiere directionnelle
+        self.act_light = QAction("Lumiere (F2)", self)
+        self.act_light.setCheckable(True)
+        self.act_light.triggered.connect(self._toggle_light)
+        toolbar.addAction(self.act_light)
+
         # Masquer/afficher panneau info
         act_toggle = QAction("Infos (I)", self)
         act_toggle.setShortcut(QKeySequence("I"))
@@ -3156,6 +3313,18 @@ class StructureViewer(QMainWindow):
             self.gl_widget.invert_selection()
             state = "inversee" if self.gl_widget.selection_inverted else "normale"
             self.statusBar().showMessage(f"Selection {state}")
+
+    def _toggle_ao(self):
+        self.gl_widget.toggle_ao()
+        self.act_ao.setChecked(self.gl_widget.ao_enabled)
+        state = "activee" if self.gl_widget.ao_enabled else "desactivee"
+        self.statusBar().showMessage(f"Occlusion ambiante {state}")
+
+    def _toggle_light(self):
+        self.gl_widget.toggle_light()
+        self.act_light.setChecked(self.gl_widget.light_enabled)
+        state = "activee" if self.gl_widget.light_enabled else "desactivee"
+        self.statusBar().showMessage(f"Lumiere directionnelle SW {state}")
 
     def _toggle_info_panel(self):
         self.info_panel.setVisible(not self.info_panel.isVisible())
