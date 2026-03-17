@@ -20,6 +20,44 @@ const CROSS_TYPES: Dictionary = {
 	82: true,  # CORNFLOWER
 }
 
+# Special shape blocks — excluded from greedy mesher, rendered with custom geometry
+# STONE_BRICKS (83) = cube normal, pas besoin de l'exclure
+const SLAB_TYPES: Dictionary = {
+	87: true,  # OAK_SLAB
+	88: true,  # COBBLESTONE_SLAB
+	89: true,  # STONE_SLAB
+}
+const STAIR_TYPES: Dictionary = {
+	84: true,  # OAK_STAIRS
+	85: true,  # COBBLESTONE_STAIRS
+	86: true,  # STONE_BRICK_STAIRS
+}
+const FENCE_TYPES: Dictionary = {
+	91: true,  # OAK_FENCE
+	97: true,  # IRON_BARS
+}
+const DOOR_TYPES: Dictionary = {
+	90: true,  # OAK_DOOR
+	95: true,  # IRON_DOOR
+}
+const THIN_TYPES: Dictionary = {
+	92: true,  # GLASS_PANE
+	93: true,  # LADDER
+	94: true,  # OAK_TRAPDOOR
+}
+const LANTERN_TYPE: int = 96  # LANTERN
+
+func _is_special_shape(bt: int) -> bool:
+	return SLAB_TYPES.has(bt) or STAIR_TYPES.has(bt) or FENCE_TYPES.has(bt) or DOOR_TYPES.has(bt) or THIN_TYPES.has(bt) or bt == LANTERN_TYPE
+
+# Bloc à exclure du greedy mesher (non-cube: flora, special shapes)
+static func _skip_bt(bt: int) -> bool:
+	return bt == 0 or bt == 15 or bt == 72 or bt >= 77  # AIR, WATER, TORCH, or any block >= SHORT_GRASS (cross + architectural)
+
+# Bloc est un cube solide pour le greedy mesher
+static func _is_greedy_solid(bt: int) -> bool:
+	return bt != 0 and bt != 15 and bt != 72 and (bt < 77 or bt == 83)  # Exclude AIR, WATER, TORCH, cross types, special shapes (but STONE_BRICKS=83 is a cube)
+
 var chunk_position: Vector3i
 var blocks: PackedByteArray
 var y_min: int = 0
@@ -145,6 +183,7 @@ func _compute_mesh_arrays():
 		_greedy_mesh_y_faces()
 		_greedy_mesh_z_faces()
 		_greedy_mesh_x_faces()
+		_build_special_mesh()
 		_build_water_mesh()
 		_build_flora_mesh()
 
@@ -353,9 +392,9 @@ func _greedy_mesh_y_faces():
 			for z in range(CHUNK_SIZE):
 				var idx: int = x_off + z * 256 + y
 				var bt: int = blocks[idx]
-				if bt != 0 and bt != WATER_TYPE and bt != TORCH_TYPE and not CROSS_TYPES.has(bt):
+				if _is_greedy_solid(bt):
 					var nb: int = blocks[idx + 1] if y + 1 < CHUNK_HEIGHT else 0
-					if nb == 0 or nb == WATER_TYPE or nb == TORCH_TYPE or CROSS_TYPES.has(nb):
+					if not _is_greedy_solid(nb):
 						mask[x][z] = bt
 						has_faces = true
 					else:
@@ -386,9 +425,9 @@ func _greedy_mesh_y_faces():
 			for z in range(CHUNK_SIZE):
 				var idx: int = x_off + z * 256 + y
 				var bt: int = blocks[idx]
-				if bt != 0 and bt != WATER_TYPE and bt != TORCH_TYPE and not CROSS_TYPES.has(bt):
+				if _is_greedy_solid(bt):
 					var nb: int = blocks[idx - 1] if y - 1 >= 0 else 0
-					if nb == 0 or nb == WATER_TYPE or nb == TORCH_TYPE or CROSS_TYPES.has(nb):
+					if not _is_greedy_solid(nb):
 						mask[x][z] = bt
 						has_faces = true
 					else:
@@ -436,9 +475,9 @@ func _greedy_mesh_z_faces():
 			for iy in range(y_range):
 				var y: int = y_min + iy
 				var bt: int = blocks[xz_off + y]
-				if bt != 0 and bt != WATER_TYPE and bt != TORCH_TYPE and not CROSS_TYPES.has(bt):
+				if _is_greedy_solid(bt):
 					var nb: int = blocks[xzp_off + y] if z + 1 < CHUNK_SIZE else 0
-					if nb == 0 or nb == WATER_TYPE or nb == TORCH_TYPE or CROSS_TYPES.has(nb):
+					if not _is_greedy_solid(nb):
 						mask[x][iy] = bt
 						has_faces = true
 					else:
@@ -471,9 +510,9 @@ func _greedy_mesh_z_faces():
 			for iy in range(y_range):
 				var y: int = y_min + iy
 				var bt: int = blocks[xz_off + y]
-				if bt != 0 and bt != WATER_TYPE and bt != TORCH_TYPE and not CROSS_TYPES.has(bt):
+				if _is_greedy_solid(bt):
 					var nb: int = blocks[xzm_off + y] if z - 1 >= 0 else 0
-					if nb == 0 or nb == WATER_TYPE or nb == TORCH_TYPE or CROSS_TYPES.has(nb):
+					if not _is_greedy_solid(nb):
 						mask[x][iy] = bt
 						has_faces = true
 					else:
@@ -523,9 +562,9 @@ func _greedy_mesh_x_faces():
 			for iy in range(y_range):
 				var y: int = y_min + iy
 				var bt: int = blocks[x_off + z_off + y]
-				if bt != 0 and bt != WATER_TYPE and bt != TORCH_TYPE and not CROSS_TYPES.has(bt):
+				if _is_greedy_solid(bt):
 					var nb: int = blocks[xp_off + z_off + y] if x + 1 < CHUNK_SIZE else 0
-					if nb == 0 or nb == WATER_TYPE or nb == TORCH_TYPE or CROSS_TYPES.has(nb):
+					if not _is_greedy_solid(nb):
 						mask[z][iy] = bt
 						has_faces = true
 					else:
@@ -556,9 +595,9 @@ func _greedy_mesh_x_faces():
 			for iy in range(y_range):
 				var y: int = y_min + iy
 				var bt: int = blocks[x_off + z_off + y]
-				if bt != 0 and bt != WATER_TYPE and bt != TORCH_TYPE and not CROSS_TYPES.has(bt):
+				if _is_greedy_solid(bt):
 					var nb: int = blocks[xm_off + z_off + y] if x - 1 >= 0 else 0
-					if nb == 0 or nb == WATER_TYPE or nb == TORCH_TYPE or CROSS_TYPES.has(nb):
+					if not _is_greedy_solid(nb):
 						mask[z][iy] = bt
 						has_faces = true
 					else:
@@ -586,7 +625,7 @@ func _greedy_mesh_x_faces():
 # EMISSION D'UN QUAD FUSIONNE
 # ============================================================
 
-func _emit_quad(v0: Vector3, v1: Vector3, v2: Vector3, v3: Vector3, normal: Vector3, color: Color, ao: Array, uv_w: float = 1.0, uv_h: float = 1.0, layer: float = 0.0):
+func _emit_quad(v0: Vector3, v1: Vector3, v2: Vector3, v3: Vector3, normal: Vector3, color: Color, ao: Array, uv_w: float = 1.0, uv_h: float = 1.0, layer: float = 0.0, skip_collision: bool = false):
 	var base: int = _vertices.size()
 
 	_vertices.append(v0)
@@ -624,12 +663,13 @@ func _emit_quad(v0: Vector3, v1: Vector3, v2: Vector3, v3: Vector3, normal: Vect
 	_indices.append(base)
 
 	# Faces de collision (2 triangles)
-	_collision_faces.append(v0)
-	_collision_faces.append(v1)
-	_collision_faces.append(v2)
-	_collision_faces.append(v2)
-	_collision_faces.append(v3)
-	_collision_faces.append(v0)
+	if not skip_collision:
+		_collision_faces.append(v0)
+		_collision_faces.append(v1)
+		_collision_faces.append(v2)
+		_collision_faces.append(v2)
+		_collision_faces.append(v3)
+		_collision_faces.append(v0)
 
 # ============================================================
 # FLORA MESH — cross billboards (2 quads en X par bloc)
@@ -807,8 +847,12 @@ func _spawn_torch_lights():
 				break
 			var xz_off = x_off + z * 256
 			for y in range(y_min, y_max + 1):
-				if blocks[xz_off + y] == TORCH_TYPE:
-					_create_torch_at(x, y, z)
+				var bt_check = blocks[xz_off + y]
+				if bt_check == TORCH_TYPE or bt_check == LANTERN_TYPE:
+					if bt_check == LANTERN_TYPE:
+						_create_lantern_at(x, y, z)
+					else:
+						_create_torch_at(x, y, z)
 					count += 1
 					if count >= MAX_TORCHES_PER_CHUNK:
 						break
@@ -858,6 +902,351 @@ func _create_torch_at(lx: int, ly: int, lz: int):
 
 	add_child(torch_node)
 	_torch_lights.append(torch_node)
+
+func _create_lantern_at(lx: int, ly: int, lz: int):
+	var lantern_node = Node3D.new()
+	lantern_node.position = Vector3(lx + 0.5, ly, lz + 0.5)
+
+	# Corps de la lanterne (cube noir + partie dorée)
+	var body = MeshInstance3D.new()
+	var box = BoxMesh.new()
+	box.size = Vector3(0.35, 0.45, 0.35)
+	body.mesh = box
+	body.position = Vector3(0, 0.225, 0)
+	var mat = StandardMaterial3D.new()
+	mat.albedo_color = Color(0.3, 0.3, 0.35, 1.0)
+	mat.emission_enabled = true
+	mat.emission = Color(1.0, 0.8, 0.4, 1.0)
+	mat.emission_energy_multiplier = 3.0
+	body.material_override = mat
+	lantern_node.add_child(body)
+
+	# Lumière
+	var light = OmniLight3D.new()
+	light.light_color = Color(1.0, 0.85, 0.5)
+	light.light_energy = 1.2
+	light.omni_range = 10.0
+	light.omni_attenuation = 1.5
+	light.shadow_enabled = false
+	light.position = Vector3(0, 0.3, 0)
+	lantern_node.add_child(light)
+
+	add_child(lantern_node)
+	_torch_lights.append(lantern_node)
+
+# ============================================================
+# SPECIAL SHAPE MESH — slabs, stairs, fences, doors, glass panes, ladders, trapdoors
+# ============================================================
+
+func _build_special_mesh():
+	if y_min > y_max:
+		return
+	for x in range(CHUNK_SIZE):
+		var x_off: int = x * 4096
+		for z in range(CHUNK_SIZE):
+			var xz_off: int = x_off + z * 256
+			for y in range(y_min, y_max + 1):
+				var bt: int = blocks[xz_off + y]
+				if SLAB_TYPES.has(bt):
+					_emit_slab(x, y, z, bt)
+				elif STAIR_TYPES.has(bt):
+					_emit_stair(x, y, z, bt)
+				elif FENCE_TYPES.has(bt):
+					_emit_fence(x, y, z, bt)
+				elif DOOR_TYPES.has(bt):
+					_emit_door(x, y, z, bt)
+				elif THIN_TYPES.has(bt):
+					if bt == 93:  # LADDER
+						_emit_ladder(x, y, z, bt)
+					elif bt == 94:  # OAK_TRAPDOOR
+						_emit_trapdoor(x, y, z, bt)
+					else:  # GLASS_PANE
+						_emit_glass_pane(x, y, z, bt)
+
+func _emit_slab(x: int, y: int, z: int, bt: int):
+	# Demi-bloc — 1×0.5×1, partie basse
+	var fx: float = float(x)
+	var fy: float = float(y)
+	var fz: float = float(z)
+	var tex_name: String = BlockRegistry.get_face_texture(bt, "all")
+	var layer: float = float(TextureManager.get_layer_index(tex_name))
+	var tint: Color = Color.WHITE
+	var ao_full: Array = [1.0, 1.0, 1.0, 1.0]
+
+	# Top face (y + 0.5)
+	_emit_quad(
+		Vector3(fx, fy + 0.5, fz), Vector3(fx + 1, fy + 0.5, fz),
+		Vector3(fx + 1, fy + 0.5, fz + 1), Vector3(fx, fy + 0.5, fz + 1),
+		Vector3.UP, tint, ao_full, 1.0, 1.0, layer)
+	# Bottom face
+	_emit_quad(
+		Vector3(fx, fy, fz + 1), Vector3(fx + 1, fy, fz + 1),
+		Vector3(fx + 1, fy, fz), Vector3(fx, fy, fz),
+		Vector3.DOWN, tint * 0.6, ao_full, 1.0, 1.0, layer)
+	# Front (+Z)
+	_emit_quad(
+		Vector3(fx + 1, fy, fz + 1), Vector3(fx, fy, fz + 1),
+		Vector3(fx, fy + 0.5, fz + 1), Vector3(fx + 1, fy + 0.5, fz + 1),
+		Vector3.BACK, tint * 0.8, ao_full, 1.0, 0.5, layer)
+	# Back (-Z)
+	_emit_quad(
+		Vector3(fx, fy, fz), Vector3(fx + 1, fy, fz),
+		Vector3(fx + 1, fy + 0.5, fz), Vector3(fx, fy + 0.5, fz),
+		Vector3.FORWARD, tint * 0.8, ao_full, 1.0, 0.5, layer)
+	# Right (+X)
+	_emit_quad(
+		Vector3(fx + 1, fy, fz), Vector3(fx + 1, fy, fz + 1),
+		Vector3(fx + 1, fy + 0.5, fz + 1), Vector3(fx + 1, fy + 0.5, fz),
+		Vector3.RIGHT, tint * 0.7, ao_full, 1.0, 0.5, layer)
+	# Left (-X)
+	_emit_quad(
+		Vector3(fx, fy, fz + 1), Vector3(fx, fy, fz),
+		Vector3(fx, fy + 0.5, fz), Vector3(fx, fy + 0.5, fz + 1),
+		Vector3.LEFT, tint * 0.7, ao_full, 1.0, 0.5, layer)
+
+func _emit_stair(x: int, y: int, z: int, bt: int):
+	# Escalier — partie basse pleine (0-0.5) + partie haute arrière (0.5-1.0 sur z=0-0.5)
+	var fx: float = float(x)
+	var fy: float = float(y)
+	var fz: float = float(z)
+	var tex_name: String = BlockRegistry.get_face_texture(bt, "all")
+	var layer: float = float(TextureManager.get_layer_index(tex_name))
+	var tint: Color = Color.WHITE
+	var ao: Array = [1.0, 1.0, 1.0, 1.0]
+
+	# ---- Partie basse (dalle 0 à 0.5) ----
+	# Bottom
+	_emit_quad(
+		Vector3(fx, fy, fz + 1), Vector3(fx + 1, fy, fz + 1),
+		Vector3(fx + 1, fy, fz), Vector3(fx, fy, fz),
+		Vector3.DOWN, tint * 0.6, ao, 1.0, 1.0, layer)
+	# Top de la dalle (face visible devant la marche)
+	_emit_quad(
+		Vector3(fx, fy + 0.5, fz + 1), Vector3(fx + 1, fy + 0.5, fz + 1),
+		Vector3(fx + 1, fy + 0.5, fz + 0.5), Vector3(fx, fy + 0.5, fz + 0.5),
+		Vector3.UP, tint, ao, 1.0, 0.5, layer)
+	# Front (+Z) basse
+	_emit_quad(
+		Vector3(fx + 1, fy, fz + 1), Vector3(fx, fy, fz + 1),
+		Vector3(fx, fy + 0.5, fz + 1), Vector3(fx + 1, fy + 0.5, fz + 1),
+		Vector3.BACK, tint * 0.8, ao, 1.0, 0.5, layer)
+	# Sides basse
+	_emit_quad(
+		Vector3(fx + 1, fy, fz), Vector3(fx + 1, fy, fz + 1),
+		Vector3(fx + 1, fy + 0.5, fz + 1), Vector3(fx + 1, fy + 0.5, fz),
+		Vector3.RIGHT, tint * 0.7, ao, 1.0, 1.0, layer)
+	_emit_quad(
+		Vector3(fx, fy, fz + 1), Vector3(fx, fy, fz),
+		Vector3(fx, fy + 0.5, fz), Vector3(fx, fy + 0.5, fz + 1),
+		Vector3.LEFT, tint * 0.7, ao, 1.0, 1.0, layer)
+
+	# ---- Partie haute (marche 0.5 à 1.0, moitié arrière z=0 à 0.5) ----
+	# Top de la marche
+	_emit_quad(
+		Vector3(fx, fy + 1.0, fz), Vector3(fx + 1, fy + 1.0, fz),
+		Vector3(fx + 1, fy + 1.0, fz + 0.5), Vector3(fx, fy + 1.0, fz + 0.5),
+		Vector3.UP, tint, ao, 1.0, 0.5, layer)
+	# Front de la marche (face z=0.5)
+	_emit_quad(
+		Vector3(fx + 1, fy + 0.5, fz + 0.5), Vector3(fx, fy + 0.5, fz + 0.5),
+		Vector3(fx, fy + 1.0, fz + 0.5), Vector3(fx + 1, fy + 1.0, fz + 0.5),
+		Vector3.BACK, tint * 0.8, ao, 1.0, 0.5, layer)
+	# Back (-Z) pleine hauteur
+	_emit_quad(
+		Vector3(fx, fy, fz), Vector3(fx + 1, fy, fz),
+		Vector3(fx + 1, fy + 1.0, fz), Vector3(fx, fy + 1.0, fz),
+		Vector3.FORWARD, tint * 0.8, ao, 1.0, 1.0, layer)
+	# Sides hautes (moitié sup des côtés)
+	_emit_quad(
+		Vector3(fx + 1, fy + 0.5, fz), Vector3(fx + 1, fy + 0.5, fz + 0.5),
+		Vector3(fx + 1, fy + 1.0, fz + 0.5), Vector3(fx + 1, fy + 1.0, fz),
+		Vector3.RIGHT, tint * 0.7, ao, 0.5, 0.5, layer)
+	_emit_quad(
+		Vector3(fx, fy + 0.5, fz + 0.5), Vector3(fx, fy + 0.5, fz),
+		Vector3(fx, fy + 1.0, fz), Vector3(fx, fy + 1.0, fz + 0.5),
+		Vector3.LEFT, tint * 0.7, ao, 0.5, 0.5, layer)
+
+func _emit_fence(x: int, y: int, z: int, bt: int):
+	# Poteau central 4/16 × 16/16 × 4/16
+	var fx: float = float(x)
+	var fy: float = float(y)
+	var fz: float = float(z)
+	var tex_name: String = BlockRegistry.get_face_texture(bt, "all")
+	var layer: float = float(TextureManager.get_layer_index(tex_name))
+	var tint: Color = Color.WHITE
+	var ao: Array = [1.0, 1.0, 1.0, 1.0]
+
+	var pw: float = 0.25  # post width
+	var ph: float = pw / 2.0
+	var cx: float = fx + 0.5
+	var cz: float = fz + 0.5
+
+	# Top
+	_emit_quad(
+		Vector3(cx - ph, fy + 1.0, cz - ph), Vector3(cx + ph, fy + 1.0, cz - ph),
+		Vector3(cx + ph, fy + 1.0, cz + ph), Vector3(cx - ph, fy + 1.0, cz + ph),
+		Vector3.UP, tint, ao, pw, pw, layer)
+	# Bottom
+	_emit_quad(
+		Vector3(cx - ph, fy, cz + ph), Vector3(cx + ph, fy, cz + ph),
+		Vector3(cx + ph, fy, cz - ph), Vector3(cx - ph, fy, cz - ph),
+		Vector3.DOWN, tint * 0.6, ao, pw, pw, layer)
+	# Front (+Z)
+	_emit_quad(
+		Vector3(cx + ph, fy, cz + ph), Vector3(cx - ph, fy, cz + ph),
+		Vector3(cx - ph, fy + 1.0, cz + ph), Vector3(cx + ph, fy + 1.0, cz + ph),
+		Vector3.BACK, tint * 0.8, ao, pw, 1.0, layer)
+	# Back (-Z)
+	_emit_quad(
+		Vector3(cx - ph, fy, cz - ph), Vector3(cx + ph, fy, cz - ph),
+		Vector3(cx + ph, fy + 1.0, cz - ph), Vector3(cx - ph, fy + 1.0, cz - ph),
+		Vector3.FORWARD, tint * 0.8, ao, pw, 1.0, layer)
+	# Right (+X)
+	_emit_quad(
+		Vector3(cx + ph, fy, cz - ph), Vector3(cx + ph, fy, cz + ph),
+		Vector3(cx + ph, fy + 1.0, cz + ph), Vector3(cx + ph, fy + 1.0, cz - ph),
+		Vector3.RIGHT, tint * 0.7, ao, pw, 1.0, layer)
+	# Left (-X)
+	_emit_quad(
+		Vector3(cx - ph, fy, cz + ph), Vector3(cx - ph, fy, cz - ph),
+		Vector3(cx - ph, fy + 1.0, cz - ph), Vector3(cx - ph, fy + 1.0, cz + ph),
+		Vector3.LEFT, tint * 0.7, ao, pw, 1.0, layer)
+
+func _emit_door(x: int, y: int, z: int, bt: int):
+	# Porte — panneau plat 1×2×3/16, orienté face au +Z
+	var fx: float = float(x)
+	var fy: float = float(y)
+	var fz: float = float(z)
+	var tex_name: String = BlockRegistry.get_face_texture(bt, "all")
+	var layer: float = float(TextureManager.get_layer_index(tex_name))
+	var tint: Color = Color.WHITE
+	var ao: Array = [1.0, 1.0, 1.0, 1.0]
+	var depth: float = 3.0 / 16.0
+
+	# Front face (+Z)
+	_emit_quad(
+		Vector3(fx + 1, fy, fz + depth), Vector3(fx, fy, fz + depth),
+		Vector3(fx, fy + 1.0, fz + depth), Vector3(fx + 1, fy + 1.0, fz + depth),
+		Vector3.BACK, tint, ao, 1.0, 1.0, layer)
+	# Back face (-Z)
+	_emit_quad(
+		Vector3(fx, fy, fz), Vector3(fx + 1, fy, fz),
+		Vector3(fx + 1, fy + 1.0, fz), Vector3(fx, fy + 1.0, fz),
+		Vector3.FORWARD, tint, ao, 1.0, 1.0, layer)
+	# Top
+	_emit_quad(
+		Vector3(fx, fy + 1.0, fz), Vector3(fx + 1, fy + 1.0, fz),
+		Vector3(fx + 1, fy + 1.0, fz + depth), Vector3(fx, fy + 1.0, fz + depth),
+		Vector3.UP, tint, ao, 1.0, depth, layer)
+	# Bottom
+	_emit_quad(
+		Vector3(fx, fy, fz + depth), Vector3(fx + 1, fy, fz + depth),
+		Vector3(fx + 1, fy, fz), Vector3(fx, fy, fz),
+		Vector3.DOWN, tint * 0.6, ao, 1.0, depth, layer)
+	# Right side
+	_emit_quad(
+		Vector3(fx + 1, fy, fz), Vector3(fx + 1, fy, fz + depth),
+		Vector3(fx + 1, fy + 1.0, fz + depth), Vector3(fx + 1, fy + 1.0, fz),
+		Vector3.RIGHT, tint * 0.7, ao, depth, 1.0, layer)
+	# Left side
+	_emit_quad(
+		Vector3(fx, fy, fz + depth), Vector3(fx, fy, fz),
+		Vector3(fx, fy + 1.0, fz), Vector3(fx, fy + 1.0, fz + depth),
+		Vector3.LEFT, tint * 0.7, ao, depth, 1.0, layer)
+
+func _emit_glass_pane(x: int, y: int, z: int, bt: int):
+	# Vitre — panneau plat centré 1×1×2/16 orienté N-S
+	var fx: float = float(x)
+	var fy: float = float(y)
+	var fz: float = float(z)
+	var tex_name: String = BlockRegistry.get_face_texture(bt, "all")
+	var layer: float = float(TextureManager.get_layer_index(tex_name))
+	var tint: Color = Color.WHITE
+	var ao: Array = [1.0, 1.0, 1.0, 1.0]
+	var half: float = 1.0 / 16.0
+	var cz: float = fz + 0.5
+
+	# Front face
+	_emit_quad(
+		Vector3(fx + 1, fy, cz + half), Vector3(fx, fy, cz + half),
+		Vector3(fx, fy + 1.0, cz + half), Vector3(fx + 1, fy + 1.0, cz + half),
+		Vector3.BACK, tint, ao, 1.0, 1.0, layer)
+	# Back face
+	_emit_quad(
+		Vector3(fx, fy, cz - half), Vector3(fx + 1, fy, cz - half),
+		Vector3(fx + 1, fy + 1.0, cz - half), Vector3(fx, fy + 1.0, cz - half),
+		Vector3.FORWARD, tint, ao, 1.0, 1.0, layer)
+	# Top
+	_emit_quad(
+		Vector3(fx, fy + 1.0, cz - half), Vector3(fx + 1, fy + 1.0, cz - half),
+		Vector3(fx + 1, fy + 1.0, cz + half), Vector3(fx, fy + 1.0, cz + half),
+		Vector3.UP, tint, ao, 1.0, half * 2, layer)
+	# Bottom
+	_emit_quad(
+		Vector3(fx, fy, cz + half), Vector3(fx + 1, fy, cz + half),
+		Vector3(fx + 1, fy, cz - half), Vector3(fx, fy, cz - half),
+		Vector3.DOWN, tint * 0.6, ao, 1.0, half * 2, layer)
+
+func _emit_ladder(x: int, y: int, z: int, bt: int):
+	# Échelle — panneau plat collé au mur -Z (face +Z)
+	var fx: float = float(x)
+	var fy: float = float(y)
+	var fz: float = float(z)
+	var tex_name: String = BlockRegistry.get_face_texture(bt, "all")
+	var layer: float = float(TextureManager.get_layer_index(tex_name))
+	var tint: Color = Color.WHITE
+	var ao: Array = [1.0, 1.0, 1.0, 1.0]
+	var offset: float = 1.0 / 16.0
+
+	# Face visible (plaquée contre le mur -Z) — pas de collision pour permettre l'escalade
+	_emit_quad(
+		Vector3(fx + 1, fy, fz + offset), Vector3(fx, fy, fz + offset),
+		Vector3(fx, fy + 1.0, fz + offset), Vector3(fx + 1, fy + 1.0, fz + offset),
+		Vector3.BACK, tint, ao, 1.0, 1.0, layer, true)
+	# Face arrière (contre le mur)
+	_emit_quad(
+		Vector3(fx, fy, fz), Vector3(fx + 1, fy, fz),
+		Vector3(fx + 1, fy + 1.0, fz), Vector3(fx, fy + 1.0, fz),
+		Vector3.FORWARD, tint, ao, 1.0, 1.0, layer, true)
+
+func _emit_trapdoor(x: int, y: int, z: int, bt: int):
+	# Trappe — panneau horizontal 1×3/16×1, au bas du bloc
+	var fx: float = float(x)
+	var fy: float = float(y)
+	var fz: float = float(z)
+	var tex_name: String = BlockRegistry.get_face_texture(bt, "all")
+	var layer: float = float(TextureManager.get_layer_index(tex_name))
+	var tint: Color = Color.WHITE
+	var ao: Array = [1.0, 1.0, 1.0, 1.0]
+	var height: float = 3.0 / 16.0
+
+	# Top
+	_emit_quad(
+		Vector3(fx, fy + height, fz), Vector3(fx + 1, fy + height, fz),
+		Vector3(fx + 1, fy + height, fz + 1), Vector3(fx, fy + height, fz + 1),
+		Vector3.UP, tint, ao, 1.0, 1.0, layer)
+	# Bottom
+	_emit_quad(
+		Vector3(fx, fy, fz + 1), Vector3(fx + 1, fy, fz + 1),
+		Vector3(fx + 1, fy, fz), Vector3(fx, fy, fz),
+		Vector3.DOWN, tint * 0.6, ao, 1.0, 1.0, layer)
+	# Sides
+	_emit_quad(
+		Vector3(fx + 1, fy, fz + 1), Vector3(fx, fy, fz + 1),
+		Vector3(fx, fy + height, fz + 1), Vector3(fx + 1, fy + height, fz + 1),
+		Vector3.BACK, tint * 0.8, ao, 1.0, height, layer)
+	_emit_quad(
+		Vector3(fx, fy, fz), Vector3(fx + 1, fy, fz),
+		Vector3(fx + 1, fy + height, fz), Vector3(fx, fy + height, fz),
+		Vector3.FORWARD, tint * 0.8, ao, 1.0, height, layer)
+	_emit_quad(
+		Vector3(fx + 1, fy, fz), Vector3(fx + 1, fy, fz + 1),
+		Vector3(fx + 1, fy + height, fz + 1), Vector3(fx + 1, fy + height, fz),
+		Vector3.RIGHT, tint * 0.7, ao, 1.0, height, layer)
+	_emit_quad(
+		Vector3(fx, fy, fz + 1), Vector3(fx, fy, fz),
+		Vector3(fx, fy + height, fz), Vector3(fx, fy + height, fz + 1),
+		Vector3.LEFT, tint * 0.7, ao, 1.0, height, layer)
 
 # ============================================================
 # AMBIENT OCCLUSION

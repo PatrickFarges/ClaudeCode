@@ -42,6 +42,8 @@ Monorepo contenant plusieurs sous-projets indépendants liés aux outils RH/paie
 | **ClaudeCraft** | `ClaudeCraft/` | Jeu voxel type Minecraft en GDScript/Godot 4.6+, style pastel, évoluant vers The Settlers |
 | **WagetypeCatalog** | `WagetypeCatalog/` | Catalogage des rubriques de paie SAP EuHReka (données uniquement) |
 | **ClocloWebUi** | `ClocloWebUi/` | Interface web pour piloter plusieurs sessions Claude Code en parallèle (Python/aiohttp) |
+| **SAP_DSN** | `SAP_DSN/` | Analyse des tickets DSN SAP EuHReka — scan de ~3158 fichiers Excel → rapport unifié (Python/openpyxl) |
+| **SAP_MDC** | `SAP_MDC/` | Analyse des tickets MDC (Modèle De Charge) SAP EuHReka — même approche que SAP_DSN (Python/openpyxl) |
 
 ## Notes techniques
 

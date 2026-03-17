@@ -237,6 +237,91 @@ static func get_all_recipes() -> Array:
 			"output_count": 1,
 			"station": "wood_table"
 		},
+		# --- Blocs architecturaux ---
+		{
+			"name": "Briques de pierre",
+			"inputs": [[BlockRegistry.BlockType.STONE, 4]],
+			"output_type": BlockRegistry.BlockType.STONE_BRICKS,
+			"output_count": 4,
+			"station": "wood_table"
+		},
+		{
+			"name": "Escalier en bois",
+			"inputs": [[BlockRegistry.BlockType.PLANKS, 6]],
+			"output_type": BlockRegistry.BlockType.OAK_STAIRS,
+			"output_count": 4,
+			"station": "wood_table"
+		},
+		{
+			"name": "Escalier en pave",
+			"inputs": [[BlockRegistry.BlockType.COBBLESTONE, 6]],
+			"output_type": BlockRegistry.BlockType.COBBLESTONE_STAIRS,
+			"output_count": 4,
+			"station": "wood_table"
+		},
+		{
+			"name": "Escalier en briques de pierre",
+			"inputs": [[BlockRegistry.BlockType.STONE_BRICKS, 6]],
+			"output_type": BlockRegistry.BlockType.STONE_BRICK_STAIRS,
+			"output_count": 4,
+			"station": "wood_table"
+		},
+		{
+			"name": "Dalle en bois",
+			"inputs": [[BlockRegistry.BlockType.PLANKS, 3]],
+			"output_type": BlockRegistry.BlockType.OAK_SLAB,
+			"output_count": 6,
+			"station": "wood_table"
+		},
+		{
+			"name": "Dalle en pave",
+			"inputs": [[BlockRegistry.BlockType.COBBLESTONE, 3]],
+			"output_type": BlockRegistry.BlockType.COBBLESTONE_SLAB,
+			"output_count": 6,
+			"station": "wood_table"
+		},
+		{
+			"name": "Dalle en pierre",
+			"inputs": [[BlockRegistry.BlockType.SMOOTH_STONE, 3]],
+			"output_type": BlockRegistry.BlockType.STONE_SLAB,
+			"output_count": 6,
+			"station": "wood_table"
+		},
+		{
+			"name": "Porte en bois",
+			"inputs": [[BlockRegistry.BlockType.PLANKS, 6]],
+			"output_type": BlockRegistry.BlockType.OAK_DOOR,
+			"output_count": 3,
+			"station": "wood_table"
+		},
+		{
+			"name": "Cloture en bois",
+			"inputs": [[BlockRegistry.BlockType.PLANKS, 4], [BlockRegistry.BlockType.WOOD, 2]],
+			"output_type": BlockRegistry.BlockType.OAK_FENCE,
+			"output_count": 3,
+			"station": "wood_table"
+		},
+		{
+			"name": "Vitre",
+			"inputs": [[BlockRegistry.BlockType.GLASS, 6]],
+			"output_type": BlockRegistry.BlockType.GLASS_PANE,
+			"output_count": 16,
+			"station": "wood_table"
+		},
+		{
+			"name": "Echelle",
+			"inputs": [[BlockRegistry.BlockType.WOOD, 7]],
+			"output_type": BlockRegistry.BlockType.LADDER,
+			"output_count": 3,
+			"station": "wood_table"
+		},
+		{
+			"name": "Trappe en bois",
+			"inputs": [[BlockRegistry.BlockType.PLANKS, 6]],
+			"output_type": BlockRegistry.BlockType.OAK_TRAPDOOR,
+			"output_count": 2,
+			"station": "wood_table"
+		},
 		# --- Nouvelles recettes table en bois ---
 		{
 			"name": "Pave",
@@ -362,6 +447,28 @@ static func get_all_recipes() -> Array:
 			"inputs": [[BlockRegistry.BlockType.WOOD, 8]],
 			"output_type": BlockRegistry.BlockType.PLANKS,
 			"output_count": 40,
+			"station": "stone_table"
+		},
+		# --- Blocs architecturaux fer ---
+		{
+			"name": "Porte en fer",
+			"inputs": [[BlockRegistry.BlockType.IRON_INGOT, 6]],
+			"output_type": BlockRegistry.BlockType.IRON_DOOR,
+			"output_count": 3,
+			"station": "stone_table"
+		},
+		{
+			"name": "Lanterne",
+			"inputs": [[BlockRegistry.BlockType.IRON_INGOT, 8], [BlockRegistry.BlockType.TORCH, 1]],
+			"output_type": BlockRegistry.BlockType.LANTERN,
+			"output_count": 1,
+			"station": "stone_table"
+		},
+		{
+			"name": "Barreaux de fer",
+			"inputs": [[BlockRegistry.BlockType.IRON_INGOT, 6]],
+			"output_type": BlockRegistry.BlockType.IRON_BARS,
+			"output_count": 16,
 			"station": "stone_table"
 		},
 		# --- Nouvelles recettes table en pierre ---

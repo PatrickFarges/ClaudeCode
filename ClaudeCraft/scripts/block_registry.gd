@@ -101,6 +101,22 @@ enum BlockType {
 	DANDELION,
 	POPPY,
 	CORNFLOWER,
+	# === BLOCS ARCHITECTURAUX (83-97) ===
+	STONE_BRICKS,
+	OAK_STAIRS,
+	COBBLESTONE_STAIRS,
+	STONE_BRICK_STAIRS,
+	OAK_SLAB,
+	COBBLESTONE_SLAB,
+	STONE_SLAB,
+	OAK_DOOR,
+	OAK_FENCE,
+	GLASS_PANE,
+	LADDER,
+	OAK_TRAPDOOR,
+	IRON_DOOR,
+	LANTERN,
+	IRON_BARS,
 }
 
 const BLOCK_DATA = {
@@ -702,6 +718,112 @@ const BLOCK_DATA = {
 		"hardness": 0.0,
 		"faces": { "all": "cornflower" }
 	},
+	# === BLOCS ARCHITECTURAUX ===
+	BlockType.STONE_BRICKS: {
+		"name": "Stone Bricks",
+		"solid": true,
+		"color": Color(0.65, 0.65, 0.7, 1.0),
+		"hardness": 1.5,
+		"faces": { "all": "stone_bricks" }
+	},
+	BlockType.OAK_STAIRS: {
+		"name": "Oak Stairs",
+		"solid": true,
+		"color": Color(0.85, 0.72, 0.5, 1.0),
+		"hardness": 0.8,
+		"faces": { "all": "oak_planks" }
+	},
+	BlockType.COBBLESTONE_STAIRS: {
+		"name": "Cobblestone Stairs",
+		"solid": true,
+		"color": Color(0.6, 0.6, 0.65, 1.0),
+		"hardness": 1.5,
+		"faces": { "all": "cobblestone" }
+	},
+	BlockType.STONE_BRICK_STAIRS: {
+		"name": "Stone Brick Stairs",
+		"solid": true,
+		"color": Color(0.65, 0.65, 0.7, 1.0),
+		"hardness": 1.5,
+		"faces": { "all": "stone_bricks" }
+	},
+	BlockType.OAK_SLAB: {
+		"name": "Oak Slab",
+		"solid": true,
+		"color": Color(0.85, 0.72, 0.5, 1.0),
+		"hardness": 0.8,
+		"faces": { "all": "oak_planks" }
+	},
+	BlockType.COBBLESTONE_SLAB: {
+		"name": "Cobblestone Slab",
+		"solid": true,
+		"color": Color(0.6, 0.6, 0.65, 1.0),
+		"hardness": 1.5,
+		"faces": { "all": "cobblestone" }
+	},
+	BlockType.STONE_SLAB: {
+		"name": "Stone Slab",
+		"solid": true,
+		"color": Color(0.7, 0.7, 0.75, 1.0),
+		"hardness": 1.5,
+		"faces": { "all": "smooth_stone" }
+	},
+	BlockType.OAK_DOOR: {
+		"name": "Oak Door",
+		"solid": true,
+		"color": Color(0.75, 0.6, 0.4, 1.0),
+		"hardness": 0.8,
+		"faces": { "all": "oak_door_bottom" }
+	},
+	BlockType.OAK_FENCE: {
+		"name": "Oak Fence",
+		"solid": true,
+		"color": Color(0.85, 0.72, 0.5, 1.0),
+		"hardness": 0.8,
+		"faces": { "all": "oak_planks" }
+	},
+	BlockType.GLASS_PANE: {
+		"name": "Glass Pane",
+		"solid": true,
+		"color": Color(0.85, 0.9, 0.95, 0.8),
+		"hardness": 0.3,
+		"faces": { "all": "glass" }
+	},
+	BlockType.LADDER: {
+		"name": "Ladder",
+		"solid": false,
+		"color": Color(0.7, 0.55, 0.35, 1.0),
+		"hardness": 0.4,
+		"faces": { "all": "ladder" }
+	},
+	BlockType.OAK_TRAPDOOR: {
+		"name": "Oak Trapdoor",
+		"solid": true,
+		"color": Color(0.75, 0.6, 0.4, 1.0),
+		"hardness": 0.8,
+		"faces": { "all": "oak_trapdoor" }
+	},
+	BlockType.IRON_DOOR: {
+		"name": "Iron Door",
+		"solid": true,
+		"color": Color(0.8, 0.8, 0.85, 1.0),
+		"hardness": 2.0,
+		"faces": { "all": "iron_door_bottom" }
+	},
+	BlockType.LANTERN: {
+		"name": "Lantern",
+		"solid": false,
+		"color": Color(0.9, 0.75, 0.4, 1.0),
+		"hardness": 0.5,
+		"faces": { "all": "lantern" }
+	},
+	BlockType.IRON_BARS: {
+		"name": "Iron Bars",
+		"solid": true,
+		"color": Color(0.6, 0.6, 0.65, 1.0),
+		"hardness": 1.5,
+		"faces": { "all": "iron_bars" }
+	},
 }
 
 static func get_block_color(block_type: BlockType) -> Color:
@@ -750,6 +872,54 @@ const WORKSTATION_BLOCKS: Dictionary = {
 
 static func is_workstation(block_type) -> bool:
 	return WORKSTATION_BLOCKS.has(block_type)
+
+# Blocs avec forme spéciale (exclus du greedy mesher, rendus séparément)
+const SLAB_BLOCKS: Dictionary = {
+	BlockType.OAK_SLAB: true,
+	BlockType.COBBLESTONE_SLAB: true,
+	BlockType.STONE_SLAB: true,
+}
+
+const STAIR_BLOCKS: Dictionary = {
+	BlockType.OAK_STAIRS: true,
+	BlockType.COBBLESTONE_STAIRS: true,
+	BlockType.STONE_BRICK_STAIRS: true,
+}
+
+const FENCE_BLOCKS: Dictionary = {
+	BlockType.OAK_FENCE: true,
+	BlockType.IRON_BARS: true,
+}
+
+const DOOR_BLOCKS: Dictionary = {
+	BlockType.OAK_DOOR: true,
+	BlockType.IRON_DOOR: true,
+}
+
+const THIN_BLOCKS: Dictionary = {
+	BlockType.GLASS_PANE: true,
+	BlockType.LADDER: true,
+	BlockType.OAK_TRAPDOOR: true,
+}
+
+const LANTERN_BLOCKS: Dictionary = {
+	BlockType.LANTERN: true,
+}
+
+static func is_slab(block_type) -> bool:
+	return SLAB_BLOCKS.has(block_type)
+
+static func is_stair(block_type) -> bool:
+	return STAIR_BLOCKS.has(block_type)
+
+static func is_fence(block_type) -> bool:
+	return FENCE_BLOCKS.has(block_type)
+
+static func is_door(block_type) -> bool:
+	return DOOR_BLOCKS.has(block_type)
+
+static func is_special_shape(block_type) -> bool:
+	return SLAB_BLOCKS.has(block_type) or STAIR_BLOCKS.has(block_type) or FENCE_BLOCKS.has(block_type) or DOOR_BLOCKS.has(block_type) or THIN_BLOCKS.has(block_type) or LANTERN_BLOCKS.has(block_type)
 
 static func get_block_tint(block_type: BlockType, face: String = "all") -> Color:
 	match block_type:

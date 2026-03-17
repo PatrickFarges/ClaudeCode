@@ -221,6 +221,22 @@ func _init_inventory():
 	inventory[BlockRegistry.BlockType.BOOKSHELF] = 0
 	inventory[BlockRegistry.BlockType.HAY_BLOCK] = 0
 	inventory[BlockRegistry.BlockType.BARREL] = 0
+	# Blocs architecturaux
+	inventory[BlockRegistry.BlockType.STONE_BRICKS] = 0
+	inventory[BlockRegistry.BlockType.OAK_STAIRS] = 0
+	inventory[BlockRegistry.BlockType.COBBLESTONE_STAIRS] = 0
+	inventory[BlockRegistry.BlockType.STONE_BRICK_STAIRS] = 0
+	inventory[BlockRegistry.BlockType.OAK_SLAB] = 0
+	inventory[BlockRegistry.BlockType.COBBLESTONE_SLAB] = 0
+	inventory[BlockRegistry.BlockType.STONE_SLAB] = 0
+	inventory[BlockRegistry.BlockType.OAK_DOOR] = 0
+	inventory[BlockRegistry.BlockType.OAK_FENCE] = 0
+	inventory[BlockRegistry.BlockType.GLASS_PANE] = 0
+	inventory[BlockRegistry.BlockType.LADDER] = 0
+	inventory[BlockRegistry.BlockType.OAK_TRAPDOOR] = 0
+	inventory[BlockRegistry.BlockType.IRON_DOOR] = 0
+	inventory[BlockRegistry.BlockType.LANTERN] = 0
+	inventory[BlockRegistry.BlockType.IRON_BARS] = 0
 
 func _create_block_highlighter():
 	block_highlighter = BlockHighlighter.new()
@@ -457,24 +473,28 @@ func _physics_process(delta):
 			_respawn()
 		return
 
-	# Détection eau
+	# Détection eau et échelle
 	in_water = false
+	var on_ladder: bool = false
 	if world_manager:
 		var feet_pos = global_position.floor()
 		var head_pos = (global_position + Vector3(0, 1.5, 0)).floor()
 		var feet_block = world_manager.get_block_at_position(feet_pos)
 		var head_block = world_manager.get_block_at_position(head_pos)
 		in_water = feet_block == BlockRegistry.BlockType.WATER or head_block == BlockRegistry.BlockType.WATER
+		on_ladder = feet_block == BlockRegistry.BlockType.LADDER or head_block == BlockRegistry.BlockType.LADDER
 
-	# Gravité (réduite dans l'eau)
+	# Gravité (réduite dans l'eau et sur échelle)
 	if not is_on_floor():
-		if in_water:
+		if in_water or on_ladder:
 			velocity.y -= gravity * 0.3 * delta
+			if on_ladder and velocity.y < -2.0:
+				velocity.y = -2.0  # Descente lente sur échelle
 		else:
 			velocity.y -= gravity * delta
 
-	# Reset fall tracking dans l'eau
-	if in_water:
+	# Reset fall tracking dans l'eau / échelle
+	if in_water or on_ladder:
 		_fall_start_y = global_position.y
 
 	# Pas de mouvement si UI ouverte
@@ -485,8 +505,13 @@ func _physics_process(delta):
 		_update_damage(delta)
 		return
 
-	# Saut / Nage
-	if in_water:
+	# Saut / Nage / Échelle
+	if on_ladder:
+		if Input.is_action_pressed("jump"):
+			velocity.y = 3.5
+		elif Input.is_action_pressed("move_backward"):
+			velocity.y = -2.0
+	elif in_water:
 		if Input.is_action_pressed("jump"):
 			velocity.y = 3.0
 	else:
@@ -645,6 +670,16 @@ func _handle_block_interaction(delta: float):
 		if _is_food_slot():
 			return
 
+		# Vérifier si on regarde une porte (ouvrir/fermer = casser/replacer)
+		if BlockRegistry.is_door(break_block_type):
+			# Toggle porte : on la casse (elle disparaît = ouverte)
+			# Simple toggle visuel : on place/retire le bloc
+			world_manager.break_block_at_position(break_pos)
+			_add_to_inventory(break_block_type)
+			if audio_manager:
+				audio_manager.play_break_sound(break_block_type, break_pos)
+			return
+
 		# Vérifier si on regarde un bloc interactif (table de craft, fourneau)
 		var interact_tier = _get_interact_tier(break_block_type)
 		if interact_tier >= 0:
@@ -659,6 +694,21 @@ func _handle_block_interaction(delta: float):
 		var can_place = (place_block_type == BlockRegistry.BlockType.AIR or place_block_type == BlockRegistry.BlockType.WATER) and not player_aabb.intersects(block_aabb)
 
 		if can_place and get_inventory_count(selected_block_type) > 0:
+			# Placement spécial : portes = 2 blocs de haut
+			if BlockRegistry.is_door(selected_block_type):
+				var above_pos = place_pos + Vector3(0, 1, 0)
+				var above_type = world_manager.get_block_at_position(above_pos)
+				var above_aabb = AABB(above_pos, Vector3.ONE)
+				if (above_type == BlockRegistry.BlockType.AIR or above_type == BlockRegistry.BlockType.WATER) and not player_aabb.intersects(above_aabb):
+					world_manager.place_block_at_position(place_pos, selected_block_type)
+					world_manager.place_block_at_position(above_pos, selected_block_type)
+					_remove_from_inventory(selected_block_type)
+					if audio_manager:
+						audio_manager.play_place_sound(selected_block_type, place_pos)
+					if hand_renderer:
+						hand_renderer.play_swing()
+				return
+
 			world_manager.place_block_at_position(place_pos, selected_block_type)
 			_remove_from_inventory(selected_block_type)
 			if audio_manager:

@@ -85,6 +85,22 @@ const BLOCK_NAMES = {
 	"Bread":             {"fr": "Pain",                     "en": "Bread"},
 	"Torch":             {"fr": "Torche",                   "en": "Torch"},
 	"Chest":             {"fr": "Coffre",                   "en": "Chest"},
+	# === BLOCS ARCHITECTURAUX ===
+	"Stone Bricks":      {"fr": "Briques de pierre",        "en": "Stone Bricks"},
+	"Oak Stairs":        {"fr": "Escalier en bois",         "en": "Oak Stairs"},
+	"Cobblestone Stairs":{"fr": "Escalier en pave",         "en": "Cobblestone Stairs"},
+	"Stone Brick Stairs":{"fr": "Escalier en briques de pierre", "en": "Stone Brick Stairs"},
+	"Oak Slab":          {"fr": "Dalle en bois",            "en": "Oak Slab"},
+	"Cobblestone Slab":  {"fr": "Dalle en pave",            "en": "Cobblestone Slab"},
+	"Stone Slab":        {"fr": "Dalle en pierre",          "en": "Stone Slab"},
+	"Oak Door":          {"fr": "Porte en bois",            "en": "Oak Door"},
+	"Oak Fence":         {"fr": "Cloture en bois",          "en": "Oak Fence"},
+	"Glass Pane":        {"fr": "Vitre",                    "en": "Glass Pane"},
+	"Ladder":            {"fr": "Echelle",                  "en": "Ladder"},
+	"Oak Trapdoor":      {"fr": "Trappe en bois",           "en": "Oak Trapdoor"},
+	"Iron Door":         {"fr": "Porte en fer",             "en": "Iron Door"},
+	"Lantern":           {"fr": "Lanterne",                 "en": "Lantern"},
+	"Iron Bars":         {"fr": "Barreaux de fer",          "en": "Iron Bars"},
 }
 
 # ============================================================

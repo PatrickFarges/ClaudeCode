@@ -87,6 +87,22 @@ const ALL_BLOCK_TYPES = [
 	BlockRegistry.BlockType.BOOKSHELF,
 	BlockRegistry.BlockType.HAY_BLOCK,
 	BlockRegistry.BlockType.BARREL,
+	# Blocs architecturaux
+	BlockRegistry.BlockType.STONE_BRICKS,
+	BlockRegistry.BlockType.OAK_STAIRS,
+	BlockRegistry.BlockType.COBBLESTONE_STAIRS,
+	BlockRegistry.BlockType.STONE_BRICK_STAIRS,
+	BlockRegistry.BlockType.OAK_SLAB,
+	BlockRegistry.BlockType.COBBLESTONE_SLAB,
+	BlockRegistry.BlockType.STONE_SLAB,
+	BlockRegistry.BlockType.OAK_DOOR,
+	BlockRegistry.BlockType.OAK_FENCE,
+	BlockRegistry.BlockType.GLASS_PANE,
+	BlockRegistry.BlockType.LADDER,
+	BlockRegistry.BlockType.OAK_TRAPDOOR,
+	BlockRegistry.BlockType.IRON_DOOR,
+	BlockRegistry.BlockType.LANTERN,
+	BlockRegistry.BlockType.IRON_BARS,
 ]
 
 const TAB_TERRAIN = [
@@ -120,6 +136,12 @@ const TAB_WOOD = [
 	BlockRegistry.BlockType.DARK_OAK_PLANKS,
 	BlockRegistry.BlockType.CHERRY_LOG,
 	BlockRegistry.BlockType.CHERRY_PLANKS,
+	BlockRegistry.BlockType.OAK_STAIRS,
+	BlockRegistry.BlockType.OAK_SLAB,
+	BlockRegistry.BlockType.OAK_DOOR,
+	BlockRegistry.BlockType.OAK_FENCE,
+	BlockRegistry.BlockType.OAK_TRAPDOOR,
+	BlockRegistry.BlockType.LADDER,
 ]
 
 const TAB_STONE = [
@@ -133,6 +155,13 @@ const TAB_STONE = [
 	BlockRegistry.BlockType.SMOOTH_STONE,
 	BlockRegistry.BlockType.BRICK,
 	BlockRegistry.BlockType.SANDSTONE,
+	BlockRegistry.BlockType.STONE_BRICKS,
+	BlockRegistry.BlockType.COBBLESTONE_STAIRS,
+	BlockRegistry.BlockType.STONE_BRICK_STAIRS,
+	BlockRegistry.BlockType.COBBLESTONE_SLAB,
+	BlockRegistry.BlockType.STONE_SLAB,
+	BlockRegistry.BlockType.IRON_BARS,
+	BlockRegistry.BlockType.IRON_DOOR,
 ]
 
 const TAB_ORES = [
@@ -151,9 +180,11 @@ const TAB_ORES = [
 
 const TAB_DECO = [
 	BlockRegistry.BlockType.GLASS,
+	BlockRegistry.BlockType.GLASS_PANE,
 	BlockRegistry.BlockType.BOOKSHELF,
 	BlockRegistry.BlockType.HAY_BLOCK,
 	BlockRegistry.BlockType.BARREL,
+	BlockRegistry.BlockType.LANTERN,
 	BlockRegistry.BlockType.LEAVES,
 	BlockRegistry.BlockType.SPRUCE_LEAVES,
 	BlockRegistry.BlockType.BIRCH_LEAVES,

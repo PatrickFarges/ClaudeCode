@@ -106,6 +106,16 @@ const TEXTURE_LIST: Array[String] = [
 	"dandelion",         # 90
 	"poppy",             # 91
 	"cornflower",        # 92
+	# === BLOCS ARCHITECTURAUX ===
+	"oak_door_bottom",   # 93
+	"oak_door_top",      # 94
+	"oak_trapdoor",      # 95
+	"iron_door_bottom",  # 96
+	"iron_door_top",     # 97
+	"ladder",            # 98
+	"glass_pane_top",    # 99
+	"iron_bars",         # 100
+	"lantern",           # 101
 ]
 
 const CROSS_MESH_TEXTURES: Dictionary = {
