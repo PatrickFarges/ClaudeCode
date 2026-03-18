@@ -77,6 +77,7 @@ const MAX_TORCHES_PER_CHUNK: int = 16
 
 # Thread mesh build
 var _mesh_thread: Thread = null
+var _rebuild_pending: bool = false  # Flag pour re-rebuild après thread en cours
 var _vertices: PackedVector3Array = PackedVector3Array()
 var _normals: PackedVector3Array = PackedVector3Array()
 var _colors: PackedColorArray = PackedColorArray()
@@ -293,11 +294,23 @@ func _apply_mesh_data():
 	_flora_uvs = PackedVector2Array()
 	_flora_custom0 = PackedFloat32Array()
 
-# Rebuild synchrone (pour casse/placement de blocs)
+# Rebuild async (pour casse/placement de blocs — threadé pour éviter le freeze)
 func _rebuild_mesh():
+	# Si un thread de rebuild est déjà en cours, juste marquer qu'on doit re-rebuild après
 	if _mesh_thread:
-		_mesh_thread.wait_to_finish()
-		_mesh_thread = null
+		_rebuild_pending = true
+		return
+	_clear_torch_lights()
+	is_mesh_built = false
+	_mesh_thread = Thread.new()
+	_mesh_thread.start(_thread_entry_rebuild)
+
+func _thread_entry_rebuild():
+	_compute_mesh_arrays()
+	call_deferred("_apply_rebuild_data")
+
+func _apply_rebuild_data():
+	# Nettoyer les anciens mesh/collision avant d'appliquer les nouveaux
 	if mesh_instance:
 		mesh_instance.queue_free()
 		mesh_instance = null
@@ -311,27 +324,15 @@ func _rebuild_mesh():
 		static_body.queue_free()
 		static_body = null
 	_clear_torch_lights()
-	is_mesh_built = false
-	call_deferred("_deferred_rebuild")
-
-func _deferred_rebuild():
-	# Nettoyer les mesh créés entre _rebuild_mesh() et ce call_deferred
-	if mesh_instance:
-		mesh_instance.queue_free()
-		mesh_instance = null
-	if water_mesh_instance:
-		water_mesh_instance.queue_free()
-		water_mesh_instance = null
-	if flora_mesh_instance:
-		flora_mesh_instance.queue_free()
-		flora_mesh_instance = null
-	if static_body:
-		static_body.queue_free()
-		static_body = null
-	_compute_mesh_arrays()
+	# _apply_mesh_data fait le wait_to_finish du thread et crée les nouveaux mesh
 	_apply_mesh_data()
+	# Si un rebuild était en attente pendant le thread, le relancer
+	if _rebuild_pending:
+		_rebuild_pending = false
+		_rebuild_mesh()
 
 func _exit_tree():
+	_rebuild_pending = false
 	if _mesh_thread:
 		_mesh_thread.wait_to_finish()
 		_mesh_thread = null

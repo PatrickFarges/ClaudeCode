@@ -6,11 +6,11 @@ extends Node3D
 
 const GC = preload("res://scripts/game_config.gd")
 const ARM_COLOR = Color(0.9, 0.75, 0.65)
-const BLOCK_SIZE = 0.28
+const BLOCK_SIZE = 0.45
 const ARM_SIZE = Vector3(0.15, 0.55, 0.15)
 const BASE_POSITION = Vector3(0.62, -0.42, -0.68)
 const SPRINT_OFFSET = Vector3(-0.1, 0.0, -0.05)
-const SPRITE_SIZE = 0.38
+const SPRITE_SIZE = 0.61
 
 # Noeuds
 var hand_pivot: Node3D
@@ -173,13 +173,11 @@ func update_held_item_sprite(tool_type: ToolRegistry.ToolType):
 	arm_mesh.visible = false
 
 	var tex_path = ToolRegistry.get_item_texture_path(tool_type)
-	print("[HandItemRenderer] tool_type=%s tex_path=%s" % [str(tool_type), tex_path])
 	if tex_path.is_empty():
 		arm_mesh.visible = true
 		return
 
 	var sprite_node = _create_item_sprite(tex_path)
-	print("[HandItemRenderer] sprite_node=%s" % str(sprite_node))
 	if sprite_node:
 		current_item_node = sprite_node
 		item_holder.add_child(current_item_node)
@@ -298,8 +296,6 @@ func _create_item_sprite(tex_path: String) -> MeshInstance3D:
 		img.resize(MODEL_GRID, MODEL_GRID, Image.INTERPOLATE_NEAREST)
 
 	var mesh = _build_extruded_mesh(img)
-	print("[HandItemRenderer] Extruded mesh: %d surfaces" % mesh.get_surface_count())
-
 	var inst = MeshInstance3D.new()
 	inst.mesh = mesh
 	inst.layers = 2
