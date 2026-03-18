@@ -244,7 +244,9 @@ func _init_inventory():
 	inventory[BlockRegistry.BlockType.IRON_DOOR] = 0
 	inventory[BlockRegistry.BlockType.LANTERN] = 0
 	inventory[BlockRegistry.BlockType.IRON_BARS] = 0
-	inventory[BlockRegistry.BlockType.TORCH] = 10  # TEST TEMPORAIRE — supprimer après test
+	inventory[BlockRegistry.BlockType.OAK_DOOR] = 2  # TEST TEMPORAIRE — supprimer après test
+	inventory[BlockRegistry.BlockType.IRON_DOOR] = 1  # TEST TEMPORAIRE — supprimer après test
+	inventory[BlockRegistry.BlockType.GLASS_PANE] = 2  # TEST TEMPORAIRE — supprimer après test
 
 func _create_block_highlighter():
 	block_highlighter = BlockHighlighter.new()
@@ -606,9 +608,9 @@ func _handle_block_interaction(delta: float):
 	var break_pos = (collision_point - normal * 0.5).floor()
 	var place_pos = (collision_point + normal * 0.5).floor()
 
-	# Si le bloc devant la face visée est une torche, cibler la torche plutôt que le bloc solide
+	# Si le bloc devant la face visée est une torche/lanterne/porte, cibler ce bloc
 	var front_type = world_manager.get_block_at_position(place_pos)
-	if front_type == BlockRegistry.BlockType.TORCH or front_type == BlockRegistry.BlockType.LANTERN:
+	if front_type == BlockRegistry.BlockType.TORCH or front_type == BlockRegistry.BlockType.LANTERN or BlockRegistry.is_door(front_type):
 		break_pos = place_pos
 
 	var break_block_type = world_manager.get_block_at_position(break_pos)
@@ -683,14 +685,9 @@ func _handle_block_interaction(delta: float):
 		if _is_food_slot():
 			return
 
-		# Vérifier si on regarde une porte (ouvrir/fermer = casser/replacer)
+		# Vérifier si on regarde une porte → ouvrir/fermer (les 2 blocs d'un coup)
 		if BlockRegistry.is_door(break_block_type):
-			# Toggle porte : on la casse (elle disparaît = ouverte)
-			# Simple toggle visuel : on place/retire le bloc
-			world_manager.break_block_at_position(break_pos)
-			_add_to_inventory(break_block_type)
-			if audio_manager:
-				audio_manager.play_break_sound(break_block_type, break_pos)
+			world_manager.toggle_door_pair(break_pos)
 			return
 
 		# Vérifier si on regarde un bloc interactif (table de craft, fourneau)
@@ -704,7 +701,8 @@ func _handle_block_interaction(delta: float):
 		var place_block_type = world_manager.get_block_at_position(place_pos)
 		var player_aabb = AABB(global_position - Vector3(0.4, 0, 0.4), Vector3(0.8, 1.8, 0.8))
 		var block_aabb = AABB(place_pos, Vector3.ONE)
-		var can_place = (place_block_type == BlockRegistry.BlockType.AIR or place_block_type == BlockRegistry.BlockType.WATER) and not player_aabb.intersects(block_aabb)
+		var is_flora = BlockRegistry.is_cross_mesh(place_block_type)
+		var can_place = (place_block_type == BlockRegistry.BlockType.AIR or place_block_type == BlockRegistry.BlockType.WATER or is_flora) and not player_aabb.intersects(block_aabb)
 
 		if can_place and get_inventory_count(selected_block_type) > 0:
 			# Placement spécial : portes = 2 blocs de haut

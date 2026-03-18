@@ -11,6 +11,32 @@ var last_player_chunk: Vector3i = Vector3i.ZERO  # Position précédente du joue
 var chunk_generator: ChunkGenerator
 var world_seed: int = 0  # Seed du monde (0 = aléatoire)
 var saved_chunk_data: Dictionary = {}  # Vector3i -> PackedByteArray (chunks modifiés à restaurer)
+var open_doors: Dictionary = {}  # Vector3i -> true (positions des portes ouvertes)
+
+func _toggle_door_key(key: Vector3i):
+	if open_doors.has(key):
+		open_doors.erase(key)
+	else:
+		open_doors[key] = true
+
+func toggle_door_pair(world_pos: Vector3):
+	# Toggle les deux blocs de la porte (haut + bas) d'un coup, puis un seul rebuild
+	var key = Vector3i(int(floor(world_pos.x)), int(floor(world_pos.y)), int(floor(world_pos.z)))
+	_toggle_door_key(key)
+	# Chercher le second bloc (dessus ou dessous)
+	var above = key + Vector3i(0, 1, 0)
+	var below = key + Vector3i(0, -1, 0)
+	if get_block_at_position(Vector3(above.x, above.y, above.z)) in [BlockRegistry.BlockType.OAK_DOOR, BlockRegistry.BlockType.IRON_DOOR]:
+		_toggle_door_key(above)
+	elif get_block_at_position(Vector3(below.x, below.y, below.z)) in [BlockRegistry.BlockType.OAK_DOOR, BlockRegistry.BlockType.IRON_DOOR]:
+		_toggle_door_key(below)
+	# Un seul rebuild
+	var chunk_pos = _world_to_chunk(world_pos)
+	if chunks.has(chunk_pos):
+		chunks[chunk_pos]._rebuild_mesh()
+
+func is_door_open(wx: int, wy: int, wz: int) -> bool:
+	return open_doors.has(Vector3i(wx, wy, wz))
 
 # PNJ villageois
 const NpcVillagerScene = preload("res://scripts/npc_villager.gd")

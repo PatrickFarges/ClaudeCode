@@ -62,6 +62,7 @@ var chunk_position: Vector3i
 var blocks: PackedByteArray
 var y_min: int = 0
 var y_max: int = 0
+var _open_doors_cache: Dictionary = {}  # Vector3i -> true, copie thread-safe
 var mesh_instance: MeshInstance3D
 var water_mesh_instance: MeshInstance3D
 var flora_mesh_instance: MeshInstance3D
@@ -151,9 +152,17 @@ func set_block(x: int, y: int, z: int, block_type: BlockRegistry.BlockType):
 # MESH BUILDING — Async (thread) + Sync (rebuild bloc)
 # ============================================================
 
+func _cache_open_doors():
+	_open_doors_cache.clear()
+	var wm = get_tree().get_first_node_in_group("world_manager") if is_inside_tree() else null
+	if wm:
+		for key in wm.open_doors:
+			_open_doors_cache[key] = true
+
 func build_mesh_async():
 	if _mesh_thread != null or is_mesh_built:
 		return
+	_cache_open_doors()
 	_mesh_thread = Thread.new()
 	_mesh_thread.start(_thread_entry)
 
@@ -300,6 +309,7 @@ func _rebuild_mesh():
 	if _mesh_thread:
 		_rebuild_pending = true
 		return
+	_cache_open_doors()
 	_clear_torch_lights()
 	is_mesh_built = false
 	_mesh_thread = Thread.new()
@@ -1161,7 +1171,6 @@ func _emit_fence(x: int, y: int, z: int, bt: int):
 		Vector3.LEFT, tint * 0.7, ao, pw, 1.0, layer)
 
 func _emit_door(x: int, y: int, z: int, bt: int):
-	# Porte — panneau plat 1×2×3/16, orienté face au +Z
 	var fx: float = float(x)
 	var fy: float = float(y)
 	var fz: float = float(z)
@@ -1169,38 +1178,77 @@ func _emit_door(x: int, y: int, z: int, bt: int):
 	var layer: float = float(TextureManager.get_layer_index(tex_name))
 	var tint: Color = Color.WHITE
 	var ao: Array = [1.0, 1.0, 1.0, 1.0]
-	var depth: float = 3.0 / 16.0
+	var d: float = 3.0 / 16.0
 
-	# Front face (+Z)
-	_emit_quad(
-		Vector3(fx + 1, fy, fz + depth), Vector3(fx, fy, fz + depth),
-		Vector3(fx, fy + 1.0, fz + depth), Vector3(fx + 1, fy + 1.0, fz + depth),
-		Vector3.BACK, tint, ao, 1.0, 1.0, layer)
-	# Back face (-Z)
-	_emit_quad(
-		Vector3(fx, fy, fz), Vector3(fx + 1, fy, fz),
-		Vector3(fx + 1, fy + 1.0, fz), Vector3(fx, fy + 1.0, fz),
-		Vector3.FORWARD, tint, ao, 1.0, 1.0, layer)
-	# Top
-	_emit_quad(
-		Vector3(fx, fy + 1.0, fz), Vector3(fx + 1, fy + 1.0, fz),
-		Vector3(fx + 1, fy + 1.0, fz + depth), Vector3(fx, fy + 1.0, fz + depth),
-		Vector3.UP, tint, ao, 1.0, depth, layer)
-	# Bottom
-	_emit_quad(
-		Vector3(fx, fy, fz + depth), Vector3(fx + 1, fy, fz + depth),
-		Vector3(fx + 1, fy, fz), Vector3(fx, fy, fz),
-		Vector3.DOWN, tint * 0.6, ao, 1.0, depth, layer)
-	# Right side
-	_emit_quad(
-		Vector3(fx + 1, fy, fz), Vector3(fx + 1, fy, fz + depth),
-		Vector3(fx + 1, fy + 1.0, fz + depth), Vector3(fx + 1, fy + 1.0, fz),
-		Vector3.RIGHT, tint * 0.7, ao, depth, 1.0, layer)
-	# Left side
-	_emit_quad(
-		Vector3(fx, fy, fz + depth), Vector3(fx, fy, fz),
-		Vector3(fx, fy + 1.0, fz), Vector3(fx, fy + 1.0, fz + depth),
-		Vector3.LEFT, tint * 0.7, ao, depth, 1.0, layer)
+	# Vérifier si la porte est ouverte (coordonnées monde, cache thread-safe)
+	var wx = chunk_position.x * CHUNK_SIZE + x
+	var wz = chunk_position.z * CHUNK_SIZE + z
+	var is_open = _open_doors_cache.has(Vector3i(wx, y, wz))
+
+	if not is_open:
+		# FERMÉE — panneau plat sur le bord -Z, face au +Z
+		# Front face (+Z)
+		_emit_quad(
+			Vector3(fx + 1, fy, fz + d), Vector3(fx, fy, fz + d),
+			Vector3(fx, fy + 1.0, fz + d), Vector3(fx + 1, fy + 1.0, fz + d),
+			Vector3.BACK, tint, ao, 1.0, 1.0, layer)
+		# Back face (-Z)
+		_emit_quad(
+			Vector3(fx, fy, fz), Vector3(fx + 1, fy, fz),
+			Vector3(fx + 1, fy + 1.0, fz), Vector3(fx, fy + 1.0, fz),
+			Vector3.FORWARD, tint, ao, 1.0, 1.0, layer)
+		# Top
+		_emit_quad(
+			Vector3(fx, fy + 1.0, fz), Vector3(fx + 1, fy + 1.0, fz),
+			Vector3(fx + 1, fy + 1.0, fz + d), Vector3(fx, fy + 1.0, fz + d),
+			Vector3.UP, tint, ao, 1.0, d, layer)
+		# Bottom
+		_emit_quad(
+			Vector3(fx, fy, fz + d), Vector3(fx + 1, fy, fz + d),
+			Vector3(fx + 1, fy, fz), Vector3(fx, fy, fz),
+			Vector3.DOWN, tint * 0.6, ao, 1.0, d, layer)
+		# Right side
+		_emit_quad(
+			Vector3(fx + 1, fy, fz), Vector3(fx + 1, fy, fz + d),
+			Vector3(fx + 1, fy + 1.0, fz + d), Vector3(fx + 1, fy + 1.0, fz),
+			Vector3.RIGHT, tint * 0.7, ao, d, 1.0, layer)
+		# Left side
+		_emit_quad(
+			Vector3(fx, fy, fz + d), Vector3(fx, fy, fz),
+			Vector3(fx, fy + 1.0, fz), Vector3(fx, fy + 1.0, fz + d),
+			Vector3.LEFT, tint * 0.7, ao, d, 1.0, layer)
+	else:
+		# OUVERTE — panneau pivoté 90° sur charnière gauche (bord -X), plaqué contre -X
+		# Front face (+X)
+		_emit_quad(
+			Vector3(fx + d, fy, fz), Vector3(fx + d, fy, fz + 1),
+			Vector3(fx + d, fy + 1.0, fz + 1), Vector3(fx + d, fy + 1.0, fz),
+			Vector3.RIGHT, tint, ao, 1.0, 1.0, layer)
+		# Back face (-X)
+		_emit_quad(
+			Vector3(fx, fy, fz + 1), Vector3(fx, fy, fz),
+			Vector3(fx, fy + 1.0, fz), Vector3(fx, fy + 1.0, fz + 1),
+			Vector3.LEFT, tint, ao, 1.0, 1.0, layer)
+		# Top
+		_emit_quad(
+			Vector3(fx, fy + 1.0, fz), Vector3(fx + d, fy + 1.0, fz),
+			Vector3(fx + d, fy + 1.0, fz + 1), Vector3(fx, fy + 1.0, fz + 1),
+			Vector3.UP, tint, ao, d, 1.0, layer)
+		# Bottom
+		_emit_quad(
+			Vector3(fx, fy, fz + 1), Vector3(fx + d, fy, fz + 1),
+			Vector3(fx + d, fy, fz), Vector3(fx, fy, fz),
+			Vector3.DOWN, tint * 0.6, ao, d, 1.0, layer)
+		# Front edge (+Z)
+		_emit_quad(
+			Vector3(fx + d, fy, fz + 1), Vector3(fx, fy, fz + 1),
+			Vector3(fx, fy + 1.0, fz + 1), Vector3(fx + d, fy + 1.0, fz + 1),
+			Vector3.BACK, tint * 0.7, ao, d, 1.0, layer)
+		# Back edge (-Z)
+		_emit_quad(
+			Vector3(fx, fy, fz), Vector3(fx + d, fy, fz),
+			Vector3(fx + d, fy + 1.0, fz), Vector3(fx, fy + 1.0, fz),
+			Vector3.FORWARD, tint * 0.7, ao, d, 1.0, layer)
 
 func _emit_glass_pane(x: int, y: int, z: int, bt: int):
 	# Vitre — panneau plat centré 1×1×2/16 orienté N-S
