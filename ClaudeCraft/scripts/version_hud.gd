@@ -199,9 +199,9 @@ func _apply_vanilla():
 	_env.tonemap_exposure = 1.0
 
 	_env.ssao_enabled = true
-	_env.ssao_radius = 2.0
-	_env.ssao_intensity = 1.5
-	_env.ssao_power = 1.5
+	_env.ssao_radius = 1.5
+	_env.ssao_intensity = 0.8
+	_env.ssao_power = 1.2
 	_env.ssao_detail = 0.5
 	_env.ssao_sharpness = 0.5
 
@@ -213,7 +213,7 @@ func _apply_vanilla():
 
 	_env.ambient_light_source = 2
 	_env.ambient_light_color = Color(1, 1, 1, 1)
-	_env.ambient_light_energy = 0.5
+	_env.ambient_light_energy = 0.6
 
 func _apply_gi():
 	_apply_vanilla()
@@ -227,7 +227,7 @@ func _apply_gi():
 	_env.sdfgi_probe_bias = 1.1
 	_env.sdfgi_bounce_feedback = 0.5
 
-	_env.ambient_light_energy = 0.25
+	_env.ambient_light_energy = 0.45
 
 func _apply_cinematic():
 	_reset_env()
@@ -252,12 +252,12 @@ func _apply_cinematic():
 	_env.tonemap_white = 5.0
 	_env.tonemap_exposure = 1.2
 
-	# SSAO adouci (moins de noirceur)
+	# SSAO adouci
 	_env.ssao_enabled = true
-	_env.ssao_radius = 2.5
-	_env.ssao_intensity = 1.8
-	_env.ssao_power = 1.5
-	_env.ssao_detail = 0.6
+	_env.ssao_radius = 1.5
+	_env.ssao_intensity = 0.8
+	_env.ssao_power = 1.2
+	_env.ssao_detail = 0.5
 	_env.ssao_sharpness = 0.5
 
 	# Glow
@@ -286,12 +286,12 @@ func _apply_cinematic():
 	# Ambient releve pour des couleurs plus vivantes
 	_env.ambient_light_source = 2
 	_env.ambient_light_color = Color(1, 1, 1, 1)
-	_env.ambient_light_energy = 0.35
+	_env.ambient_light_energy = 0.45
 
 	# Color grading — vibrance pour des couleurs vivantes
 	_env.adjustment_enabled = true
 	_env.adjustment_saturation = 1.5
-	_env.adjustment_contrast = 1.12
+	_env.adjustment_contrast = 1.08
 	_env.adjustment_brightness = 1.0
 
 func _apply_enb_sombre():
@@ -320,9 +320,9 @@ func _apply_enb_sombre():
 
 	# SSAO doux
 	_env.ssao_enabled = true
-	_env.ssao_radius = 2.0
-	_env.ssao_intensity = 1.5
-	_env.ssao_power = 1.3
+	_env.ssao_radius = 1.5
+	_env.ssao_intensity = 0.8
+	_env.ssao_power = 1.2
 	_env.ssao_detail = 0.5
 	_env.ssao_sharpness = 0.5
 
@@ -352,13 +352,13 @@ func _apply_enb_sombre():
 	# Ambient chaud — tons dorés dans les ombres
 	_env.ambient_light_source = 2
 	_env.ambient_light_color = Color(1.0, 0.92, 0.8, 1)
-	_env.ambient_light_energy = 0.32
+	_env.ambient_light_energy = 0.42
 
 	# Color grading — saturation forte, contraste, warmth
 	_env.adjustment_enabled = true
 	_env.adjustment_saturation = 1.5
-	_env.adjustment_contrast = 1.18
-	_env.adjustment_brightness = 0.97
+	_env.adjustment_contrast = 1.1
+	_env.adjustment_brightness = 0.98
 
 func _apply_reshade_epique():
 	_reset_env()
@@ -386,9 +386,9 @@ func _apply_reshade_epique():
 
 	# SSAO modéré — profondeur sans noircir
 	_env.ssao_enabled = true
-	_env.ssao_radius = 2.0
-	_env.ssao_intensity = 1.5
-	_env.ssao_power = 1.3
+	_env.ssao_radius = 1.5
+	_env.ssao_intensity = 0.8
+	_env.ssao_power = 1.2
 	_env.ssao_detail = 0.5
 	_env.ssao_sharpness = 0.5
 
@@ -418,13 +418,13 @@ func _apply_reshade_epique():
 	# Ambient — ombres lisibles mais profondes
 	_env.ambient_light_source = 2
 	_env.ambient_light_color = Color(0.8, 0.85, 1.0, 1)
-	_env.ambient_light_energy = 0.28
+	_env.ambient_light_energy = 0.38
 
-	# Color grading — verts profonds, contraste élevé, ombres froides highlights chaudes
+	# Color grading — verts profonds, contraste modéré, ombres froides highlights chaudes
 	_env.adjustment_enabled = true
 	_env.adjustment_saturation = 1.45
-	_env.adjustment_contrast = 1.3
-	_env.adjustment_brightness = 0.88
+	_env.adjustment_contrast = 1.15
+	_env.adjustment_brightness = 0.92
 
 func _process(_delta):
 	# Appliquer le preset sauvegardé après warmup (le renderer a besoin de
