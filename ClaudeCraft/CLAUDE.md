@@ -4,6 +4,8 @@ Jeu voxel type Minecraft en GDScript avec Godot 4.6+, style pastel. Évolue vers
 
 ## Lancer
 
+**Exécutable Godot :** `D:\Program\Godot\Godot_v4.6.1-stable_win64.exe`
+
 1. Ouvrir le projet dans Godot 4.6+
 2. Ouvrir `scenes/main.tscn`
 3. F5 pour lancer

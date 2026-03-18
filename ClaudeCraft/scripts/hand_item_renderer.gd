@@ -55,6 +55,8 @@ func _build_hierarchy():
 	var arm_mat = StandardMaterial3D.new()
 	arm_mat.albedo_color = ARM_COLOR
 	arm_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	arm_mat.no_depth_test = true
+	arm_mat.render_priority = 127
 	arm_mesh.material_override = arm_mat
 	arm_mesh.layers = 2
 	arm_mesh.position = Vector3(0, -0.08, 0)
@@ -162,6 +164,7 @@ func update_held_item(block_type: BlockRegistry.BlockType):
 	current_item_node = _create_block_cube(block_type)
 	if current_item_node:
 		item_holder.add_child(current_item_node)
+		_apply_no_depth(current_item_node)
 
 # ============================================================
 # AFFICHAGE OUTIL EN MAIN — FLAT SPRITE MINECRAFT-STYLE
@@ -181,6 +184,7 @@ func update_held_item_sprite(tool_type: ToolRegistry.ToolType):
 	if sprite_node:
 		current_item_node = sprite_node
 		item_holder.add_child(current_item_node)
+		_apply_no_depth(current_item_node)
 	else:
 		arm_mesh.visible = true
 
@@ -264,11 +268,30 @@ func update_held_tool_node(node: Node3D, hand_rotation := Vector3(-25, -135, 45)
 	node.rotation_degrees = hand_rotation
 	current_item_node = node
 	item_holder.add_child(current_item_node)
+	_apply_no_depth(current_item_node)
 
 func _clear_held_item():
 	if current_item_node:
 		current_item_node.queue_free()
 		current_item_node = null
+
+func _apply_no_depth(node: Node):
+	if node is MeshInstance3D:
+		var mi := node as MeshInstance3D
+		if mi.material_override:
+			mi.material_override = mi.material_override.duplicate()
+			mi.material_override.no_depth_test = true
+			mi.material_override.render_priority = 127
+		if mi.mesh:
+			for si in mi.mesh.get_surface_count():
+				var mat = mi.mesh.surface_get_material(si)
+				if mat:
+					mat = mat.duplicate()
+					mat.no_depth_test = true
+					mat.render_priority = 127
+					mi.set_surface_override_material(si, mat)
+	for child in node.get_children():
+		_apply_no_depth(child)
 
 # ============================================================
 # CREATION DU MODELE 3D EXTRUDE (pixel-extruded Minecraft-style)

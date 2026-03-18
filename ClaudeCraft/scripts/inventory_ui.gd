@@ -101,6 +101,7 @@ const ALL_BLOCK_TYPES = [
 	BlockRegistry.BlockType.LADDER,
 	BlockRegistry.BlockType.OAK_TRAPDOOR,
 	BlockRegistry.BlockType.IRON_DOOR,
+	BlockRegistry.BlockType.TORCH,
 	BlockRegistry.BlockType.LANTERN,
 	BlockRegistry.BlockType.IRON_BARS,
 ]
@@ -179,6 +180,7 @@ const TAB_ORES = [
 ]
 
 const TAB_DECO = [
+	BlockRegistry.BlockType.TORCH,
 	BlockRegistry.BlockType.GLASS,
 	BlockRegistry.BlockType.GLASS_PANE,
 	BlockRegistry.BlockType.BOOKSHELF,

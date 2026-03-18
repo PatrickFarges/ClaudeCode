@@ -244,6 +244,7 @@ func _init_inventory():
 	inventory[BlockRegistry.BlockType.IRON_DOOR] = 0
 	inventory[BlockRegistry.BlockType.LANTERN] = 0
 	inventory[BlockRegistry.BlockType.IRON_BARS] = 0
+	inventory[BlockRegistry.BlockType.TORCH] = 10  # TEST TEMPORAIRE — supprimer après test
 
 func _create_block_highlighter():
 	block_highlighter = BlockHighlighter.new()

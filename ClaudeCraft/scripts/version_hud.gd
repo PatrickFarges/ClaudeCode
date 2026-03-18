@@ -107,14 +107,25 @@ func _ready():
 			_env = child.environment
 			break
 
-	# Charger le preset sauvegardé — application différée au premier _process
-	# (utilise le même _env que F2 qui fonctionne correctement)
+	# Charger le preset sauvegardé — application immédiate + re-application après warmup
 	var saved_preset = 2  # Cloclo Style par défaut
 	var cfg = ConfigFile.new()
 	if cfg.load("user://settings.cfg") == OK and cfg.has_section_key("game", "render_preset"):
 		saved_preset = int(cfg.get_value("game", "render_preset"))
 		if saved_preset < 0 or saved_preset >= RENDER_NAMES.size():
 			saved_preset = 2
+	# Application immédiate pour que l'éclairage soit correct dès le départ
+	if _env:
+		_render_preset = saved_preset
+		match _render_preset:
+			0: _apply_vanilla()
+			1: _apply_gi()
+			2: _apply_cinematic()
+			3: _apply_enb_sombre()
+			4: _apply_reshade_epique()
+		render_label.text = "Rendu : %s (F2)" % RENDER_NAMES[_render_preset]
+		render_label.add_theme_color_override("font_color", RENDER_COLORS[_render_preset])
+	# Re-application après warmup pour SSAO/SDFGI (besoin de géométrie)
 	_pending_preset = saved_preset
 
 func _input(event):
@@ -213,7 +224,7 @@ func _apply_vanilla():
 
 	_env.ambient_light_source = 2
 	_env.ambient_light_color = Color(1, 1, 1, 1)
-	_env.ambient_light_energy = 0.6
+	_env.ambient_light_energy = 0.12
 
 func _apply_gi():
 	_apply_vanilla()
@@ -227,7 +238,7 @@ func _apply_gi():
 	_env.sdfgi_probe_bias = 1.1
 	_env.sdfgi_bounce_feedback = 0.5
 
-	_env.ambient_light_energy = 0.45
+	_env.ambient_light_energy = 0.08
 
 func _apply_cinematic():
 	_reset_env()
@@ -286,7 +297,7 @@ func _apply_cinematic():
 	# Ambient releve pour des couleurs plus vivantes
 	_env.ambient_light_source = 2
 	_env.ambient_light_color = Color(1, 1, 1, 1)
-	_env.ambient_light_energy = 0.45
+	_env.ambient_light_energy = 0.1
 
 	# Color grading — vibrance pour des couleurs vivantes
 	_env.adjustment_enabled = true
@@ -352,7 +363,7 @@ func _apply_enb_sombre():
 	# Ambient chaud — tons dorés dans les ombres
 	_env.ambient_light_source = 2
 	_env.ambient_light_color = Color(1.0, 0.92, 0.8, 1)
-	_env.ambient_light_energy = 0.42
+	_env.ambient_light_energy = 0.08
 
 	# Color grading — saturation forte, contraste, warmth
 	_env.adjustment_enabled = true
@@ -418,7 +429,7 @@ func _apply_reshade_epique():
 	# Ambient — ombres lisibles mais profondes
 	_env.ambient_light_source = 2
 	_env.ambient_light_color = Color(0.8, 0.85, 1.0, 1)
-	_env.ambient_light_energy = 0.38
+	_env.ambient_light_energy = 0.06
 
 	# Color grading — verts profonds, contraste modéré, ombres froides highlights chaudes
 	_env.adjustment_enabled = true
