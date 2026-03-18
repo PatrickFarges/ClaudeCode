@@ -863,7 +863,41 @@ func _create_torch_at(lx: int, ly: int, lz: int):
 	var torch_node = Node3D.new()
 	torch_node.position = Vector3(lx + 0.5, ly, lz + 0.5)
 
-	# Visuel : petit cube doré
+	# Pivot pour inclinaison murale (rotation autour de la base)
+	var pivot = Node3D.new()
+	pivot.name = "TorchPivot"
+	torch_node.add_child(pivot)
+
+	# Détecter si torche murale : bloc en dessous non-solide → chercher un mur adjacent
+	var is_wall_torch = false
+	var wall_angle = 0.0
+	var below_bt = _get_local_block(lx, ly - 1, lz)
+	if below_bt == 0 or below_bt == 15 or (below_bt >= 77 and below_bt != 83):
+		# Pas de support en dessous → chercher un mur solide adjacent
+		var checks = [
+			[lx - 1, lz, 0.0],    # mur Ouest → pencher vers Est (+X) → rotation Z négative
+			[lx + 1, lz, 180.0],  # mur Est → pencher vers Ouest (-X) → rotation Z positive
+			[lx, lz - 1, 90.0],   # mur Nord → pencher vers Sud (+Z) → rotation X positive
+			[lx, lz + 1, -90.0],  # mur Sud → pencher vers Nord (-Z) → rotation X négative
+		]
+		for check in checks:
+			var cx = int(check[0])
+			var cz = int(check[1])
+			var adj_bt = _get_local_block(cx, ly, cz)
+			if adj_bt != 0 and adj_bt != 15 and (adj_bt < 77 or adj_bt == 83):
+				is_wall_torch = true
+				wall_angle = check[2]
+				break
+
+	if is_wall_torch:
+		# Inclinaison 45° dans la direction opposée au mur
+		match wall_angle:
+			0.0:    pivot.rotation_degrees = Vector3(0, 0, -45)    # Mur Ouest → penche Est
+			180.0:  pivot.rotation_degrees = Vector3(0, 0, 45)     # Mur Est → penche Ouest
+			90.0:   pivot.rotation_degrees = Vector3(45, 0, 0)     # Mur Nord → penche Sud
+			-90.0:  pivot.rotation_degrees = Vector3(-45, 0, 0)    # Mur Sud → penche Nord
+
+	# Visuel : petit cube doré (manche)
 	var mesh_inst = MeshInstance3D.new()
 	var box = BoxMesh.new()
 	box.size = Vector3(0.15, 0.5, 0.15)
@@ -875,7 +909,7 @@ func _create_torch_at(lx: int, ly: int, lz: int):
 	mat.emission = Color(1.0, 0.85, 0.5, 1.0)
 	mat.emission_energy_multiplier = 2.0
 	mesh_inst.material_override = mat
-	torch_node.add_child(mesh_inst)
+	pivot.add_child(mesh_inst)
 
 	# Flamme : petit cube émissif au sommet
 	var flame_inst = MeshInstance3D.new()
@@ -889,7 +923,7 @@ func _create_torch_at(lx: int, ly: int, lz: int):
 	flame_mat.emission = Color(1.0, 0.85, 0.4, 1.0)
 	flame_mat.emission_energy_multiplier = 4.0
 	flame_inst.material_override = flame_mat
-	torch_node.add_child(flame_inst)
+	pivot.add_child(flame_inst)
 
 	# Lumière omnidirectionnelle
 	var light = OmniLight3D.new()
@@ -903,6 +937,11 @@ func _create_torch_at(lx: int, ly: int, lz: int):
 
 	add_child(torch_node)
 	_torch_lights.append(torch_node)
+
+func _get_local_block(lx: int, ly: int, lz: int) -> int:
+	if lx < 0 or lx >= CHUNK_SIZE or lz < 0 or lz >= CHUNK_SIZE or ly < 0 or ly >= CHUNK_HEIGHT:
+		return 0
+	return blocks[lx * 4096 + lz * 256 + ly]
 
 func _create_lantern_at(lx: int, ly: int, lz: int):
 	var lantern_node = Node3D.new()
