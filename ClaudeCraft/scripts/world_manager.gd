@@ -237,20 +237,32 @@ func set_block_at_position(world_pos: Vector3, block_type: BlockRegistry.BlockTy
 
 func break_block_at_position(world_pos: Vector3):
 	set_block_at_position(world_pos, BlockRegistry.BlockType.AIR)
+	_broken_extras.clear()
 	# Supprimer la végétation décorative posée sur le bloc cassé
 	var above_pos = world_pos + Vector3(0, 1, 0)
 	var above_type = get_block_at_position(above_pos)
 	if BlockRegistry.is_cross_mesh(above_type):
 		set_block_at_position(above_pos, BlockRegistry.BlockType.AIR)
-		# Retourner le type de végétation détruite pour que l'appelant puisse la collecter
-		_last_broken_flora = above_type
+		_broken_extras.append(above_type)
+	# Supprimer les torches supportées par ce bloc (au-dessus + 4 adjacents)
+	var torch_checks = [
+		above_pos,
+		world_pos + Vector3(1, 0, 0),
+		world_pos + Vector3(-1, 0, 0),
+		world_pos + Vector3(0, 0, 1),
+		world_pos + Vector3(0, 0, -1),
+	]
+	for check_pos in torch_checks:
+		if get_block_at_position(check_pos) == BlockRegistry.BlockType.TORCH:
+			set_block_at_position(check_pos, BlockRegistry.BlockType.AIR)
+			_broken_extras.append(BlockRegistry.BlockType.TORCH)
 
-var _last_broken_flora: BlockRegistry.BlockType = BlockRegistry.BlockType.AIR
+var _broken_extras: Array = []
 
-func get_and_clear_broken_flora() -> BlockRegistry.BlockType:
-	var flora = _last_broken_flora
-	_last_broken_flora = BlockRegistry.BlockType.AIR
-	return flora
+func get_and_clear_broken_extras() -> Array:
+	var extras = _broken_extras.duplicate()
+	_broken_extras.clear()
+	return extras
 
 func place_block_at_position(world_pos: Vector3, block_type: BlockRegistry.BlockType):
 	set_block_at_position(world_pos, block_type)

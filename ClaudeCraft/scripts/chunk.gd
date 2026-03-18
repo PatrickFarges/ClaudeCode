@@ -893,16 +893,16 @@ func _create_torch_at(lx: int, ly: int, lz: int):
 		# Décaler le pivot vers le mur pour que la torche penche depuis le mur
 		match wall_angle:
 			0.0:    # Mur Ouest → base contre le mur -X, flamme vers +X
-				pivot.position = Vector3(-0.45, 0.3, 0)
+				pivot.position = Vector3(-0.55, 0.3, 0)
 				pivot.rotation_degrees = Vector3(0, 0, -45)
 			180.0:  # Mur Est → base contre le mur +X, flamme vers -X
-				pivot.position = Vector3(0.45, 0.3, 0)
+				pivot.position = Vector3(0.55, 0.3, 0)
 				pivot.rotation_degrees = Vector3(0, 0, 45)
 			90.0:   # Mur Nord → base contre le mur -Z, flamme vers +Z
-				pivot.position = Vector3(0, 0.3, -0.45)
+				pivot.position = Vector3(0, 0.3, -0.55)
 				pivot.rotation_degrees = Vector3(45, 0, 0)
 			-90.0:  # Mur Sud → base contre le mur +Z, flamme vers -Z
-				pivot.position = Vector3(0, 0.3, 0.45)
+				pivot.position = Vector3(0, 0.3, 0.55)
 				pivot.rotation_degrees = Vector3(-45, 0, 0)
 
 	# Visuel : petit cube doré (manche)

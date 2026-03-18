@@ -605,10 +605,15 @@ func _handle_block_interaction(delta: float):
 	var normal = raycast.get_collision_normal()
 	var break_pos = (collision_point - normal * 0.5).floor()
 	var place_pos = (collision_point + normal * 0.5).floor()
-	
+
+	# Si le bloc devant la face visée est une torche, cibler la torche plutôt que le bloc solide
+	var front_type = world_manager.get_block_at_position(place_pos)
+	if front_type == BlockRegistry.BlockType.TORCH or front_type == BlockRegistry.BlockType.LANTERN:
+		break_pos = place_pos
+
 	var break_block_type = world_manager.get_block_at_position(break_pos)
 	look_block_type = break_block_type
-	var can_break = break_block_type != BlockRegistry.BlockType.AIR and break_block_type != BlockRegistry.BlockType.WATER and BlockRegistry.is_solid(break_block_type)
+	var can_break = break_block_type != BlockRegistry.BlockType.AIR and break_block_type != BlockRegistry.BlockType.WATER and (BlockRegistry.is_solid(break_block_type) or break_block_type == BlockRegistry.BlockType.TORCH or break_block_type == BlockRegistry.BlockType.LANTERN)
 	
 	# Highlighter
 	if block_highlighter and can_break:
@@ -734,11 +739,10 @@ func _break_block(pos: Vector3, block_type: BlockRegistry.BlockType):
 	_spawn_break_particles(pos, block_type)
 	if audio_manager:
 		audio_manager.play_break_sound(block_type, pos)
-	# Récupérer la végétation détruite au-dessus du bloc cassé
-	var flora = world_manager.get_and_clear_broken_flora()
-	if flora != BlockRegistry.BlockType.AIR:
-		_add_to_inventory(flora)
-		_spawn_break_particles(pos + Vector3(0, 1, 0), flora)
+	# Récupérer la végétation/torches détruites par le cassage du bloc
+	var extras = world_manager.get_and_clear_broken_extras()
+	for extra in extras:
+		_add_to_inventory(extra)
 	_cancel_mining()
 
 func _cancel_mining():
