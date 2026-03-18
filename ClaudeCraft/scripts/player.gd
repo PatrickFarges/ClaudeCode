@@ -685,6 +685,15 @@ func _handle_block_interaction(delta: float):
 		if _is_food_slot():
 			return
 
+		# Shift+clic droit : rotation de bloc (vitres, barreaux)
+		if Input.is_key_pressed(KEY_SHIFT):
+			if break_block_type == BlockRegistry.BlockType.GLASS_PANE or break_block_type == BlockRegistry.BlockType.IRON_BARS:
+				var rkey = Vector3i(int(floor(break_pos.x)), int(floor(break_pos.y)), int(floor(break_pos.z)))
+				var cur = world_manager.pane_orientation.get(rkey, 0)
+				world_manager.pane_orientation[rkey] = 1 - cur  # toggle 0↔1
+				world_manager.rebuild_chunk_at(break_pos)
+				return
+
 		# Vérifier si on regarde une porte → ouvrir/fermer (les 2 blocs d'un coup)
 		if BlockRegistry.is_door(break_block_type):
 			world_manager.toggle_door_pair(break_pos)
@@ -705,14 +714,30 @@ func _handle_block_interaction(delta: float):
 		var can_place = (place_block_type == BlockRegistry.BlockType.AIR or place_block_type == BlockRegistry.BlockType.WATER or is_flora) and not player_aabb.intersects(block_aabb)
 
 		if can_place and get_inventory_count(selected_block_type) > 0:
-			# Placement spécial : portes = 2 blocs de haut
+			# Placement spécial : portes = 2 blocs de haut avec orientation
 			if BlockRegistry.is_door(selected_block_type):
 				var above_pos = place_pos + Vector3(0, 1, 0)
 				var above_type = world_manager.get_block_at_position(above_pos)
 				var above_aabb = AABB(above_pos, Vector3.ONE)
 				if (above_type == BlockRegistry.BlockType.AIR or above_type == BlockRegistry.BlockType.WATER) and not player_aabb.intersects(above_aabb):
-					world_manager.place_block_at_position(place_pos, selected_block_type)
-					world_manager.place_block_at_position(above_pos, selected_block_type)
+					# Déterminer l'orientation : direction dans laquelle le joueur regarde
+					var yaw = camera.global_rotation.y
+					var facing: int
+					if abs(sin(yaw)) > abs(cos(yaw)):
+						facing = 3 if sin(yaw) > 0 else 2  # W ou E
+					else:
+						facing = 0 if cos(yaw) > 0 else 1  # N ou S
+					# Ctrl = inverser (front au lieu de back)
+					if Input.is_key_pressed(KEY_CTRL):
+						facing = [1, 0, 3, 2][facing]  # N↔S, E↔W
+					# Déterminer la charnière : auto-miroir si porte adjacente
+					var hinge = "left"
+					var bottom_key = Vector3i(int(floor(place_pos.x)), int(floor(place_pos.y)), int(floor(place_pos.z)))
+					var adj = world_manager._find_adjacent_door(bottom_key, facing)
+					if adj.x != -9999:
+						var adj_hinge = world_manager.get_door_hinge(adj.x, adj.y, adj.z)
+						hinge = "right" if adj_hinge == "left" else "left"
+					world_manager.place_door(place_pos, selected_block_type, facing, hinge)
 					_remove_from_inventory(selected_block_type)
 					if audio_manager:
 						audio_manager.play_place_sound(selected_block_type, place_pos)
@@ -720,6 +745,25 @@ func _handle_block_interaction(delta: float):
 						hand_renderer.play_swing()
 				return
 
+			# Auto-orientation vitre : détection blocs adjacents
+			if selected_block_type == BlockRegistry.BlockType.GLASS_PANE or selected_block_type == BlockRegistry.BlockType.IRON_BARS:
+				var pkey = Vector3i(int(floor(place_pos.x)), int(floor(place_pos.y)), int(floor(place_pos.z)))
+				# Vérifier blocs solides sur les 4 côtés
+				var has_x_plus = BlockRegistry.is_solid(world_manager.get_block_at_position(place_pos + Vector3(1, 0, 0)))
+				var has_x_minus = BlockRegistry.is_solid(world_manager.get_block_at_position(place_pos + Vector3(-1, 0, 0)))
+				var has_z_plus = BlockRegistry.is_solid(world_manager.get_block_at_position(place_pos + Vector3(0, 0, 1)))
+				var has_z_minus = BlockRegistry.is_solid(world_manager.get_block_at_position(place_pos + Vector3(0, 0, -1)))
+				var x_neighbors = int(has_x_plus) + int(has_x_minus)
+				var z_neighbors = int(has_z_plus) + int(has_z_minus)
+				# Aligner avec les blocs adjacents : si blocs sur X → s'étendre le long de X (0), si blocs sur Z → s'étendre le long de Z (1)
+				var orient: int
+				if x_neighbors > z_neighbors:
+					orient = 0  # N-S (s'étend le long de X, entre les blocs à gauche/droite)
+				elif z_neighbors > x_neighbors:
+					orient = 1  # E-W (s'étend le long de Z, entre les blocs devant/derrière)
+				else:
+					orient = 0  # défaut
+				world_manager.pane_orientation[pkey] = orient
 			world_manager.place_block_at_position(place_pos, selected_block_type)
 			_remove_from_inventory(selected_block_type)
 			if audio_manager:
@@ -732,12 +776,14 @@ func _handle_block_interaction(delta: float):
 		_cancel_eating()
 
 func _break_block(pos: Vector3, block_type: BlockRegistry.BlockType):
+	var is_door = BlockRegistry.is_door(block_type)
 	world_manager.break_block_at_position(pos)
-	_add_to_inventory(block_type)
+	if not is_door:
+		_add_to_inventory(block_type)
 	_spawn_break_particles(pos, block_type)
 	if audio_manager:
 		audio_manager.play_break_sound(block_type, pos)
-	# Récupérer la végétation/torches détruites par le cassage du bloc
+	# Récupérer la végétation/torches/portes détruites par le cassage du bloc
 	var extras = world_manager.get_and_clear_broken_extras()
 	for extra in extras:
 		_add_to_inventory(extra)

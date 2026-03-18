@@ -12,6 +12,9 @@ var chunk_generator: ChunkGenerator
 var world_seed: int = 0  # Seed du monde (0 = aléatoire)
 var saved_chunk_data: Dictionary = {}  # Vector3i -> PackedByteArray (chunks modifiés à restaurer)
 var open_doors: Dictionary = {}  # Vector3i -> true (positions des portes ouvertes)
+# Métadonnées porte : facing (0=N, 1=S, 2=E, 3=W), hinge ("left"/"right")
+var door_data: Dictionary = {}  # Vector3i -> { "facing": int, "hinge": String }
+var pane_orientation: Dictionary = {}  # Vector3i -> int (0=N-S along Z, 1=E-W along X)
 
 func _toggle_door_key(key: Vector3i):
 	if open_doors.has(key):
@@ -19,18 +22,109 @@ func _toggle_door_key(key: Vector3i):
 	else:
 		open_doors[key] = true
 
-func toggle_door_pair(world_pos: Vector3):
-	# Toggle les deux blocs de la porte (haut + bas) d'un coup, puis un seul rebuild
-	var key = Vector3i(int(floor(world_pos.x)), int(floor(world_pos.y)), int(floor(world_pos.z)))
-	_toggle_door_key(key)
-	# Chercher le second bloc (dessus ou dessous)
+func _is_door_block(pos: Vector3i) -> bool:
+	var bt = get_block_at_position(Vector3(pos.x, pos.y, pos.z))
+	return bt == BlockRegistry.BlockType.OAK_DOOR or bt == BlockRegistry.BlockType.IRON_DOOR
+
+func _get_door_partner(key: Vector3i) -> Vector3i:
+	# Retourne le second bloc de la porte (haut ou bas)
 	var above = key + Vector3i(0, 1, 0)
 	var below = key + Vector3i(0, -1, 0)
-	if get_block_at_position(Vector3(above.x, above.y, above.z)) in [BlockRegistry.BlockType.OAK_DOOR, BlockRegistry.BlockType.IRON_DOOR]:
-		_toggle_door_key(above)
-	elif get_block_at_position(Vector3(below.x, below.y, below.z)) in [BlockRegistry.BlockType.OAK_DOOR, BlockRegistry.BlockType.IRON_DOOR]:
-		_toggle_door_key(below)
+	if _is_door_block(above):
+		return above
+	elif _is_door_block(below):
+		return below
+	return key
+
+func _get_door_bottom(key: Vector3i) -> Vector3i:
+	var below = key + Vector3i(0, -1, 0)
+	if _is_door_block(below):
+		return below
+	return key
+
+func get_door_facing(wx: int, wy: int, wz: int) -> int:
+	var key = Vector3i(wx, wy, wz)
+	# Chercher les data sur ce bloc ou son partenaire
+	if door_data.has(key):
+		return door_data[key]["facing"]
+	var bottom = _get_door_bottom(key)
+	if door_data.has(bottom):
+		return door_data[bottom]["facing"]
+	return 0
+
+func get_door_hinge(wx: int, wy: int, wz: int) -> String:
+	var key = Vector3i(wx, wy, wz)
+	if door_data.has(key):
+		return door_data[key]["hinge"]
+	var bottom = _get_door_bottom(key)
+	if door_data.has(bottom):
+		return door_data[bottom]["hinge"]
+	return "left"
+
+func place_door(world_pos: Vector3, block_type: BlockRegistry.BlockType, facing: int, hinge: String = "left"):
+	var key = Vector3i(int(floor(world_pos.x)), int(floor(world_pos.y)), int(floor(world_pos.z)))
+	var above = key + Vector3i(0, 1, 0)
+	set_block_at_position(world_pos, block_type)
+	set_block_at_position(Vector3(above.x, above.y, above.z), block_type)
+	door_data[key] = { "facing": facing, "hinge": hinge }
+
+func remove_door(world_pos: Vector3) -> BlockRegistry.BlockType:
+	var key = Vector3i(int(floor(world_pos.x)), int(floor(world_pos.y)), int(floor(world_pos.z)))
+	var partner = _get_door_partner(key)
+	var bottom = _get_door_bottom(key)
+	var bt = get_block_at_position(Vector3(key.x, key.y, key.z))
+	# Supprimer les deux blocs
+	set_block_at_position(Vector3(key.x, key.y, key.z), BlockRegistry.BlockType.AIR)
+	if partner != key:
+		set_block_at_position(Vector3(partner.x, partner.y, partner.z), BlockRegistry.BlockType.AIR)
+	# Nettoyer les données
+	open_doors.erase(key)
+	open_doors.erase(partner)
+	door_data.erase(bottom)
+	return bt
+
+func _find_adjacent_door(key: Vector3i, facing: int) -> Vector3i:
+	# Cherche une porte adjacente (même facing) pour double porte
+	var offsets: Array
+	if facing == 0 or facing == 1:  # N/S → chercher à gauche/droite sur X
+		offsets = [Vector3i(-1, 0, 0), Vector3i(1, 0, 0)]
+	else:  # E/W → chercher à gauche/droite sur Z
+		offsets = [Vector3i(0, 0, -1), Vector3i(0, 0, 1)]
+	for off in offsets:
+		var adj = key + off
+		if _is_door_block(adj):
+			var adj_bottom = _get_door_bottom(adj)
+			if door_data.has(adj_bottom) and door_data[adj_bottom]["facing"] == facing:
+				return adj
+	return Vector3i(-9999, -9999, -9999)
+
+func toggle_door_pair(world_pos: Vector3):
+	var key = Vector3i(int(floor(world_pos.x)), int(floor(world_pos.y)), int(floor(world_pos.z)))
+	var bottom = _get_door_bottom(key)
+	var partner = _get_door_partner(key)
+	# Toggle les deux blocs de cette porte
+	_toggle_door_key(key)
+	if partner != key:
+		_toggle_door_key(partner)
+	# Chercher une double porte adjacente et la toggler aussi
+	var facing = get_door_facing(key.x, key.y, key.z)
+	var adj = _find_adjacent_door(bottom, facing)
+	if adj.x != -9999:
+		var adj_partner = _get_door_partner(adj)
+		_toggle_door_key(adj)
+		if adj_partner != adj:
+			_toggle_door_key(adj_partner)
+		# Rebuild chunk de la porte adjacente si différent
+		var adj_chunk = _world_to_chunk(Vector3(adj.x, adj.y, adj.z))
+		var my_chunk = _world_to_chunk(world_pos)
+		if adj_chunk != my_chunk and chunks.has(adj_chunk):
+			chunks[adj_chunk]._rebuild_mesh()
 	# Un seul rebuild
+	var chunk_pos = _world_to_chunk(world_pos)
+	if chunks.has(chunk_pos):
+		chunks[chunk_pos]._rebuild_mesh()
+
+func rebuild_chunk_at(world_pos: Vector3):
 	var chunk_pos = _world_to_chunk(world_pos)
 	if chunks.has(chunk_pos):
 		chunks[chunk_pos]._rebuild_mesh()
@@ -262,7 +356,19 @@ func set_block_at_position(world_pos: Vector3, block_type: BlockRegistry.BlockTy
 		chunks[chunk_pos].set_block(local_pos.x, local_pos.y, local_pos.z, block_type)
 
 func break_block_at_position(world_pos: Vector3):
+	var broken_type = get_block_at_position(world_pos)
+	# Si on casse une porte, supprimer la paire entière
+	if BlockRegistry.is_door(broken_type):
+		var door_bt = remove_door(world_pos)
+		_broken_extras.clear()
+		# Ne pas ajouter aux extras — le bloc principal est déjà compté par l'appelant
+		# Mais il faut signaler que c'est une porte (l'appelant ne doit pas re-ajouter)
+		_broken_extras.append(door_bt)
+		return
 	set_block_at_position(world_pos, BlockRegistry.BlockType.AIR)
+	# Nettoyer orientation vitre si applicable
+	var bkey = Vector3i(int(floor(world_pos.x)), int(floor(world_pos.y)), int(floor(world_pos.z)))
+	pane_orientation.erase(bkey)
 	_broken_extras.clear()
 	# Supprimer la végétation décorative posée sur le bloc cassé
 	var above_pos = world_pos + Vector3(0, 1, 0)
@@ -282,6 +388,23 @@ func break_block_at_position(world_pos: Vector3):
 		if get_block_at_position(check_pos) == BlockRegistry.BlockType.TORCH:
 			set_block_at_position(check_pos, BlockRegistry.BlockType.AIR)
 			_broken_extras.append(BlockRegistry.BlockType.TORCH)
+	# Supprimer les portes dont le bloc support a été cassé (adjacents + dessous)
+	var door_checks = [
+		above_pos,
+		world_pos + Vector3(1, 0, 0), world_pos + Vector3(-1, 0, 0),
+		world_pos + Vector3(0, 0, 1), world_pos + Vector3(0, 0, -1),
+	]
+	for check_pos in door_checks:
+		var check_type = get_block_at_position(check_pos)
+		if BlockRegistry.is_door(check_type):
+			# Vérifier si cette porte a encore un support (bloc solide en dessous du bas de la porte)
+			var door_bottom_key = Vector3i(int(floor(check_pos.x)), int(floor(check_pos.y)), int(floor(check_pos.z)))
+			var door_bottom = _get_door_bottom(door_bottom_key)
+			var support_pos = Vector3(door_bottom.x, door_bottom.y - 1, door_bottom.z)
+			var support_type = get_block_at_position(support_pos)
+			if not BlockRegistry.is_solid(support_type):
+				var door_bt = remove_door(check_pos)
+				_broken_extras.append(door_bt)
 
 var _broken_extras: Array = []
 

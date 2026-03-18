@@ -192,8 +192,11 @@ func _build_ui():
 		["ZQSD / WASD", "Se déplacer"],
 		["Souris", "Regarder autour"],
 		["Clic gauche", "Miner / Attaquer"],
-		["Clic droit", "Placer un bloc"],
-		["Espace", "Sauter"],
+		["Clic droit", "Placer bloc / Interagir"],
+		["Clic droit sur porte", "Ouvrir / Fermer"],
+		["Shift + Clic droit", "Pivoter un bloc (vitre, barreaux)"],
+		["Ctrl + Clic droit", "Porte : inverser face (devant/derrière)"],
+		["Espace", "Sauter / Monter échelle"],
 		["Shift", "Sprinter"],
 		["Molette", "Changer slot hotbar"],
 		["1-9", "Sélectionner slot"],
@@ -201,10 +204,10 @@ func _build_ui():
 		["C", "Table de craft"],
 		["F1", "Gestion du village"],
 		["F2", "Changer style éclairage"],
-		["F3", "Ce menu"],
+		["F3", "Ce menu (Paramètres)"],
 		["Ctrl + Molette", "Vitesse du temps"],
 		["Alt + Molette", "Zoom FOV (70°-110°)"],
-		["Echap", "Pause"],
+		["Echap", "Pause / Sauvegarder / Quitter"],
 	]
 
 	for binding in bindings:
