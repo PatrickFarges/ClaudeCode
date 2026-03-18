@@ -221,6 +221,13 @@ func _init_inventory():
 	inventory[BlockRegistry.BlockType.BOOKSHELF] = 0
 	inventory[BlockRegistry.BlockType.HAY_BLOCK] = 0
 	inventory[BlockRegistry.BlockType.BARREL] = 0
+	# Végétation décorative
+	inventory[BlockRegistry.BlockType.SHORT_GRASS] = 0
+	inventory[BlockRegistry.BlockType.FERN] = 0
+	inventory[BlockRegistry.BlockType.DEAD_BUSH] = 0
+	inventory[BlockRegistry.BlockType.DANDELION] = 0
+	inventory[BlockRegistry.BlockType.POPPY] = 0
+	inventory[BlockRegistry.BlockType.CORNFLOWER] = 0
 	# Blocs architecturaux
 	inventory[BlockRegistry.BlockType.STONE_BRICKS] = 0
 	inventory[BlockRegistry.BlockType.OAK_STAIRS] = 0
@@ -726,6 +733,11 @@ func _break_block(pos: Vector3, block_type: BlockRegistry.BlockType):
 	_spawn_break_particles(pos, block_type)
 	if audio_manager:
 		audio_manager.play_break_sound(block_type, pos)
+	# Récupérer la végétation détruite au-dessus du bloc cassé
+	var flora = world_manager.get_and_clear_broken_flora()
+	if flora != BlockRegistry.BlockType.AIR:
+		_add_to_inventory(flora)
+		_spawn_break_particles(pos + Vector3(0, 1, 0), flora)
 	_cancel_mining()
 
 func _cancel_mining():

@@ -237,6 +237,20 @@ func set_block_at_position(world_pos: Vector3, block_type: BlockRegistry.BlockTy
 
 func break_block_at_position(world_pos: Vector3):
 	set_block_at_position(world_pos, BlockRegistry.BlockType.AIR)
+	# Supprimer la végétation décorative posée sur le bloc cassé
+	var above_pos = world_pos + Vector3(0, 1, 0)
+	var above_type = get_block_at_position(above_pos)
+	if BlockRegistry.is_cross_mesh(above_type):
+		set_block_at_position(above_pos, BlockRegistry.BlockType.AIR)
+		# Retourner le type de végétation détruite pour que l'appelant puisse la collecter
+		_last_broken_flora = above_type
+
+var _last_broken_flora: BlockRegistry.BlockType = BlockRegistry.BlockType.AIR
+
+func get_and_clear_broken_flora() -> BlockRegistry.BlockType:
+	var flora = _last_broken_flora
+	_last_broken_flora = BlockRegistry.BlockType.AIR
+	return flora
 
 func place_block_at_position(world_pos: Vector3, block_type: BlockRegistry.BlockType):
 	set_block_at_position(world_pos, block_type)

@@ -75,6 +75,13 @@ const BLOCK_NAMES = {
 	"Bookshelf":         {"fr": "Bibliotheque",            "en": "Bookshelf"},
 	"Hay Block":         {"fr": "Botte de foin",           "en": "Hay Block"},
 	"Barrel":            {"fr": "Tonneau",                 "en": "Barrel"},
+	# === VEGETATION DECORATIVE ===
+	"Short Grass":       {"fr": "Herbe courte",             "en": "Short Grass"},
+	"Fern":              {"fr": "Fougere",                  "en": "Fern"},
+	"Dead Bush":         {"fr": "Buisson mort",             "en": "Dead Bush"},
+	"Dandelion":         {"fr": "Pissenlit",                "en": "Dandelion"},
+	"Poppy":             {"fr": "Coquelicot",               "en": "Poppy"},
+	"Cornflower":        {"fr": "Bleuet",                   "en": "Cornflower"},
 	# === AGRICULTURE ===
 	"Farmland":          {"fr": "Terre cultivee",           "en": "Farmland"},
 	"Wheat (sprout)":    {"fr": "Ble (pousse)",             "en": "Wheat (sprout)"},
