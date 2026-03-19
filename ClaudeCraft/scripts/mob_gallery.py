@@ -1,0 +1,760 @@
+#!/usr/bin/env python3
+"""
+mob_gallery.py v1.0.0
+Galerie 3D de mobs — affiche tous les GLB d'un répertoire en vignettes 3D
+
+Affiche une grille 4 colonnes de modèles GLB avec rendu 3D interactif.
+Chaque vignette montre le modèle en rotation lente avec son nom.
+Clic pour sélectionner, [A] ou double-clic pour passer en plein écran.
+
+Usage:
+    python mob_gallery.py                              # Charge assets/Mobs/Bedrock/
+    python mob_gallery.py path/to/glb/folder/
+
+Contrôles:
+    Clic gauche          Sélectionner un modèle
+    Double-clic / [A]    Plein écran ↔ galerie
+    Clic gauche + drag   Orbite caméra (modèle sélectionné / plein écran)
+    Molette              Scroll galerie / Zoom plein écran
+    Échap                Retour galerie / Quitter
+
+Changelog:
+    v1.0.1 — Fix faces inversées : reset état GL au début de paintGL (QPainter
+             modifiait l'état GL entre les frames), glPushAttrib/glPopAttrib
+    v1.0.0 — Création : galerie 4 colonnes, rotation auto, fullscreen toggle,
+             orbite caméra, QPainter overlay pour noms
+"""
+
+APP_VERSION = "1.0.1"
+
+import sys
+import json
+import struct
+import math
+import os
+from pathlib import Path
+
+from PyQt6.QtWidgets import QApplication, QMainWindow
+from PyQt6.QtCore import Qt, QTimer, QRectF
+from PyQt6.QtGui import QFont, QPainter, QColor, QPen
+from PyQt6.QtOpenGLWidgets import QOpenGLWidget
+
+from OpenGL.GL import *
+from OpenGL.GLU import *
+
+DEFAULT_MOB_DIR = Path(__file__).parent.parent / "assets" / "Mobs" / "Bedrock"
+GRID_COLS = 4
+LABEL_HEIGHT = 28
+AUTO_ROTATE_SPEED = 0.3  # radians/sec
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Math (same as character_viewer.py)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def quat_identity():
+    return [0.0, 0.0, 0.0, 1.0]
+
+def quat_multiply(a, b):
+    ax, ay, az, aw = a
+    bx, by, bz, bw = b
+    return [
+        aw * bx + ax * bw + ay * bz - az * by,
+        aw * by - ax * bz + ay * bw + az * bx,
+        aw * bz + ax * by - ay * bx + az * bw,
+        aw * bw - ax * bx - ay * by - az * bz,
+    ]
+
+def quat_slerp(a, b, t):
+    dot = sum(x * y for x, y in zip(a, b))
+    if dot < 0:
+        b = [-x for x in b]
+        dot = -dot
+    if dot > 0.9995:
+        r = [a[i] + t * (b[i] - a[i]) for i in range(4)]
+        l = math.sqrt(sum(x * x for x in r))
+        return [x / l for x in r] if l > 0 else quat_identity()
+    theta0 = math.acos(min(dot, 1.0))
+    theta = theta0 * t
+    st, st0 = math.sin(theta), math.sin(theta0)
+    sa, sb = math.cos(theta) - dot * st / st0, st / st0
+    return [sa * a[i] + sb * b[i] for i in range(4)]
+
+def quat_to_mat4(q):
+    x, y, z, w = q
+    m = [0.0] * 16
+    m[0] = 1 - 2*(y*y + z*z); m[1] = 2*(x*y + z*w); m[2] = 2*(x*z - y*w)
+    m[4] = 2*(x*y - z*w); m[5] = 1 - 2*(x*x + z*z); m[6] = 2*(y*z + x*w)
+    m[8] = 2*(x*z + y*w); m[9] = 2*(y*z - x*w); m[10] = 1 - 2*(x*x + y*y)
+    m[15] = 1.0
+    return m
+
+def mat4_identity():
+    m = [0.0] * 16; m[0] = m[5] = m[10] = m[15] = 1.0; return m
+
+def mat4_multiply(a, b):
+    r = [0.0] * 16
+    for c in range(4):
+        for rr in range(4):
+            r[c*4+rr] = sum(a[k*4+rr] * b[c*4+k] for k in range(4))
+    return r
+
+def mat4_trs(t, q, s):
+    m = quat_to_mat4(q)
+    m[0] *= s[0]; m[1] *= s[0]; m[2] *= s[0]
+    m[4] *= s[1]; m[5] *= s[1]; m[6] *= s[1]
+    m[8] *= s[2]; m[9] *= s[2]; m[10] *= s[2]
+    m[12] = t[0]; m[13] = t[1]; m[14] = t[2]
+    return m
+
+def mat4_transform_point(m, p):
+    return [
+        m[0]*p[0] + m[4]*p[1] + m[8]*p[2] + m[12],
+        m[1]*p[0] + m[5]*p[1] + m[9]*p[2] + m[13],
+        m[2]*p[0] + m[6]*p[1] + m[10]*p[2] + m[14],
+    ]
+
+def mat4_transform_dir(m, n):
+    r = [m[0]*n[0]+m[4]*n[1]+m[8]*n[2], m[1]*n[0]+m[5]*n[1]+m[9]*n[2], m[2]*n[0]+m[6]*n[1]+m[10]*n[2]]
+    l = math.sqrt(sum(x*x for x in r))
+    return [x/l for x in r] if l > 0 else [0, 1, 0]
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# GLB Loader (from character_viewer.py)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+class GLBData:
+    def __init__(self, path):
+        self.path = Path(path)
+        self.positions = []; self.normals = []; self.uvs = []
+        self.indices = []; self.base_indices = []; self.overlay_indices = []
+        self.joints = []; self.weights = []
+        self.bones = []; self.bone_parent = {}; self.ibms = []
+        self.animations = {}
+        self.embedded_texture = None; self.double_sided = False
+        self._parse()
+
+    def _parse(self):
+        with open(self.path, "rb") as f:
+            magic, version, length = struct.unpack("<III", f.read(12))
+            if magic != 0x46546C67:
+                raise ValueError("Not a valid GLB file")
+            json_len, _ = struct.unpack("<II", f.read(8))
+            self.gltf = json.loads(f.read(json_len))
+            bin_len, _ = struct.unpack("<II", f.read(8))
+            self.bin = f.read(bin_len)
+        self._extract_mesh()
+        self._extract_skeleton()
+        self._extract_animations()
+        self._extract_texture()
+
+    def _read_accessor(self, idx):
+        acc = self.gltf["accessors"][idx]
+        bv = self.gltf["bufferViews"][acc["bufferView"]]
+        offset = bv.get("byteOffset", 0)
+        data = self.bin[offset: offset + bv["byteLength"]]
+        comp_fmt = {5120: "b", 5121: "B", 5122: "h", 5123: "H", 5125: "I", 5126: "f"}
+        type_n = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4, "MAT4": 16}
+        fmt = comp_fmt[acc["componentType"]]
+        n = type_n[acc["type"]]
+        stride = struct.calcsize(f"<{n}{fmt}")
+        result = []
+        for i in range(acc["count"]):
+            vals = struct.unpack_from(f"<{n}{fmt}", data, i * stride)
+            result.append(vals[0] if n == 1 else list(vals))
+        return result
+
+    def _extract_mesh(self):
+        primitives = self.gltf["meshes"][0]["primitives"]
+        materials = self.gltf.get("materials", [])
+        prim0 = primitives[0]
+        attrs = prim0["attributes"]
+        self.positions = self._read_accessor(attrs["POSITION"])
+        self.normals = self._read_accessor(attrs["NORMAL"])
+        self.uvs = self._read_accessor(attrs["TEXCOORD_0"])
+        self.joints = self._read_accessor(attrs["JOINTS_0"])
+        self.weights = self._read_accessor(attrs["WEIGHTS_0"])
+        self.base_indices = []; self.overlay_indices = []; self.indices = []
+        for prim in primitives:
+            idx = self._read_accessor(prim["indices"])
+            mat_idx = prim.get("material", 0)
+            alpha = materials[mat_idx].get("alphaMode", "OPAQUE") if mat_idx < len(materials) else "OPAQUE"
+            if alpha == "BLEND":
+                self.overlay_indices.extend(idx)
+            else:
+                self.base_indices.extend(idx)
+            self.indices.extend(idx)
+
+    def _extract_skeleton(self):
+        skin = self.gltf["skins"][0]
+        joint_nodes = skin["joints"]
+        self.ibms = self._read_accessor(skin["inverseBindMatrices"])
+        node_to_bone = {}; self.bones = []
+        for bi, ni in enumerate(joint_nodes):
+            node = self.gltf["nodes"][ni]
+            self.bones.append({
+                "name": node.get("name", f"bone_{bi}"),
+                "translation": list(node.get("translation", [0, 0, 0])),
+                "rotation": list(node.get("rotation", [0, 0, 0, 1])),
+                "scale": list(node.get("scale", [1, 1, 1])),
+                "children_nodes": node.get("children", []),
+                "node_index": ni,
+            })
+            node_to_bone[ni] = bi
+        self.bone_parent = {}
+        for bi, bone in enumerate(self.bones):
+            for cn in bone["children_nodes"]:
+                if cn in node_to_bone:
+                    self.bone_parent[node_to_bone[cn]] = bi
+
+    def _extract_animations(self):
+        self.animations = {}
+        node_to_bone = {b["node_index"]: i for i, b in enumerate(self.bones)}
+        for anim in self.gltf.get("animations", []):
+            name = anim["name"]
+            channels = {}; max_t = 0.0
+            for ch in anim["channels"]:
+                samp = anim["samplers"][ch["sampler"]]
+                tn = ch["target"]["node"]; tp = ch["target"]["path"]
+                if tn not in node_to_bone: continue
+                bname = self.bones[node_to_bone[tn]]["name"]
+                timestamps = self._read_accessor(samp["input"])
+                values = self._read_accessor(samp["output"])
+                if bname not in channels: channels[bname] = {}
+                channels[bname][tp] = {"timestamps": timestamps, "values": values}
+                if timestamps: max_t = max(max_t, max(timestamps))
+            self.animations[name] = {"channels": channels, "duration": max_t}
+
+    def _extract_texture(self):
+        images = self.gltf.get("images", [])
+        if images and "bufferView" in images[0]:
+            bv = self.gltf["bufferViews"][images[0]["bufferView"]]
+            offset = bv.get("byteOffset", 0)
+            self.embedded_texture = self.bin[offset: offset + bv["byteLength"]]
+        for mat in self.gltf.get("materials", []):
+            if mat.get("doubleSided", False):
+                self.double_sided = True; break
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Skeletal Animator (from character_viewer.py)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+class SkeletalAnimator:
+    def __init__(self, glb):
+        self.glb = glb
+        self.current_anim = None; self.time = 0.0
+        self.speed = 1.0; self.playing = False; self.loop = True
+
+    def set_animation(self, name):
+        self.current_anim = name; self.time = 0.0
+
+    def advance(self, dt):
+        if not self.playing or not self.current_anim: return
+        anim = self.glb.animations.get(self.current_anim)
+        if not anim: return
+        self.time += dt * self.speed
+        dur = anim["duration"]
+        if dur > 0:
+            self.time = self.time % dur if self.loop else min(self.time, dur)
+
+    def _sample_channel(self, cd, t):
+        ts, vals = cd["timestamps"], cd["values"]
+        if not ts: return None
+        if t <= ts[0]: return vals[0]
+        if t >= ts[-1]: return vals[-1]
+        for i in range(len(ts) - 1):
+            if ts[i] <= t <= ts[i + 1]:
+                frac = (t - ts[i]) / (ts[i + 1] - ts[i]) if ts[i + 1] != ts[i] else 0
+                a, b = vals[i], vals[i + 1]
+                return quat_slerp(a, b, frac) if len(a) == 4 else [a[j] + frac * (b[j] - a[j]) for j in range(len(a))]
+        return vals[-1]
+
+    def compute_skinned(self):
+        glb = self.glb; n = len(glb.bones)
+        br, bt = {}, {}
+        if self.current_anim and self.current_anim in glb.animations:
+            for bname, chs in glb.animations[self.current_anim]["channels"].items():
+                if "rotation" in chs:
+                    q = self._sample_channel(chs["rotation"], self.time)
+                    if q: br[bname] = q
+                if "translation" in chs:
+                    v = self._sample_channel(chs["translation"], self.time)
+                    if v: bt[bname] = v
+        wt = [None] * n
+        for bi in range(n):
+            bone = glb.bones[bi]
+            local = mat4_trs(bt.get(bone["name"], bone["translation"]),
+                           br.get(bone["name"], bone["rotation"]), bone["scale"])
+            if bi in glb.bone_parent and wt[glb.bone_parent[bi]]:
+                wt[bi] = mat4_multiply(wt[glb.bone_parent[bi]], local)
+            else:
+                wt[bi] = local
+        sm = [mat4_multiply(wt[bi], glb.ibms[bi]) if wt[bi] else mat4_identity() for bi in range(n)]
+        sp, sn = [], []
+        for vi in range(len(glb.positions)):
+            ji = glb.joints[vi][0]
+            m = sm[ji] if ji < n else mat4_identity()
+            sp.append(mat4_transform_point(m, glb.positions[vi]))
+            sn.append(mat4_transform_dir(m, glb.normals[vi]))
+        return sp, sn
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Model Entry (one per GLB)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+class MobEntry:
+    def __init__(self, glb_path):
+        self.name = glb_path.stem
+        self.glb = GLBData(glb_path)
+        self.animator = SkeletalAnimator(self.glb)
+        # Auto-play idle or first animation
+        anim_names = list(self.glb.animations.keys())
+        if "idle" in anim_names:
+            self.animator.set_animation("idle")
+        elif anim_names:
+            self.animator.set_animation(anim_names[0])
+        self.animator.playing = True
+        # Camera state
+        self.theta = 200.0  # degrees
+        self.phi = 15.0
+        self.cam_dist = self._auto_distance()
+        self.cam_target_y = self._auto_target_y()
+        # GL texture
+        self.tex_id = None
+
+    def _auto_distance(self):
+        """Compute camera distance based on model bounding box."""
+        if not self.glb.positions:
+            return 3.0
+        ys = [p[1] for p in self.glb.positions]
+        xs = [p[0] for p in self.glb.positions]
+        zs = [p[2] for p in self.glb.positions]
+        height = max(ys) - min(ys)
+        width = max(max(xs) - min(xs), max(zs) - min(zs))
+        return max(height, width) * 1.8 + 0.5
+
+    def _auto_target_y(self):
+        if not self.glb.positions:
+            return 0.5
+        ys = [p[1] for p in self.glb.positions]
+        return (max(ys) + min(ys)) / 2.0
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Gallery Widget
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+class MobGalleryWidget(QOpenGLWidget):
+    def __init__(self, mob_dir, parent=None):
+        super().__init__(parent)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.models = []
+        self.selected_idx = 0
+        self.fullscreen_mode = False
+        self.scroll_y = 0.0
+        self.mouse_last = None
+        self.mouse_button = None
+
+        # Load all GLB files from directory
+        glb_files = sorted(Path(mob_dir).glob("*.glb"))
+        print(f"Chargement de {len(glb_files)} modèles depuis {mob_dir}...")
+        for p in glb_files:
+            try:
+                entry = MobEntry(p)
+                self.models.append(entry)
+                print(f"  {entry.name} — {len(entry.glb.positions)} verts, "
+                      f"{len(entry.glb.animations)} anims, "
+                      f"height={entry.cam_target_y*2:.2f}")
+            except Exception as e:
+                print(f"  ERREUR {p.name}: {e}")
+        print(f"{len(self.models)} modèles chargés")
+
+        # Animation timer
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._tick)
+        self._timer.start(16)
+
+    def _tick(self):
+        dt = 0.016
+        for m in self.models:
+            m.animator.advance(dt)
+            if not self.fullscreen_mode:
+                # Auto-rotate in gallery mode
+                m.theta += math.degrees(AUTO_ROTATE_SPEED * dt)
+        self.update()
+
+    # ── Cell geometry ──
+
+    def _cell_size(self):
+        w = self.width() / GRID_COLS
+        return int(w), int(w + LABEL_HEIGHT)
+
+    def _cell_rect(self, idx):
+        """Returns (x, y, w, h) in widget coords for a model index."""
+        cw, ch = self._cell_size()
+        col = idx % GRID_COLS
+        row = idx // GRID_COLS
+        x = col * cw
+        y = row * ch - int(self.scroll_y)
+        return x, y, cw, ch
+
+    def _total_height(self):
+        _, ch = self._cell_size()
+        rows = math.ceil(len(self.models) / GRID_COLS)
+        return rows * ch
+
+    def _hit_test(self, mx, my):
+        """Return model index under mouse position, or -1."""
+        for i in range(len(self.models)):
+            x, y, w, h = self._cell_rect(i)
+            if x <= mx < x + w and y <= my < y + h:
+                return i
+        return -1
+
+    # ── OpenGL ──
+
+    def initializeGL(self):
+        glClearColor(0.12, 0.12, 0.14, 1.0)
+        glEnable(GL_DEPTH_TEST)
+        glEnable(GL_LIGHTING)
+        glEnable(GL_LIGHT0)
+        glLightfv(GL_LIGHT0, GL_POSITION, [2.0, 4.0, 3.0, 0.0])
+        glLightfv(GL_LIGHT0, GL_DIFFUSE, [0.9, 0.9, 0.9, 1.0])
+        glLightfv(GL_LIGHT0, GL_AMBIENT, [0.3, 0.3, 0.3, 1.0])
+        glEnable(GL_COLOR_MATERIAL)
+        glColorMaterial(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE)
+        glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_TRUE)
+        # Load textures for all models
+        for m in self.models:
+            if m.glb.embedded_texture:
+                m.tex_id = self._upload_texture(m.glb.embedded_texture)
+
+    def _upload_texture(self, png_bytes):
+        from PyQt6.QtGui import QImage
+        img = QImage()
+        img.loadFromData(png_bytes)
+        if img.isNull():
+            return None
+        img = img.convertToFormat(QImage.Format.Format_RGBA8888)
+        w, h = img.width(), img.height()
+        bits = img.bits(); bits.setsize(w * h * 4)
+        data = bytes(bits)
+        tex_id = glGenTextures(1)
+        glBindTexture(GL_TEXTURE_2D, tex_id)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data)
+        return tex_id
+
+    def resizeGL(self, w, h):
+        pass  # Viewport set per-cell in paintGL
+
+    def paintGL(self):
+        # Reset GL state that QPainter may have changed between frames
+        glDisable(GL_CULL_FACE)
+        glEnable(GL_DEPTH_TEST)
+        glDepthMask(GL_TRUE)
+        glDisable(GL_BLEND)
+        glEnable(GL_LIGHTING)
+        glEnable(GL_LIGHT0)
+        glEnable(GL_COLOR_MATERIAL)
+        glColorMaterial(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE)
+        glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_TRUE)
+        glFrontFace(GL_CCW)
+
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+        w, h = self.width(), self.height()
+        dpr = self.devicePixelRatio()
+        pw, ph = int(w * dpr), int(h * dpr)
+
+        if self.fullscreen_mode and 0 <= self.selected_idx < len(self.models):
+            # Render single model fullscreen
+            glViewport(0, 0, pw, ph)
+            glScissor(0, 0, pw, ph)
+            glEnable(GL_SCISSOR_TEST)
+            self._render_model(self.models[self.selected_idx], pw, ph)
+            glDisable(GL_SCISSOR_TEST)
+        else:
+            glEnable(GL_SCISSOR_TEST)
+            for i, m in enumerate(self.models):
+                x, y, cw, ch = self._cell_rect(i)
+                # Viewport height excludes label area
+                vh = ch - LABEL_HEIGHT
+                # Skip if off-screen
+                if y + ch < 0 or y > h:
+                    continue
+                # GL viewport (bottom-left origin, in physical pixels)
+                gl_x = int(x * dpr)
+                gl_y = int((h - y - vh) * dpr)
+                gl_w = int(cw * dpr)
+                gl_h = int(vh * dpr)
+                glViewport(gl_x, gl_y, max(gl_w, 1), max(gl_h, 1))
+                glScissor(gl_x, gl_y, max(gl_w, 1), max(gl_h, 1))
+                self._render_model(m, max(gl_w, 1), max(gl_h, 1))
+            glDisable(GL_SCISSOR_TEST)
+
+    def _render_model(self, m, vw, vh):
+        """Render a single mob model into the current viewport."""
+        glClear(GL_DEPTH_BUFFER_BIT)
+
+        # Projection
+        glMatrixMode(GL_PROJECTION)
+        glLoadIdentity()
+        aspect = vw / vh if vh > 0 else 1.0
+        gluPerspective(45.0, aspect, 0.01, 100.0)
+
+        # Camera
+        glMatrixMode(GL_MODELVIEW)
+        glLoadIdentity()
+        theta = math.radians(m.theta)
+        phi = math.radians(m.phi)
+        cx = m.cam_dist * math.cos(phi) * math.sin(theta)
+        cy = m.cam_dist * math.sin(phi)
+        cz = m.cam_dist * math.cos(phi) * math.cos(theta)
+        ty = m.cam_target_y
+        gluLookAt(cx, cy + ty, cz, 0, ty, 0, 0, 1, 0)
+
+        # Grid
+        glDisable(GL_LIGHTING)
+        glDisable(GL_TEXTURE_2D)
+        glBegin(GL_LINES)
+        glColor3f(0.25, 0.25, 0.25)
+        extent = 2.0
+        step = 0.5
+        x = -extent
+        while x <= extent + 0.001:
+            glVertex3f(x, 0, -extent); glVertex3f(x, 0, extent)
+            glVertex3f(-extent, 0, x); glVertex3f(extent, 0, x)
+            x += step
+        glEnd()
+
+        # Mesh
+        glEnable(GL_LIGHTING)
+        sp, sn = m.animator.compute_skinned()
+        has_tex = m.tex_id is not None
+        if has_tex:
+            glEnable(GL_TEXTURE_2D)
+            glBindTexture(GL_TEXTURE_2D, m.tex_id)
+        else:
+            glDisable(GL_TEXTURE_2D)
+
+        if m.glb.double_sided:
+            glDisable(GL_CULL_FACE)
+        else:
+            glEnable(GL_CULL_FACE)
+
+        # Alpha test for MASK mode
+        glEnable(GL_ALPHA_TEST)
+        glAlphaFunc(GL_GREATER, 0.5)
+
+        glColor3f(1.0, 1.0, 1.0)
+        indices = m.glb.base_indices if m.glb.base_indices else m.glb.indices
+        glBegin(GL_TRIANGLES)
+        for idx in indices:
+            if idx < len(sp):
+                glNormal3f(*sn[idx])
+                if has_tex:
+                    glTexCoord2f(*m.glb.uvs[idx])
+                glVertex3f(*sp[idx])
+        glEnd()
+
+        # Overlay pass (blend)
+        if m.glb.overlay_indices:
+            glEnable(GL_BLEND)
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+            glDepthMask(GL_FALSE)
+            glBegin(GL_TRIANGLES)
+            for idx in m.glb.overlay_indices:
+                if idx < len(sp):
+                    glNormal3f(*sn[idx])
+                    if has_tex:
+                        glTexCoord2f(*m.glb.uvs[idx])
+                    glVertex3f(*sp[idx])
+            glEnd()
+            glDepthMask(GL_TRUE)
+            glDisable(GL_BLEND)
+
+        glDisable(GL_ALPHA_TEST)
+        glDisable(GL_TEXTURE_2D)
+
+    def paintEvent(self, event):
+        # First: GL rendering
+        super().paintEvent(event)
+
+        # Save GL state before QPainter modifies it
+        self.makeCurrent()
+        glPushAttrib(GL_ALL_ATTRIB_BITS)
+        glPushClientAttrib(GL_CLIENT_ALL_ATTRIB_BITS)
+        self.doneCurrent()
+
+        # QPainter overlay for labels and selection borders
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        font = QFont("Segoe UI", 10, QFont.Weight.Bold)
+        painter.setFont(font)
+
+        if self.fullscreen_mode and 0 <= self.selected_idx < len(self.models):
+            m = self.models[self.selected_idx]
+            painter.setPen(QColor(255, 255, 255))
+            rect = QRectF(0, self.height() - 36, self.width(), 32)
+            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter,
+                           f"{m.name.upper()}  [A] retour galerie")
+        else:
+            for i, m in enumerate(self.models):
+                x, y, cw, ch = self._cell_rect(i)
+                vh = ch - LABEL_HEIGHT
+                if y + ch < 0 or y > self.height():
+                    continue
+
+                # Selection border
+                if i == self.selected_idx:
+                    painter.setPen(QPen(QColor(80, 160, 255), 3))
+                    painter.drawRect(x + 1, y + 1, cw - 3, vh - 3)
+
+                # Name label below viewport
+                painter.setPen(QColor(200, 200, 200))
+                label_rect = QRectF(x, y + vh, cw, LABEL_HEIGHT)
+                painter.drawText(label_rect, Qt.AlignmentFlag.AlignCenter, m.name)
+
+        painter.end()
+
+        # Restore GL state after QPainter is done
+        self.makeCurrent()
+        glPopClientAttrib()
+        glPopAttrib()
+        self.doneCurrent()
+
+    # ── Input ──
+
+    def mousePressEvent(self, event):
+        pos = event.position()
+        self.mouse_last = (pos.x(), pos.y())
+        self.mouse_button = event.button()
+        if not self.fullscreen_mode:
+            hit = self._hit_test(pos.x(), pos.y())
+            if hit >= 0:
+                self.selected_idx = hit
+                self.update()
+
+    def mouseDoubleClickEvent(self, event):
+        if not self.fullscreen_mode:
+            pos = event.position()
+            hit = self._hit_test(pos.x(), pos.y())
+            if hit >= 0:
+                self.selected_idx = hit
+                self.fullscreen_mode = True
+                self.update()
+        else:
+            self.fullscreen_mode = False
+            self.update()
+
+    def mouseMoveEvent(self, event):
+        if self.mouse_last is None:
+            return
+        pos = event.position()
+        dx = pos.x() - self.mouse_last[0]
+        dy = pos.y() - self.mouse_last[1]
+        self.mouse_last = (pos.x(), pos.y())
+
+        if self.mouse_button == Qt.MouseButton.LeftButton:
+            if self.fullscreen_mode:
+                target = self.models[self.selected_idx]
+            elif 0 <= self.selected_idx < len(self.models):
+                target = self.models[self.selected_idx]
+            else:
+                return
+            target.theta -= dx * 0.5
+            target.phi = max(-89, min(89, target.phi + dy * 0.3))
+            self.update()
+
+    def mouseReleaseEvent(self, event):
+        self.mouse_last = None
+        self.mouse_button = None
+
+    def wheelEvent(self, event):
+        delta = event.angleDelta().y()
+        if self.fullscreen_mode:
+            # Zoom
+            m = self.models[self.selected_idx]
+            m.cam_dist *= 0.95 if delta > 0 else 1.05
+            m.cam_dist = max(0.3, min(20.0, m.cam_dist))
+        else:
+            # Scroll gallery
+            self.scroll_y -= delta * 0.5
+            max_scroll = max(0, self._total_height() - self.height())
+            self.scroll_y = max(0, min(self.scroll_y, max_scroll))
+        self.update()
+
+    def keyPressEvent(self, event):
+        key = event.key()
+        if key == Qt.Key.Key_A:
+            if self.fullscreen_mode:
+                self.fullscreen_mode = False
+            elif 0 <= self.selected_idx < len(self.models):
+                self.fullscreen_mode = True
+            self.update()
+        elif key == Qt.Key.Key_Escape:
+            if self.fullscreen_mode:
+                self.fullscreen_mode = False
+                self.update()
+            else:
+                QApplication.quit()
+        elif key == Qt.Key.Key_Right and not self.fullscreen_mode:
+            self.selected_idx = min(self.selected_idx + 1, len(self.models) - 1)
+            self.update()
+        elif key == Qt.Key.Key_Left and not self.fullscreen_mode:
+            self.selected_idx = max(self.selected_idx - 1, 0)
+            self.update()
+        elif key == Qt.Key.Key_Down and not self.fullscreen_mode:
+            self.selected_idx = min(self.selected_idx + GRID_COLS, len(self.models) - 1)
+            self.update()
+        elif key == Qt.Key.Key_Up and not self.fullscreen_mode:
+            self.selected_idx = max(self.selected_idx - GRID_COLS, 0)
+            self.update()
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Main Window
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+class GalleryWindow(QMainWindow):
+    def __init__(self, mob_dir):
+        super().__init__()
+        self.setWindowTitle(f"Mob Gallery v{APP_VERSION} — {mob_dir}")
+        self.gallery = MobGalleryWidget(mob_dir, self)
+        self.setCentralWidget(self.gallery)
+
+
+def main():
+    os.environ["PYOPENGL_PLATFORM"] = "nt"
+    app = QApplication(sys.argv)
+
+    mob_dir = DEFAULT_MOB_DIR
+    if len(sys.argv) > 1:
+        mob_dir = Path(sys.argv[1])
+
+    if not mob_dir.is_dir():
+        print(f"Répertoire introuvable : {mob_dir}")
+        sys.exit(1)
+
+    win = GalleryWindow(mob_dir)
+    # Fullscreen on primary monitor
+    screen = app.primaryScreen()
+    if screen:
+        geo = screen.geometry()
+        win.setGeometry(geo)
+        win.showFullScreen()
+    else:
+        win.resize(1920, 1080)
+        win.show()
+
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()

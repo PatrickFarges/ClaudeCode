@@ -16,10 +16,24 @@ Usage:
     python mob_converter.py zombie --output path/to/output.glb
 
 Changelog:
+    v2.3.0 — Fix enderman tête trop basse (CUBE_OFFSET_OVERRIDES +14Y pour head,
+             tête passe de y=24 à y=38 au sommet du corps)
+    v2.2.0 — Fix wolf rotation (body/upperBody bind_pose_rotation 90°X manquant),
+             fix sheep tex_size (64×64 au lieu de 64×32),
+             fix TGA alpha binarisation (alpha>0 → 255, corrige faces invisibles
+             sheep/enderman), BPR_OVERRIDES pour bones manquant de rotation
+    v2.1.0 — Fix hiérarchie bones (wolf/chicken/bat/sheep sans parents dans Bedrock),
+             normalisation Y (pieds à Y=0 pour tous les mobs),
+             PARENT_OVERRIDES pour inférer la hiérarchie manquante
+    v2.0.0 — 15 mobs (ajout zombie, skeleton, polar_bear, rabbit, fox, cat, bat,
+             enderman), support TGA (via Pillow), fix geo keys v1.8/v1.0,
+             catégories passive/neutral/hostile, animations humanoid
+    v1.3.0 — Fix bottom face winding (indices inversés pour normale -Y correcte),
+             corrige les faces noires sur les mobs avec bind_pose_rotation
     v1.0.0 — Création : parsing .geo.json, bind_pose_rotation, Molang -> keyframes
 """
 
-APP_VERSION = "1.2.1"
+APP_VERSION = "2.3.0"
 
 import json
 import struct
@@ -30,6 +44,13 @@ import shutil
 import argparse
 from pathlib import Path
 
+try:
+    from PIL import Image
+    import io
+    HAS_PIL = True
+except ImportError:
+    HAS_PIL = False
+
 # ─── Configuration ────────────────────────────────────────────────────────────
 
 BEDROCK_PATH = Path(r"D:\Games\Minecraft - Bedrock Edition\data\resource_packs\vanilla")
@@ -39,16 +60,39 @@ SCALE = 1.0 / 16.0   # 16 Bedrock units = 1 Godot unit (≈ 1 block)
 # ─── Mob Registry ─────────────────────────────────────────────────────────────
 # Maps mob name -> { geo, texture, animations, tex_size }
 
+# Categories for in-game behavior
+MOB_CATEGORY = {
+    # Passive — flee when attacked
+    "cow": "passive", "pig": "passive", "sheep": "passive",
+    "chicken": "passive", "rabbit": "passive", "bat": "passive",
+    "fox": "passive", "cat": "passive",
+    # Neutral — attack only when provoked
+    "wolf": "neutral", "polar_bear": "neutral", "enderman": "neutral",
+    # Hostile — attack on sight (night only unless specified)
+    "zombie": "hostile", "skeleton": "hostile", "creeper": "hostile",
+    "spider": "hostile",
+}
+
+# Day spawning for specific mobs (overrides night-only default for hostiles)
+MOB_DAY_SPAWN = {"polar_bear", "enderman"}
+
+# Biome restrictions
+MOB_BIOMES = {
+    "polar_bear": ["mountain"],  # Cold/snowy biomes
+    "fox": ["forest"],
+    "rabbit": ["desert", "plains"],
+    "bat": ["all"],  # Spawns underground
+    "cat": ["plains", "forest"],
+    "enderman": ["all"],
+}
+
 MOB_REGISTRY = {
+    # ── Passive mobs ──
     "cow": {
         "geo": "models/entity/cow.geo.json",
         "geo_key": "geometry.cow",
         "texture": "textures/entity/cow/cow.png",
         "tex_size": (64, 32),
-        "animations": {
-            "walk": ("animations/quadruped.animation.json", "animation.quadruped.walk"),
-            "setup": ("animations/cow.animation.json", "animation.cow.setup"),
-        },
         "custom_anims": ["walk", "idle", "eat"],
     },
     "pig": {
@@ -56,20 +100,13 @@ MOB_REGISTRY = {
         "geo_key": "geometry.pig",
         "texture": "textures/entity/pig/pig.png",
         "tex_size": (64, 32),
-        "animations": {
-            "walk": ("animations/quadruped.animation.json", "animation.quadruped.walk"),
-        },
         "custom_anims": ["walk", "idle"],
     },
     "sheep": {
         "geo": "models/entity/sheep.geo.json",
-        "geo_key": "geometry.sheep",
-        "texture": "textures/entity/sheep/sheep.png",
-        "tex_size": (64, 32),
-        "animations": {
-            "walk": ("animations/quadruped.animation.json", "animation.quadruped.walk"),
-            "eat": ("animations/sheep.animation.json", "animation.sheep.grazing"),
-        },
+        "geo_key": "geometry.sheep.sheared",
+        "texture": "textures/entity/sheep/sheep.tga",
+        "tex_size": (64, 64),
         "custom_anims": ["walk", "idle", "eat"],
     },
     "chicken": {
@@ -77,57 +114,129 @@ MOB_REGISTRY = {
         "geo_key": "geometry.chicken",
         "texture": "textures/entity/chicken.png",
         "tex_size": (64, 32),
-        "animations": {
-            "walk": ("animations/chicken.animation.json", "animation.chicken.move"),
-        },
         "custom_anims": ["walk", "idle"],
     },
+    "rabbit": {
+        "geo": "models/entity/rabbit.geo.json",
+        "geo_key": "geometry.rabbit",
+        "texture": "textures/entity/rabbit/brown.png",
+        "tex_size": (64, 32),
+        "custom_anims": ["walk", "idle"],
+    },
+    "fox": {
+        "geo": "models/entity/fox.geo.json",
+        "geo_key": "geometry.fox",
+        "texture": "textures/entity/fox/fox.png",
+        "tex_size": (64, 32),
+        "custom_anims": ["walk", "idle"],
+    },
+    "cat": {
+        "geo": "models/entity/cat.geo.json",
+        "geo_key": "geometry.cat",
+        "texture": "textures/entity/cat/tabby.png",
+        "tex_size": (64, 32),
+        "custom_anims": ["walk", "idle"],
+    },
+    "bat": {
+        "geo": "models/entity/bat.geo.json",
+        "geo_key": "geometry.bat",
+        "texture": "textures/entity/bat.png",
+        "tex_size": (64, 64),
+        "custom_anims": ["walk", "idle"],
+    },
+    # ── Neutral mobs ──
     "wolf": {
         "geo": "models/entity/wolf.geo.json",
         "geo_key": "geometry.wolf",
         "texture": "textures/entity/wolf/wolf.png",
         "tex_size": (64, 32),
-        "animations": {
-            "walk": ("animations/quadruped.animation.json", "animation.quadruped.walk"),
-        },
         "custom_anims": ["walk", "idle"],
+    },
+    "polar_bear": {
+        "geo": "models/entity/polar_bear.geo.json",
+        "geo_key": "geometry.polarbear",
+        "texture": "textures/entity/polarbear.png",
+        "tex_size": (128, 64),
+        "custom_anims": ["walk", "idle"],
+    },
+    "enderman": {
+        "geo": "models/entity/enderman.geo.json",
+        "geo_key": "geometry.enderman",
+        "texture": "textures/entity/enderman/enderman.tga",
+        "tex_size": (64, 32),
+        "custom_anims": ["walk", "idle"],
+    },
+    # ── Hostile mobs ──
+    "zombie": {
+        "geo": "models/entity/zombie.geo.json",
+        "geo_key": "geometry.zombie",
+        "texture": "textures/entity/zombie/zombie.png",
+        "tex_size": (64, 32),
+        "custom_anims": ["walk", "idle", "attack"],
+    },
+    "skeleton": {
+        "geo": "models/entity/skeleton.geo.json",
+        "geo_key": "geometry.skeleton",
+        "texture": "textures/entity/skeleton/skeleton.png",
+        "tex_size": (64, 32),
+        "custom_anims": ["walk", "idle", "attack"],
     },
     "creeper": {
         "geo": "models/entity/creeper.geo.json",
         "geo_key": "geometry.creeper",
         "texture": "textures/entity/creeper/creeper.png",
         "tex_size": (64, 32),
-        "animations": {
-            "walk": ("animations/creeper.animation.json", "animation.creeper.legs"),
-        },
         "custom_anims": ["walk", "idle"],
-    },
-    "zombie": {
-        "geo": "models/mobs.json",
-        "geo_key": "geometry.zombie",
-        "texture": "textures/entity/zombie/zombie.png",
-        "tex_size": (64, 64),
-        "animations": {},
-        "custom_anims": ["walk", "idle", "attack"],
-    },
-    "skeleton": {
-        "geo": "models/mobs.json",
-        "geo_key": "geometry.skeleton",
-        "texture": "textures/entity/skeleton/skeleton.png",
-        "tex_size": (64, 32),
-        "animations": {},
-        "custom_anims": ["walk", "idle", "attack"],
     },
     "spider": {
         "geo": "models/entity/spider.geo.json",
         "geo_key": "geometry.spider",
-        "texture": "textures/entity/spider/spider.png",
+        "texture": "textures/entity/spider/spider.tga",
         "tex_size": (64, 32),
-        "animations": {
-            "walk": ("animations/spider.animation.json", "animation.spider.walk"),
-            "pose": ("animations/spider.animation.json", "animation.spider.default_leg_pose"),
-        },
         "custom_anims": ["walk", "idle"],
+    },
+}
+
+# ─── Parent Overrides ────────────────────────────────────────────────────────
+# Bedrock geometry for some mobs has NO parent hierarchy (all bones are roots).
+# We infer the correct hierarchy based on Minecraft anatomy.
+PARENT_OVERRIDES = {
+    "wolf": {
+        "head": "body", "upperBody": "body",
+        "leg0": "body", "leg1": "body", "leg2": "body", "leg3": "body",
+        "tail": "body",
+    },
+    "chicken": {
+        "head": "body",
+        "leg0": "body", "leg1": "body",
+        "wing0": "body", "wing1": "body",
+    },
+    "sheep": {
+        "head": "body",
+    },
+    "bat": {
+        "head": "body",
+    },
+}
+
+# ─── Bind Pose Rotation Overrides ────────────────────────────────────────────
+# Some Bedrock mobs are missing bind_pose_rotation in the geo file — the game
+# applies these rotations in code at runtime.  We inject them here.
+BPR_OVERRIDES = {
+    "wolf": {
+        "body": [90.0, 0.0, 0.0],
+        "upperBody": [90.0, 0.0, 0.0],
+    },
+}
+
+# ─── Cube Position Overrides ─────────────────────────────────────────────────
+# Some Bedrock mobs have bones whose cube positions don't match the visual rest
+# pose (the game repositions them via skeleton at runtime).
+# We shift pivot + cube origins by the given offset [x, y, z] in Bedrock units.
+CUBE_OFFSET_OVERRIDES = {
+    "enderman": {
+        # Head at y=24 overlaps body (y=26-38) — move to y=38 (top of body)
+        "head": [0, 14, 0],
     },
 }
 
@@ -217,10 +326,11 @@ def mat4_inverse_rigid(m):
 
 # ─── Model Parsing ───────────────────────────────────────────────────────────
 
-def parse_geo_json(mob_info):
+def parse_geo_json(mob_info, mob_name=None):
     """Parse a .geo.json or mobs.json file for a specific geometry key.
 
     Returns list of bone dicts with: name, parent, pivot, cubes, bind_pose_rotation, mirror.
+    If mob_name is given, applies PARENT_OVERRIDES for mobs with missing hierarchy.
     """
     geo_path = BEDROCK_PATH / mob_info["geo"]
     with open(geo_path, "r", encoding="utf-8") as f:
@@ -302,6 +412,39 @@ def parse_geo_json(mob_info):
             })
         bones.append(bone)
 
+    # Apply parent overrides for mobs with missing hierarchy
+    if mob_name and mob_name in PARENT_OVERRIDES:
+        overrides = PARENT_OVERRIDES[mob_name]
+        bone_names_set = {b["name"] for b in bones}
+        for bone in bones:
+            if bone["parent"] is None and bone["name"] in overrides:
+                target = overrides[bone["name"]]
+                if target in bone_names_set:
+                    bone["parent"] = target
+
+    # Apply bind_pose_rotation overrides for mobs missing rotation in Bedrock data
+    if mob_name and mob_name in BPR_OVERRIDES:
+        bpr_overrides = BPR_OVERRIDES[mob_name]
+        for bone in bones:
+            if bone["name"] in bpr_overrides:
+                existing = bone.get("bind_pose_rotation", [0, 0, 0])
+                if not any(abs(v) > 0.01 for v in existing):
+                    bone["bind_pose_rotation"] = bpr_overrides[bone["name"]]
+
+    # Apply cube position overrides (shift pivot + cube origins)
+    if mob_name and mob_name in CUBE_OFFSET_OVERRIDES:
+        offsets = CUBE_OFFSET_OVERRIDES[mob_name]
+        for bone in bones:
+            if bone["name"] in offsets:
+                dx, dy, dz = offsets[bone["name"]]
+                bone["pivot"][0] += dx
+                bone["pivot"][1] += dy
+                bone["pivot"][2] += dz
+                for cube in bone["cubes"]:
+                    cube["origin"][0] += dx
+                    cube["origin"][1] += dy
+                    cube["origin"][2] += dz
+
     return bones, tex_w, tex_h
 
 
@@ -334,6 +477,7 @@ def generate_cube_faces(cube, tex_w, tex_h):
 
     # Box UV layout (Bedrock standard)
     face_defs = [
+        # (name, 4 verts, normal, UV rect)
         ("front",  [[x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [x1, y0, z0]],
          [0, 0, -1], [u0 + cd, v0 + cd, cw, ch]),
         ("back",   [[x1, y0, z1], [x1, y1, z1], [x0, y1, z1], [x0, y0, z1]],
@@ -348,7 +492,7 @@ def generate_cube_faces(cube, tex_w, tex_h):
          [0, -1, 0], [u0 + cd + cw, v0, cw, cd]),
     ]
 
-    for _, verts, normal, uv_rect in face_defs:
+    for face_name, verts, normal, uv_rect in face_defs:
         base = len(positions)
         for v in verts:
             positions.append(v)
@@ -366,7 +510,11 @@ def generate_cube_faces(cube, tex_w, tex_h):
                 uv(fu + fw, fv),       uv(fu + fw, fv + fh),
             ]
         uvs.extend(face_uvs)
-        indices.extend([base, base + 1, base + 2, base, base + 2, base + 3])
+        # Bottom face has reversed winding to match its -Y normal
+        if face_name == "bottom":
+            indices.extend([base, base + 2, base + 1, base, base + 3, base + 2])
+        else:
+            indices.extend([base, base + 1, base + 2, base, base + 2, base + 3])
 
     return positions, normals_out, uvs, indices
 
@@ -491,6 +639,44 @@ def build_skeleton_and_mesh(bones, tex_w, tex_h):
     }
 
 
+def normalize_ground_level(mesh_data):
+    """Shift entire model so that min Y = 0 (feet touch ground).
+
+    Adjusts positions, world_pivots, local_translations (root bones), and IBMs.
+    Returns the Y offset applied (in Godot units).
+    """
+    positions = mesh_data["positions"]
+    if not positions:
+        return 0.0
+
+    min_y = min(p[1] for p in positions)
+    if abs(min_y) < 1e-4:
+        return 0.0  # Already grounded
+
+    # Shift all vertex positions
+    for p in positions:
+        p[1] -= min_y
+
+    # Shift all world pivots
+    for name in mesh_data["world_pivots"]:
+        mesh_data["world_pivots"][name][1] -= min_y
+
+    # Shift local translations for root bones (no parent)
+    for bone in mesh_data["bones"]:
+        if bone["parent"] is None:
+            mesh_data["local_translations"][bone["name"]][1] -= min_y
+
+    # Recompute IBMs (pure inverse translation of world pivots)
+    ibms = mesh_data["inverse_bind_matrices"]
+    for i, bone in enumerate(mesh_data["bones"]):
+        p = mesh_data["world_pivots"][bone["name"]]
+        ibms[i][12] = -p[0]
+        ibms[i][13] = -p[1]
+        ibms[i][14] = -p[2]
+
+    return min_y
+
+
 # ─── Animation Baking ────────────────────────────────────────────────────────
 
 def bake_mob_animations(mob_name, mob_info, bone_names, bone_map, mesh_data):
@@ -546,52 +732,87 @@ def bake_mob_animations(mob_name, mob_info, bone_names, bone_map, mesh_data):
         return {"name": name, "timestamps": timestamps,
                 "channels": channels, "pos_channels": pos_channels}
 
-    # ── Quadruped walk (cow, pig, sheep, wolf) ──
+    # ── Quadruped walk (cow, pig, sheep, wolf, polar_bear, fox) ──
     if "walk" in custom_anims:
-        if mob_name in ("cow", "pig", "sheep", "wolf", "horse"):
-            # Quadruped walk: legs swing ±40° around X
+        if mob_name in ("cow", "pig", "sheep", "wolf", "horse", "polar_bear", "fox"):
             def quad_walk(bone, t, dur):
                 a = math.cos(t / dur * 2 * math.pi) * 40
                 m = {
-                    "leg0": [a, 0, 0],
-                    "leg1": [-a, 0, 0],
-                    "leg2": [-a, 0, 0],
-                    "leg3": [a, 0, 0],
+                    "leg0": [a, 0, 0], "leg1": [-a, 0, 0],
+                    "leg2": [-a, 0, 0], "leg3": [a, 0, 0],
                 }
+                # Fox/wolf: also wag tail
+                if mob_name in ("fox", "wolf"):
+                    m["tail"] = [0, math.sin(t / dur * 4 * math.pi) * 20, 0]
                 return m.get(bone)
             animations.append(make_anim("walk", 1.0, 24, quad_walk))
+
+        elif mob_name == "cat":
+            def cat_walk(bone, t, dur):
+                a = math.cos(t / dur * 2 * math.pi) * 35
+                m = {
+                    "frontLegL": [a, 0, 0], "frontLegR": [-a, 0, 0],
+                    "backLegL": [-a, 0, 0], "backLegR": [a, 0, 0],
+                    "tail1": [0, math.sin(t / dur * 4 * math.pi) * 25, 0],
+                    "tail2": [0, math.sin(t / dur * 4 * math.pi + 0.5) * 15, 0],
+                }
+                return m.get(bone)
+            animations.append(make_anim("walk", 0.8, 24, cat_walk))
+
+        elif mob_name == "rabbit":
+            def rabbit_walk(bone, t, dur):
+                phase = (t / dur) % 1.0
+                # Hop motion — bunny jumps
+                hop = abs(math.sin(phase * math.pi)) * 30
+                m = {
+                    "haunchLeft": [-hop, 0, 0], "haunchRight": [-hop, 0, 0],
+                    "rearFootLeft": [hop * 0.5, 0, 0], "rearFootRight": [hop * 0.5, 0, 0],
+                    "frontLegLeft": [hop * 0.8, 0, 0], "frontLegRight": [hop * 0.8, 0, 0],
+                    "body": {"rot": [-hop * 0.2, 0, 0], "pos": [0, hop * 0.1 * SCALE, 0]},
+                }
+                r = m.get(bone)
+                if isinstance(r, dict):
+                    return r
+                return r
+            animations.append(make_anim("walk", 0.5, 24, rabbit_walk))
 
         elif mob_name == "chicken":
             def chicken_walk(bone, t, dur):
                 a = math.cos(t / dur * 2 * math.pi) * 40
-                m = {
-                    "leg0": [a, 0, 0],
-                    "leg1": [-a, 0, 0],
-                }
+                m = {"leg0": [a, 0, 0], "leg1": [-a, 0, 0]}
                 return m.get(bone)
             animations.append(make_anim("walk", 1.0, 24, chicken_walk))
+
+        elif mob_name == "bat":
+            def bat_walk(bone, t, dur):
+                # Wings flapping
+                flap = math.sin(t / dur * 4 * math.pi) * 40
+                m = {
+                    "rightWing": [0, 0, flap],
+                    "rightWingTip": [0, 0, flap * 0.7],
+                    "leftWing": [0, 0, -flap],
+                    "leftWingTip": [0, 0, -flap * 0.7],
+                    "body": [math.sin(t / dur * 2 * math.pi) * 5, 0, 0],
+                }
+                return m.get(bone)
+            animations.append(make_anim("walk", 0.5, 24, bat_walk))
 
         elif mob_name == "creeper":
             def creeper_walk(bone, t, dur):
                 a = math.cos(t / dur * 2 * math.pi) * 40
                 m = {
-                    "leg0": [a, 0, 0],
-                    "leg1": [-a, 0, 0],
-                    "leg2": [-a, 0, 0],
-                    "leg3": [a, 0, 0],
+                    "leg0": [a, 0, 0], "leg1": [-a, 0, 0],
+                    "leg2": [-a, 0, 0], "leg3": [a, 0, 0],
                 }
                 return m.get(bone)
             animations.append(make_anim("walk", 1.0, 24, creeper_walk))
 
-        elif mob_name in ("zombie", "skeleton"):
-            # Humanoid walk: arms and legs swing
+        elif mob_name in ("zombie", "skeleton", "enderman"):
             def humanoid_walk(bone, t, dur):
                 a = math.cos(t / dur * 2 * math.pi) * 40
                 m = {
-                    "leftArm": [-a, 0, 0],
-                    "rightArm": [a, 0, 0],
-                    "leftLeg": [a * 1.4, 0, 0],
-                    "rightLeg": [-a * 1.4, 0, 0],
+                    "leftArm": [-a, 0, 0], "rightArm": [a, 0, 0],
+                    "leftLeg": [a * 1.4, 0, 0], "rightLeg": [-a * 1.4, 0, 0],
                 }
                 return m.get(bone)
             animations.append(make_anim("walk", 1.0, 24, humanoid_walk))
@@ -606,7 +827,6 @@ def bake_mob_animations(mob_name, mob_info, bone_names, bone_map, mesh_data):
                     return None
                 offset = phase_offsets[bone]
                 at = t / dur * 2 * math.pi
-                # Spider legs swing on Y and Z axes
                 y_swing = abs(math.cos(at + math.radians(offset))) * 22.92
                 z_swing = abs(math.sin(at / 2 + math.radians(offset))) * 22.92
                 sign_y = -1 if bone in ("leg0", "leg2", "leg4", "leg6") else 1
@@ -618,14 +838,16 @@ def bake_mob_animations(mob_name, mob_info, bone_names, bone_map, mesh_data):
     if "idle" in custom_anims:
         def idle_fn(bone, t, dur):
             if bone == "head":
-                # Subtle head bob
                 bob = math.sin(t / dur * 2 * math.pi) * 3
                 return [bob, 0, 0]
-            # Force legs to rest
-            if bone.startswith("leg"):
+            if bone.startswith("leg") or bone.startswith("front") or bone.startswith("back") or bone.startswith("haunch") or bone.startswith("rear"):
                 return [0, 0, 0]
             if bone in ("leftArm", "rightArm", "leftLeg", "rightLeg"):
                 return [0, 0, 0]
+            if bone in ("rightWing", "leftWing", "rightWingTip", "leftWingTip"):
+                # Bat: gentle wing fold
+                sign = 1 if "right" in bone else -1
+                return [0, 0, sign * 5 + math.sin(t / dur * 2 * math.pi) * sign * 3]
             return None
         animations.append(make_anim("idle", 3.0, 12, idle_fn))
 
@@ -707,8 +929,28 @@ class GLBWriter:
         return idx
 
     def _add_texture(self, png_path):
-        with open(png_path, "rb") as f:
-            img_data = f.read()
+        # Convert TGA to PNG in memory if needed
+        # Also binarize alpha: Bedrock TGA textures use alpha=3 for "opaque" pixels
+        # which would be invisible with alphaMode MASK at alphaCutoff 0.5.
+        # Fix: alpha > 0 → 255, alpha == 0 stays 0 (matches Minecraft rendering).
+        if png_path.lower().endswith(".tga"):
+            if not HAS_PIL:
+                print(f"  WARN: Pillow requis pour les textures TGA, pip install Pillow")
+                return len(self.materials) - 1 if self.materials else 0
+            img = Image.open(png_path).convert("RGBA")
+            # Binarize alpha for TGA (Bedrock uses low alpha for opaque pixels)
+            pixels = img.load()
+            for y in range(img.height):
+                for x in range(img.width):
+                    r, g, b, a = pixels[x, y]
+                    if a > 0 and a < 255:
+                        pixels[x, y] = (r, g, b, 255)
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            img_data = buf.getvalue()
+        else:
+            with open(png_path, "rb") as f:
+                img_data = f.read()
         bv = self._add_bv(img_data)
         img_idx = len(self.images)
         self.images.append({"bufferView": bv, "mimeType": "image/png"})
@@ -946,7 +1188,8 @@ def main():
         print(f"Mobs disponibles ({len(MOB_REGISTRY)}) :")
         for name, info in sorted(MOB_REGISTRY.items()):
             anims = ", ".join(info.get("custom_anims", []))
-            print(f"  {name:12s} — texture {info['tex_size'][0]}x{info['tex_size'][1]}, anims: {anims}")
+            cat = MOB_CATEGORY.get(name, "?")
+            print(f"  {name:12s} [{cat:8s}] — texture {info['tex_size'][0]}x{info['tex_size'][1]}, anims: {anims}")
         return
 
     mobs_to_convert = []
@@ -975,7 +1218,7 @@ def main():
         # 1. Parse geometry
         print(f"Parsing modèle {mob_info['geo']}...")
         try:
-            bones, tex_w, tex_h = parse_geo_json(mob_info)
+            bones, tex_w, tex_h = parse_geo_json(mob_info, mob_name)
         except Exception as e:
             print(f"  ERREUR: {e}")
             continue
@@ -991,6 +1234,12 @@ def main():
         # 2. Build mesh + skeleton
         print("Construction mesh + squelette...")
         mesh_data = build_skeleton_and_mesh(bones, tex_w, tex_h)
+
+        # 2b. Normalize Y so feet touch ground (Y=0)
+        y_shift = normalize_ground_level(mesh_data)
+        if abs(y_shift) > 1e-4:
+            print(f"  Y normalisé : décalage {y_shift*16:.1f} MC units ({y_shift:.3f} Godot)")
+
         n_v = len(mesh_data["positions"])
         n_t = len(mesh_data["indices"]) // 3
         print(f"  {n_v} vertices, {n_t} triangles")
@@ -1008,6 +1257,24 @@ def main():
         tex_path = BEDROCK_PATH / mob_info["texture"]
         if tex_path.exists():
             print(f"Texture : {tex_path}")
+            # Copy texture alongside GLB (convert TGA to PNG if needed)
+            tex_out_dir = output_path.parent / "textures"
+            tex_out_dir.mkdir(parents=True, exist_ok=True)
+            if str(tex_path).lower().endswith(".tga") and HAS_PIL:
+                png_out = tex_out_dir / f"{mob_name}.png"
+                img = Image.open(tex_path).convert("RGBA")
+                # Binarize alpha (Bedrock TGA uses alpha=3 for opaque)
+                pixels = img.load()
+                for y in range(img.height):
+                    for x in range(img.width):
+                        r, g, b, a = pixels[x, y]
+                        if a > 0 and a < 255:
+                            pixels[x, y] = (r, g, b, 255)
+                img.save(png_out)
+                print(f"  Texture convertie TGA->PNG : {png_out}")
+            else:
+                png_out = tex_out_dir / f"{mob_name}.png"
+                shutil.copy2(tex_path, png_out)
         else:
             print(f"Texture introuvable : {tex_path}")
             tex_path = None

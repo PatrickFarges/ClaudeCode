@@ -180,7 +180,7 @@ def generate_cube_faces(cube):
          [0, -1, 0], [u0 + cd + cw, v0, cw, cd]),
     ]
 
-    for _, verts, normal, uv_rect in face_defs:
+    for face_name, verts, normal, uv_rect in face_defs:
         base = len(positions)
         for v in verts:
             positions.append(v)
@@ -198,7 +198,11 @@ def generate_cube_faces(cube):
                 uv(fu + fw, fv),       uv(fu + fw, fv + fh),
             ]
         uvs.extend(face_uvs)
-        indices.extend([base, base + 1, base + 2, base, base + 2, base + 3])
+        # Bottom face has reversed winding to match its -Y normal
+        if face_name == "bottom":
+            indices.extend([base, base + 2, base + 1, base, base + 3, base + 2])
+        else:
+            indices.extend([base, base + 1, base + 2, base, base + 2, base + 3])
 
     return positions, normals_out, uvs, indices
 

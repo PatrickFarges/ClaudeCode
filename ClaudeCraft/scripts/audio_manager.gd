@@ -47,52 +47,75 @@ const BIOME_MOUNTAIN = 2
 const BIOME_PLAINS = 3
 
 # ============================================================
-# BANQUES DE SONS — Chargées au démarrage
+# BANQUES DE SONS — Vrais sons Minecraft (MP3)
 # ============================================================
 
-# Break sounds (casse de bloc)
+const MC = "res://assets/Audio/Minecraft/"
+
+# Break / dig sounds
 var snd_break_stone: Array = []
 var snd_break_wood: Array = []
-var snd_break_dirt: Array = []
+var snd_break_dirt: Array = []   # grass-type dig
 var snd_break_sand: Array = []
-var snd_break_leaves: Array = []
+var snd_break_gravel: Array = []
+var snd_break_leaves: Array = [] # cloth
 var snd_break_snow: Array = []
+var snd_break_glass: Array = []
+var snd_break_metal: Array = []  # anvil / chain
 var snd_break_default: Array = []
 
-# Place sounds (placement de bloc)
+# Place sounds (same material families)
 var snd_place_stone: Array = []
 var snd_place_wood: Array = []
+var snd_place_dirt: Array = []
 var snd_place_sand: Array = []
+var snd_place_gravel: Array = []
 var snd_place_snow: Array = []
+var snd_place_metal: Array = []
 var snd_place_default: Array = []
 
-# Mining hit sounds (frappe de minage)
+# Mining hit sounds (= dig sounds, played at lower volume during mining)
 var snd_mine_stone: Array = []
 var snd_mine_wood: Array = []
 var snd_mine_dirt: Array = []
 var snd_mine_sand: Array = []
+var snd_mine_gravel: Array = []
+var snd_mine_metal: Array = []
 var snd_mine_default: Array = []
 
-# Footstep sounds (pas)
+# Footstep sounds
 var snd_step_stone: Array = []
 var snd_step_wood: Array = []
 var snd_step_grass: Array = []
 var snd_step_sand: Array = []
+var snd_step_gravel: Array = []
 var snd_step_snow: Array = []
-var snd_step_dirt: Array = []
+var snd_step_dirt: Array = []    # = gravel (earthy)
+var snd_step_metal: Array = []   # chain/lantern
+var snd_step_ladder: Array = []
 
-# Metal sounds (ingots, furnace)
-var snd_break_metal: Array = []
-var snd_place_metal: Array = []
-var snd_mine_metal: Array = []
-var snd_step_metal: Array = []
+# Special block sounds
+var snd_door_wood_open: Array = []
+var snd_door_wood_close: Array = []
+var snd_door_iron_open: Array = []
+var snd_door_iron_close: Array = []
+var snd_chest_open: Array = []
+var snd_chest_close: Array = []
+var snd_lantern_break: Array = []
+var snd_lantern_place: Array = []
 
 # Eating sounds
-var snd_eat: AudioStream = null
+var snd_eat: Array = []
 
 # UI sounds
 var snd_ui_click: AudioStream = null
 var snd_craft_success: AudioStream = null
+
+# Combat / misc
+var snd_bow_shoot: AudioStream = null
+var snd_arrow_hit: Array = []
+var snd_explode: Array = []
+var snd_levelup: AudioStream = null
 
 # Forest ambient par heure du jour
 var forest_ambient_by_hour: Array = []  # Array de [heure_debut, heure_fin, Array[AudioStream]]
@@ -120,130 +143,81 @@ func _safe_load_bank(paths: Array) -> Array:
 	return bank
 
 func _load_sound_banks():
-	# === Break sounds ===
-	snd_break_stone = _safe_load_bank([
-		"res://Audio/stone-1.mp3",
-		"res://Audio/stone-4.mp3",
-		"res://Audio/stone-6.mp3",
-	])
-	snd_break_wood = _safe_load_bank([
-		"res://Audio/wood-1.mp3", "res://Audio/wood-2.mp3",
-		"res://Audio/wood-3.mp3", "res://Audio/wood-4.mp3",
-	])
-	snd_break_dirt = _safe_load_bank([
-		"res://Audio/grass-2.mp3", "res://Audio/grass-4.mp3", "res://Audio/gravel-4.mp3",
-	])
-	snd_break_sand = _safe_load_bank(["res://Audio/u_scysdwddsp-sand-effect-254993.mp3"])
-	snd_break_leaves = _safe_load_bank([
-		"res://Audio/cloth1.ogg", "res://Audio/cloth2.ogg",
-		"res://Audio/cloth3.ogg", "res://Audio/cloth4.ogg",
-	])
-	snd_break_snow = _safe_load_bank([
-		"res://Audio/footstep_snow_000.ogg", "res://Audio/footstep_snow_001.ogg",
-		"res://Audio/footstep_snow_002.ogg",
-	])
-	snd_break_default = _safe_load_bank([
-		"res://Audio/impactGeneric_light_000.ogg", "res://Audio/impactGeneric_light_001.ogg",
-		"res://Audio/impactGeneric_light_002.ogg", "res://Audio/impactGeneric_light_003.ogg",
-		"res://Audio/impactGeneric_light_004.ogg",
-	])
+	# ── Helper pour charger N fichiers numérotés ──
+	var _mc = func(folder: String, prefix: String, start: int, count: int) -> Array:
+		var paths: Array = []
+		for i in range(start, start + count):
+			paths.append(MC + folder + "/" + prefix + str(i) + ".mp3")
+		return _safe_load_bank(paths)
 
-	# === Place sounds ===
-	snd_place_stone = _safe_load_bank(["res://Audio/stone-1.mp3"])
-	snd_place_wood = _safe_load_bank(["res://Audio/wood-1.mp3", "res://Audio/wood-2.mp3"])
-	snd_place_sand = _safe_load_bank(["res://Audio/u_scysdwddsp-sand-effect-254993.mp3"])
-	snd_place_snow = _safe_load_bank(["res://Audio/footstep_snow_000.ogg"])
-	snd_place_default = _safe_load_bank([
-		"res://Audio/impactGeneric_light_000.ogg", "res://Audio/impactGeneric_light_001.ogg",
-		"res://Audio/impactGeneric_light_002.ogg",
+	# === Break / dig sounds (casse de bloc) ===
+	snd_break_stone  = _mc.call("dig", "stone", 1, 4)
+	snd_break_wood   = _mc.call("dig", "wood", 1, 4)
+	snd_break_dirt   = _mc.call("dig", "grass", 1, 4)
+	snd_break_sand   = _mc.call("dig", "sand", 1, 4)
+	snd_break_gravel = _mc.call("dig", "gravel", 1, 4)
+	snd_break_leaves = _mc.call("dig", "cloth", 1, 4)
+	snd_break_snow   = _mc.call("dig", "snow", 1, 4)
+	snd_break_glass  = _mc.call("random", "glass", 1, 3)
+	snd_break_metal  = _safe_load_bank([
+		MC + "random/anvil_break.mp3", MC + "random/anvil_land.mp3",
 	])
+	snd_break_default = snd_break_stone  # fallback = stone
 
-	# === Mining hit sounds ===
-	snd_mine_stone = _safe_load_bank([
-		"res://Audio/impactMining_000.ogg", "res://Audio/impactMining_001.ogg",
-		"res://Audio/impactMining_002.ogg", "res://Audio/impactMining_003.ogg",
-		"res://Audio/impactMining_004.ogg",
-	])
-	snd_mine_wood = _safe_load_bank([
-		"res://Audio/impactPlank_medium_000.ogg", "res://Audio/impactPlank_medium_001.ogg",
-		"res://Audio/impactPlank_medium_002.ogg", "res://Audio/impactPlank_medium_003.ogg",
-		"res://Audio/impactPlank_medium_004.ogg",
-	])
-	snd_mine_dirt = _safe_load_bank([
-		"res://Audio/impactSoft_medium_000.ogg", "res://Audio/impactSoft_medium_001.ogg",
-		"res://Audio/impactSoft_medium_002.ogg", "res://Audio/impactSoft_medium_003.ogg",
-		"res://Audio/impactSoft_medium_004.ogg",
-	])
-	snd_mine_sand = _safe_load_bank([
-		"res://Audio/impactSoft_heavy_000.ogg", "res://Audio/impactSoft_heavy_001.ogg",
-		"res://Audio/impactSoft_heavy_002.ogg", "res://Audio/impactSoft_heavy_003.ogg",
-		"res://Audio/impactSoft_heavy_004.ogg",
-	])
-	snd_mine_default = _safe_load_bank([
-		"res://Audio/impactGeneric_light_000.ogg", "res://Audio/impactGeneric_light_001.ogg",
-		"res://Audio/impactGeneric_light_002.ogg", "res://Audio/impactGeneric_light_003.ogg",
-		"res://Audio/impactGeneric_light_004.ogg",
-	])
+	# === Place sounds (même famille, son de dig réutilisé comme MC) ===
+	snd_place_stone  = snd_break_stone
+	snd_place_wood   = snd_break_wood
+	snd_place_dirt   = snd_break_dirt
+	snd_place_sand   = snd_break_sand
+	snd_place_gravel = snd_break_gravel
+	snd_place_snow   = snd_break_snow
+	snd_place_metal  = _safe_load_bank([MC + "random/anvil_land.mp3"])
+	snd_place_default = snd_break_stone
 
-	# === Footstep sounds ===
-	snd_step_stone = _safe_load_bank([
-		"res://Audio/footstep_concrete_000.ogg", "res://Audio/footstep_concrete_001.ogg",
-		"res://Audio/footstep_concrete_002.ogg", "res://Audio/footstep_concrete_003.ogg",
-		"res://Audio/footstep_concrete_004.ogg",
-	])
-	snd_step_wood = _safe_load_bank([
-		"res://Audio/footstep_wood_000.ogg", "res://Audio/footstep_wood_001.ogg",
-		"res://Audio/footstep_wood_002.ogg", "res://Audio/footstep_wood_003.ogg",
-		"res://Audio/footstep_wood_004.ogg",
-	])
-	snd_step_grass = _safe_load_bank([
-		"res://Audio/footstep_grass_000.ogg", "res://Audio/footstep_grass_001.ogg",
-		"res://Audio/footstep_grass_002.ogg", "res://Audio/footstep_grass_003.ogg",
-		"res://Audio/footstep_grass_004.ogg",
-	])
-	snd_step_sand = _safe_load_bank([
-		"res://Audio/footstep_carpet_000.ogg", "res://Audio/footstep_carpet_001.ogg",
-		"res://Audio/footstep_carpet_002.ogg", "res://Audio/footstep_carpet_003.ogg",
-		"res://Audio/footstep_carpet_004.ogg",
-	])
-	snd_step_snow = _safe_load_bank([
-		"res://Audio/footstep_snow_000.ogg", "res://Audio/footstep_snow_001.ogg",
-		"res://Audio/footstep_snow_002.ogg", "res://Audio/footstep_snow_003.ogg",
-		"res://Audio/footstep_snow_004.ogg",
-	])
-	snd_step_dirt = _safe_load_bank([
-		"res://Audio/footstep00.ogg", "res://Audio/footstep01.ogg",
-		"res://Audio/footstep02.ogg", "res://Audio/footstep03.ogg",
-		"res://Audio/footstep04.ogg", "res://Audio/footstep05.ogg",
-		"res://Audio/footstep06.ogg", "res://Audio/footstep07.ogg",
-		"res://Audio/footstep08.ogg", "res://Audio/footstep09.ogg",
-	])
+	# === Mining hit sounds (= dig sounds, joués pendant le minage) ===
+	snd_mine_stone  = snd_break_stone
+	snd_mine_wood   = snd_break_wood
+	snd_mine_dirt   = snd_break_dirt
+	snd_mine_sand   = snd_break_sand
+	snd_mine_gravel = snd_break_gravel
+	snd_mine_metal  = snd_break_metal
+	snd_mine_default = snd_break_stone
 
-	# === Metal sounds ===
-	snd_break_metal = _safe_load_bank([
-		"res://Audio/impactMetal_heavy_000.ogg", "res://Audio/impactMetal_heavy_001.ogg",
-		"res://Audio/impactMetal_heavy_002.ogg", "res://Audio/impactMetal_heavy_003.ogg",
-		"res://Audio/impactMetal_heavy_004.ogg",
-	])
-	snd_place_metal = _safe_load_bank([
-		"res://Audio/impactMetal_light_000.ogg", "res://Audio/impactMetal_light_001.ogg",
-		"res://Audio/impactMetal_light_002.ogg",
-	])
-	snd_mine_metal = _safe_load_bank([
-		"res://Audio/impactMetal_medium_000.ogg", "res://Audio/impactMetal_medium_001.ogg",
-		"res://Audio/impactMetal_medium_002.ogg", "res://Audio/impactMetal_medium_003.ogg",
-		"res://Audio/impactMetal_medium_004.ogg",
-	])
-	snd_step_metal = _safe_load_bank([
-		"res://Audio/impactMetal_light_000.ogg", "res://Audio/impactMetal_light_001.ogg",
-		"res://Audio/impactMetal_light_002.ogg", "res://Audio/impactMetal_light_003.ogg",
-		"res://Audio/impactMetal_light_004.ogg",
-	])
+	# === Footstep sounds (pas sur surfaces) ===
+	snd_step_stone  = _mc.call("step", "stone", 1, 6)
+	snd_step_wood   = _mc.call("step", "wood", 1, 6)
+	snd_step_grass  = _mc.call("step", "grass", 1, 6)
+	snd_step_sand   = _mc.call("step", "sand", 1, 5)
+	snd_step_gravel = _mc.call("step", "gravel", 1, 4)
+	snd_step_snow   = _mc.call("step", "snow", 1, 4)
+	snd_step_dirt   = snd_step_gravel  # terre = gravel dans MC
+	snd_step_metal  = _mc.call("step", "stone", 1, 6)  # pierre pour métal
+	snd_step_ladder = _mc.call("step", "ladder", 1, 5)
 
-	# === Eating sound ===
-	snd_eat = _safe_load("res://Audio/eating-effect-254996.mp3")
+	# === Special block sounds ===
+	snd_door_wood_open  = _mc.call("block/wooden_door", "open", 1, 2)
+	snd_door_wood_close = _mc.call("block/wooden_door", "close", 1, 3)
+	snd_door_iron_open  = _mc.call("block/iron_door", "open", 1, 4)
+	snd_door_iron_close = _mc.call("block/iron_door", "close", 1, 4)
+	snd_chest_open  = _safe_load_bank([MC + "block/chest/open.mp3"])
+	snd_chest_close = _mc.call("block/chest", "close", 1, 3)
+	snd_lantern_break = _mc.call("block/lantern", "break", 1, 6)
+	snd_lantern_place = _mc.call("block/lantern", "place", 1, 6)
 
-	# === Forest ambient by hour ===
+	# === Eating sounds (3 variantes MC) ===
+	snd_eat = _mc.call("random", "eat", 1, 3)
+
+	# === Combat / misc ===
+	snd_bow_shoot = _safe_load(MC + "random/bow.mp3")
+	snd_arrow_hit = _mc.call("random", "bowhit", 1, 4)
+	snd_explode   = _mc.call("random", "explode", 1, 4)
+	snd_levelup   = _safe_load(MC + "random/levelup.mp3")
+
+	# === UI sounds ===
+	snd_ui_click = _safe_load(MC + "random/click.mp3")
+	snd_craft_success = _safe_load(MC + "random/levelup.mp3")
+
+	# === Forest ambient par heure ===
 	forest_ambient_by_hour = [
 		[5.0, 10.0, _safe_load_bank(["res://Audio/Forest/5-10 matiné.mp3"])],
 		[10.0, 12.0, _safe_load_bank(["res://Audio/Forest/10-12 Aurore.mp3", "res://Audio/Forest/10-12 ambiance légère.mp3"])],
@@ -253,10 +227,6 @@ func _load_sound_banks():
 		[18.0, 21.0, _safe_load_bank(["res://Audio/Forest/18-21 crépuscule.mp3", "res://Audio/Forest/18-21 Wind forest.mp3"])],
 		[21.0, 29.0, _safe_load_bank(["res://Audio/Forest/21-5 night.mp3"])],
 	]
-
-	# === UI sounds ===
-	snd_ui_click = _safe_load("res://Audio/metalClick.ogg")
-	snd_craft_success = _safe_load("res://Audio/pling.mp3")
 
 func _pick_random(bank: Array) -> AudioStream:
 	if bank.is_empty():
@@ -383,11 +353,40 @@ func play_craft_success():
 	p.play()
 
 func play_eat_sound():
-	if not snd_eat:
+	var stream = _pick_random(snd_eat)
+	if not stream:
 		return
 	var p = _get_free_sfx()
-	p.stream = snd_eat
+	p.stream = stream
 	p.volume_db = linear_to_db(sfx_volume * master_volume * 0.6)
+	p.pitch_scale = randf_range(0.95, 1.05)
+	p.play()
+
+func play_door_sound(block_type: int, opening: bool, world_pos: Vector3):
+	var bank: Array
+	if block_type == BlockRegistry.BlockType.IRON_DOOR:
+		bank = snd_door_iron_open if opening else snd_door_iron_close
+	else:
+		bank = snd_door_wood_open if opening else snd_door_wood_close
+	var stream = _pick_random(bank)
+	if not stream:
+		return
+	var p = _get_free_sfx_3d()
+	p.stream = stream
+	p.global_position = world_pos + Vector3(0.5, 0.5, 0.5)
+	p.volume_db = linear_to_db(sfx_volume * master_volume * 0.8)
+	p.pitch_scale = randf_range(0.95, 1.05)
+	p.play()
+
+func play_chest_sound(opening: bool, world_pos: Vector3):
+	var bank = snd_chest_open if opening else snd_chest_close
+	var stream = _pick_random(bank)
+	if not stream:
+		return
+	var p = _get_free_sfx_3d()
+	p.stream = stream
+	p.global_position = world_pos + Vector3(0.5, 0.5, 0.5)
+	p.volume_db = linear_to_db(sfx_volume * master_volume * 0.7)
 	p.pitch_scale = randf_range(0.95, 1.05)
 	p.play()
 
@@ -396,164 +395,166 @@ func play_eat_sound():
 # ============================================================
 
 func _get_break_sound(block_type: int) -> AudioStream:
+	var BR = BlockRegistry.BlockType
 	match block_type:
-		BlockRegistry.BlockType.STONE, BlockRegistry.BlockType.GRAVEL, \
-		BlockRegistry.BlockType.BRICK, BlockRegistry.BlockType.SANDSTONE, \
-		BlockRegistry.BlockType.COAL_ORE, BlockRegistry.BlockType.IRON_ORE, \
-		BlockRegistry.BlockType.GOLD_ORE, BlockRegistry.BlockType.FURNACE, \
-		BlockRegistry.BlockType.COBBLESTONE, BlockRegistry.BlockType.MOSSY_COBBLESTONE, \
-		BlockRegistry.BlockType.ANDESITE, BlockRegistry.BlockType.GRANITE, \
-		BlockRegistry.BlockType.DIORITE, BlockRegistry.BlockType.DEEPSLATE, \
-		BlockRegistry.BlockType.SMOOTH_STONE, BlockRegistry.BlockType.DIAMOND_ORE, \
-		BlockRegistry.BlockType.COPPER_ORE:
+		# Stone family
+		BR.STONE, BR.COBBLESTONE, BR.MOSSY_COBBLESTONE, BR.BRICK, BR.SANDSTONE, \
+		BR.COAL_ORE, BR.IRON_ORE, BR.GOLD_ORE, BR.DIAMOND_ORE, BR.COPPER_ORE, \
+		BR.FURNACE, BR.ANDESITE, BR.GRANITE, BR.DIORITE, BR.DEEPSLATE, \
+		BR.SMOOTH_STONE, BR.STONE_BRICKS, BR.COBBLESTONE_STAIRS, \
+		BR.STONE_BRICK_STAIRS, BR.COBBLESTONE_SLAB, BR.STONE_SLAB:
 			return _pick_random(snd_break_stone)
-		BlockRegistry.BlockType.IRON_INGOT, BlockRegistry.BlockType.GOLD_INGOT, \
-		BlockRegistry.BlockType.COPPER_INGOT, BlockRegistry.BlockType.DIAMOND_BLOCK, \
-		BlockRegistry.BlockType.COPPER_BLOCK, BlockRegistry.BlockType.COAL_BLOCK:
+		# Metal family
+		BR.IRON_INGOT, BR.GOLD_INGOT, BR.COPPER_INGOT, BR.DIAMOND_BLOCK, \
+		BR.COPPER_BLOCK, BR.COAL_BLOCK, BR.IRON_DOOR, BR.IRON_BARS:
 			return _pick_random(snd_break_metal)
-		BlockRegistry.BlockType.WOOD, BlockRegistry.BlockType.PLANKS, \
-		BlockRegistry.BlockType.CRAFTING_TABLE, BlockRegistry.BlockType.STONE_TABLE, \
-		BlockRegistry.BlockType.IRON_TABLE, BlockRegistry.BlockType.GOLD_TABLE, \
-		BlockRegistry.BlockType.SPRUCE_LOG, BlockRegistry.BlockType.BIRCH_LOG, \
-		BlockRegistry.BlockType.JUNGLE_LOG, BlockRegistry.BlockType.ACACIA_LOG, \
-		BlockRegistry.BlockType.DARK_OAK_LOG, BlockRegistry.BlockType.CHERRY_LOG, \
-		BlockRegistry.BlockType.SPRUCE_PLANKS, BlockRegistry.BlockType.BIRCH_PLANKS, \
-		BlockRegistry.BlockType.JUNGLE_PLANKS, BlockRegistry.BlockType.ACACIA_PLANKS, \
-		BlockRegistry.BlockType.DARK_OAK_PLANKS, BlockRegistry.BlockType.CHERRY_PLANKS, \
-		BlockRegistry.BlockType.BOOKSHELF, BlockRegistry.BlockType.BARREL:
+		# Wood family
+		BR.WOOD, BR.PLANKS, BR.CRAFTING_TABLE, BR.STONE_TABLE, BR.IRON_TABLE, \
+		BR.GOLD_TABLE, BR.SPRUCE_LOG, BR.BIRCH_LOG, BR.JUNGLE_LOG, BR.ACACIA_LOG, \
+		BR.DARK_OAK_LOG, BR.CHERRY_LOG, BR.SPRUCE_PLANKS, BR.BIRCH_PLANKS, \
+		BR.JUNGLE_PLANKS, BR.ACACIA_PLANKS, BR.DARK_OAK_PLANKS, BR.CHERRY_PLANKS, \
+		BR.BOOKSHELF, BR.BARREL, BR.CHEST, BR.OAK_STAIRS, BR.OAK_SLAB, \
+		BR.OAK_DOOR, BR.OAK_FENCE, BR.LADDER, BR.OAK_TRAPDOOR:
 			return _pick_random(snd_break_wood)
-		BlockRegistry.BlockType.DIRT, BlockRegistry.BlockType.GRASS, \
-		BlockRegistry.BlockType.DARK_GRASS, BlockRegistry.BlockType.CLAY, \
-		BlockRegistry.BlockType.PODZOL, BlockRegistry.BlockType.MOSS_BLOCK:
+		# Dirt / grass
+		BR.DIRT, BR.GRASS, BR.DARK_GRASS, BR.CLAY, BR.PODZOL, BR.MOSS_BLOCK, \
+		BR.FARMLAND:
 			return _pick_random(snd_break_dirt)
-		BlockRegistry.BlockType.SAND:
+		# Sand
+		BR.SAND:
 			return _pick_random(snd_break_sand)
-		BlockRegistry.BlockType.LEAVES, BlockRegistry.BlockType.CACTUS, \
-		BlockRegistry.BlockType.SPRUCE_LEAVES, BlockRegistry.BlockType.BIRCH_LEAVES, \
-		BlockRegistry.BlockType.JUNGLE_LEAVES, BlockRegistry.BlockType.ACACIA_LEAVES, \
-		BlockRegistry.BlockType.DARK_OAK_LEAVES, BlockRegistry.BlockType.CHERRY_LEAVES, \
-		BlockRegistry.BlockType.HAY_BLOCK:
+		# Gravel
+		BR.GRAVEL:
+			return _pick_random(snd_break_gravel)
+		# Leaves / cloth
+		BR.LEAVES, BR.CACTUS, BR.SPRUCE_LEAVES, BR.BIRCH_LEAVES, \
+		BR.JUNGLE_LEAVES, BR.ACACIA_LEAVES, BR.DARK_OAK_LEAVES, \
+		BR.CHERRY_LEAVES, BR.HAY_BLOCK:
 			return _pick_random(snd_break_leaves)
-		BlockRegistry.BlockType.SNOW, BlockRegistry.BlockType.ICE, \
-		BlockRegistry.BlockType.PACKED_ICE:
+		# Snow / ice
+		BR.SNOW, BR.ICE, BR.PACKED_ICE:
 			return _pick_random(snd_break_snow)
-		BlockRegistry.BlockType.GLASS:
-			return _pick_random(snd_break_default)
+		# Glass
+		BR.GLASS, BR.GLASS_PANE:
+			return _pick_random(snd_break_glass)
+		# Lantern (custom MC sound)
+		BR.LANTERN:
+			return _pick_random(snd_lantern_break)
 		_:
 			return _pick_random(snd_break_default)
 
 func _get_place_sound(block_type: int) -> AudioStream:
+	var BR = BlockRegistry.BlockType
 	match block_type:
-		BlockRegistry.BlockType.STONE, BlockRegistry.BlockType.BRICK, \
-		BlockRegistry.BlockType.SANDSTONE, BlockRegistry.BlockType.GRAVEL, \
-		BlockRegistry.BlockType.COAL_ORE, BlockRegistry.BlockType.IRON_ORE, \
-		BlockRegistry.BlockType.GOLD_ORE, BlockRegistry.BlockType.FURNACE, \
-		BlockRegistry.BlockType.COBBLESTONE, BlockRegistry.BlockType.MOSSY_COBBLESTONE, \
-		BlockRegistry.BlockType.ANDESITE, BlockRegistry.BlockType.GRANITE, \
-		BlockRegistry.BlockType.DIORITE, BlockRegistry.BlockType.DEEPSLATE, \
-		BlockRegistry.BlockType.SMOOTH_STONE, BlockRegistry.BlockType.DIAMOND_ORE, \
-		BlockRegistry.BlockType.COPPER_ORE:
+		BR.STONE, BR.COBBLESTONE, BR.MOSSY_COBBLESTONE, BR.BRICK, BR.SANDSTONE, \
+		BR.COAL_ORE, BR.IRON_ORE, BR.GOLD_ORE, BR.DIAMOND_ORE, BR.COPPER_ORE, \
+		BR.FURNACE, BR.ANDESITE, BR.GRANITE, BR.DIORITE, BR.DEEPSLATE, \
+		BR.SMOOTH_STONE, BR.STONE_BRICKS, BR.COBBLESTONE_STAIRS, \
+		BR.STONE_BRICK_STAIRS, BR.COBBLESTONE_SLAB, BR.STONE_SLAB:
 			return _pick_random(snd_place_stone)
-		BlockRegistry.BlockType.IRON_INGOT, BlockRegistry.BlockType.GOLD_INGOT, \
-		BlockRegistry.BlockType.COPPER_INGOT, BlockRegistry.BlockType.DIAMOND_BLOCK, \
-		BlockRegistry.BlockType.COPPER_BLOCK, BlockRegistry.BlockType.COAL_BLOCK:
+		BR.IRON_INGOT, BR.GOLD_INGOT, BR.COPPER_INGOT, BR.DIAMOND_BLOCK, \
+		BR.COPPER_BLOCK, BR.COAL_BLOCK, BR.IRON_DOOR, BR.IRON_BARS:
 			return _pick_random(snd_place_metal)
-		BlockRegistry.BlockType.WOOD, BlockRegistry.BlockType.PLANKS, \
-		BlockRegistry.BlockType.CRAFTING_TABLE, BlockRegistry.BlockType.STONE_TABLE, \
-		BlockRegistry.BlockType.IRON_TABLE, BlockRegistry.BlockType.GOLD_TABLE, \
-		BlockRegistry.BlockType.SPRUCE_LOG, BlockRegistry.BlockType.BIRCH_LOG, \
-		BlockRegistry.BlockType.JUNGLE_LOG, BlockRegistry.BlockType.ACACIA_LOG, \
-		BlockRegistry.BlockType.DARK_OAK_LOG, BlockRegistry.BlockType.CHERRY_LOG, \
-		BlockRegistry.BlockType.SPRUCE_PLANKS, BlockRegistry.BlockType.BIRCH_PLANKS, \
-		BlockRegistry.BlockType.JUNGLE_PLANKS, BlockRegistry.BlockType.ACACIA_PLANKS, \
-		BlockRegistry.BlockType.DARK_OAK_PLANKS, BlockRegistry.BlockType.CHERRY_PLANKS, \
-		BlockRegistry.BlockType.BOOKSHELF, BlockRegistry.BlockType.BARREL:
+		BR.WOOD, BR.PLANKS, BR.CRAFTING_TABLE, BR.STONE_TABLE, BR.IRON_TABLE, \
+		BR.GOLD_TABLE, BR.SPRUCE_LOG, BR.BIRCH_LOG, BR.JUNGLE_LOG, BR.ACACIA_LOG, \
+		BR.DARK_OAK_LOG, BR.CHERRY_LOG, BR.SPRUCE_PLANKS, BR.BIRCH_PLANKS, \
+		BR.JUNGLE_PLANKS, BR.ACACIA_PLANKS, BR.DARK_OAK_PLANKS, BR.CHERRY_PLANKS, \
+		BR.BOOKSHELF, BR.BARREL, BR.CHEST, BR.OAK_STAIRS, BR.OAK_SLAB, \
+		BR.OAK_DOOR, BR.OAK_FENCE, BR.LADDER, BR.OAK_TRAPDOOR:
 			return _pick_random(snd_place_wood)
-		BlockRegistry.BlockType.SAND:
+		BR.DIRT, BR.GRASS, BR.DARK_GRASS, BR.CLAY, BR.PODZOL, BR.MOSS_BLOCK, \
+		BR.FARMLAND:
+			return _pick_random(snd_place_dirt)
+		BR.SAND:
 			return _pick_random(snd_place_sand)
-		BlockRegistry.BlockType.SNOW, BlockRegistry.BlockType.ICE, \
-		BlockRegistry.BlockType.PACKED_ICE:
+		BR.GRAVEL:
+			return _pick_random(snd_place_gravel)
+		BR.SNOW, BR.ICE, BR.PACKED_ICE:
 			return _pick_random(snd_place_snow)
+		BR.LANTERN:
+			return _pick_random(snd_lantern_place)
 		_:
 			return _pick_random(snd_place_default)
 
 func _get_mining_sound(block_type: int) -> AudioStream:
+	var BR = BlockRegistry.BlockType
 	match block_type:
-		BlockRegistry.BlockType.STONE, BlockRegistry.BlockType.GRAVEL, \
-		BlockRegistry.BlockType.BRICK, BlockRegistry.BlockType.SANDSTONE, \
-		BlockRegistry.BlockType.COAL_ORE, BlockRegistry.BlockType.IRON_ORE, \
-		BlockRegistry.BlockType.GOLD_ORE, BlockRegistry.BlockType.FURNACE, \
-		BlockRegistry.BlockType.COBBLESTONE, BlockRegistry.BlockType.MOSSY_COBBLESTONE, \
-		BlockRegistry.BlockType.ANDESITE, BlockRegistry.BlockType.GRANITE, \
-		BlockRegistry.BlockType.DIORITE, BlockRegistry.BlockType.DEEPSLATE, \
-		BlockRegistry.BlockType.SMOOTH_STONE, BlockRegistry.BlockType.DIAMOND_ORE, \
-		BlockRegistry.BlockType.COPPER_ORE:
+		BR.STONE, BR.COBBLESTONE, BR.MOSSY_COBBLESTONE, BR.BRICK, BR.SANDSTONE, \
+		BR.COAL_ORE, BR.IRON_ORE, BR.GOLD_ORE, BR.DIAMOND_ORE, BR.COPPER_ORE, \
+		BR.FURNACE, BR.ANDESITE, BR.GRANITE, BR.DIORITE, BR.DEEPSLATE, \
+		BR.SMOOTH_STONE, BR.STONE_BRICKS, BR.COBBLESTONE_STAIRS, \
+		BR.STONE_BRICK_STAIRS, BR.COBBLESTONE_SLAB, BR.STONE_SLAB:
 			return _pick_random(snd_mine_stone)
-		BlockRegistry.BlockType.IRON_INGOT, BlockRegistry.BlockType.GOLD_INGOT, \
-		BlockRegistry.BlockType.COPPER_INGOT, BlockRegistry.BlockType.DIAMOND_BLOCK, \
-		BlockRegistry.BlockType.COPPER_BLOCK, BlockRegistry.BlockType.COAL_BLOCK:
+		BR.IRON_INGOT, BR.GOLD_INGOT, BR.COPPER_INGOT, BR.DIAMOND_BLOCK, \
+		BR.COPPER_BLOCK, BR.COAL_BLOCK, BR.IRON_DOOR, BR.IRON_BARS:
 			return _pick_random(snd_mine_metal)
-		BlockRegistry.BlockType.WOOD, BlockRegistry.BlockType.PLANKS, \
-		BlockRegistry.BlockType.CRAFTING_TABLE, BlockRegistry.BlockType.STONE_TABLE, \
-		BlockRegistry.BlockType.IRON_TABLE, BlockRegistry.BlockType.GOLD_TABLE, \
-		BlockRegistry.BlockType.SPRUCE_LOG, BlockRegistry.BlockType.BIRCH_LOG, \
-		BlockRegistry.BlockType.JUNGLE_LOG, BlockRegistry.BlockType.ACACIA_LOG, \
-		BlockRegistry.BlockType.DARK_OAK_LOG, BlockRegistry.BlockType.CHERRY_LOG, \
-		BlockRegistry.BlockType.SPRUCE_PLANKS, BlockRegistry.BlockType.BIRCH_PLANKS, \
-		BlockRegistry.BlockType.JUNGLE_PLANKS, BlockRegistry.BlockType.ACACIA_PLANKS, \
-		BlockRegistry.BlockType.DARK_OAK_PLANKS, BlockRegistry.BlockType.CHERRY_PLANKS, \
-		BlockRegistry.BlockType.BOOKSHELF, BlockRegistry.BlockType.BARREL:
+		BR.WOOD, BR.PLANKS, BR.CRAFTING_TABLE, BR.STONE_TABLE, BR.IRON_TABLE, \
+		BR.GOLD_TABLE, BR.SPRUCE_LOG, BR.BIRCH_LOG, BR.JUNGLE_LOG, BR.ACACIA_LOG, \
+		BR.DARK_OAK_LOG, BR.CHERRY_LOG, BR.SPRUCE_PLANKS, BR.BIRCH_PLANKS, \
+		BR.JUNGLE_PLANKS, BR.ACACIA_PLANKS, BR.DARK_OAK_PLANKS, BR.CHERRY_PLANKS, \
+		BR.BOOKSHELF, BR.BARREL, BR.CHEST, BR.OAK_STAIRS, BR.OAK_SLAB, \
+		BR.OAK_DOOR, BR.OAK_FENCE, BR.LADDER, BR.OAK_TRAPDOOR:
 			return _pick_random(snd_mine_wood)
-		BlockRegistry.BlockType.DIRT, BlockRegistry.BlockType.GRASS, \
-		BlockRegistry.BlockType.DARK_GRASS, BlockRegistry.BlockType.LEAVES, \
-		BlockRegistry.BlockType.CACTUS, BlockRegistry.BlockType.CLAY, \
-		BlockRegistry.BlockType.PODZOL, BlockRegistry.BlockType.MOSS_BLOCK, \
-		BlockRegistry.BlockType.SPRUCE_LEAVES, BlockRegistry.BlockType.BIRCH_LEAVES, \
-		BlockRegistry.BlockType.JUNGLE_LEAVES, BlockRegistry.BlockType.ACACIA_LEAVES, \
-		BlockRegistry.BlockType.DARK_OAK_LEAVES, BlockRegistry.BlockType.CHERRY_LEAVES, \
-		BlockRegistry.BlockType.HAY_BLOCK:
+		BR.DIRT, BR.GRASS, BR.DARK_GRASS, BR.CLAY, BR.PODZOL, BR.MOSS_BLOCK, \
+		BR.FARMLAND, BR.LEAVES, BR.CACTUS, BR.SPRUCE_LEAVES, BR.BIRCH_LEAVES, \
+		BR.JUNGLE_LEAVES, BR.ACACIA_LEAVES, BR.DARK_OAK_LEAVES, \
+		BR.CHERRY_LEAVES, BR.HAY_BLOCK:
 			return _pick_random(snd_mine_dirt)
-		BlockRegistry.BlockType.SAND, BlockRegistry.BlockType.SNOW, \
-		BlockRegistry.BlockType.ICE, BlockRegistry.BlockType.PACKED_ICE:
+		BR.SAND:
 			return _pick_random(snd_mine_sand)
+		BR.GRAVEL:
+			return _pick_random(snd_mine_gravel)
+		BR.SNOW, BR.ICE, BR.PACKED_ICE:
+			return _pick_random(snd_mine_sand)
+		BR.GLASS, BR.GLASS_PANE:
+			return _pick_random(snd_mine_stone)
 		_:
 			return _pick_random(snd_mine_default)
 
 func _get_footstep_sound(surface_type: int) -> AudioStream:
+	var BR = BlockRegistry.BlockType
 	match surface_type:
-		BlockRegistry.BlockType.STONE, BlockRegistry.BlockType.BRICK, \
-		BlockRegistry.BlockType.GRAVEL, BlockRegistry.BlockType.SANDSTONE, \
-		BlockRegistry.BlockType.COAL_ORE, BlockRegistry.BlockType.IRON_ORE, \
-		BlockRegistry.BlockType.GOLD_ORE, BlockRegistry.BlockType.FURNACE, \
-		BlockRegistry.BlockType.COBBLESTONE, BlockRegistry.BlockType.MOSSY_COBBLESTONE, \
-		BlockRegistry.BlockType.ANDESITE, BlockRegistry.BlockType.GRANITE, \
-		BlockRegistry.BlockType.DIORITE, BlockRegistry.BlockType.DEEPSLATE, \
-		BlockRegistry.BlockType.SMOOTH_STONE, BlockRegistry.BlockType.DIAMOND_ORE, \
-		BlockRegistry.BlockType.COPPER_ORE:
+		# Stone
+		BR.STONE, BR.COBBLESTONE, BR.MOSSY_COBBLESTONE, BR.BRICK, BR.SANDSTONE, \
+		BR.COAL_ORE, BR.IRON_ORE, BR.GOLD_ORE, BR.DIAMOND_ORE, BR.COPPER_ORE, \
+		BR.FURNACE, BR.ANDESITE, BR.GRANITE, BR.DIORITE, BR.DEEPSLATE, \
+		BR.SMOOTH_STONE, BR.STONE_BRICKS, BR.COBBLESTONE_STAIRS, \
+		BR.STONE_BRICK_STAIRS, BR.COBBLESTONE_SLAB, BR.STONE_SLAB:
 			return _pick_random(snd_step_stone)
-		BlockRegistry.BlockType.IRON_INGOT, BlockRegistry.BlockType.GOLD_INGOT, \
-		BlockRegistry.BlockType.COPPER_INGOT, BlockRegistry.BlockType.DIAMOND_BLOCK, \
-		BlockRegistry.BlockType.COPPER_BLOCK, BlockRegistry.BlockType.COAL_BLOCK:
+		# Metal
+		BR.IRON_INGOT, BR.GOLD_INGOT, BR.COPPER_INGOT, BR.DIAMOND_BLOCK, \
+		BR.COPPER_BLOCK, BR.COAL_BLOCK, BR.IRON_DOOR, BR.IRON_BARS, BR.LANTERN:
 			return _pick_random(snd_step_metal)
-		BlockRegistry.BlockType.WOOD, BlockRegistry.BlockType.PLANKS, \
-		BlockRegistry.BlockType.CRAFTING_TABLE, BlockRegistry.BlockType.STONE_TABLE, \
-		BlockRegistry.BlockType.IRON_TABLE, BlockRegistry.BlockType.GOLD_TABLE, \
-		BlockRegistry.BlockType.SPRUCE_LOG, BlockRegistry.BlockType.BIRCH_LOG, \
-		BlockRegistry.BlockType.JUNGLE_LOG, BlockRegistry.BlockType.ACACIA_LOG, \
-		BlockRegistry.BlockType.DARK_OAK_LOG, BlockRegistry.BlockType.CHERRY_LOG, \
-		BlockRegistry.BlockType.SPRUCE_PLANKS, BlockRegistry.BlockType.BIRCH_PLANKS, \
-		BlockRegistry.BlockType.JUNGLE_PLANKS, BlockRegistry.BlockType.ACACIA_PLANKS, \
-		BlockRegistry.BlockType.DARK_OAK_PLANKS, BlockRegistry.BlockType.CHERRY_PLANKS, \
-		BlockRegistry.BlockType.BOOKSHELF, BlockRegistry.BlockType.BARREL:
+		# Wood
+		BR.WOOD, BR.PLANKS, BR.CRAFTING_TABLE, BR.STONE_TABLE, BR.IRON_TABLE, \
+		BR.GOLD_TABLE, BR.SPRUCE_LOG, BR.BIRCH_LOG, BR.JUNGLE_LOG, BR.ACACIA_LOG, \
+		BR.DARK_OAK_LOG, BR.CHERRY_LOG, BR.SPRUCE_PLANKS, BR.BIRCH_PLANKS, \
+		BR.JUNGLE_PLANKS, BR.ACACIA_PLANKS, BR.DARK_OAK_PLANKS, BR.CHERRY_PLANKS, \
+		BR.BOOKSHELF, BR.BARREL, BR.CHEST, BR.OAK_STAIRS, BR.OAK_SLAB, \
+		BR.OAK_DOOR, BR.OAK_FENCE, BR.OAK_TRAPDOOR:
 			return _pick_random(snd_step_wood)
-		BlockRegistry.BlockType.GRASS, BlockRegistry.BlockType.DARK_GRASS, \
-		BlockRegistry.BlockType.PODZOL, BlockRegistry.BlockType.MOSS_BLOCK:
+		# Grass
+		BR.GRASS, BR.DARK_GRASS, BR.PODZOL, BR.MOSS_BLOCK, BR.FARMLAND:
 			return _pick_random(snd_step_grass)
-		BlockRegistry.BlockType.SAND:
+		# Sand
+		BR.SAND:
 			return _pick_random(snd_step_sand)
-		BlockRegistry.BlockType.SNOW, BlockRegistry.BlockType.ICE, \
-		BlockRegistry.BlockType.PACKED_ICE:
+		# Gravel
+		BR.GRAVEL, BR.DIRT, BR.CLAY:
+			return _pick_random(snd_step_gravel)
+		# Snow / ice
+		BR.SNOW, BR.ICE, BR.PACKED_ICE:
 			return _pick_random(snd_step_snow)
+		# Ladder
+		BR.LADDER:
+			return _pick_random(snd_step_ladder)
+		# Leaves
+		BR.LEAVES, BR.SPRUCE_LEAVES, BR.BIRCH_LEAVES, BR.JUNGLE_LEAVES, \
+		BR.ACACIA_LEAVES, BR.DARK_OAK_LEAVES, BR.CHERRY_LEAVES:
+			return _pick_random(snd_step_grass)
+		# Glass
+		BR.GLASS, BR.GLASS_PANE:
+			return _pick_random(snd_step_stone)
 		_:
 			return _pick_random(snd_step_dirt)
 

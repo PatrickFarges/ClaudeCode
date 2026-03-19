@@ -24,8 +24,29 @@ var should_exit: bool = false
 var world_seed: int = 0
 var _structure_placements: Array = []
 
+# Biome noises (copies for public access from main thread)
+var _biome_temp_noise: FastNoiseLite = null
+var _biome_humid_noise: FastNoiseLite = null
+var _biome_terrain_noise: FastNoiseLite = null
+
 func set_world_seed(seed_value: int):
 	world_seed = seed_value
+	# Create biome noise copies for get_biome_at() from main thread
+	var seed_base = seed_value
+	_biome_temp_noise = FastNoiseLite.new()
+	_biome_temp_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	_biome_temp_noise.seed = seed_base + 9012
+	_biome_temp_noise.frequency = 0.0015
+	_biome_temp_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
+	_biome_temp_noise.fractal_octaves = 2
+	_biome_temp_noise.fractal_gain = 0.4
+	_biome_humid_noise = FastNoiseLite.new()
+	_biome_humid_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	_biome_humid_noise.seed = seed_base + 3456
+	_biome_humid_noise.frequency = 0.0015
+	_biome_humid_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
+	_biome_humid_noise.fractal_octaves = 2
+	_biome_humid_noise.fractal_gain = 0.4
 
 func set_structure_placements(data: Array):
 	_structure_placements = data
@@ -733,6 +754,14 @@ func _get_biome(temp: float, humid: float, height: int = 0) -> int:
 		return 2  # MOUNTAIN
 	else:
 		return 3  # PLAINS
+
+func get_biome_at(wx: int, wz: int) -> int:
+	"""Public biome query for mob spawning (main thread safe)."""
+	if _biome_temp_noise and _biome_humid_noise:
+		var t = (_biome_temp_noise.get_noise_2d(wx, wz) + 1.0) / 2.0
+		var h = (_biome_humid_noise.get_noise_2d(wx, wz) + 1.0) / 2.0
+		return _get_biome(t, h)
+	return 3  # default plains
 
 func _is_cave(x: int, y: int, z: int, n1: FastNoiseLite, n2: FastNoiseLite, n3: FastNoiseLite) -> bool:
 	# Grottes de type "spaghetti" — deux noises multipliés créent des tunnels fins

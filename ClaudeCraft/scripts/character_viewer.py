@@ -14,12 +14,14 @@ Usage:
     python character_viewer.py path/to/model.glb
 
 Changelog:
+    v1.4.0 — Support mobs : doubleSided (désactive culling + two-sided lighting),
+             texture embarquée prioritaire dans la liste skins, GL_FRONT_AND_BACK
     v1.2.0 — Scan récursif sous-dossiers skins, labels avec préfixe dossier (professions/...)
     v1.1.0 — Fix faces noires : rendu alpha blend pour overlays, depth sort
     v1.0.0 — Création initiale
 """
 
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.4.0"
 
 import sys
 import json
@@ -161,6 +163,7 @@ class GLBData:
         self.ibms = []
         self.animations = {}
         self.embedded_texture = None
+        self.double_sided = False
         self._parse()
 
     def _parse(self):
@@ -276,6 +279,11 @@ class GLBData:
                 bv = self.gltf["bufferViews"][img["bufferView"]]
                 offset = bv.get("byteOffset", 0)
                 self.embedded_texture = self.bin[offset : offset + bv["byteLength"]]
+        # Check doubleSided on any material
+        for mat in self.gltf.get("materials", []):
+            if mat.get("doubleSided", False):
+                self.double_sided = True
+                break
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -518,8 +526,12 @@ class GLViewport(QOpenGLWidget):
     def initializeGL(self):
         glClearColor(0.18, 0.20, 0.25, 1.0)
         glEnable(GL_DEPTH_TEST)
-        glEnable(GL_CULL_FACE)
-        glCullFace(GL_BACK)
+        # Disable face culling for doubleSided models (mobs), enable for single-sided (Steve)
+        if self.glb and self.glb.double_sided:
+            glDisable(GL_CULL_FACE)
+        else:
+            glEnable(GL_CULL_FACE)
+            glCullFace(GL_BACK)
         glEnable(GL_LIGHTING)
         # Key light (front-right-above)
         glEnable(GL_LIGHT0)
@@ -532,7 +544,11 @@ class GLViewport(QOpenGLWidget):
         glLightfv(GL_LIGHT1, GL_DIFFUSE, [0.4, 0.4, 0.45, 1.0])
         glLightfv(GL_LIGHT1, GL_AMBIENT, [0.0, 0.0, 0.0, 1.0])
         glEnable(GL_COLOR_MATERIAL)
-        glColorMaterial(GL_FRONT, GL_AMBIENT_AND_DIFFUSE)
+        # FRONT_AND_BACK so both sides are properly lit (important for doubleSided mobs)
+        glColorMaterial(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE)
+        # Two-sided lighting: back faces get flipped normals for proper illumination
+        if self.glb and self.glb.double_sided:
+            glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_TRUE)
         # Alpha blending setup
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
         # Load default texture
@@ -845,23 +861,38 @@ class CharacterViewer(QMainWindow):
 
     def _populate_skins(self):
         self.skin_list.clear()
+        has_embedded = self.glb and self.glb.embedded_texture
+        is_mob = has_embedded and self.glb.path != DEFAULT_GLB
+
+        # If mob model with embedded texture, add it as first entry
+        if has_embedded:
+            item = QListWidgetItem("(Texture embarquée)")
+            item.setData(Qt.ItemDataRole.UserRole, "__embedded__")
+            self.skin_list.addItem(item)
+
         skin_files = []
-        # Embedded / default
-        if DEFAULT_SKIN.exists():
-            skin_files.append(DEFAULT_SKIN)
-        # Skins directory (including subdirectories)
-        if DEFAULT_SKINS.exists():
-            for f in sorted(DEFAULT_SKINS.rglob("*.png")):
+        if not is_mob:
+            # Steve model — add default skins
+            if DEFAULT_SKIN.exists():
+                skin_files.append(DEFAULT_SKIN)
+            if DEFAULT_SKINS.exists():
+                for f in sorted(DEFAULT_SKINS.rglob("*.png")):
+                    if f not in skin_files:
+                        skin_files.append(f)
+
+        # Also check alongside GLB (mob textures or custom skins)
+        glb_dir = self.glb.path.parent
+        # Check in textures/ subdir first (mob_converter output structure)
+        tex_dir = glb_dir / "textures"
+        if tex_dir.exists():
+            for f in sorted(tex_dir.rglob("*.png")):
                 if f not in skin_files:
                     skin_files.append(f)
-        # Also check alongside GLB
-        glb_dir = self.glb.path.parent
         for f in sorted(glb_dir.glob("*.png")):
             if f not in skin_files:
                 skin_files.append(f)
 
         for f in skin_files:
-            # Show subfolder prefix for organized skins
             if f.parent != DEFAULT_SKINS and f.parent.parent == DEFAULT_SKINS:
                 label = f"{f.parent.name}/{f.stem}"
             else:
@@ -885,7 +916,11 @@ class CharacterViewer(QMainWindow):
         if current is None:
             return
         path = current.data(Qt.ItemDataRole.UserRole)
-        if path and os.path.exists(path):
+        if path == "__embedded__":
+            # Reload the embedded texture from the GLB
+            if self.glb and self.glb.embedded_texture:
+                self.viewport.load_texture_from_bytes(self.glb.embedded_texture)
+        elif path and os.path.exists(path):
             self.viewport.load_texture_from_file(path)
 
     def _on_anim_changed(self, text):

@@ -146,6 +146,19 @@ var poi_manager = null
 var _village_spawned: bool = false
 const VILLAGE_NPC_COUNT = 9
 
+# ── Mobs ──
+var mobs: Array = []
+const MAX_MOBS = 40
+const MOBS_PER_CHUNK_PASSIVE = 2  # max passive mobs spawned per chunk
+const MOBS_PER_CHUNK_HOSTILE = 1  # max hostile mobs spawned per chunk
+const MOB_SPAWN_MIN_DIST = 24.0   # min distance from player to spawn
+const MOB_SPAWN_MAX_DIST = 64.0   # max distance from player to spawn
+var _mob_spawn_timer: float = 0.0
+const MOB_SPAWN_INTERVAL = 10.0   # check spawn every N seconds
+var _spawned_chunks: Dictionary = {}  # chunk_pos -> true (already spawned passive)
+var _pending_mob_chunks: Array = []   # [Vector3i] — chunk positions waiting for mesh
+var _mob_glbs_preloaded: bool = false
+
 func _ready():
 	# Générer un seed aléatoire si non défini
 	if world_seed == 0:
@@ -185,6 +198,21 @@ func _process(_delta):
 		if current_chunk != last_player_chunk:
 			last_player_chunk = current_chunk
 			_update_chunks()
+
+		# Mob spawning timer (hostile at night)
+		_mob_spawn_timer += _delta
+		if _mob_spawn_timer >= MOB_SPAWN_INTERVAL:
+			_mob_spawn_timer = 0.0
+			_try_spawn_mobs()
+
+		# Deferred passive mob spawning — wait for chunk mesh to be built
+		if not _pending_mob_chunks.is_empty():
+			_process_pending_mob_spawns()
+
+		# Preload mob GLBs once (after first chunks are loaded, avoid startup freeze)
+		if not _mob_glbs_preloaded and chunks.size() >= 4:
+			_mob_glbs_preloaded = true
+			_preload_mob_glbs()
 
 func _update_chunks():
 	if not player:
@@ -268,6 +296,11 @@ func _on_chunk_data_ready(chunk_data: Dictionary):
 	if not _village_spawned and player:
 		_try_spawn_village(chunk_pos, chunk_data)
 
+	# Queue mob spawn — will execute once the chunk mesh+collision is built
+	if not _spawned_chunks.has(chunk_pos):
+		_spawned_chunks[chunk_pos] = true
+		_pending_mob_chunks.append(chunk_pos)
+
 func _unload_distant_chunks(player_chunk_pos: Vector3i):
 	var chunks_to_remove = []
 	
@@ -313,6 +346,13 @@ func _unload_distant_chunks(player_chunk_pos: Vector3i):
 	if poi_manager:
 		for chunk_pos in chunks_to_remove:
 			poi_manager.remove_chunk_pois(chunk_pos)
+
+	# Allow mob respawn in unloaded chunks + clean pending queue
+	for chunk_pos in chunks_to_remove:
+		_spawned_chunks.erase(chunk_pos)
+	# Purge pending mob spawns for unloaded chunks
+	if not _pending_mob_chunks.is_empty():
+		_pending_mob_chunks = _pending_mob_chunks.filter(func(cp): return not remove_set.has(cp))
 
 func _world_to_chunk(world_pos: Vector3) -> Vector3i:
 	return Vector3i(
@@ -577,3 +617,167 @@ func _flatten_village_area(chunk_pos: Vector3i, packed_blocks: PackedByteArray, 
 						cleared += 1
 	if cleared > 0:
 		print("WorldManager: terrain aplati — %d blocs retirés autour du village" % cleared)
+
+# ============================================================
+#  MOB SPAWNING
+# ============================================================
+
+func _process_pending_mob_spawns():
+	"""Process queued mob spawns — only when chunk mesh+collision is ready.
+	Max 3 per frame, uses chunk.blocks directly (no copy)."""
+	var still_pending = []
+	var processed = 0
+	for cp in _pending_mob_chunks:
+		if not chunks.has(cp):
+			continue  # chunk unloaded, drop
+		var chunk = chunks[cp]
+		if chunk.is_mesh_built and processed < 3:
+			_try_spawn_passive_mobs_in_chunk(cp, chunk.blocks)
+			processed += 1
+		elif not chunk.is_mesh_built:
+			still_pending.append(cp)
+		# mesh built but over limit → drop (don't re-queue, mob already missed)
+	_pending_mob_chunks = still_pending
+
+func _get_biome_at_chunk(chunk_pos: Vector3i) -> int:
+	# Sample biome at center of chunk using the chunk generator noises
+	if chunk_generator:
+		var wx = chunk_pos.x * Chunk.CHUNK_SIZE + 8
+		var wz = chunk_pos.z * Chunk.CHUNK_SIZE + 8
+		return chunk_generator.get_biome_at(wx, wz)
+	return 3  # default plains
+
+func _find_ground_y_in_chunk(blocks: PackedByteArray, lx: int, lz: int) -> int:
+	"""Find the GROUND surface Y (ignoring trees, vegetation, torches).
+	Returns the Y of the solid ground block where a mob can stand."""
+	var offset = lx * Chunk.CHUNK_SIZE * Chunk.CHUNK_HEIGHT + lz * Chunk.CHUNK_HEIGHT
+	for y in range(Chunk.CHUNK_HEIGHT - 1, 0, -1):
+		var bt = blocks[offset + y]
+		if bt == 0 or bt == BlockRegistry.BlockType.WATER:
+			continue
+		# Skip non-ground blocks: leaves, logs, vegetation, torches, etc.
+		if bt == BlockRegistry.BlockType.LEAVES or \
+		   bt == BlockRegistry.BlockType.WOOD or \
+		   bt == BlockRegistry.BlockType.CACTUS or \
+		   bt == BlockRegistry.BlockType.TORCH or \
+		   bt >= BlockRegistry.BlockType.SPRUCE_LOG and bt <= BlockRegistry.BlockType.CHERRY_LEAVES:
+			continue
+		# Skip cross-mesh vegetation (SHORT_GRASS=98, FERN=99, etc.)
+		if bt >= 98 and bt <= 103:
+			continue
+		# Found solid ground — verify 2 blocks of air above for mob to stand
+		if y + 2 < Chunk.CHUNK_HEIGHT:
+			var above1 = blocks[offset + y + 1]
+			var above2 = blocks[offset + y + 2]
+			# Air, vegetation, or leaves above = OK
+			var a1_clear = (above1 == 0 or above1 >= 98 and above1 <= 103 or above1 == BlockRegistry.BlockType.LEAVES)
+			var a2_clear = (above2 == 0 or above2 >= 98 and above2 <= 103 or above2 == BlockRegistry.BlockType.LEAVES)
+			if a1_clear and a2_clear:
+				return y
+		else:
+			return y
+	return -1
+
+func _try_spawn_passive_mobs_in_chunk(chunk_pos: Vector3i, blocks: PackedByteArray):
+	"""Spawn passive mobs when a new chunk is generated (daytime animals)."""
+	# Clean dead refs
+	mobs = mobs.filter(func(m): return is_instance_valid(m))
+	if mobs.size() >= MAX_MOBS:
+		return
+
+	# Spawn in ~50% of chunks
+	if randf() > 0.5:
+		return
+
+	var biome = _get_biome_at_chunk(chunk_pos)
+	var mob_list = PassiveMob.BIOME_PASSIVE_MOBS.get(biome, [])
+	if mob_list.is_empty():
+		return
+
+	# Pick 1-2 mobs
+	var count = randi_range(1, MOBS_PER_CHUNK_PASSIVE)
+	for i in range(count):
+		if mobs.size() >= MAX_MOBS:
+			break
+		var mob_type = mob_list[randi() % mob_list.size()]
+		# Try several positions to find valid ground
+		var spawned = false
+		for _attempt in range(4):
+			var lx = randi_range(2, 13)
+			var lz = randi_range(2, 13)
+			var sy = _find_ground_y_in_chunk(blocks, lx, lz)
+			if sy >= 10 and sy <= 200:
+				var wx = chunk_pos.x * Chunk.CHUNK_SIZE + lx
+				var wz = chunk_pos.z * Chunk.CHUNK_SIZE + lz
+				_spawn_mob(mob_type, Vector3(wx + 0.5, sy + 1.0, wz + 0.5), chunk_pos)
+				spawned = true
+				break
+
+func _try_spawn_mobs():
+	"""Periodic spawn check — spawns hostile mobs at night near the player."""
+	mobs = mobs.filter(func(m): return is_instance_valid(m))
+	if mobs.size() >= MAX_MOBS:
+		return
+
+	var dnc = get_tree().get_first_node_in_group("day_night_cycle")
+	if not dnc or not player:
+		return
+	var hour = dnc.get_hour()
+	var is_night = hour < 6.0 or hour >= 18.0
+
+	if not is_night:
+		return  # Hostile mobs only spawn at night
+
+	# Count current hostile mobs
+	var hostile_count = 0
+	for m in mobs:
+		if is_instance_valid(m) and m._behavior == PassiveMob.Behavior.HOSTILE:
+			hostile_count += 1
+	if hostile_count >= 10:
+		return  # Cap hostile mobs
+
+	# Spawn 1-2 hostile mobs around the player
+	var player_pos = player.global_position
+	var attempts = 5
+	for _i in range(attempts):
+		var angle = randf() * TAU
+		var dist = randf_range(MOB_SPAWN_MIN_DIST, MOB_SPAWN_MAX_DIST)
+		var spawn_x = player_pos.x + cos(angle) * dist
+		var spawn_z = player_pos.z + sin(angle) * dist
+		var spawn_chunk = _world_to_chunk(Vector3(spawn_x, 0, spawn_z))
+		if not chunks.has(spawn_chunk):
+			continue
+
+		# Find surface
+		var chunk = chunks[spawn_chunk]
+		var lx = int(spawn_x) - spawn_chunk.x * Chunk.CHUNK_SIZE
+		var lz = int(spawn_z) - spawn_chunk.z * Chunk.CHUNK_SIZE
+		lx = clampi(lx, 0, Chunk.CHUNK_SIZE - 1)
+		lz = clampi(lz, 0, Chunk.CHUNK_SIZE - 1)
+		var sy = _find_ground_y_in_chunk(chunk.blocks, lx, lz)
+		if sy < 10 or sy > 200:
+			continue
+
+		var biome = _get_biome_at_chunk(spawn_chunk)
+		var mob_list = PassiveMob.BIOME_HOSTILE_MOBS.get(biome, [])
+		if mob_list.is_empty():
+			continue
+
+		var mob_type = mob_list[randi() % mob_list.size()]
+		var spawn_pos = Vector3(spawn_x, sy + 1.0, spawn_z)
+		_spawn_mob(mob_type, spawn_pos, spawn_chunk)
+		break  # One per cycle
+
+func _preload_mob_glbs():
+	"""Preload all mob GLB scenes into cache to avoid freeze on first spawn."""
+	for mob_type in PassiveMob.MOB_DATA:
+		var data = PassiveMob.MOB_DATA[mob_type]
+		var glb_path = data.get("glb_path", "")
+		if glb_path != "" and ResourceLoader.exists(glb_path):
+			PassiveMob._load_glb(glb_path)
+
+func _spawn_mob(mob_type: int, pos: Vector3, chunk_pos: Vector3i):
+	var mob = PassiveMob.new()
+	mob.setup(mob_type, pos, chunk_pos)
+	add_child(mob)
+	mobs.append(mob)

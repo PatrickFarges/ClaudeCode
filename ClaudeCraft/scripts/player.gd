@@ -1078,11 +1078,13 @@ func _check_cactus_damage():
 						take_damage(CACTUS_DAMAGE)
 						return
 
-func take_damage(amount: int):
+func take_damage(amount: int, knockback: Vector3 = Vector3.ZERO):
 	if damage_cooldown > 0 or is_dead:
 		return
 	current_health = maxi(0, current_health - amount)
 	damage_cooldown = DAMAGE_COOLDOWN_TIME
+	if knockback.length_squared() > 0.01:
+		velocity += knockback
 	if current_health <= 0:
 		_die()
 
