@@ -71,6 +71,7 @@ var flora_mesh_instance: MeshInstance3D
 var collision_shape: CollisionShape3D
 var static_body: StaticBody3D
 var is_mesh_built: bool = false
+var has_collision: bool = false
 var is_modified: bool = false
 
 # Torch lights
@@ -279,17 +280,8 @@ func _build_and_attach_meshes():
 		mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		add_child(mesh_instance)
 
-	# Collision
-	var _t_col = Time.get_ticks_msec()
-	if _collision_faces.size() > 0:
-		static_body = StaticBody3D.new()
-		collision_shape = CollisionShape3D.new()
-		var shape: ConcavePolygonShape3D = ConcavePolygonShape3D.new()
-		shape.set_faces(_collision_faces)
-		collision_shape.shape = shape
-		static_body.add_child(collision_shape)
-		add_child(static_body)
-	var _t_col_end = Time.get_ticks_msec()
+	# Collision différée — stockée, créée à la demande par WorldManager
+	# (set_faces() coûte 12-16ms, on ne le fait que pour les chunks proches du joueur)
 
 	# Water mesh (transparent, no collision)
 	if _water_vertices.size() > 0:
@@ -337,19 +329,16 @@ func _build_and_attach_meshes():
 	is_mesh_built = true
 
 	var _t_total = Time.get_ticks_msec() - _t0
-	if _t_total > 5:
-		print("[Chunk %s] apply: %dms total (collision: %dms, verts: %d, col_faces: %d)" % [
-			str(chunk_position), _t_total, _t_col_end - _t_col,
-			_vertices.size(), _collision_faces.size()])
+	if _t_total > 10:
+		print("[Chunk %s] mesh: %dms (verts: %d)" % [str(chunk_position), _t_total, _vertices.size()])
 
-	# Libérer les tableaux temporaires
+	# Libérer les tableaux temporaires (sauf collision — gardées pour create_collision)
 	_vertices = PackedVector3Array()
 	_normals = PackedVector3Array()
 	_colors = PackedColorArray()
 	_indices = PackedInt32Array()
 	_uvs = PackedVector2Array()
 	_custom0 = PackedFloat32Array()
-	_collision_faces = PackedVector3Array()
 	_water_vertices = PackedVector3Array()
 	_water_normals = PackedVector3Array()
 	_water_colors = PackedColorArray()
@@ -361,6 +350,28 @@ func _build_and_attach_meshes():
 	_flora_indices = PackedInt32Array()
 	_flora_uvs = PackedVector2Array()
 	_flora_custom0 = PackedFloat32Array()
+
+func create_collision():
+	if has_collision or _collision_faces.size() == 0:
+		return
+	static_body = StaticBody3D.new()
+	collision_shape = CollisionShape3D.new()
+	var shape: ConcavePolygonShape3D = ConcavePolygonShape3D.new()
+	shape.set_faces(_collision_faces)
+	collision_shape.shape = shape
+	static_body.add_child(collision_shape)
+	add_child(static_body)
+	has_collision = true
+	_collision_faces = PackedVector3Array()  # Libérer la mémoire
+
+func remove_collision():
+	if not has_collision:
+		return
+	if static_body:
+		static_body.queue_free()
+		static_body = null
+		collision_shape = null
+	has_collision = false
 
 # Rebuild async (pour casse/placement de blocs — threadé pour éviter le freeze)
 func _rebuild_mesh():
@@ -392,9 +403,13 @@ func _apply_rebuild_data():
 	if static_body:
 		static_body.queue_free()
 		static_body = null
+		collision_shape = null
+	has_collision = false
 	_clear_torch_lights()
 	# _apply_mesh_data fait le wait_to_finish du thread et crée les nouveaux mesh
 	_apply_mesh_data()
+	# Rebuild = joueur est dans ce chunk, collision immédiate nécessaire
+	create_collision()
 	# Si un rebuild était en attente pendant le thread, le relancer
 	if _rebuild_pending:
 		_rebuild_pending = false

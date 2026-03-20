@@ -159,6 +159,8 @@ var _spawned_chunks: Dictionary = {}  # chunk_pos -> true (already spawned passi
 var _pending_mob_chunks: Array = []   # [Vector3i] — chunk positions waiting for mesh
 var _pending_chunk_data: Array = []   # Buffer de chunks générés en attente d'instanciation
 const MAX_CHUNK_INSTANTIATE_PER_FRAME: int = 2
+const COLLISION_DISTANCE: int = 3     # Chunks à ≤3 Manhattan = collision active
+const COLLISION_REMOVE_DISTANCE: int = 5  # Au-delà = collision retirée
 var _mob_glbs_preloaded: bool = false
 
 func _ready():
@@ -197,6 +199,10 @@ func _process(_delta):
 	if _pending_chunk_data.size() > 0:
 		_process_pending_chunks()
 
+	# Collision différée : créer/supprimer selon distance joueur (1/frame)
+	if player:
+		_update_chunk_collisions()
+
 	if player:
 		var current_chunk = _world_to_chunk(player.global_position)
 
@@ -219,6 +225,22 @@ func _process(_delta):
 		if not _mob_glbs_preloaded and chunks.size() >= 4:
 			_mob_glbs_preloaded = true
 			_preload_mob_glbs()
+
+func _update_chunk_collisions():
+	var player_chunk = _world_to_chunk(player.global_position)
+	var created_this_frame = 0
+	for chunk_pos in chunks:
+		var chunk = chunks[chunk_pos]
+		if not chunk.is_mesh_built:
+			continue
+		var dist = abs(chunk_pos.x - player_chunk.x) + abs(chunk_pos.z - player_chunk.z)
+		if dist <= COLLISION_DISTANCE and not chunk.has_collision:
+			chunk.create_collision()
+			created_this_frame += 1
+			if created_this_frame >= 1:
+				return  # Max 1 collision créée par frame
+		elif dist > COLLISION_REMOVE_DISTANCE and chunk.has_collision:
+			chunk.remove_collision()
 
 func _update_chunks():
 	if not player:
