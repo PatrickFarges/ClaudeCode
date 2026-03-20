@@ -144,7 +144,7 @@ var poi_manager = null
 
 # Village
 var _village_spawned: bool = false
-const VILLAGE_NPC_COUNT = 9
+const VILLAGE_NPC_COUNT = 0  # Inhibé — remettre à 9 pour mode Settlers
 
 # ── Mobs ──
 var mobs: Array = []
@@ -157,6 +157,8 @@ var _mob_spawn_timer: float = 0.0
 const MOB_SPAWN_INTERVAL = 10.0   # check spawn every N seconds
 var _spawned_chunks: Dictionary = {}  # chunk_pos -> true (already spawned passive)
 var _pending_mob_chunks: Array = []   # [Vector3i] — chunk positions waiting for mesh
+var _pending_chunk_data: Array = []   # Buffer de chunks générés en attente d'instanciation
+const MAX_CHUNK_INSTANTIATE_PER_FRAME: int = 2
 var _mob_glbs_preloaded: bool = false
 
 func _ready():
@@ -191,6 +193,10 @@ func _ready():
 		_update_chunks()
 
 func _process(_delta):
+	# Instancier les chunks en attente (max 2/frame)
+	if _pending_chunk_data.size() > 0:
+		_process_pending_chunks()
+
 	if player:
 		var current_chunk = _world_to_chunk(player.global_position)
 
@@ -245,7 +251,19 @@ func _update_chunks():
 	_unload_distant_chunks(player_chunk_pos)
 
 func _on_chunk_data_ready(chunk_data: Dictionary):
-	"""Appelé quand un chunk a été généré dans un thread"""
+	"""Appelé quand un chunk a été généré dans un thread — bufferisé"""
+	_pending_chunk_data.append(chunk_data)
+
+func _process_pending_chunks():
+	"""Instancie max 2 chunks par frame depuis le buffer"""
+	var processed = 0
+	while processed < MAX_CHUNK_INSTANTIATE_PER_FRAME and _pending_chunk_data.size() > 0:
+		var chunk_data = _pending_chunk_data.pop_front()
+		_instantiate_chunk(chunk_data)
+		processed += 1
+
+func _instantiate_chunk(chunk_data: Dictionary):
+	var _t0 = Time.get_ticks_msec()
 	var chunk_pos = chunk_data["position"]
 	var blocks = chunk_data["blocks"]
 	var p_y_min: int = chunk_data.get("y_min", 0)
@@ -300,6 +318,10 @@ func _on_chunk_data_ready(chunk_data: Dictionary):
 	if not _spawned_chunks.has(chunk_pos):
 		_spawned_chunks[chunk_pos] = true
 		_pending_mob_chunks.append(chunk_pos)
+
+	var _t_inst = Time.get_ticks_msec() - _t0
+	if _t_inst > 5:
+		print("[WorldManager] instantiate chunk %s: %dms" % [str(chunk_pos), _t_inst])
 
 func _unload_distant_chunks(player_chunk_pos: Vector3i):
 	var chunks_to_remove = []

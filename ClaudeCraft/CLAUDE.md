@@ -93,7 +93,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 
 ## Direction du projet
 
-**Version actuelle : v18.3.0**
+**Version actuelle : v18.4.0**
 
 | Phase | Statut | Contenu |
 |-------|--------|---------|
@@ -141,6 +141,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 | 11 | Fait | v18.0.0 — **Blocs architecturaux + craft joueur**. 15 nouveaux BlockTypes (83-97) : STONE_BRICKS (cube), 3 escaliers (OAK/COBBLESTONE/STONE_BRICK_STAIRS — mesh en L), 3 dalles (OAK/COBBLESTONE/STONE_SLAB — demi-bloc 0.5), 2 portes (OAK/IRON_DOOR — panneau 3/16 + placement 2 blocs de haut + clic droit ouvre), 1 clôture (OAK_FENCE — poteau 4/16), 1 vitre (GLASS_PANE — panneau 2/16 centré), 1 échelle (LADDER — plat sur mur + escalade Space/S + pas de collision), 1 trappe (OAK_TRAPDOOR — panneau horizontal 3/16), 1 lanterne (LANTERN — OmniLight 10 blocs), 1 barreaux (IRON_BARS — poteau fin). **15 recettes** (wood_table + stone_table) : briques de pierre, escaliers ×4, dalles ×6, portes ×3, clôtures, vitres ×16, échelles, trappes, porte fer, lanterne, barreaux fer ×16. **Rendu spécial** dans chunk.gd : `_build_special_mesh()` scan post-greedy, 7 fonctions emit (slab/stair/fence/door/glass_pane/ladder/trapdoor), `_is_greedy_solid()` exclut tous les blocs ≥77 sauf STONE_BRICKS. Collision skip pour échelles. Texture2DArray étendu à 102 layers |
 | 11.1 | Fait | v18.2.1 — **mob_converter.py v2.3.0** — Fix wolf (BPR_OVERRIDES body/upperBody 90°X), fix sheep (tex_size 64×64), fix enderman (CUBE_OFFSET_OVERRIDES head +14Y), binarisation alpha TGA (alpha>0→255). **mob_gallery.py v1.0.1** — galerie 3D PyQt6/OpenGL 4 colonnes, rotation auto, animations, fullscreen |
 | 11.2 | Fait | v18.3.0 — **Vrais sons Minecraft**. 3998 MP3 téléchargés depuis minecraft-sounds.vercel.app (`download_mc_sounds.py`). `audio_manager.gd` refait : dig/ (stone/wood/grass/sand/gravel/snow/cloth), step/ (stone/wood/grass/sand/gravel/snow/ladder), glass break, lantern break/place, door open/close (bois/fer), chest open/close, eating ×3, UI click MC. Blocs architecturaux mappés aux bons sons. Nouvelles banques : gravel, glass, ladder, doors, chest, lantern |
+| 11.3 | Fait | v18.4.0 — **Fix wolf GLB** (CUBE_OFFSET_OVERRIDES body Z-2 / upperBody Z-4, ferme gap tête-corps). **Fix presets rendu** au démarrage (pas d'application avant warmup 30 frames, SSAO/SDFGI s'initialisent avec géométrie). **Texture eau** Faithful32 (water_still + UVs tilées, remplace vertex color plat). **Plus d'arbres dans l'eau** (skip végétation si height ≤ SEA_LEVEL). **Suppression filtre at_shore** eau (plus de gap 1 bloc aux rives). **Throttle chunks** : buffer instanciation (max 2/frame) + mesh apply (max 1/frame), réduit les freezes. **Villageois inhibés** (VILLAGE_NPC_COUNT=0) pour focus solo. mob_converter.py v2.4.0 |
 | 12 | À venir | Mobs Minecraft (98+ GLB déjà en assets), armures (texture swap 2 couches), UI craft MC (textures GUI Faithful32 disponibles) |
 
 **Packs GLB utilisés** : Steve GLB (modèle Bedrock converti, 28 bones, 4 anims) pour tous les PNJ avec skins par profession. Kenney.nl (18 modèles BlockPNJ — conservés mais plus utilisés). **PNJ futurs** : KayKit Adventurers (161 anims travail)

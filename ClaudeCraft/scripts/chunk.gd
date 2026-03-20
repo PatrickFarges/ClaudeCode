@@ -78,6 +78,11 @@ var _torch_lights: Array = []  # Array de Node3D (OmniLight3D + mesh)
 const TORCH_TYPE: int = 72  # BlockRegistry.BlockType.TORCH
 const MAX_TORCHES_PER_CHUNK: int = 16
 
+# Throttle: max 2 chunk mesh applications par frame (évite les freeze)
+static var _apply_frame: int = -1
+static var _apply_count: int = 0
+const MAX_APPLY_PER_FRAME: int = 1
+
 # Thread mesh build
 var _mesh_thread: Thread = null
 var _rebuild_pending: bool = false  # Flag pour re-rebuild après thread en cours
@@ -94,6 +99,7 @@ var _water_vertices: PackedVector3Array = PackedVector3Array()
 var _water_normals: PackedVector3Array = PackedVector3Array()
 var _water_colors: PackedColorArray = PackedColorArray()
 var _water_indices: PackedInt32Array = PackedInt32Array()
+var _water_uvs: PackedVector2Array = PackedVector2Array()
 
 # Flora mesh arrays (cross billboards)
 var _flora_vertices: PackedVector3Array = PackedVector3Array()
@@ -122,11 +128,24 @@ static func _get_cross_material() -> Material:
 static func _get_water_material() -> StandardMaterial3D:
 	if not _shared_water_material:
 		_shared_water_material = StandardMaterial3D.new()
-		_shared_water_material.vertex_color_use_as_albedo = true
 		_shared_water_material.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
 		_shared_water_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_shared_water_material.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_ALWAYS
 		_shared_water_material.cull_mode = BaseMaterial3D.CULL_DISABLED
 		_shared_water_material.roughness = 0.2
+		# Texture d'eau Faithful32 (premier frame du spritesheet)
+		var GC = preload("res://scripts/game_config.gd")
+		var tex_path = GC.get_block_texture_path() + "water_still_frame0.png"
+		var img := Image.new()
+		if img.load(tex_path) == OK:
+			img.convert(Image.FORMAT_RGBA8)
+			var tex = ImageTexture.create_from_image(img)
+			tex.set_meta("sampling", 0)  # NEAREST
+			_shared_water_material.albedo_texture = tex
+			_shared_water_material.uv1_triplanar = false
+			_shared_water_material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+		# Teinte bleue appliquée sur la texture grise
+		_shared_water_material.albedo_color = Color(0.3, 0.5, 0.9, 0.65)
 	return _shared_water_material
 
 # ============================================================
@@ -190,6 +209,7 @@ func _compute_mesh_arrays():
 	_water_normals = PackedVector3Array()
 	_water_colors = PackedColorArray()
 	_water_indices = PackedInt32Array()
+	_water_uvs = PackedVector2Array()
 	_flora_vertices = PackedVector3Array()
 	_flora_normals = PackedVector3Array()
 	_flora_colors = PackedColorArray()
@@ -206,6 +226,7 @@ func _compute_mesh_arrays():
 		_build_flora_mesh()
 
 func _apply_mesh_data():
+	# Toujours finir le thread d'abord (pas de crash si chunk freed)
 	if _mesh_thread:
 		_mesh_thread.wait_to_finish()
 		_mesh_thread = null
@@ -217,6 +238,26 @@ func _apply_mesh_data():
 		is_mesh_built = true
 		return
 
+	# Throttle: max 2 chunks appliqués par frame pour éviter les freeze
+	var frame = Engine.get_frames_drawn()
+	if frame != _apply_frame:
+		_apply_frame = frame
+		_apply_count = 0
+	if _apply_count >= MAX_APPLY_PER_FRAME:
+		# Reporter la construction mesh/collision à la frame suivante
+		get_tree().process_frame.connect(_deferred_apply, CONNECT_ONE_SHOT)
+		return
+	_apply_count += 1
+
+	_build_and_attach_meshes()
+
+func _deferred_apply():
+	if not is_inside_tree():
+		return
+	_apply_mesh_data()
+
+func _build_and_attach_meshes():
+	var _t0 = Time.get_ticks_msec()
 	# ArrayMesh depuis les packed arrays (solid blocks)
 	if _vertices.size() > 0:
 		var arrays: Array = []
@@ -239,6 +280,7 @@ func _apply_mesh_data():
 		add_child(mesh_instance)
 
 	# Collision
+	var _t_col = Time.get_ticks_msec()
 	if _collision_faces.size() > 0:
 		static_body = StaticBody3D.new()
 		collision_shape = CollisionShape3D.new()
@@ -247,6 +289,7 @@ func _apply_mesh_data():
 		collision_shape.shape = shape
 		static_body.add_child(collision_shape)
 		add_child(static_body)
+	var _t_col_end = Time.get_ticks_msec()
 
 	# Water mesh (transparent, no collision)
 	if _water_vertices.size() > 0:
@@ -256,6 +299,7 @@ func _apply_mesh_data():
 		water_arrays[Mesh.ARRAY_NORMAL] = _water_normals
 		water_arrays[Mesh.ARRAY_COLOR] = _water_colors
 		water_arrays[Mesh.ARRAY_INDEX] = _water_indices
+		water_arrays[Mesh.ARRAY_TEX_UV] = _water_uvs
 
 		var water_mesh: ArrayMesh = ArrayMesh.new()
 		water_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, water_arrays)
@@ -292,6 +336,12 @@ func _apply_mesh_data():
 
 	is_mesh_built = true
 
+	var _t_total = Time.get_ticks_msec() - _t0
+	if _t_total > 5:
+		print("[Chunk %s] apply: %dms total (collision: %dms, verts: %d, col_faces: %d)" % [
+			str(chunk_position), _t_total, _t_col_end - _t_col,
+			_vertices.size(), _collision_faces.size()])
+
 	# Libérer les tableaux temporaires
 	_vertices = PackedVector3Array()
 	_normals = PackedVector3Array()
@@ -304,6 +354,7 @@ func _apply_mesh_data():
 	_water_normals = PackedVector3Array()
 	_water_colors = PackedColorArray()
 	_water_indices = PackedInt32Array()
+	_water_uvs = PackedVector2Array()
 	_flora_vertices = PackedVector3Array()
 	_flora_normals = PackedVector3Array()
 	_flora_colors = PackedColorArray()
@@ -783,30 +834,8 @@ func _build_water_mesh():
 				var idx: int = x_off + z * 256 + y
 				var bt: int = blocks[idx]
 				if bt == WATER_TYPE and (y + 1 >= CHUNK_HEIGHT or blocks[idx + 1] == 0):
-					# Anti-damier : ne pas rendre l'eau en surface si un voisin
-					# au meme niveau est un bloc solide (= rive)
-					var at_shore: bool = false
-					if x > 0:
-						var nb: int = blocks[(x - 1) * 4096 + z * 256 + y]
-						if nb != 0 and nb != WATER_TYPE:
-							at_shore = true
-					if not at_shore and x < CHUNK_SIZE - 1:
-						var nb: int = blocks[(x + 1) * 4096 + z * 256 + y]
-						if nb != 0 and nb != WATER_TYPE:
-							at_shore = true
-					if not at_shore and z > 0:
-						var nb: int = blocks[x_off + (z - 1) * 256 + y]
-						if nb != 0 and nb != WATER_TYPE:
-							at_shore = true
-					if not at_shore and z < CHUNK_SIZE - 1:
-						var nb: int = blocks[x_off + (z + 1) * 256 + y]
-						if nb != 0 and nb != WATER_TYPE:
-							at_shore = true
-					if not at_shore:
-						mask[x][z] = bt
-						has_faces = true
-					else:
-						mask[x][z] = -1
+					mask[x][z] = bt
+					has_faces = true
 				else:
 					mask[x][z] = -1
 
@@ -818,9 +847,9 @@ func _build_water_mesh():
 				_emit_water_quad(
 					Vector3(u, y + 0.85, v), Vector3(u + w, y + 0.85, v),
 					Vector3(u + w, y + 0.85, v + h), Vector3(u, y + 0.85, v + h),
-					Vector3.UP, color)
+					Vector3.UP, color, w, h)
 
-func _emit_water_quad(v0: Vector3, v1: Vector3, v2: Vector3, v3: Vector3, normal: Vector3, color: Color):
+func _emit_water_quad(v0: Vector3, v1: Vector3, v2: Vector3, v3: Vector3, normal: Vector3, color: Color, tile_w: int = 1, tile_h: int = 1):
 	var base: int = _water_vertices.size()
 	_water_vertices.append(v0)
 	_water_vertices.append(v1)
@@ -834,6 +863,11 @@ func _emit_water_quad(v0: Vector3, v1: Vector3, v2: Vector3, v3: Vector3, normal
 	_water_colors.append(color)
 	_water_colors.append(color)
 	_water_colors.append(color)
+	# UVs qui tilent la texture par bloc
+	_water_uvs.append(Vector2(0, 0))
+	_water_uvs.append(Vector2(tile_w, 0))
+	_water_uvs.append(Vector2(tile_w, tile_h))
+	_water_uvs.append(Vector2(0, tile_h))
 	_water_indices.append(base)
 	_water_indices.append(base + 1)
 	_water_indices.append(base + 2)

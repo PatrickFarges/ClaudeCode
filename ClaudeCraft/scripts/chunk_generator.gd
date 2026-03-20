@@ -395,7 +395,7 @@ func _place_all_vegetation(blocks: Array, heightmap: Array, biome_map: Array, ch
 			var wx = chunk_pos.x * CHUNK_SIZE + x
 			var wz = chunk_pos.z * CHUNK_SIZE + z
 
-			if height >= CHUNK_HEIGHT - 20 or height < SEA_LEVEL - 5:
+			if height >= CHUNK_HEIGHT - 20 or height <= SEA_LEVEL:
 				continue
 
 			match biome:

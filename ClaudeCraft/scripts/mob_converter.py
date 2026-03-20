@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-mob_converter.py v1.0.0
+mob_converter.py v2.4.0
 Convertisseur universel Minecraft Bedrock Edition Mobs -> GLB pour ClaudeCraft
 
 Parse les fichiers .geo.json (modèles) et .animation.json (animations Molang)
@@ -16,6 +16,8 @@ Usage:
     python mob_converter.py zombie --output path/to/output.glb
 
 Changelog:
+    v2.4.0 — Fix wolf corps décalé (CUBE_OFFSET_OVERRIDES body/upperBody Z-4,
+             ferme le vide tête-corps et corrige le chevauchement corps-queue)
     v2.3.0 — Fix enderman tête trop basse (CUBE_OFFSET_OVERRIDES +14Y pour head,
              tête passe de y=24 à y=38 au sommet du corps)
     v2.2.0 — Fix wolf rotation (body/upperBody bind_pose_rotation 90°X manquant),
@@ -33,7 +35,7 @@ Changelog:
     v1.0.0 — Création : parsing .geo.json, bind_pose_rotation, Molang -> keyframes
 """
 
-APP_VERSION = "2.3.0"
+APP_VERSION = "2.4.0"
 
 import json
 import struct
@@ -234,6 +236,12 @@ BPR_OVERRIDES = {
 # pose (the game repositions them via skeleton at runtime).
 # We shift pivot + cube origins by the given offset [x, y, z] in Bedrock units.
 CUBE_OFFSET_OVERRIDES = {
+    "wolf": {
+        # Body/upperBody rotated 90°X but children not moved — 4-unit Z gap
+        # between head back (Z=-5) and body front (Z=-1). Shift forward to close.
+        "body": [0, 0, -2],
+        "upperBody": [0, 0, -4],
+    },
     "enderman": {
         # Head at y=24 overlaps body (y=26-38) — move to y=38 (top of body)
         "head": [0, 14, 0],

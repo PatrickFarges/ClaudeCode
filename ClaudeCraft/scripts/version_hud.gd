@@ -8,7 +8,7 @@ var speed_label: Label
 var render_label: Label
 var target_label: Label
 
-const VERSION = "v18.2.1"
+const VERSION = "v18.4.0"
 
 var audio_manager = null
 var player = null
@@ -107,25 +107,17 @@ func _ready():
 			_env = child.environment
 			break
 
-	# Charger le preset sauvegardé — application immédiate + re-application après warmup
+	# Charger le preset sauvegardé — appliqué UNIQUEMENT après warmup
+	# (SSAO/SDFGI doivent s'initialiser avec de la géométrie dans le depth buffer)
 	var saved_preset = 2  # Cloclo Style par défaut
 	var cfg = ConfigFile.new()
 	if cfg.load("user://settings.cfg") == OK and cfg.has_section_key("game", "render_preset"):
 		saved_preset = int(cfg.get_value("game", "render_preset"))
 		if saved_preset < 0 or saved_preset >= RENDER_NAMES.size():
 			saved_preset = 2
-	# Application immédiate pour que l'éclairage soit correct dès le départ
-	if _env:
-		_render_preset = saved_preset
-		match _render_preset:
-			0: _apply_vanilla()
-			1: _apply_gi()
-			2: _apply_cinematic()
-			3: _apply_enb_sombre()
-			4: _apply_reshade_epique()
-		render_label.text = "Rendu : %s (F2)" % RENDER_NAMES[_render_preset]
-		render_label.add_theme_color_override("font_color", RENDER_COLORS[_render_preset])
-	# Re-application après warmup pour SSAO/SDFGI (besoin de géométrie)
+	_render_preset = saved_preset
+	render_label.text = "Rendu : %s (F2)" % RENDER_NAMES[_render_preset]
+	render_label.add_theme_color_override("font_color", RENDER_COLORS[_render_preset])
 	_pending_preset = saved_preset
 
 func _input(event):
@@ -442,7 +434,7 @@ func _process(_delta):
 	# quelques frames avec de la géométrie pour que SSAO/SDFGI fonctionnent)
 	if _pending_preset >= 0 and _env:
 		_warmup_frames += 1
-		if _warmup_frames >= 15:
+		if _warmup_frames >= 30:
 			_render_preset = _pending_preset
 			_pending_preset = -1
 			_warmup_frames = 0
