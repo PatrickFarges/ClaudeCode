@@ -267,8 +267,8 @@ CUBE_OFFSET_OVERRIDES = {
         # Rotate Head offset [0,11,-3] by -30°X → delta [0, -3, -5]
         "Head": [0, -3, -5],
         "Muzzle": [0, -3, -5],
-        "EarL": [1, -0.5, -8.5],
-        "EarR": [-1, -0.5, -8.5],
+        "EarL": [1, -0.5, -7.75],
+        "EarR": [-1, -0.5, -7.75],
     },
 }
 
