@@ -16,6 +16,8 @@ Usage:
     python mob_converter.py zombie --output path/to/output.glb
 
 Changelog:
+    v2.5.0 — Fix oreilles cheval (EarL/EarR offset Z-5 au lieu de Z-7,
+             aligné avec Head — les oreilles étaient enfoncées dans la tête)
     v2.4.0 — Fix wolf corps décalé (CUBE_OFFSET_OVERRIDES body/upperBody Z-4,
              ferme le vide tête-corps et corrige le chevauchement corps-queue)
     v2.3.0 — Fix enderman tête trop basse (CUBE_OFFSET_OVERRIDES +14Y pour head,
@@ -35,7 +37,7 @@ Changelog:
     v1.0.0 — Création : parsing .geo.json, bind_pose_rotation, Molang -> keyframes
 """
 
-APP_VERSION = "2.4.0"
+APP_VERSION = "2.5.0"
 
 import json
 import struct
@@ -67,7 +69,7 @@ MOB_CATEGORY = {
     # Passive — flee when attacked
     "cow": "passive", "pig": "passive", "sheep": "passive",
     "chicken": "passive", "rabbit": "passive", "bat": "passive",
-    "fox": "passive", "cat": "passive",
+    "fox": "passive", "cat": "passive", "horse": "passive",
     # Neutral — attack only when provoked
     "wolf": "neutral", "polar_bear": "neutral", "enderman": "neutral",
     # Hostile — attack on sight (night only unless specified)
@@ -145,6 +147,15 @@ MOB_REGISTRY = {
         "texture": "textures/entity/bat.png",
         "tex_size": (64, 64),
         "custom_anims": ["walk", "idle"],
+    },
+    "horse": {
+        "geo": "models/entity/horse_v3.geo.json",
+        "geo_key": "geometry.horse.v3",
+        "texture": "textures/entity/horse2/horse_white.png",
+        "tex_size": (64, 64),
+        "custom_anims": ["walk", "idle"],
+        "hide_bones": ["Saddle", "Bridle", "BitL", "BitR", "ReinsL", "ReinsR",
+                        "BagL", "BagR", "MuleEarL", "MuleEarR"],
     },
     # ── Neutral mobs ──
     "wolf": {
@@ -229,6 +240,11 @@ BPR_OVERRIDES = {
         "body": [90.0, 0.0, 0.0],
         "upperBody": [90.0, 0.0, 0.0],
     },
+    "horse": {
+        "Head": [30.0, 0.0, 0.0],
+        "Muzzle": [30.0, 0.0, 0.0],
+        "Mane": [30.0, 0.0, 0.0],
+    },
 }
 
 # ─── Cube Position Overrides ─────────────────────────────────────────────────
@@ -246,8 +262,37 @@ CUBE_OFFSET_OVERRIDES = {
         # Head at y=24 overlaps body (y=26-38) — move to y=38 (top of body)
         "head": [0, 14, 0],
     },
+    "horse": {
+        # Neck rotates 30°X but children not repositioned.
+        # Rotate Head offset [0,11,-3] by -30°X → delta [0, -3, -5]
+        "Head": [0, -3, -5],
+        "Muzzle": [0, -3, -5],
+        "EarL": [0, 0.5, -9.5],
+        "EarR": [0, 0.5, -9.5],
+    },
 }
 
+# ─── Force BPR Overrides ─────────────────────────────────────────────────────
+# Replace bind_pose_rotation even when the bone already has one in the geo file.
+# Used when the existing rotation is wrong/insufficient (e.g., ears need neck tilt).
+BPR_FORCE_OVERRIDES = {
+    "horse": {
+        "EarL": [30.0, 0.0, 5.0],   # original [0,0,5] + 30°X to align with neck
+        "EarR": [30.0, 0.0, -5.0],  # original [0,0,-5] + 30°X to align with neck
+    },
+}
+
+# ─── Pivot-Only Overrides ────────────────────────────────────────────────────
+# Shift ONLY the pivot (not cube origins) — allows BPR to rotate around a
+# different point (e.g., ear base instead of neck).
+PIVOT_ONLY_OVERRIDES = {
+    "horse": {
+        # Ear pivots are at neck position [0,17,-8] — way too far from ear cubes
+        # at Y=34. Move pivots up to ear base so 30°X rotation doesn't fling them.
+        "EarL": [0, 15, 3],
+        "EarR": [0, 15, 3],
+    },
+}
 
 # ─── Math Utilities ───────────────────────────────────────────────────────────
 
@@ -401,7 +446,7 @@ def parse_geo_json(mob_info, mob_name=None):
             "name": name,
             "parent": b.get("parent"),
             "pivot": b.get("pivot", [0, 0, 0]),
-            "bind_pose_rotation": b.get("bind_pose_rotation", [0, 0, 0]),
+            "bind_pose_rotation": b.get("bind_pose_rotation", b.get("rotation", [0, 0, 0])),
             "never_render": b.get("neverRender", False),
             "mirror": b.get("mirror", False),
             "cubes": [],
@@ -439,6 +484,13 @@ def parse_geo_json(mob_info, mob_name=None):
                 if not any(abs(v) > 0.01 for v in existing):
                     bone["bind_pose_rotation"] = bpr_overrides[bone["name"]]
 
+    # Apply forced BPR overrides (replace even existing rotations)
+    if mob_name and mob_name in BPR_FORCE_OVERRIDES:
+        force_bpr = BPR_FORCE_OVERRIDES[mob_name]
+        for bone in bones:
+            if bone["name"] in force_bpr:
+                bone["bind_pose_rotation"] = force_bpr[bone["name"]]
+
     # Apply cube position overrides (shift pivot + cube origins)
     if mob_name and mob_name in CUBE_OFFSET_OVERRIDES:
         offsets = CUBE_OFFSET_OVERRIDES[mob_name]
@@ -452,6 +504,24 @@ def parse_geo_json(mob_info, mob_name=None):
                     cube["origin"][0] += dx
                     cube["origin"][1] += dy
                     cube["origin"][2] += dz
+
+    # Apply pivot-only overrides (shift pivot WITHOUT shifting cube origins)
+    if mob_name and mob_name in PIVOT_ONLY_OVERRIDES:
+        pov = PIVOT_ONLY_OVERRIDES[mob_name]
+        for bone in bones:
+            if bone["name"] in pov:
+                dx, dy, dz = pov[bone["name"]]
+                bone["pivot"][0] += dx
+                bone["pivot"][1] += dy
+                bone["pivot"][2] += dz
+
+    # Hide bones (tack, equipment) — keep in skeleton but don't render
+    if mob_name and mob_name in MOB_REGISTRY:
+        hide_list = MOB_REGISTRY[mob_name].get("hide_bones", [])
+        if hide_list:
+            for bone in bones:
+                if bone["name"] in hide_list:
+                    bone["never_render"] = True
 
     return bones, tex_w, tex_h
 
@@ -749,8 +819,16 @@ def bake_mob_animations(mob_name, mob_info, bone_names, bone_map, mesh_data):
                     "leg0": [a, 0, 0], "leg1": [-a, 0, 0],
                     "leg2": [-a, 0, 0], "leg3": [a, 0, 0],
                 }
+                # Horse: different bone names
+                if mob_name == "horse":
+                    m = {
+                        "LegFL": [a, 0, 0], "LegFR": [-a, 0, 0],
+                        "LegBL": [-a, 0, 0], "LegBR": [a, 0, 0],
+                        "Tail": [0, math.sin(t / dur * 2 * math.pi) * 10, 0],
+                        "Neck": [math.sin(t / dur * 2 * math.pi) * 3, 0, 0],
+                    }
                 # Fox/wolf: also wag tail
-                if mob_name in ("fox", "wolf"):
+                elif mob_name in ("fox", "wolf"):
                     m["tail"] = [0, math.sin(t / dur * 4 * math.pi) * 20, 0]
                 return m.get(bone)
             animations.append(make_anim("walk", 1.0, 24, quad_walk))
