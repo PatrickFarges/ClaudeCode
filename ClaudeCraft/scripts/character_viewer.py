@@ -1,27 +1,32 @@
 #!/usr/bin/env python3
 """
-character_viewer.py v1.3.0
-Visualiseur de personnage GLB avec squelette, animations et skin swap
+character_viewer.py v1.5.0
+Visualiseur de personnage GLB avec squelette, animations, skin swap et armures
 
-Charge un modèle GLB (Bedrock → GLB converti) et permet de :
-- Visualiser le personnage 3D avec rotation caméra
-- Changer de skin (texture 64×64) en un clic
-- Sélectionner et jouer les animations
+Charge un modele GLB (Bedrock -> GLB converti) et permet de :
+- Visualiser le personnage 3D avec rotation camera
+- Changer de skin (texture 64x64) en un clic
+- Selectionner et jouer les animations
 - Voir le squelette (bones)
+- Superposer des pieces d'armure (casque, plastron, jambieres, bottes)
+  avec 5 materiaux (cuir, chaine, fer, or, diamant)
 
 Usage:
     python character_viewer.py
     python character_viewer.py path/to/model.glb
 
 Changelog:
-    v1.4.0 — Support mobs : doubleSided (désactive culling + two-sided lighting),
-             texture embarquée prioritaire dans la liste skins, GL_FRONT_AND_BACK
-    v1.2.0 — Scan récursif sous-dossiers skins, labels avec préfixe dossier (professions/...)
+    v1.5.0 — Systeme d'armures : overlay 3D inflated cubes (helmet, chestplate,
+             leggings, boots), 5 materiaux (leather/chain/iron/gold/diamond),
+             textures Bedrock vanilla, rendu skinne synchronise avec animations
+    v1.4.0 — Support mobs : doubleSided (desactive culling + two-sided lighting),
+             texture embarquee prioritaire dans la liste skins, GL_FRONT_AND_BACK
+    v1.2.0 — Scan recursif sous-dossiers skins, labels avec prefixe dossier
     v1.1.0 — Fix faces noires : rendu alpha blend pour overlays, depth sort
-    v1.0.0 — Création initiale
+    v1.0.0 — Creation initiale
 """
 
-APP_VERSION = "1.4.0"
+APP_VERSION = "1.5.0"
 
 import sys
 import json
@@ -45,6 +50,58 @@ from OpenGL.GLU import *
 DEFAULT_GLB = Path(__file__).parent.parent / "assets" / "PlayerModel" / "steve.glb"
 DEFAULT_SKINS = Path(__file__).parent.parent / "assets" / "PlayerModel" / "skins"
 DEFAULT_SKIN = Path(__file__).parent.parent / "assets" / "PlayerModel" / "steve_skin.png"
+
+ARMOR_TEXTURES_DIR = Path(r"D:\Games\Minecraft - Bedrock Edition\data\resource_packs\vanilla\textures\models\armor")
+
+# Armor materials: (layer1_file, layer2_file)
+ARMOR_MATERIALS = {
+    "leather": ("cloth_1.png", "cloth_2.png"),
+    "chain": ("chain_1.png", "chain_2.png"),
+    "iron": ("iron_1.png", "iron_2.png"),
+    "gold": ("gold_1.png", "gold_2.png"),
+    "diamond": ("diamond_1.png", "diamond_2.png"),
+}
+
+# Armor piece definitions from player_armor.json
+# layer: 1 = _1 texture (helmet+chest+boots), 2 = _2 texture (leggings)
+# Each cube: (bone_name, origin, size, uv_offset, inflate, mirror)
+# All coords in Bedrock pixels (1/16 of a block)
+ARMOR_PIECES = {
+    "helmet": {
+        "layer": 1,
+        "cubes": [
+            ("head", [-4, 24, -4], [8, 8, 8], [0, 0], 1.0, False),
+            ("hat", [-4, 24, -4], [8, 8, 8], [32, 0], 1.5, False),
+        ],
+    },
+    "chestplate": {
+        "layer": 1,
+        "cubes": [
+            ("body", [-4, 12, -2], [8, 12, 4], [16, 16], 1.01, False),
+            ("rightArm", [-8, 12, -2], [4, 12, 4], [40, 16], 1.0, False),
+            ("leftArm", [4, 12, -2], [4, 12, 4], [40, 16], 1.0, True),
+        ],
+    },
+    "leggings": {
+        "layer": 2,
+        "cubes": [
+            ("body", [-4, 12, -2], [8, 12, 4], [16, 16], 0.5, False),
+            ("rightLeg", [-3.9, 0, -2], [4, 12, 4], [0, 16], 0.5, False),
+            ("leftLeg", [-0.1, 0, -2], [4, 12, 4], [0, 16], 0.5, True),
+        ],
+    },
+    "boots": {
+        "layer": 1,
+        "cubes": [
+            ("rightLeg", [-3.9, 0, -2], [4, 12, 4], [0, 16], 1.0, False),
+            ("leftLeg", [-0.1, 0, -2], [4, 12, 4], [0, 16], 1.0, True),
+        ],
+    },
+}
+
+BEDROCK_SCALE = 1.0 / 16.0
+ARMOR_TEX_W = 64
+ARMOR_TEX_H = 32
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -112,7 +169,6 @@ def mat4_multiply(a, b):
 
 
 def mat4_trs(t, q, s):
-    """Build TRS matrix (column-major) from translation, quaternion, scale."""
     x, y, z, w = q
     xx, yy, zz = x * x, y * y, z * z
     xy, xz, yz = x * y, x * z, y * z
@@ -148,8 +204,6 @@ def mat4_transform_dir(m, n):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 class GLBData:
-    """Parse a GLB file and extract mesh, skeleton, animations."""
-
     def __init__(self, path):
         self.path = Path(path)
         self.positions = []
@@ -175,7 +229,6 @@ class GLBData:
             self.gltf = json.loads(f.read(json_len))
             bin_len, _ = struct.unpack("<II", f.read(8))
             self.bin = f.read(bin_len)
-
         self._extract_mesh()
         self._extract_skeleton()
         self._extract_animations()
@@ -200,7 +253,6 @@ class GLBData:
     def _extract_mesh(self):
         primitives = self.gltf["meshes"][0]["primitives"]
         materials = self.gltf.get("materials", [])
-        # First primitive provides vertex data (shared across primitives)
         prim0 = primitives[0]
         attrs = prim0["attributes"]
         self.positions = self._read_accessor(attrs["POSITION"])
@@ -208,7 +260,6 @@ class GLBData:
         self.uvs = self._read_accessor(attrs["TEXCOORD_0"])
         self.joints = self._read_accessor(attrs["JOINTS_0"])
         self.weights = self._read_accessor(attrs["WEIGHTS_0"])
-        # Split indices into base (opaque) and overlay (blend)
         self.base_indices = []
         self.overlay_indices = []
         self.indices = []
@@ -279,11 +330,16 @@ class GLBData:
                 bv = self.gltf["bufferViews"][img["bufferView"]]
                 offset = bv.get("byteOffset", 0)
                 self.embedded_texture = self.bin[offset : offset + bv["byteLength"]]
-        # Check doubleSided on any material
         for mat in self.gltf.get("materials", []):
             if mat.get("doubleSided", False):
                 self.double_sided = True
                 break
+
+    def bone_index_by_name(self, name):
+        for i, b in enumerate(self.bones):
+            if b["name"] == name:
+                return i
+        return -1
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -291,8 +347,6 @@ class GLBData:
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 class SkeletalAnimator:
-    """Compute skinned vertex positions for a given animation time."""
-
     def __init__(self, glb: GLBData):
         self.glb = glb
         self.current_anim = None
@@ -300,6 +354,7 @@ class SkeletalAnimator:
         self.speed = 1.0
         self.playing = False
         self.loop = True
+        self.last_skin_matrices = None  # Cached for armor rendering
 
     def set_animation(self, name):
         self.current_anim = name
@@ -320,7 +375,6 @@ class SkeletalAnimator:
                 self.time = min(self.time, dur)
 
     def _sample_channel(self, channel_data, t):
-        """Interpolate keyframes at time t."""
         ts = channel_data["timestamps"]
         vals = channel_data["values"]
         if not ts:
@@ -329,23 +383,20 @@ class SkeletalAnimator:
             return vals[0]
         if t >= ts[-1]:
             return vals[-1]
-        # Find bracketing keyframes
         for i in range(len(ts) - 1):
             if ts[i] <= t <= ts[i + 1]:
                 frac = (t - ts[i]) / (ts[i + 1] - ts[i]) if ts[i + 1] != ts[i] else 0
                 a, b = vals[i], vals[i + 1]
-                if len(a) == 4:  # quaternion → slerp
+                if len(a) == 4:
                     return quat_slerp(a, b, frac)
-                else:  # linear interpolation
+                else:
                     return [a[j] + frac * (b[j] - a[j]) for j in range(len(a))]
         return vals[-1]
 
-    def compute_skinned(self):
-        """Compute skinned positions and normals. Returns (positions, normals)."""
+    def _compute_transforms(self):
+        """Compute world transforms and skin matrices."""
         glb = self.glb
         n_bones = len(glb.bones)
-
-        # Get animated bone rotations and translations
         bone_rotations = {}
         bone_translations = {}
         if self.current_anim and self.current_anim in glb.animations:
@@ -360,7 +411,6 @@ class SkeletalAnimator:
                     if v:
                         bone_translations[bname] = v
 
-        # Compute world transforms
         world_transforms = [None] * n_bones
         for bi in range(n_bones):
             bone = glb.bones[bi]
@@ -377,16 +427,21 @@ class SkeletalAnimator:
             else:
                 world_transforms[bi] = local
 
-        # Compute skinning matrices
         skin_matrices = [None] * n_bones
         for bi in range(n_bones):
             if world_transforms[bi]:
-                ibm = glb.ibms[bi]
-                skin_matrices[bi] = mat4_multiply(world_transforms[bi], ibm)
+                skin_matrices[bi] = mat4_multiply(world_transforms[bi], glb.ibms[bi])
             else:
                 skin_matrices[bi] = mat4_identity()
 
-        # Skin vertices
+        return world_transforms, skin_matrices
+
+    def compute_skinned(self):
+        glb = self.glb
+        n_bones = len(glb.bones)
+        world_transforms, skin_matrices = self._compute_transforms()
+        self.last_skin_matrices = skin_matrices
+
         skinned_pos = []
         skinned_nrm = []
         for vi in range(len(glb.positions)):
@@ -398,41 +453,227 @@ class SkeletalAnimator:
         return skinned_pos, skinned_nrm
 
     def get_bone_positions(self):
-        """Get world positions of all bones (for skeleton visualization)."""
         glb = self.glb
         n_bones = len(glb.bones)
-        bone_rotations = {}
-        bone_translations = {}
-        if self.current_anim and self.current_anim in glb.animations:
-            anim = glb.animations[self.current_anim]
-            for bname, channels in anim["channels"].items():
-                if "rotation" in channels:
-                    q = self._sample_channel(channels["rotation"], self.time)
-                    if q:
-                        bone_rotations[bname] = q
-                if "translation" in channels:
-                    v = self._sample_channel(channels["translation"], self.time)
-                    if v:
-                        bone_translations[bname] = v
-
-        world_transforms = [None] * n_bones
-        for bi in range(n_bones):
-            bone = glb.bones[bi]
-            t = bone_translations.get(bone["name"], bone["translation"])
-            r = bone_rotations.get(bone["name"], bone["rotation"])
-            s = bone["scale"]
-            local = mat4_trs(t, r, s)
-            if bi in glb.bone_parent:
-                parent_world = world_transforms[glb.bone_parent[bi]]
-                world_transforms[bi] = mat4_multiply(parent_world, local) if parent_world else local
-            else:
-                world_transforms[bi] = local
-
+        world_transforms, _ = self._compute_transforms()
         positions = []
         for bi in range(n_bones):
             wt = world_transforms[bi]
             positions.append([wt[12], wt[13], wt[14]] if wt else [0, 0, 0])
         return positions
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Armor Renderer
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def _generate_box_faces(origin, size, uv_offset, inflate, mirror=False):
+    """Generate 6 faces for a Bedrock box (in model space, scaled by 1/16).
+    Returns list of (position, normal, uv) tuples, 6 vertices per face, 36 total."""
+    ox, oy, oz = origin
+    w, h, d = size
+    u0, v0 = uv_offset
+    inf = inflate
+    S = BEDROCK_SCALE
+
+    # Inflated corners in GLB space
+    x0 = (ox - inf) * S
+    y0 = (oy - inf) * S
+    z0 = (oz - inf) * S
+    x1 = (ox + w + inf) * S
+    y1 = (oy + h + inf) * S
+    z1 = (oz + d + inf) * S
+
+    tw, th = ARMOR_TEX_W, ARMOR_TEX_H
+
+    def uv(px, py):
+        return [px / tw, py / th]
+
+    verts = []
+
+    # Bedrock box UV layout (from uv_offset [u0, v0], box size [w, h, d]):
+    # Top:    (u0+d, v0)      size w x d
+    # Bottom: (u0+d+w, v0)    size w x d
+    # Left:   (u0, v0+d)      size d x h
+    # Front:  (u0+d, v0+d)    size w x h
+    # Right:  (u0+d+w, v0+d)  size d x h
+    # Back:   (u0+d+w+d, v0+d) size w x h
+
+    # Front face (-Z)
+    u_f, v_f = u0 + d, v0 + d
+    n_front = [0, 0, -1]
+    quad_front = [
+        ([x0, y0, z0], uv(u_f, v_f + h)),
+        ([x1, y0, z0], uv(u_f + w, v_f + h)),
+        ([x1, y1, z0], uv(u_f + w, v_f)),
+        ([x0, y1, z0], uv(u_f, v_f)),
+    ]
+
+    # Back face (+Z)
+    u_b, v_b = u0 + d + w + d, v0 + d
+    n_back = [0, 0, 1]
+    quad_back = [
+        ([x1, y0, z1], uv(u_b, v_b + h)),
+        ([x0, y0, z1], uv(u_b + w, v_b + h)),
+        ([x0, y1, z1], uv(u_b + w, v_b)),
+        ([x1, y1, z1], uv(u_b, v_b)),
+    ]
+
+    # Right face (+X)
+    u_r, v_r = u0 + d + w, v0 + d
+    n_right = [1, 0, 0]
+    quad_right = [
+        ([x1, y0, z0], uv(u_r, v_r + h)),
+        ([x1, y0, z1], uv(u_r + d, v_r + h)),
+        ([x1, y1, z1], uv(u_r + d, v_r)),
+        ([x1, y1, z0], uv(u_r, v_r)),
+    ]
+
+    # Left face (-X)
+    u_l, v_l = u0, v0 + d
+    n_left = [-1, 0, 0]
+    quad_left = [
+        ([x0, y0, z1], uv(u_l, v_l + h)),
+        ([x0, y0, z0], uv(u_l + d, v_l + h)),
+        ([x0, y1, z0], uv(u_l + d, v_l)),
+        ([x0, y1, z1], uv(u_l, v_l)),
+    ]
+
+    # Top face (+Y)
+    u_t, v_t = u0 + d, v0
+    n_top = [0, 1, 0]
+    quad_top = [
+        ([x0, y1, z0], uv(u_t, v_t + d)),
+        ([x1, y1, z0], uv(u_t + w, v_t + d)),
+        ([x1, y1, z1], uv(u_t + w, v_t)),
+        ([x0, y1, z1], uv(u_t, v_t)),
+    ]
+
+    # Bottom face (-Y)
+    u_bo, v_bo = u0 + d + w, v0
+    n_bottom = [0, -1, 0]
+    quad_bottom = [
+        ([x0, y0, z1], uv(u_bo, v_bo + d)),
+        ([x1, y0, z1], uv(u_bo + w, v_bo + d)),
+        ([x1, y0, z0], uv(u_bo + w, v_bo)),
+        ([x0, y0, z0], uv(u_bo, v_bo)),
+    ]
+
+    for quad, normal in [(quad_front, n_front), (quad_back, n_back),
+                          (quad_right, n_right), (quad_left, n_left),
+                          (quad_top, n_top), (quad_bottom, n_bottom)]:
+        if mirror:
+            # Mirror = flip UVs horizontally within each face (swap U of vertex 0<->1, 3<->2)
+            q = [(quad[0][0], quad[1][1]), (quad[1][0], quad[0][1]),
+                 (quad[2][0], quad[3][1]), (quad[3][0], quad[2][1])]
+        else:
+            q = quad
+        # Two triangles per quad: 0-1-2, 0-2-3
+        for idx in [0, 1, 2, 0, 2, 3]:
+            pos, uvc = q[idx]
+            verts.append((pos, normal, uvc))
+
+    return verts
+
+
+class ArmorRenderer:
+    """Generates and renders armor overlay meshes."""
+
+    def __init__(self, glb: GLBData):
+        self.glb = glb
+        self.enabled_pieces = {"helmet": False, "chestplate": False,
+                               "leggings": False, "boots": False}
+        self.material = "iron"
+        self.tex_ids = {}  # "iron_1" -> GL tex id, etc.
+        # Pre-generate armor meshes
+        # Each piece: list of (bone_index, positions[], normals[], uvs[])
+        self.piece_meshes = {}
+        for piece_name, piece_def in ARMOR_PIECES.items():
+            meshes = []
+            for bone_name, origin, size, uv_offset, inflate, mirror in piece_def["cubes"]:
+                bi = glb.bone_index_by_name(bone_name)
+                if bi < 0:
+                    continue
+                faces = _generate_box_faces(origin, size, uv_offset, inflate, mirror)
+                positions = [f[0] for f in faces]
+                normals = [f[1] for f in faces]
+                uvs = [f[2] for f in faces]
+                meshes.append((bi, positions, normals, uvs))
+            self.piece_meshes[piece_name] = meshes
+
+    def load_textures(self):
+        """Load armor textures for all materials. Call after GL context is ready."""
+        for mat_name, (file1, file2) in ARMOR_MATERIALS.items():
+            for suffix, filename in [("1", file1), ("2", file2)]:
+                key = f"{mat_name}_{suffix}"
+                path = ARMOR_TEXTURES_DIR / filename
+                if path.exists():
+                    tid = self._load_tex(path)
+                    if tid:
+                        self.tex_ids[key] = tid
+
+    def _load_tex(self, path):
+        img = QImage(str(path))
+        if img.isNull():
+            return None
+        img = img.convertToFormat(QImage.Format.Format_RGBA8888)
+        w, h = img.width(), img.height()
+        bits = img.bits()
+        bits.setsize(w * h * 4)
+        data = bytes(bits)
+        tex_id = glGenTextures(1)
+        glBindTexture(GL_TEXTURE_2D, tex_id)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data)
+        return tex_id
+
+    def render(self, skin_matrices):
+        """Render enabled armor pieces using the current skin matrices."""
+        if not skin_matrices:
+            return
+        any_enabled = any(self.enabled_pieces.values())
+        if not any_enabled:
+            return
+
+        glEnable(GL_TEXTURE_2D)
+        glEnable(GL_LIGHTING)
+        glDisable(GL_CULL_FACE)  # Armor may be seen from inside
+        glEnable(GL_ALPHA_TEST)
+        glAlphaFunc(GL_GREATER, 0.5)
+        # Slight depth offset to prevent z-fighting with body
+        glEnable(GL_POLYGON_OFFSET_FILL)
+        glPolygonOffset(-1.0, -1.0)
+
+        for piece_name, enabled in self.enabled_pieces.items():
+            if not enabled:
+                continue
+            layer = ARMOR_PIECES[piece_name]["layer"]
+            tex_key = f"{self.material}_{layer}"
+            tex_id = self.tex_ids.get(tex_key)
+            if not tex_id:
+                continue
+            glBindTexture(GL_TEXTURE_2D, tex_id)
+
+            meshes = self.piece_meshes.get(piece_name, [])
+            glColor4f(1.0, 1.0, 1.0, 1.0)
+            glBegin(GL_TRIANGLES)
+            for bone_idx, positions, normals, uvs in meshes:
+                sm = skin_matrices[bone_idx] if bone_idx < len(skin_matrices) else mat4_identity()
+                for i in range(len(positions)):
+                    sp = mat4_transform_point(sm, positions[i])
+                    sn = mat4_transform_dir(sm, normals[i])
+                    glTexCoord2f(*uvs[i])
+                    glNormal3f(*sn)
+                    glVertex3f(*sp)
+            glEnd()
+
+        glDisable(GL_POLYGON_OFFSET_FILL)
+        glDisable(GL_ALPHA_TEST)
+        glDisable(GL_TEXTURE_2D)
+        glEnable(GL_CULL_FACE)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -444,12 +685,13 @@ class GLViewport(QOpenGLWidget):
         super().__init__(parent)
         self.glb = None
         self.animator = None
+        self.armor_renderer = None
         self.texture_id = 0
         # Camera
-        self.cam_theta = 200.0  # horizontal angle (degrees) — face the front of the model
-        self.cam_phi = 15.0     # vertical angle (degrees)
-        self.cam_dist = 4.0     # distance
-        self.cam_target = [0.0, 0.8, 0.0]  # look-at point (roughly chest height)
+        self.cam_theta = 200.0
+        self.cam_phi = 15.0
+        self.cam_dist = 4.0
+        self.cam_target = [0.0, 0.8, 0.0]
         self.cam_pan = [0.0, 0.0]
         # Mouse
         self._last_mouse = None
@@ -461,11 +703,12 @@ class GLViewport(QOpenGLWidget):
         # Animation timer
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
-        self._timer.start(16)  # ~60fps
+        self._timer.start(16)
 
     def set_model(self, glb: GLBData):
         self.glb = glb
         self.animator = SkeletalAnimator(glb)
+        self.armor_renderer = ArmorRenderer(glb)
         if glb.animations:
             first = list(glb.animations.keys())[0]
             self.animator.set_animation(first)
@@ -521,41 +764,63 @@ class GLViewport(QOpenGLWidget):
             self.animator.advance(0.016)
             self.update()
 
-    # ── OpenGL ──
+    # -- OpenGL --
 
     def initializeGL(self):
         glClearColor(0.18, 0.20, 0.25, 1.0)
         glEnable(GL_DEPTH_TEST)
-        # Disable face culling for doubleSided models (mobs), enable for single-sided (Steve)
         if self.glb and self.glb.double_sided:
             glDisable(GL_CULL_FACE)
         else:
             glEnable(GL_CULL_FACE)
             glCullFace(GL_BACK)
         glEnable(GL_LIGHTING)
-        # Key light (front-right-above)
         glEnable(GL_LIGHT0)
         glLightfv(GL_LIGHT0, GL_POSITION, [-2.0, 5.0, -3.0, 0.0])
         glLightfv(GL_LIGHT0, GL_DIFFUSE, [0.9, 0.85, 0.8, 1.0])
         glLightfv(GL_LIGHT0, GL_AMBIENT, [0.45, 0.45, 0.5, 1.0])
-        # Fill light (back-left, softer) to reduce harsh shadows
         glEnable(GL_LIGHT1)
         glLightfv(GL_LIGHT1, GL_POSITION, [2.0, 3.0, 3.0, 0.0])
         glLightfv(GL_LIGHT1, GL_DIFFUSE, [0.4, 0.4, 0.45, 1.0])
         glLightfv(GL_LIGHT1, GL_AMBIENT, [0.0, 0.0, 0.0, 1.0])
         glEnable(GL_COLOR_MATERIAL)
-        # FRONT_AND_BACK so both sides are properly lit (important for doubleSided mobs)
         glColorMaterial(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE)
-        # Two-sided lighting: back faces get flipped normals for proper illumination
         if self.glb and self.glb.double_sided:
             glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_TRUE)
-        # Alpha blending setup
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-        # Load default texture
+        # Load default texture (direct GL calls — context is current in initializeGL)
         if self.glb and self.glb.embedded_texture:
-            self.load_texture_from_bytes(self.glb.embedded_texture)
+            img = QImage()
+            img.loadFromData(self.glb.embedded_texture)
+            if not img.isNull():
+                img = img.convertToFormat(QImage.Format.Format_RGBA8888)
+                w, h = img.width(), img.height()
+                bits = img.bits(); bits.setsize(w * h * 4)
+                self.texture_id = glGenTextures(1)
+                glBindTexture(GL_TEXTURE_2D, self.texture_id)
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, bytes(bits))
         elif DEFAULT_SKIN.exists():
-            self.load_texture_from_file(DEFAULT_SKIN)
+            img = QImage(str(DEFAULT_SKIN))
+            if not img.isNull():
+                img = img.convertToFormat(QImage.Format.Format_RGBA8888)
+                w, h = img.width(), img.height()
+                bits = img.bits(); bits.setsize(w * h * 4)
+                self.texture_id = glGenTextures(1)
+                glBindTexture(GL_TEXTURE_2D, self.texture_id)
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, bytes(bits))
+        # Load armor textures (context still current)
+        if self.armor_renderer:
+            self.armor_renderer.load_textures()
+            n = len(self.armor_renderer.tex_ids)
+            print(f"Armor textures loaded: {n}")
 
     def resizeGL(self, w, h):
         glViewport(0, 0, w, h)
@@ -582,7 +847,6 @@ class GLViewport(QOpenGLWidget):
             0, 1, 0,
         )
 
-        # Grid
         if self.show_grid:
             self._draw_grid()
 
@@ -592,7 +856,7 @@ class GLViewport(QOpenGLWidget):
         # Compute skinned mesh
         skinned_pos, skinned_nrm = self.animator.compute_skinned()
 
-        # Draw mesh — two passes: base (opaque) then overlay (alpha blend)
+        # Draw mesh
         if self.show_wireframe:
             glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
             glDisable(GL_LIGHTING)
@@ -606,11 +870,10 @@ class GLViewport(QOpenGLWidget):
         else:
             glDisable(GL_TEXTURE_2D)
 
-        # Use base_indices if available (split primitives), else fallback to all indices
         base_idx = getattr(self.glb, 'base_indices', None) or self.glb.indices
         overlay_idx = getattr(self.glb, 'overlay_indices', None) or []
 
-        # Pass 1: Base body (opaque, no blending)
+        # Pass 1: Base body
         glDisable(GL_BLEND)
         glColor4f(1.0, 1.0, 1.0, 1.0)
         glBegin(GL_TRIANGLES)
@@ -621,10 +884,10 @@ class GLViewport(QOpenGLWidget):
                 glVertex3f(*skinned_pos[idx])
         glEnd()
 
-        # Pass 2: Overlay (hat, sleeves, pants, jacket — alpha blended)
+        # Pass 2: Overlay
         if overlay_idx:
             glEnable(GL_BLEND)
-            glDepthMask(GL_FALSE)  # Don't write depth for transparent parts
+            glDepthMask(GL_FALSE)
             glBegin(GL_TRIANGLES)
             for idx in overlay_idx:
                 if idx < len(skinned_pos):
@@ -637,6 +900,10 @@ class GLViewport(QOpenGLWidget):
 
         glDisable(GL_TEXTURE_2D)
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
+
+        # Pass 3: Armor overlay
+        if self.armor_renderer and not self.show_wireframe:
+            self.armor_renderer.render(self.animator.last_skin_matrices)
 
         # Draw bones
         if self.show_bones:
@@ -661,7 +928,6 @@ class GLViewport(QOpenGLWidget):
             glVertex3f(-extent, 0, v)
             glVertex3f(extent, 0, v)
         glEnd()
-        # Axes
         glLineWidth(2.0)
         glBegin(GL_LINES)
         glColor3f(0.9, 0.2, 0.2); glVertex3f(0, 0, 0); glVertex3f(0.5, 0, 0)
@@ -676,7 +942,6 @@ class GLViewport(QOpenGLWidget):
         glDisable(GL_DEPTH_TEST)
         glDisable(GL_TEXTURE_2D)
         bone_pos = self.animator.get_bone_positions()
-        # Draw bones as lines
         glLineWidth(2.0)
         glBegin(GL_LINES)
         glColor3f(1.0, 1.0, 0.0)
@@ -686,7 +951,6 @@ class GLViewport(QOpenGLWidget):
                 glVertex3f(*bone_pos[pi])
                 glVertex3f(*bone_pos[bi])
         glEnd()
-        # Draw joints as points
         glPointSize(6.0)
         glBegin(GL_POINTS)
         glColor3f(1.0, 0.3, 0.3)
@@ -698,7 +962,7 @@ class GLViewport(QOpenGLWidget):
         glEnable(GL_DEPTH_TEST)
         glEnable(GL_LIGHTING)
 
-    # ── Mouse ──
+    # -- Mouse --
 
     def mousePressEvent(self, event):
         self._last_mouse = event.pos()
@@ -740,14 +1004,12 @@ class CharacterViewer(QMainWindow):
         self.setMinimumSize(900, 650)
         self.resize(1100, 750)
 
-        # Load model
         path = Path(glb_path) if glb_path else DEFAULT_GLB
         self.glb = GLBData(path)
 
         self._build_ui()
         self.viewport.set_model(self.glb)
         self._populate_animations()
-        # Defer skin population to after window is shown (avoids QPixmap before GL init)
         QTimer.singleShot(100, self._populate_skins)
 
     def _build_ui(self):
@@ -756,7 +1018,7 @@ class CharacterViewer(QMainWindow):
         main_layout = QHBoxLayout(central)
         main_layout.setContentsMargins(4, 4, 4, 4)
 
-        # ── Left panel ──
+        # -- Left panel --
         left = QWidget()
         left.setFixedWidth(240)
         left_layout = QVBoxLayout(left)
@@ -774,11 +1036,59 @@ class CharacterViewer(QMainWindow):
         skin_layout.addWidget(btn_load)
         left_layout.addWidget(skin_group)
 
+        # Armor
+        armor_group = QGroupBox("Armure")
+        armor_layout = QVBoxLayout(armor_group)
+
+        # Material selector
+        mat_row = QHBoxLayout()
+        mat_row.addWidget(QLabel("Materiau:"))
+        self.armor_material_combo = QComboBox()
+        for mat_name in ARMOR_MATERIALS:
+            self.armor_material_combo.addItem(mat_name.capitalize())
+        self.armor_material_combo.setCurrentText("Iron")
+        self.armor_material_combo.currentTextChanged.connect(self._on_armor_material_changed)
+        mat_row.addWidget(self.armor_material_combo)
+        armor_layout.addLayout(mat_row)
+
+        # Piece checkboxes
+        self.armor_checks = {}
+        pieces_row1 = QHBoxLayout()
+        pieces_row2 = QHBoxLayout()
+        for i, (piece_name, label) in enumerate([
+            ("helmet", "Casque"), ("chestplate", "Plastron"),
+            ("leggings", "Jambieres"), ("boots", "Bottes"),
+        ]):
+            cb = QCheckBox(label)
+            cb.toggled.connect(lambda checked, pn=piece_name: self._on_armor_toggled(pn, checked))
+            self.armor_checks[piece_name] = cb
+            if i < 2:
+                pieces_row1.addWidget(cb)
+            else:
+                pieces_row2.addWidget(cb)
+        armor_layout.addLayout(pieces_row1)
+        armor_layout.addLayout(pieces_row2)
+
+        # All on/off
+        btn_row = QHBoxLayout()
+        btn_all = QPushButton("Tout")
+        btn_all.setFixedWidth(60)
+        btn_all.clicked.connect(lambda: self._set_all_armor(True))
+        btn_none = QPushButton("Rien")
+        btn_none.setFixedWidth(60)
+        btn_none.clicked.connect(lambda: self._set_all_armor(False))
+        btn_row.addWidget(btn_all)
+        btn_row.addWidget(btn_none)
+        btn_row.addStretch()
+        armor_layout.addLayout(btn_row)
+
+        left_layout.addWidget(armor_group)
+
         # Bones
         bone_group = QGroupBox(f"Bones ({len(self.glb.bones)})")
         bone_layout = QVBoxLayout(bone_group)
         self.bone_list = QListWidget()
-        self.bone_list.setMaximumHeight(200)
+        self.bone_list.setMaximumHeight(150)
         for bone in self.glb.bones:
             self.bone_list.addItem(bone["name"])
         bone_layout.addWidget(self.bone_list)
@@ -787,12 +1097,11 @@ class CharacterViewer(QMainWindow):
         left_layout.addStretch()
         main_layout.addWidget(left)
 
-        # ── Center: viewport + controls ──
+        # -- Center: viewport + controls --
         center = QWidget()
         center_layout = QVBoxLayout(center)
         center_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Viewport
         self.viewport = GLViewport()
         center_layout.addWidget(self.viewport, stretch=1)
 
@@ -801,20 +1110,17 @@ class CharacterViewer(QMainWindow):
         controls.setFixedHeight(50)
         ctrl_layout = QHBoxLayout(controls)
 
-        # Animation selector
         ctrl_layout.addWidget(QLabel("Animation:"))
         self.anim_combo = QComboBox()
         self.anim_combo.setMinimumWidth(120)
         self.anim_combo.currentTextChanged.connect(self._on_anim_changed)
         ctrl_layout.addWidget(self.anim_combo)
 
-        # Play/Pause
-        self.btn_play = QPushButton("⏸ Pause")
+        self.btn_play = QPushButton("Pause")
         self.btn_play.setFixedWidth(90)
         self.btn_play.clicked.connect(self._toggle_play)
         ctrl_layout.addWidget(self.btn_play)
 
-        # Speed
         ctrl_layout.addWidget(QLabel("Vitesse:"))
         self.speed_slider = QSlider(Qt.Orientation.Horizontal)
         self.speed_slider.setRange(10, 300)
@@ -828,7 +1134,6 @@ class CharacterViewer(QMainWindow):
 
         ctrl_layout.addSpacing(20)
 
-        # Display toggles
         cb_grid = QCheckBox("Grille")
         cb_grid.setChecked(True)
         cb_grid.toggled.connect(lambda v: setattr(self.viewport, "show_grid", v))
@@ -845,6 +1150,24 @@ class CharacterViewer(QMainWindow):
         ctrl_layout.addStretch()
         center_layout.addWidget(controls)
         main_layout.addWidget(center, stretch=1)
+
+    # -- Armor --
+
+    def _on_armor_material_changed(self, text):
+        if self.viewport.armor_renderer:
+            self.viewport.armor_renderer.material = text.lower()
+            self.viewport.update()
+
+    def _on_armor_toggled(self, piece_name, checked):
+        if self.viewport.armor_renderer:
+            self.viewport.armor_renderer.enabled_pieces[piece_name] = checked
+            self.viewport.update()
+
+    def _set_all_armor(self, enabled):
+        for cb in self.armor_checks.values():
+            cb.setChecked(enabled)
+
+    # -- Skins / Animations --
 
     def _populate_animations(self):
         self.anim_combo.blockSignals(True)
@@ -864,15 +1187,13 @@ class CharacterViewer(QMainWindow):
         has_embedded = self.glb and self.glb.embedded_texture
         is_mob = has_embedded and self.glb.path != DEFAULT_GLB
 
-        # If mob model with embedded texture, add it as first entry
         if has_embedded:
-            item = QListWidgetItem("(Texture embarquée)")
+            item = QListWidgetItem("(Texture embarquee)")
             item.setData(Qt.ItemDataRole.UserRole, "__embedded__")
             self.skin_list.addItem(item)
 
         skin_files = []
         if not is_mob:
-            # Steve model — add default skins
             if DEFAULT_SKIN.exists():
                 skin_files.append(DEFAULT_SKIN)
             if DEFAULT_SKINS.exists():
@@ -880,9 +1201,7 @@ class CharacterViewer(QMainWindow):
                     if f not in skin_files:
                         skin_files.append(f)
 
-        # Also check alongside GLB (mob textures or custom skins)
         glb_dir = self.glb.path.parent
-        # Check in textures/ subdir first (mob_converter output structure)
         tex_dir = glb_dir / "textures"
         if tex_dir.exists():
             for f in sorted(tex_dir.rglob("*.png")):
@@ -917,7 +1236,6 @@ class CharacterViewer(QMainWindow):
             return
         path = current.data(Qt.ItemDataRole.UserRole)
         if path == "__embedded__":
-            # Reload the embedded texture from the GLB
             if self.glb and self.glb.embedded_texture:
                 self.viewport.load_texture_from_bytes(self.glb.embedded_texture)
         elif path and os.path.exists(path):
@@ -933,13 +1251,13 @@ class CharacterViewer(QMainWindow):
             name = text.split(" (")[0]
             self.viewport.animator.set_animation(name)
             self.viewport.animator.playing = True
-            self.btn_play.setText("⏸ Pause")
+            self.btn_play.setText("Pause")
 
     def _toggle_play(self):
         if not self.viewport.animator:
             return
         self.viewport.animator.playing = not self.viewport.animator.playing
-        self.btn_play.setText("⏸ Pause" if self.viewport.animator.playing else "▶ Play")
+        self.btn_play.setText("Pause" if self.viewport.animator.playing else "Play")
 
     def _on_speed_changed(self, value):
         speed = value / 100.0
@@ -951,7 +1269,6 @@ class CharacterViewer(QMainWindow):
         path, _ = QFileDialog.getOpenFileName(self, "Charger une texture skin", "", "PNG (*.png)")
         if path:
             self.viewport.load_texture_from_file(path)
-            # Add to list
             f = Path(path)
             item = QListWidgetItem(f.stem)
             item.setData(Qt.ItemDataRole.UserRole, str(f))
@@ -972,29 +1289,24 @@ class CharacterViewer(QMainWindow):
 def main():
     import os
     os.environ.setdefault("PYOPENGL_PLATFORM", "nt")
-    # Force UTF-8 output
     if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
         sys.stdout.reconfigure(encoding='utf-8')
     if sys.stderr and hasattr(sys.stderr, 'reconfigure'):
         sys.stderr.reconfigure(encoding='utf-8')
 
     print(f"character_viewer.py v{APP_VERSION}", flush=True)
-    print("Creating QApplication...", flush=True)
     app = QApplication(sys.argv)
     glb_path = sys.argv[1] if len(sys.argv) > 1 else None
     print(f"Loading GLB: {glb_path or DEFAULT_GLB}", flush=True)
     win = CharacterViewer(glb_path)
-    print(f"Window created: {win.width()}x{win.height()}", flush=True)
-    # Plein écran sur l'écran principal (1080p)
     screen = app.primaryScreen()
     if screen:
         geo = screen.availableGeometry()
         win.setGeometry(geo)
-        print(f"Window fullscreen on primary: {geo.width()}x{geo.height()} at ({geo.x()},{geo.y()})", flush=True)
     win.show()
     win.raise_()
     win.activateWindow()
-    print("Entering event loop...", flush=True)
+    print("Ready.", flush=True)
     sys.exit(app.exec())
 
 

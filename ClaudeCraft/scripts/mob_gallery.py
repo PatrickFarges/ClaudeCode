@@ -1,31 +1,40 @@
 #!/usr/bin/env python3
 """
-mob_gallery.py v1.0.0
+mob_gallery.py v1.1.0
 Galerie 3D de mobs — affiche tous les GLB d'un répertoire en vignettes 3D
 
 Affiche une grille 4 colonnes de modèles GLB avec rendu 3D interactif.
 Chaque vignette montre le modèle en rotation lente avec son nom.
 Clic pour sélectionner, [A] ou double-clic pour passer en plein écran.
 
+En plein écran : panneau gauche avec liste d'animations et textures,
+visualisation des bones (touche [B]), changement d'animation et de texture
+par clic.
+
 Usage:
     python mob_gallery.py                              # Charge assets/Mobs/Bedrock/
     python mob_gallery.py path/to/glb/folder/
 
-Contrôles:
-    Clic gauche          Sélectionner un modèle
-    Double-clic / [A]    Plein écran ↔ galerie
-    Clic gauche + drag   Orbite caméra (modèle sélectionné / plein écran)
-    Molette              Scroll galerie / Zoom plein écran
-    Échap                Retour galerie / Quitter
+Controles:
+    Clic gauche          Selectionner un modele
+    Double-clic / [A]    Plein ecran <-> galerie
+    Clic gauche + drag   Orbite camera (modele selectionne / plein ecran)
+    Molette              Scroll galerie / Zoom plein ecran
+    [B]                  Toggle bones (plein ecran)
+    Echap                Retour galerie / Quitter
 
 Changelog:
-    v1.0.1 — Fix faces inversées : reset état GL au début de paintGL (QPainter
-             modifiait l'état GL entre les frames), glPushAttrib/glPopAttrib
-    v1.0.0 — Création : galerie 4 colonnes, rotation auto, fullscreen toggle,
-             orbite caméra, QPainter overlay pour noms
+    v1.1.0 — Plein ecran enrichi : panneau gauche avec liste animations
+             (cliquable) + liste textures Bedrock (cliquable, swap dynamique),
+             rendu bones (lignes jaunes + joints rouges, toggle [B]),
+             scan auto des textures entity Bedrock par mob
+    v1.0.1 — Fix faces inversees : reset etat GL au debut de paintGL (QPainter
+             modifiait l'etat GL entre les frames), glPushAttrib/glPopAttrib
+    v1.0.0 — Creation : galerie 4 colonnes, rotation auto, fullscreen toggle,
+             orbite camera, QPainter overlay pour noms
 """
 
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.1.0"
 
 import sys
 import json
@@ -36,16 +45,32 @@ from pathlib import Path
 
 from PyQt6.QtWidgets import QApplication, QMainWindow
 from PyQt6.QtCore import Qt, QTimer, QRectF
-from PyQt6.QtGui import QFont, QPainter, QColor, QPen
+from PyQt6.QtGui import QFont, QPainter, QColor, QPen, QBrush, QImage
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
 
 from OpenGL.GL import *
 from OpenGL.GLU import *
 
 DEFAULT_MOB_DIR = Path(__file__).parent.parent / "assets" / "Mobs" / "Bedrock"
+BEDROCK_TEX_DIR = Path(r"D:\Games\Minecraft - Bedrock Edition\data\resource_packs\vanilla\textures\entity")
 GRID_COLS = 4
 LABEL_HEIGHT = 28
 AUTO_ROTATE_SPEED = 0.3  # radians/sec
+
+# Fullscreen panel
+PANEL_WIDTH = 270
+PANEL_BG = QColor(28, 28, 32)
+PANEL_HEADER_BG = QColor(40, 40, 48)
+ITEM_HEIGHT = 26
+HEADER_HEIGHT = 32
+ITEM_SELECTED_BG = QColor(60, 120, 200)
+ITEM_HOVER_BG = QColor(50, 50, 60)
+
+# Texture folder mapping — some mobs use different folder names
+TEX_FOLDER_ALIASES = {
+    "horse": ["horse2", "horse"],
+    "polar_bear": ["polarbear"],
+}
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -246,6 +271,7 @@ class SkeletalAnimator:
         self.glb = glb
         self.current_anim = None; self.time = 0.0
         self.speed = 1.0; self.playing = False; self.loop = True
+        self.last_world_transforms = None  # Set after compute_skinned
 
     def set_animation(self, name):
         self.current_anim = name; self.time = 0.0
@@ -291,6 +317,8 @@ class SkeletalAnimator:
                 wt[bi] = mat4_multiply(wt[glb.bone_parent[bi]], local)
             else:
                 wt[bi] = local
+        # Store world transforms for bone rendering
+        self.last_world_transforms = wt
         sm = [mat4_multiply(wt[bi], glb.ibms[bi]) if wt[bi] else mat4_identity() for bi in range(n)]
         sp, sn = [], []
         for vi in range(len(glb.positions)):
@@ -299,6 +327,44 @@ class SkeletalAnimator:
             sp.append(mat4_transform_point(m, glb.positions[vi]))
             sn.append(mat4_transform_dir(m, glb.normals[vi]))
         return sp, sn
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Texture discovery
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def find_mob_textures(mob_name):
+    """Find all texture variants for a mob in Bedrock data.
+    Returns list of (display_name, file_path)."""
+    textures = []
+    seen_paths = set()
+
+    if not BEDROCK_TEX_DIR.is_dir():
+        return textures
+
+    # Determine folder names to search
+    folder_names = TEX_FOLDER_ALIASES.get(mob_name, [mob_name])
+
+    for folder_name in folder_names:
+        folder = BEDROCK_TEX_DIR / folder_name
+        if folder.is_dir():
+            for f in sorted(folder.iterdir()):
+                # Skip armor subfolders
+                if f.is_dir():
+                    continue
+                if f.suffix.lower() in ('.png', '.tga') and f.resolve() not in seen_paths:
+                    seen_paths.add(f.resolve())
+                    textures.append((f.stem, f))
+
+    # Also check for direct file (e.g., chicken.png, polarbear.png)
+    for f in sorted(BEDROCK_TEX_DIR.iterdir()):
+        if f.is_file() and f.suffix.lower() in ('.png', '.tga'):
+            if f.stem == mob_name or f.stem.replace("_", "") == mob_name.replace("_", ""):
+                if f.resolve() not in seen_paths:
+                    seen_paths.add(f.resolve())
+                    textures.append((f.stem, f))
+
+    return textures
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -311,11 +377,11 @@ class MobEntry:
         self.glb = GLBData(glb_path)
         self.animator = SkeletalAnimator(self.glb)
         # Auto-play idle or first animation
-        anim_names = list(self.glb.animations.keys())
-        if "idle" in anim_names:
+        self.anim_names = list(self.glb.animations.keys())
+        if "idle" in self.anim_names:
             self.animator.set_animation("idle")
-        elif anim_names:
-            self.animator.set_animation(anim_names[0])
+        elif self.anim_names:
+            self.animator.set_animation(self.anim_names[0])
         self.animator.playing = True
         # Camera state
         self.theta = 200.0  # degrees
@@ -324,9 +390,12 @@ class MobEntry:
         self.cam_target_y = self._auto_target_y()
         # GL texture
         self.tex_id = None
+        # Available textures from Bedrock (discovered lazily)
+        self.available_textures = []  # [(display_name, path)]
+        self.current_tex_idx = -1  # -1 = embedded
+        self.loaded_tex_ids = {}  # path -> GL tex_id
 
     def _auto_distance(self):
-        """Compute camera distance based on model bounding box."""
         if not self.glb.positions:
             return 3.0
         ys = [p[1] for p in self.glb.positions]
@@ -342,6 +411,20 @@ class MobEntry:
         ys = [p[1] for p in self.glb.positions]
         return (max(ys) + min(ys)) / 2.0
 
+    def discover_textures(self):
+        """Find available Bedrock textures for this mob."""
+        if not self.available_textures:
+            self.available_textures = find_mob_textures(self.name)
+
+    def get_active_tex_id(self):
+        """Return the GL texture ID currently in use."""
+        if self.current_tex_idx < 0:
+            return self.tex_id  # embedded
+        if self.current_tex_idx < len(self.available_textures):
+            _, path = self.available_textures[self.current_tex_idx]
+            return self.loaded_tex_ids.get(str(path), self.tex_id)
+        return self.tex_id
+
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Gallery Widget
@@ -351,26 +434,29 @@ class MobGalleryWidget(QOpenGLWidget):
     def __init__(self, mob_dir, parent=None):
         super().__init__(parent)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setMouseTracking(True)
         self.models = []
         self.selected_idx = 0
         self.fullscreen_mode = False
         self.scroll_y = 0.0
         self.mouse_last = None
         self.mouse_button = None
+        self.show_bones = False
+        self.hover_item = None  # (list_type, index) for panel hover
 
         # Load all GLB files from directory
         glb_files = sorted(Path(mob_dir).glob("*.glb"))
-        print(f"Chargement de {len(glb_files)} modèles depuis {mob_dir}...")
+        print(f"Chargement de {len(glb_files)} modeles depuis {mob_dir}...")
         for p in glb_files:
             try:
                 entry = MobEntry(p)
                 self.models.append(entry)
-                print(f"  {entry.name} — {len(entry.glb.positions)} verts, "
+                print(f"  {entry.name} -- {len(entry.glb.positions)} verts, "
                       f"{len(entry.glb.animations)} anims, "
                       f"height={entry.cam_target_y*2:.2f}")
             except Exception as e:
                 print(f"  ERREUR {p.name}: {e}")
-        print(f"{len(self.models)} modèles chargés")
+        print(f"{len(self.models)} modeles charges")
 
         # Animation timer
         self._timer = QTimer(self)
@@ -382,18 +468,16 @@ class MobGalleryWidget(QOpenGLWidget):
         for m in self.models:
             m.animator.advance(dt)
             if not self.fullscreen_mode:
-                # Auto-rotate in gallery mode
                 m.theta += math.degrees(AUTO_ROTATE_SPEED * dt)
         self.update()
 
-    # ── Cell geometry ──
+    # -- Cell geometry --
 
     def _cell_size(self):
         w = self.width() / GRID_COLS
         return int(w), int(w + LABEL_HEIGHT)
 
     def _cell_rect(self, idx):
-        """Returns (x, y, w, h) in widget coords for a model index."""
         cw, ch = self._cell_size()
         col = idx % GRID_COLS
         row = idx // GRID_COLS
@@ -407,14 +491,44 @@ class MobGalleryWidget(QOpenGLWidget):
         return rows * ch
 
     def _hit_test(self, mx, my):
-        """Return model index under mouse position, or -1."""
         for i in range(len(self.models)):
             x, y, w, h = self._cell_rect(i)
             if x <= mx < x + w and y <= my < y + h:
                 return i
         return -1
 
-    # ── OpenGL ──
+    # -- Panel layout helpers (fullscreen) --
+
+    def _panel_item_at(self, mx, my):
+        """Return (list_type, index) for a click in the panel, or None."""
+        if mx >= PANEL_WIDTH:
+            return None
+        m = self.models[self.selected_idx]
+        y = 8
+
+        # Animations header
+        y += HEADER_HEIGHT
+        for i, aname in enumerate(m.anim_names):
+            if y <= my < y + ITEM_HEIGHT:
+                return ("anim", i)
+            y += ITEM_HEIGHT
+
+        y += 12  # spacing
+
+        # Textures header
+        y += HEADER_HEIGHT
+        # "Embedded" item
+        if y <= my < y + ITEM_HEIGHT:
+            return ("tex", -1)
+        y += ITEM_HEIGHT
+        for i in range(len(m.available_textures)):
+            if y <= my < y + ITEM_HEIGHT:
+                return ("tex", i)
+            y += ITEM_HEIGHT
+
+        return None
+
+    # -- OpenGL --
 
     def initializeGL(self):
         glClearColor(0.12, 0.12, 0.14, 1.0)
@@ -427,17 +541,24 @@ class MobGalleryWidget(QOpenGLWidget):
         glEnable(GL_COLOR_MATERIAL)
         glColorMaterial(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE)
         glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_TRUE)
-        # Load textures for all models
         for m in self.models:
             if m.glb.embedded_texture:
-                m.tex_id = self._upload_texture(m.glb.embedded_texture)
+                m.tex_id = self._upload_texture_bytes(m.glb.embedded_texture)
 
-    def _upload_texture(self, png_bytes):
-        from PyQt6.QtGui import QImage
+    def _upload_texture_bytes(self, png_bytes):
         img = QImage()
         img.loadFromData(png_bytes)
         if img.isNull():
             return None
+        return self._upload_qimage(img)
+
+    def _upload_texture_file(self, filepath):
+        img = QImage(str(filepath))
+        if img.isNull():
+            return None
+        return self._upload_qimage(img)
+
+    def _upload_qimage(self, img):
         img = img.convertToFormat(QImage.Format.Format_RGBA8888)
         w, h = img.width(), img.height()
         bits = img.bits(); bits.setsize(w * h * 4)
@@ -451,11 +572,25 @@ class MobGalleryWidget(QOpenGLWidget):
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data)
         return tex_id
 
+    def _ensure_tex_loaded(self, mob_entry, tex_idx):
+        """Lazy-load a Bedrock texture and return its GL ID."""
+        if tex_idx < 0 or tex_idx >= len(mob_entry.available_textures):
+            return
+        _, path = mob_entry.available_textures[tex_idx]
+        key = str(path)
+        if key not in mob_entry.loaded_tex_ids:
+            tid = self._upload_texture_file(path)
+            if tid:
+                mob_entry.loaded_tex_ids[key] = tid
+                print(f"  Texture chargee: {path.name}")
+            else:
+                print(f"  ERREUR texture: {path.name}")
+
     def resizeGL(self, w, h):
-        pass  # Viewport set per-cell in paintGL
+        pass
 
     def paintGL(self):
-        # Reset GL state that QPainter may have changed between frames
+        # Reset GL state
         glDisable(GL_CULL_FACE)
         glEnable(GL_DEPTH_TEST)
         glDepthMask(GL_TRUE)
@@ -473,22 +608,25 @@ class MobGalleryWidget(QOpenGLWidget):
         pw, ph = int(w * dpr), int(h * dpr)
 
         if self.fullscreen_mode and 0 <= self.selected_idx < len(self.models):
-            # Render single model fullscreen
-            glViewport(0, 0, pw, ph)
-            glScissor(0, 0, pw, ph)
+            # Render model in viewport area (right of panel)
+            panel_px = int(PANEL_WIDTH * dpr)
+            vp_x = panel_px
+            vp_w = pw - panel_px
+            glViewport(vp_x, 0, max(vp_w, 1), ph)
+            glScissor(vp_x, 0, max(vp_w, 1), ph)
             glEnable(GL_SCISSOR_TEST)
-            self._render_model(self.models[self.selected_idx], pw, ph)
+            m = self.models[self.selected_idx]
+            self._render_model(m, max(vp_w, 1), ph)
+            if self.show_bones:
+                self._render_bones(m)
             glDisable(GL_SCISSOR_TEST)
         else:
             glEnable(GL_SCISSOR_TEST)
             for i, m in enumerate(self.models):
                 x, y, cw, ch = self._cell_rect(i)
-                # Viewport height excludes label area
                 vh = ch - LABEL_HEIGHT
-                # Skip if off-screen
                 if y + ch < 0 or y > h:
                     continue
-                # GL viewport (bottom-left origin, in physical pixels)
                 gl_x = int(x * dpr)
                 gl_y = int((h - y - vh) * dpr)
                 gl_w = int(cw * dpr)
@@ -499,16 +637,12 @@ class MobGalleryWidget(QOpenGLWidget):
             glDisable(GL_SCISSOR_TEST)
 
     def _render_model(self, m, vw, vh):
-        """Render a single mob model into the current viewport."""
         glClear(GL_DEPTH_BUFFER_BIT)
-
-        # Projection
         glMatrixMode(GL_PROJECTION)
         glLoadIdentity()
         aspect = vw / vh if vh > 0 else 1.0
         gluPerspective(45.0, aspect, 0.01, 100.0)
 
-        # Camera
         glMatrixMode(GL_MODELVIEW)
         glLoadIdentity()
         theta = math.radians(m.theta)
@@ -536,10 +670,11 @@ class MobGalleryWidget(QOpenGLWidget):
         # Mesh
         glEnable(GL_LIGHTING)
         sp, sn = m.animator.compute_skinned()
-        has_tex = m.tex_id is not None
+        active_tex = m.get_active_tex_id()
+        has_tex = active_tex is not None
         if has_tex:
             glEnable(GL_TEXTURE_2D)
-            glBindTexture(GL_TEXTURE_2D, m.tex_id)
+            glBindTexture(GL_TEXTURE_2D, active_tex)
         else:
             glDisable(GL_TEXTURE_2D)
 
@@ -548,7 +683,6 @@ class MobGalleryWidget(QOpenGLWidget):
         else:
             glEnable(GL_CULL_FACE)
 
-        # Alpha test for MASK mode
         glEnable(GL_ALPHA_TEST)
         glAlphaFunc(GL_GREATER, 0.5)
 
@@ -563,7 +697,6 @@ class MobGalleryWidget(QOpenGLWidget):
                 glVertex3f(*sp[idx])
         glEnd()
 
-        # Overlay pass (blend)
         if m.glb.overlay_indices:
             glEnable(GL_BLEND)
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
@@ -582,17 +715,54 @@ class MobGalleryWidget(QOpenGLWidget):
         glDisable(GL_ALPHA_TEST)
         glDisable(GL_TEXTURE_2D)
 
+    def _render_bones(self, m):
+        """Draw bone skeleton overlay."""
+        wt = m.animator.last_world_transforms
+        if not wt:
+            return
+        glb = m.glb
+        n = len(glb.bones)
+
+        glDisable(GL_LIGHTING)
+        glDisable(GL_TEXTURE_2D)
+        glDisable(GL_DEPTH_TEST)
+
+        # Bone lines (yellow)
+        glLineWidth(2.0)
+        glBegin(GL_LINES)
+        glColor3f(1.0, 0.9, 0.0)
+        for bi in range(n):
+            if bi in glb.bone_parent and wt[bi] and wt[glb.bone_parent[bi]]:
+                pi = glb.bone_parent[bi]
+                glVertex3f(wt[pi][12], wt[pi][13], wt[pi][14])
+                glVertex3f(wt[bi][12], wt[bi][13], wt[bi][14])
+        glEnd()
+
+        # Joint dots (red)
+        glPointSize(6.0)
+        glBegin(GL_POINTS)
+        glColor3f(1.0, 0.2, 0.2)
+        for bi in range(n):
+            if wt[bi]:
+                glVertex3f(wt[bi][12], wt[bi][13], wt[bi][14])
+        glEnd()
+
+        # Bone name labels at joint positions
+        # (skipped in GL — done via QPainter for readability)
+
+        glLineWidth(1.0)
+        glPointSize(1.0)
+        glEnable(GL_DEPTH_TEST)
+        glEnable(GL_LIGHTING)
+
     def paintEvent(self, event):
-        # First: GL rendering
         super().paintEvent(event)
 
-        # Save GL state before QPainter modifies it
         self.makeCurrent()
         glPushAttrib(GL_ALL_ATTRIB_BITS)
         glPushClientAttrib(GL_CLIENT_ALL_ATTRIB_BITS)
         self.doneCurrent()
 
-        # QPainter overlay for labels and selection borders
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         font = QFont("Segoe UI", 10, QFont.Weight.Bold)
@@ -600,68 +770,228 @@ class MobGalleryWidget(QOpenGLWidget):
 
         if self.fullscreen_mode and 0 <= self.selected_idx < len(self.models):
             m = self.models[self.selected_idx]
-            painter.setPen(QColor(255, 255, 255))
-            rect = QRectF(0, self.height() - 36, self.width(), 32)
-            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter,
-                           f"{m.name.upper()}  [A] retour galerie")
+            self._draw_panel(painter, m)
+            # Bottom bar in viewport area
+            painter.setPen(QColor(180, 180, 180))
+            small_font = QFont("Segoe UI", 9)
+            painter.setFont(small_font)
+            bar_rect = QRectF(PANEL_WIDTH, self.height() - 32, self.width() - PANEL_WIDTH, 28)
+            bones_status = "ON" if self.show_bones else "OFF"
+            painter.drawText(bar_rect, Qt.AlignmentFlag.AlignCenter,
+                           f"{m.name.upper()}   |   [B] Bones: {bones_status}   |   [A]/Echap retour galerie   |   Molette = Zoom")
         else:
             for i, m in enumerate(self.models):
                 x, y, cw, ch = self._cell_rect(i)
                 vh = ch - LABEL_HEIGHT
                 if y + ch < 0 or y > self.height():
                     continue
-
-                # Selection border
                 if i == self.selected_idx:
                     painter.setPen(QPen(QColor(80, 160, 255), 3))
                     painter.drawRect(x + 1, y + 1, cw - 3, vh - 3)
-
-                # Name label below viewport
                 painter.setPen(QColor(200, 200, 200))
                 label_rect = QRectF(x, y + vh, cw, LABEL_HEIGHT)
                 painter.drawText(label_rect, Qt.AlignmentFlag.AlignCenter, m.name)
 
         painter.end()
 
-        # Restore GL state after QPainter is done
         self.makeCurrent()
         glPopClientAttrib()
         glPopAttrib()
         self.doneCurrent()
 
-    # ── Input ──
+    def _draw_panel(self, painter, m):
+        """Draw the left info panel in fullscreen mode."""
+        h = self.height()
+
+        # Panel background
+        painter.fillRect(0, 0, PANEL_WIDTH, h, PANEL_BG)
+
+        # Separator line
+        painter.setPen(QPen(QColor(60, 60, 70), 1))
+        painter.drawLine(PANEL_WIDTH - 1, 0, PANEL_WIDTH - 1, h)
+
+        y = 8
+        header_font = QFont("Segoe UI", 11, QFont.Weight.Bold)
+        item_font = QFont("Segoe UI", 9)
+        small_font = QFont("Segoe UI", 8)
+
+        # ── ANIMATIONS ──
+        painter.setFont(header_font)
+        painter.fillRect(4, y, PANEL_WIDTH - 8, HEADER_HEIGHT, PANEL_HEADER_BG)
+        painter.setPen(QColor(100, 180, 255))
+        painter.drawText(QRectF(12, y, PANEL_WIDTH - 20, HEADER_HEIGHT),
+                        Qt.AlignmentFlag.AlignVCenter, f"ANIMATIONS ({len(m.anim_names)})")
+        y += HEADER_HEIGHT
+
+        painter.setFont(item_font)
+        for i, aname in enumerate(m.anim_names):
+            is_current = (m.animator.current_anim == aname)
+            is_hover = (self.hover_item == ("anim", i))
+
+            if is_current:
+                painter.fillRect(4, y, PANEL_WIDTH - 8, ITEM_HEIGHT, ITEM_SELECTED_BG)
+            elif is_hover:
+                painter.fillRect(4, y, PANEL_WIDTH - 8, ITEM_HEIGHT, ITEM_HOVER_BG)
+
+            painter.setPen(QColor(255, 255, 255) if is_current else QColor(190, 190, 190))
+
+            # Duration info
+            anim_data = m.glb.animations.get(aname, {})
+            dur = anim_data.get("duration", 0)
+            n_channels = len(anim_data.get("channels", {}))
+            label = f"  {aname}"
+            painter.drawText(QRectF(4, y, PANEL_WIDTH - 70, ITEM_HEIGHT),
+                           Qt.AlignmentFlag.AlignVCenter, label)
+            # Duration + channels on the right
+            painter.setFont(small_font)
+            painter.setPen(QColor(120, 120, 130))
+            painter.drawText(QRectF(PANEL_WIDTH - 74, y, 66, ITEM_HEIGHT),
+                           Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight,
+                           f"{dur:.1f}s {n_channels}b")
+            painter.setFont(item_font)
+            y += ITEM_HEIGHT
+
+        y += 12
+
+        # ── TEXTURES ──
+        m.discover_textures()
+        n_tex = len(m.available_textures)
+        painter.setFont(header_font)
+        painter.fillRect(4, y, PANEL_WIDTH - 8, HEADER_HEIGHT, PANEL_HEADER_BG)
+        painter.setPen(QColor(100, 255, 160))
+        painter.drawText(QRectF(12, y, PANEL_WIDTH - 20, HEADER_HEIGHT),
+                        Qt.AlignmentFlag.AlignVCenter, f"TEXTURES ({n_tex + 1})")
+        y += HEADER_HEIGHT
+
+        painter.setFont(item_font)
+
+        # "Embedded" (default GLB texture)
+        is_current = (m.current_tex_idx < 0)
+        is_hover = (self.hover_item == ("tex", -1))
+        if is_current:
+            painter.fillRect(4, y, PANEL_WIDTH - 8, ITEM_HEIGHT, ITEM_SELECTED_BG)
+        elif is_hover:
+            painter.fillRect(4, y, PANEL_WIDTH - 8, ITEM_HEIGHT, ITEM_HOVER_BG)
+        painter.setPen(QColor(255, 255, 255) if is_current else QColor(190, 190, 190))
+        painter.drawText(QRectF(12, y, PANEL_WIDTH - 20, ITEM_HEIGHT),
+                        Qt.AlignmentFlag.AlignVCenter, "[embedded]")
+        y += ITEM_HEIGHT
+
+        for i, (tex_name, tex_path) in enumerate(m.available_textures):
+            is_current = (m.current_tex_idx == i)
+            is_hover = (self.hover_item == ("tex", i))
+            if is_current:
+                painter.fillRect(4, y, PANEL_WIDTH - 8, ITEM_HEIGHT, ITEM_SELECTED_BG)
+            elif is_hover:
+                painter.fillRect(4, y, PANEL_WIDTH - 8, ITEM_HEIGHT, ITEM_HOVER_BG)
+            painter.setPen(QColor(255, 255, 255) if is_current else QColor(190, 190, 190))
+            painter.drawText(QRectF(12, y, PANEL_WIDTH - 20, ITEM_HEIGHT),
+                           Qt.AlignmentFlag.AlignVCenter, tex_name)
+            y += ITEM_HEIGHT
+
+        y += 12
+
+        # ── BONES INFO ──
+        painter.setFont(header_font)
+        painter.fillRect(4, y, PANEL_WIDTH - 8, HEADER_HEIGHT, PANEL_HEADER_BG)
+        painter.setPen(QColor(255, 200, 80))
+        painter.drawText(QRectF(12, y, PANEL_WIDTH - 20, HEADER_HEIGHT),
+                        Qt.AlignmentFlag.AlignVCenter, f"BONES ({len(m.glb.bones)})")
+        y += HEADER_HEIGHT
+
+        painter.setFont(small_font)
+        painter.setPen(QColor(160, 160, 170))
+        for bi, bone in enumerate(m.glb.bones):
+            if y + 18 > h - 20:
+                painter.drawText(QRectF(12, y, PANEL_WIDTH - 20, 18),
+                               Qt.AlignmentFlag.AlignVCenter, "...")
+                break
+            parent_name = ""
+            if bi in m.glb.bone_parent:
+                parent_name = f" <- {m.glb.bones[m.glb.bone_parent[bi]]['name']}"
+            painter.drawText(QRectF(12, y, PANEL_WIDTH - 20, 18),
+                           Qt.AlignmentFlag.AlignVCenter,
+                           f"{bone['name']}{parent_name}")
+            y += 18
+
+    # -- Input --
 
     def mousePressEvent(self, event):
         pos = event.position()
         self.mouse_last = (pos.x(), pos.y())
         self.mouse_button = event.button()
+
+        if self.fullscreen_mode and pos.x() < PANEL_WIDTH:
+            # Panel click
+            hit = self._panel_item_at(pos.x(), pos.y())
+            if hit:
+                self._handle_panel_click(hit)
+            return
+
         if not self.fullscreen_mode:
             hit = self._hit_test(pos.x(), pos.y())
             if hit >= 0:
                 self.selected_idx = hit
                 self.update()
 
+    def _handle_panel_click(self, hit):
+        m = self.models[self.selected_idx]
+        list_type, idx = hit
+
+        if list_type == "anim":
+            if 0 <= idx < len(m.anim_names):
+                aname = m.anim_names[idx]
+                m.animator.set_animation(aname)
+                m.animator.playing = True
+                print(f"Animation: {aname}")
+
+        elif list_type == "tex":
+            if idx < 0:
+                # Embedded
+                m.current_tex_idx = -1
+                print("Texture: [embedded]")
+            elif 0 <= idx < len(m.available_textures):
+                self.makeCurrent()
+                self._ensure_tex_loaded(m, idx)
+                self.doneCurrent()
+                m.current_tex_idx = idx
+                tex_name = m.available_textures[idx][0]
+                print(f"Texture: {tex_name}")
+
+        self.update()
+
     def mouseDoubleClickEvent(self, event):
-        if not self.fullscreen_mode:
-            pos = event.position()
+        pos = event.position()
+        if self.fullscreen_mode:
+            if pos.x() >= PANEL_WIDTH:
+                self.fullscreen_mode = False
+                self.update()
+        else:
             hit = self._hit_test(pos.x(), pos.y())
             if hit >= 0:
                 self.selected_idx = hit
                 self.fullscreen_mode = True
                 self.update()
-        else:
-            self.fullscreen_mode = False
-            self.update()
 
     def mouseMoveEvent(self, event):
+        pos = event.position()
+
+        # Update hover for panel
+        if self.fullscreen_mode and pos.x() < PANEL_WIDTH:
+            self.hover_item = self._panel_item_at(pos.x(), pos.y())
+        else:
+            self.hover_item = None
+
         if self.mouse_last is None:
             return
-        pos = event.position()
         dx = pos.x() - self.mouse_last[0]
         dy = pos.y() - self.mouse_last[1]
         self.mouse_last = (pos.x(), pos.y())
 
         if self.mouse_button == Qt.MouseButton.LeftButton:
+            # Don't orbit if dragging in panel
+            if self.fullscreen_mode and self.mouse_last[0] < PANEL_WIDTH:
+                return
             if self.fullscreen_mode:
                 target = self.models[self.selected_idx]
             elif 0 <= self.selected_idx < len(self.models):
@@ -679,12 +1009,10 @@ class MobGalleryWidget(QOpenGLWidget):
     def wheelEvent(self, event):
         delta = event.angleDelta().y()
         if self.fullscreen_mode:
-            # Zoom
             m = self.models[self.selected_idx]
             m.cam_dist *= 0.95 if delta > 0 else 1.05
             m.cam_dist = max(0.3, min(20.0, m.cam_dist))
         else:
-            # Scroll gallery
             self.scroll_y -= delta * 0.5
             max_scroll = max(0, self._total_height() - self.height())
             self.scroll_y = max(0, min(self.scroll_y, max_scroll))
@@ -697,6 +1025,10 @@ class MobGalleryWidget(QOpenGLWidget):
                 self.fullscreen_mode = False
             elif 0 <= self.selected_idx < len(self.models):
                 self.fullscreen_mode = True
+            self.update()
+        elif key == Qt.Key.Key_B and self.fullscreen_mode:
+            self.show_bones = not self.show_bones
+            print(f"Bones: {'ON' if self.show_bones else 'OFF'}")
             self.update()
         elif key == Qt.Key.Key_Escape:
             if self.fullscreen_mode:
@@ -725,7 +1057,7 @@ class MobGalleryWidget(QOpenGLWidget):
 class GalleryWindow(QMainWindow):
     def __init__(self, mob_dir):
         super().__init__()
-        self.setWindowTitle(f"Mob Gallery v{APP_VERSION} — {mob_dir}")
+        self.setWindowTitle(f"Mob Gallery v{APP_VERSION} -- {mob_dir}")
         self.gallery = MobGalleryWidget(mob_dir, self)
         self.setCentralWidget(self.gallery)
 
@@ -739,11 +1071,10 @@ def main():
         mob_dir = Path(sys.argv[1])
 
     if not mob_dir.is_dir():
-        print(f"Répertoire introuvable : {mob_dir}")
+        print(f"Repertoire introuvable : {mob_dir}")
         sys.exit(1)
 
     win = GalleryWindow(mob_dir)
-    # Fullscreen on primary monitor
     screen = app.primaryScreen()
     if screen:
         geo = screen.geometry()
