@@ -534,9 +534,12 @@ func _try_spawn_village(chunk_pos: Vector3i, chunk_data: Dictionary):
 	if center_surface_y < 0:
 		return
 
-	# Teleporter le joueur a la surface (spawn initial a y=80 peut etre sous le terrain)
-	if player:
-		player.global_position.y = center_surface_y + 2.0
+	# Téléporter le joueur à la surface (le chunk_data contient déjà les blocs, donc center_surface_y est fiable)
+	# Le joueur doit être AU-DESSUS de la surface pour ne pas tomber dans une grotte
+	if player and center_surface_y > 0 and center_surface_y < 200:
+		player.global_position.y = center_surface_y + 3.0
+		player.velocity = Vector3.ZERO
+		print("Player: téléporté à la surface Y=%d" % (center_surface_y + 3))
 
 	var village_center = Vector3(
 		chunk_pos.x * Chunk.CHUNK_SIZE + center_x + 0.5,

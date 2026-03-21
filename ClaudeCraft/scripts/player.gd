@@ -26,6 +26,21 @@ const ZOOM_FOV_STEP = 5.0
 var zoom_fov: float = 70.0
 
 # ============================================================
+# VUE CAMÉRA (F5)
+# ============================================================
+# 0 = 1ère personne, 1 = 3ème personne dos, 2 = 3ème personne face
+var camera_mode: int = 0
+const CAMERA_3RD_DISTANCE = 4.0
+const CAMERA_3RD_HEIGHT = 1.8
+const CAMERA_HEAD_Y = 1.6
+var _cam_pitch: float = 0.0  # Pitch stocké pour la 3ème personne
+var _player_model: Node3D = null
+var _player_anim: AnimationPlayer = null
+const STEVE_GLB = "res://assets/PlayerModel/steve.glb"
+const STEVE_SKIN = "res://assets/PlayerModel/steve_skin.png"
+static var _steve_packed: PackedScene = null
+
+# ============================================================
 # INVENTAIRE
 # ============================================================
 var inventory: Dictionary = {}
@@ -148,6 +163,8 @@ func _ready():
 	_create_block_highlighter()
 	_create_hand_renderer()
 	_update_selected_block()
+	# Modèle 3e personne chargé en différé
+	call_deferred("_create_player_model")
 	
 	await get_tree().process_frame
 	inventory_ui = get_tree().get_first_node_in_group("inventory_ui")
@@ -273,6 +290,150 @@ func _create_hand_renderer():
 	camera.add_child(hand_renderer)
 	# Activer le layer 2 sur la caméra pour voir le bras
 	camera.cull_mask = camera.cull_mask | 2
+
+func _create_player_model():
+	# Charger le modèle Steve pour la vue 3ème personne (même pattern que NPC)
+	if not _steve_packed:
+		_steve_packed = load(STEVE_GLB) as PackedScene
+		if not _steve_packed:
+			var gltf_doc = GLTFDocument.new()
+			var gltf_state = GLTFState.new()
+			if gltf_doc.append_from_file(STEVE_GLB, gltf_state) == OK:
+				var scene_root = gltf_doc.generate_scene(gltf_state)
+				if scene_root:
+					var packed = PackedScene.new()
+					packed.pack(scene_root)
+					_steve_packed = packed
+					scene_root.queue_free()
+	if not _steve_packed:
+		print("Player: IMPOSSIBLE de charger steve.glb pour vue 3e personne")
+		return
+	_player_model = _steve_packed.instantiate()
+	_player_model.scale = Vector3(0.85, 0.85, 0.85)
+	_player_model.visible = false  # Caché en 1ère personne
+	add_child(_player_model)
+	# Appliquer le skin Steve (même méthode que npc_villager.gd)
+	_apply_steve_skin()
+	# Trouver l'AnimationPlayer
+	_player_anim = _find_anim_player(_player_model)
+	if _player_anim:
+		_player_anim.deterministic = true
+		print("Player: modèle 3e personne prêt (%d anims)" % _player_anim.get_animation_list().size())
+
+func _apply_steve_skin():
+	if not _player_model:
+		return
+	var skin_path = STEVE_SKIN
+	if not FileAccess.file_exists(skin_path):
+		return
+	var img = Image.new()
+	if img.load(skin_path) != OK:
+		return
+	var tex = ImageTexture.create_from_image(img)
+	# Même méthode que npc_villager.gd : dupliquer le matériau du mesh et remplacer la texture
+	_apply_skin_recursive(_player_model, tex)
+
+func _apply_skin_recursive(node: Node, tex: Texture2D):
+	if node is MeshInstance3D:
+		var mi = node as MeshInstance3D
+		if mi.mesh:
+			for i in range(mi.mesh.get_surface_count()):
+				var base_mat = mi.mesh.surface_get_material(i)
+				if base_mat is StandardMaterial3D:
+					var mat = base_mat.duplicate() as StandardMaterial3D
+					mat.albedo_texture = tex
+					mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+					mi.set_surface_override_material(i, mat)
+	for child in node.get_children():
+		_apply_skin_recursive(child, tex)
+
+func _find_anim_player(node: Node) -> AnimationPlayer:
+	for child in node.get_children():
+		if child is AnimationPlayer:
+			return child
+		var found = _find_anim_player(child)
+		if found:
+			return found
+	return null
+
+func _cycle_camera_mode():
+	camera_mode = (camera_mode + 1) % 3
+	var mode_names = ["1ère personne", "3ème personne (dos)", "3ème personne (face)"]
+	print("Caméra: %s" % mode_names[camera_mode])
+	match camera_mode:
+		0:  # 1ère personne
+			camera.position = Vector3(0, CAMERA_HEAD_Y, 0)
+			camera.rotation.x = _cam_pitch
+			camera.rotation.y = 0
+			camera.rotation.z = 0
+			if _player_model:
+				_player_model.visible = false
+			if hand_renderer:
+				hand_renderer.visible = true
+		1:  # 3ème personne dos
+			if _player_model:
+				_player_model.visible = true
+			if hand_renderer:
+				hand_renderer.visible = false
+		2:  # 3ème personne face
+			if _player_model:
+				_player_model.visible = true
+			if hand_renderer:
+				hand_renderer.visible = false
+
+func _update_third_person_camera():
+	if camera_mode == 0:
+		return
+	# En Godot, -Z = devant le joueur, +Z = derrière
+	var sign_z = -1.0 if camera_mode == 2 else 1.0
+	# Position caméra basée sur le pitch stocké
+	var cam_y = CAMERA_HEAD_Y + CAMERA_3RD_DISTANCE * sin(-_cam_pitch) + 0.3
+	var cam_z = sign_z * CAMERA_3RD_DISTANCE * cos(_cam_pitch)
+	var target_pos = Vector3(0, cam_y, cam_z)
+	# Empêcher la caméra de passer sous le terrain
+	var cam_world = global_position + transform.basis * target_pos
+	if world_manager:
+		var ground_y = global_position.y  # fallback
+		var check_pos = cam_world.floor()
+		var block_at_cam = world_manager.get_block_at_position(check_pos)
+		if block_at_cam != BlockRegistry.BlockType.AIR and block_at_cam != BlockRegistry.BlockType.WATER:
+			# La caméra est dans un bloc solide — remonter au-dessus
+			target_pos.y = maxf(target_pos.y, CAMERA_HEAD_Y + 0.5)
+			cam_world = global_position + transform.basis * target_pos
+
+	# Collision caméra — raycast du joueur vers la position caméra cible
+	var space = get_world_3d().direct_space_state
+	var head_world = global_position + Vector3(0, CAMERA_HEAD_Y, 0)
+	var query = PhysicsRayQueryParameters3D.create(head_world, cam_world)
+	query.exclude = [get_rid()]
+	var result = space.intersect_ray(query)
+	if result:
+		var hit_dist = head_world.distance_to(result.position) - 0.3
+		var full_dist = head_world.distance_to(cam_world)
+		if full_dist > 0.01 and hit_dist < full_dist:
+			target_pos = target_pos * maxf(0.3, hit_dist / full_dist)
+	camera.position = target_pos
+	# Orienter la caméra
+	if camera_mode == 2:
+		# Vue face : regarder la tête du joueur
+		var look_world = global_position + Vector3(0, CAMERA_HEAD_Y, 0)
+		if cam_world.distance_to(look_world) > 0.1:
+			camera.look_at(look_world, Vector3.UP)
+	else:
+		# Vue dos : regarder devant le joueur
+		var forward_world = global_position + transform.basis * Vector3(0, CAMERA_HEAD_Y + CAMERA_3RD_DISTANCE * sin(-_cam_pitch), -10.0)
+		camera.look_at(forward_world, Vector3.UP)
+
+func _update_player_model_anim():
+	if not _player_model or not _player_anim or camera_mode == 0:
+		return
+	var hvel = Vector2(velocity.x, velocity.z).length()
+	if hvel > 1.0:
+		if _player_anim.current_animation != "walk":
+			_player_anim.play("walk")
+	else:
+		if _player_anim.current_animation != "idle":
+			_player_anim.play("idle")
 
 func get_inventory_count(block_type: BlockRegistry.BlockType) -> int:
 	if inventory.has(block_type):
@@ -400,6 +561,10 @@ func _input(event):
 		if event.physical_keycode == KEY_F1:
 			_toggle_village_inventory()
 			return
+		# Touche F5 — cycle vue caméra (1ère/3ème dos/3ème face)
+		if event.physical_keycode == KEY_F5:
+			_cycle_camera_mode()
+			return
 
 	# Gestion Escape : 3 cas
 	if event.is_action_pressed("ui_cancel"):
@@ -453,8 +618,16 @@ func _input(event):
 	# Rotation de la caméra
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		rotate_y(-event.relative.x * mouse_sensitivity)
-		camera.rotate_x(-event.relative.y * mouse_sensitivity)
-		camera.rotation.x = clamp(camera.rotation.x, -PI/2, PI/2)
+		if camera_mode == 0:
+			camera.rotate_x(-event.relative.y * mouse_sensitivity)
+			camera.rotation.x = clamp(camera.rotation.x, -PI/2, PI/2)
+			_cam_pitch = camera.rotation.x
+		elif camera_mode == 1:
+			# Vue dos : pitch limité (légèrement au-dessus, pas sous terre)
+			_cam_pitch = clamp(_cam_pitch - event.relative.y * mouse_sensitivity, -0.15, 0.5)
+		else:
+			# Vue face : pitch plus libre mais pas sous le sol
+			_cam_pitch = clamp(_cam_pitch - event.relative.y * mouse_sensitivity, -0.3, PI/3)
 
 	# Molette souris
 	if event is InputEventMouseButton and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
@@ -494,6 +667,12 @@ func _physics_process(delta):
 		in_water = feet_block == BlockRegistry.BlockType.WATER or head_block == BlockRegistry.BlockType.WATER
 		on_ladder = feet_block == BlockRegistry.BlockType.LADDER or head_block == BlockRegistry.BlockType.LADDER
 
+	# Sécurité : si le joueur tombe sous le monde, le remonter en surface
+	if global_position.y < -20.0:
+		global_position.y = 100.0
+		velocity = Vector3.ZERO
+		print("Player: chute sous le monde — téléport de sécurité à Y=100")
+
 	# Gravité (réduite dans l'eau et sur échelle)
 	if not is_on_floor():
 		if in_water or on_ladder:
@@ -502,6 +681,8 @@ func _physics_process(delta):
 				velocity.y = -2.0  # Descente lente sur échelle
 		else:
 			velocity.y -= gravity * delta
+			# Limiter la vitesse de chute (terminal velocity)
+			velocity.y = maxf(velocity.y, -50.0)
 
 	# Reset fall tracking dans l'eau / échelle
 	if in_water or on_ladder:
@@ -555,6 +736,9 @@ func _physics_process(delta):
 	_handle_block_interaction(delta)
 	_handle_eating(delta)
 	_handle_footsteps(delta, direction)
+	# Vue 3ème personne
+	_update_third_person_camera()
+	_update_player_model_anim()
 
 func _handle_auto_step(direction: Vector3):
 	if not is_on_floor() or direction.length() == 0:
