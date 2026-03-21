@@ -1185,114 +1185,124 @@ def bake_mob_animations(mob_name, mob_info, bone_names, bone_map, mesh_data):
         return {"name": name, "timestamps": timestamps,
                 "channels": channels, "pos_channels": pos_channels}
 
-    # ── Quadruped walk (cow, pig, sheep, wolf, polar_bear, fox, llama, mooshroom, goat, panda, hoglin, ravager, camel, sniffer) ──
-    QUADRUPEDS = ("cow", "pig", "sheep", "wolf", "horse", "polar_bear", "fox",
-                  "llama", "mooshroom", "goat", "panda", "hoglin", "ravager",
-                  "camel", "sniffer", "armadillo", "turtle")
-    HUMANOIDS = ("zombie", "skeleton", "enderman", "drowned", "husk", "stray",
-                 "wither_skeleton", "zombie_villager", "zombie_pigman",
-                 "pillager", "vindicator", "evoker", "witch", "piglin",
-                 "warden", "bogged", "creaking", "iron_golem", "snow_golem")
-    SPIDERS = ("spider", "cave_spider")
-
+    # ── Walk animations — using REAL bone names from each mob's .geo.json ──
     if "walk" in custom_anims:
-        if mob_name in QUADRUPEDS:
-            def quad_walk(bone, t, dur):
-                a = math.cos(t / dur * 2 * math.pi) * 40
-                m = {
-                    "leg0": [a, 0, 0], "leg1": [-a, 0, 0],
-                    "leg2": [-a, 0, 0], "leg3": [a, 0, 0],
-                }
-                # Horse: different bone names
-                if mob_name == "horse":
-                    m = {
-                        "LegFL": [a, 0, 0], "LegFR": [-a, 0, 0],
-                        "LegBL": [-a, 0, 0], "LegBR": [a, 0, 0],
-                        "Tail": [0, math.sin(t / dur * 2 * math.pi) * 10, 0],
-                        "Neck": [math.sin(t / dur * 2 * math.pi) * 3, 0, 0],
-                    }
-                # Fox/wolf: also wag tail
-                elif mob_name in ("fox", "wolf"):
-                    m["tail"] = [0, math.sin(t / dur * 4 * math.pi) * 20, 0]
-                return m.get(bone)
-            animations.append(make_anim("walk", 1.0, 24, quad_walk))
+        def _walk_fn(bone, t, dur):
+            """Universal walk dispatcher based on mob_name and real bone names."""
+            a = math.cos(t / dur * 2 * math.pi) * 40
+            s = math.sin(t / dur * 2 * math.pi)
 
-        elif mob_name == "cat":
-            def cat_walk(bone, t, dur):
-                a = math.cos(t / dur * 2 * math.pi) * 35
-                m = {
-                    "frontLegL": [a, 0, 0], "frontLegR": [-a, 0, 0],
-                    "backLegL": [-a, 0, 0], "backLegR": [a, 0, 0],
-                    "tail1": [0, math.sin(t / dur * 4 * math.pi) * 25, 0],
-                    "tail2": [0, math.sin(t / dur * 4 * math.pi + 0.5) * 15, 0],
-                }
+            # ── Quadruped with leg0-3 (cow, pig, sheep, creeper, mooshroom, panda, llama, turtle, ravager) ──
+            if mob_name in ("cow", "pig", "sheep", "creeper", "mooshroom", "panda",
+                            "llama", "turtle", "ravager"):
+                m = {"leg0": [a, 0, 0], "leg1": [-a, 0, 0],
+                     "leg2": [-a, 0, 0], "leg3": [a, 0, 0],
+                     "tail": [0, s * 10, 0]}
                 return m.get(bone)
-            animations.append(make_anim("walk", 0.8, 24, cat_walk))
 
-        elif mob_name == "rabbit":
-            def rabbit_walk(bone, t, dur):
+            # ── Horse (LegFL/FR/BL/BR) ──
+            if mob_name == "horse":
+                m = {"LegFL": [a, 0, 0], "LegFR": [-a, 0, 0],
+                     "LegBL": [-a, 0, 0], "LegBR": [a, 0, 0],
+                     "Tail": [0, s * 10, 0],
+                     "Neck": [s * 3, 0, 0]}
+                return m.get(bone)
+
+            # ── Wolf/fox (leg0-3 + tail wag) ──
+            if mob_name in ("wolf", "fox", "polar_bear"):
+                m = {"leg0": [a, 0, 0], "leg1": [-a, 0, 0],
+                     "leg2": [-a, 0, 0], "leg3": [a, 0, 0],
+                     "tail": [0, math.sin(t / dur * 4 * math.pi) * 25, 0]}
+                return m.get(bone)
+
+            # ── Cat/Ocelot (frontLegL/R, backLegL/R + tail1/tail2) ──
+            if mob_name in ("cat", "ocelot"):
+                a35 = math.cos(t / dur * 2 * math.pi) * 35
+                m = {"frontLegL": [a35, 0, 0], "frontLegR": [-a35, 0, 0],
+                     "backLegL": [-a35, 0, 0], "backLegR": [a35, 0, 0],
+                     "tail1": [0, math.sin(t / dur * 4 * math.pi) * 25, 0],
+                     "tail2": [0, math.sin(t / dur * 4 * math.pi + 0.5) * 15, 0]}
+                return m.get(bone)
+
+            # ── Armadillo (right/left_front/hind_leg) ──
+            if mob_name == "armadillo":
+                m = {"right_front_leg": [a, 0, 0], "left_front_leg": [-a, 0, 0],
+                     "right_hind_leg": [-a, 0, 0], "left_hind_leg": [a, 0, 0],
+                     "tail": [0, s * 15, 0],
+                     "body": [s * 2, 0, 0]}
+                return m.get(bone)
+
+            # ── Goat (left/right_front/back_leg) ──
+            if mob_name == "goat":
+                m = {"right_front_leg": [a, 0, 0], "left_front_leg": [-a, 0, 0],
+                     "right_back_leg": [-a, 0, 0], "left_back_leg": [a, 0, 0],
+                     "head": [s * 3, 0, 0]}
+                return m.get(bone)
+
+            # ── Camel (right/left_front/hind_leg) ──
+            if mob_name == "camel":
+                m = {"right_front_leg": [a, 0, 0], "left_front_leg": [-a, 0, 0],
+                     "right_hind_leg": [-a, 0, 0], "left_hind_leg": [a, 0, 0],
+                     "tail": [s * 15, 0, 0],
+                     "head": [s * 3, 0, 0]}
+                return m.get(bone)
+
+            # ── Sniffer (6-legged: right/left_front/mid/hind_leg) ──
+            if mob_name == "sniffer":
+                m = {"right_front_leg": [a, 0, 0], "left_front_leg": [-a, 0, 0],
+                     "right_mid_leg": [-a * 0.7, 0, 0], "left_mid_leg": [a * 0.7, 0, 0],
+                     "right_hind_leg": [-a, 0, 0], "left_hind_leg": [a, 0, 0],
+                     "head": [s * 3, 0, 0], "nose": [s * 5, 0, 0]}
+                return m.get(bone)
+
+            # ── Hoglin (leg_front/back_right/left) ──
+            if mob_name == "hoglin":
+                m = {"leg_front_right": [a, 0, 0], "leg_front_left": [-a, 0, 0],
+                     "leg_back_right": [-a, 0, 0], "leg_back_left": [a, 0, 0],
+                     "head": [s * 3, 0, 0]}
+                return m.get(bone)
+
+            # ── Rabbit (hop) ──
+            if mob_name == "rabbit":
                 phase = (t / dur) % 1.0
-                # Hop motion — bunny jumps
                 hop = abs(math.sin(phase * math.pi)) * 30
-                m = {
-                    "haunchLeft": [-hop, 0, 0], "haunchRight": [-hop, 0, 0],
-                    "rearFootLeft": [hop * 0.5, 0, 0], "rearFootRight": [hop * 0.5, 0, 0],
-                    "frontLegLeft": [hop * 0.8, 0, 0], "frontLegRight": [hop * 0.8, 0, 0],
-                    "body": {"rot": [-hop * 0.2, 0, 0], "pos": [0, hop * 0.1 * SCALE, 0]},
-                }
-                r = m.get(bone)
-                if isinstance(r, dict):
-                    return r
-                return r
-            animations.append(make_anim("walk", 0.5, 24, rabbit_walk))
+                m = {"haunchLeft": [-hop, 0, 0], "haunchRight": [-hop, 0, 0],
+                     "rearFootLeft": [hop * 0.5, 0, 0], "rearFootRight": [hop * 0.5, 0, 0],
+                     "frontLegLeft": [hop * 0.8, 0, 0], "frontLegRight": [hop * 0.8, 0, 0]}
+                return m.get(bone)
 
-        elif mob_name == "chicken":
-            def chicken_walk(bone, t, dur):
-                a = math.cos(t / dur * 2 * math.pi) * 40
+            # ── Chicken (leg0/leg1 only) ──
+            if mob_name == "chicken":
                 m = {"leg0": [a, 0, 0], "leg1": [-a, 0, 0]}
                 return m.get(bone)
-            animations.append(make_anim("walk", 1.0, 24, chicken_walk))
 
-        elif mob_name == "bat":
-            def bat_walk(bone, t, dur):
-                # Wings flapping
+            # ── Bat (wings) ──
+            if mob_name == "bat":
                 flap = math.sin(t / dur * 4 * math.pi) * 40
-                m = {
-                    "rightWing": [0, 0, flap],
-                    "rightWingTip": [0, 0, flap * 0.7],
-                    "leftWing": [0, 0, -flap],
-                    "leftWingTip": [0, 0, -flap * 0.7],
-                    "body": [math.sin(t / dur * 2 * math.pi) * 5, 0, 0],
-                }
+                m = {"rightWing": [0, 0, flap], "rightWingTip": [0, 0, flap * 0.7],
+                     "leftWing": [0, 0, -flap], "leftWingTip": [0, 0, -flap * 0.7],
+                     "body": [s * 5, 0, 0]}
                 return m.get(bone)
-            animations.append(make_anim("walk", 0.5, 24, bat_walk))
 
-        elif mob_name == "creeper":
-            def creeper_walk(bone, t, dur):
-                a = math.cos(t / dur * 2 * math.pi) * 40
-                m = {
-                    "leg0": [a, 0, 0], "leg1": [-a, 0, 0],
-                    "leg2": [-a, 0, 0], "leg3": [a, 0, 0],
-                }
+            # ── Bee (leftwing_bone/rightwing_bone) ──
+            if mob_name == "bee":
+                flap = math.sin(t / dur * 8 * math.pi) * 30
+                m = {"leftwing_bone": [0, 0, -flap], "rightwing_bone": [0, 0, flap],
+                     "body": [s * 3, 0, 0]}
                 return m.get(bone)
-            animations.append(make_anim("walk", 1.0, 24, creeper_walk))
 
-        elif mob_name in HUMANOIDS:
-            def humanoid_walk(bone, t, dur):
-                a = math.cos(t / dur * 2 * math.pi) * 40
-                m = {
-                    "leftArm": [-a, 0, 0], "rightArm": [a, 0, 0],
-                    "leftLeg": [a * 1.4, 0, 0], "rightLeg": [-a * 1.4, 0, 0],
-                }
+            # ── Parrot (wing0/wing1 + leg0/leg1) ──
+            if mob_name == "parrot":
+                flap = math.sin(t / dur * 6 * math.pi) * 35
+                m = {"wing0": [0, 0, -flap], "wing1": [0, 0, flap],
+                     "leg0": [a * 0.5, 0, 0], "leg1": [-a * 0.5, 0, 0],
+                     "tail": [s * 5, 0, 0]}
                 return m.get(bone)
-            animations.append(make_anim("walk", 1.0, 24, humanoid_walk))
 
-        elif mob_name in SPIDERS:
-            def spider_walk(bone, t, dur):
-                phase_offsets = {
-                    "leg0": 0, "leg1": 0, "leg2": 90, "leg3": 90,
-                    "leg4": 180, "leg5": 180, "leg6": 270, "leg7": 270,
-                }
+            # ── Spider/cave_spider (leg0-7) ──
+            if mob_name in ("spider", "cave_spider"):
+                phase_offsets = {"leg0": 0, "leg1": 0, "leg2": 90, "leg3": 90,
+                                 "leg4": 180, "leg5": 180, "leg6": 270, "leg7": 270}
                 if bone not in phase_offsets:
                     return None
                 offset = phase_offsets[bone]
@@ -1302,171 +1312,183 @@ def bake_mob_animations(mob_name, mob_info, bone_names, bone_map, mesh_data):
                 sign_y = -1 if bone in ("leg0", "leg2", "leg4", "leg6") else 1
                 sign_z = 1 if bone in ("leg0", "leg2", "leg4", "leg6") else -1
                 return [0, sign_y * y_swing, sign_z * z_swing]
-            animations.append(make_anim("walk", 1.0, 24, spider_walk))
 
-        elif mob_name in ("ocelot", "cat"):
-            def cat_ocelot_walk(bone, t, dur):
-                a = math.cos(t / dur * 2 * math.pi) * 35
-                m = {
-                    "frontLegL": [a, 0, 0], "frontLegR": [-a, 0, 0],
-                    "backLegL": [-a, 0, 0], "backLegR": [a, 0, 0],
-                    "tail1": [0, math.sin(t / dur * 4 * math.pi) * 25, 0],
-                    "tail2": [0, math.sin(t / dur * 4 * math.pi + 0.5) * 15, 0],
-                    # Also support ocelot bone names (leg0-3)
-                    "leg0": [a, 0, 0], "leg1": [-a, 0, 0],
-                    "leg2": [-a, 0, 0], "leg3": [a, 0, 0],
-                }
+            # ── Humanoids (leftArm/rightArm/leftLeg/rightLeg) ──
+            if mob_name in ("zombie", "skeleton", "enderman", "drowned", "husk",
+                            "stray", "wither_skeleton", "zombie_villager",
+                            "zombie_pigman", "pillager", "vindicator", "evoker",
+                            "witch", "warden", "bogged", "creaking",
+                            "iron_golem", "snow_golem"):
+                m = {"leftArm": [-a, 0, 0], "rightArm": [a, 0, 0],
+                     "leftLeg": [a * 1.4, 0, 0], "rightLeg": [-a * 1.4, 0, 0],
+                     # iron_golem: arm0/arm1/leg0/leg1
+                     "arm0": [-a, 0, 0], "arm1": [a, 0, 0],
+                     "leg0": [a * 1.4, 0, 0], "leg1": [-a * 1.4, 0, 0],
+                     # snow_golem: arm1/arm2
+                     "arm2": [a, 0, 0],
+                     # warden: right_arm/left_arm/right_leg/left_leg
+                     "right_arm": [a, 0, 0], "left_arm": [-a, 0, 0],
+                     "right_leg": [-a * 1.4, 0, 0], "left_leg": [a * 1.4, 0, 0]}
                 return m.get(bone)
-            animations.append(make_anim("walk", 0.8, 24, cat_ocelot_walk))
 
-        elif mob_name in ("blaze",):
-            def blaze_walk(bone, t, dur):
-                # Blaze rods rotate
-                if "rod" in bone.lower():
-                    a = math.sin(t / dur * 4 * math.pi) * 15
-                    return [a, t / dur * 360, 0]
+            # ── Piglin (rightarm/leftarm/rightleg/leftleg — lowercase) ──
+            if mob_name == "piglin":
+                m = {"leftarm": [-a, 0, 0], "rightarm": [a, 0, 0],
+                     "leftleg": [a * 1.4, 0, 0], "rightleg": [-a * 1.4, 0, 0]}
+                return m.get(bone)
+
+            # ── Frog/Axolotl (left/right_arm/leg) ──
+            if mob_name in ("frog", "axolotl"):
+                a30 = math.cos(t / dur * 2 * math.pi) * 30
+                m = {"left_arm": [a30, 0, 0], "right_arm": [-a30, 0, 0],
+                     "left_leg": [-a30, 0, 0], "right_leg": [a30, 0, 0],
+                     "tail": [0, s * 20, 0]}
+                return m.get(bone)
+
+            # ── Blaze (upperBodyParts0-11 rods) ──
+            if mob_name == "blaze":
+                if bone.startswith("upperBodyParts"):
+                    idx = int(bone.replace("upperBodyParts", ""))
+                    phase = idx / 12.0 * 2 * math.pi
+                    return [math.sin(t / dur * 2 * math.pi + phase) * 15, 0, 0]
                 if bone == "head":
-                    return [math.sin(t / dur * 2 * math.pi) * 5, 0, 0]
+                    return [s * 5, 0, 0]
                 return None
-            animations.append(make_anim("walk", 1.5, 12, blaze_walk))
 
-        elif mob_name in ("ghast",):
-            def ghast_walk(bone, t, dur):
-                # Tentacles wave
-                if "tentacle" in bone.lower():
-                    a = math.sin(t / dur * 2 * math.pi) * 20
-                    return [a, 0, 0]
+            # ── Ghast (tentacles_0-8) ──
+            if mob_name == "ghast":
+                if bone.startswith("tentacles_"):
+                    idx = int(bone.replace("tentacles_", ""))
+                    phase = idx / 9.0 * 2 * math.pi
+                    return [math.sin(t / dur * 2 * math.pi + phase) * 20, 0, 0]
                 return None
-            animations.append(make_anim("walk", 2.0, 12, ghast_walk))
 
-        elif mob_name in ("slime", "magma_cube"):
-            def slime_walk(bone, t, dur):
-                # Hop
+            # ── Slime/Magma_cube (hop — body bob) ──
+            if mob_name in ("slime", "magma_cube"):
                 phase = (t / dur) % 1.0
                 squish = abs(math.sin(phase * math.pi))
-                return {"rot": [0, 0, 0], "pos": [0, squish * 0.5 * SCALE, 0]} if bone == "body" else None
-            animations.append(make_anim("walk", 0.6, 24, slime_walk))
+                first_bone = "cube" if mob_name == "slime" else "bodyCube_0"
+                if bone == first_bone:
+                    return {"rot": [0, 0, 0], "pos": [0, squish * 0.5 * SCALE, 0]}
+                return None
 
-        elif mob_name in ("phantom",):
-            def phantom_walk(bone, t, dur):
+            # ── Phantom (wing0/wingtip0/wing1/wingtip1) ──
+            if mob_name == "phantom":
                 flap = math.sin(t / dur * 4 * math.pi) * 30
-                m = {
-                    "leftWing": [0, 0, -flap],
-                    "rightWing": [0, 0, flap],
-                    "tailBase": [math.sin(t / dur * 2 * math.pi) * 10, 0, 0],
-                }
+                m = {"wing0": [0, 0, -flap], "wingtip0": [0, 0, -flap * 0.7],
+                     "wing1": [0, 0, flap], "wingtip1": [0, 0, flap * 0.7],
+                     "tail": [s * 10, 0, 0], "tailtip": [s * 15, 0, 0]}
                 return m.get(bone)
-            animations.append(make_anim("walk", 0.8, 24, phantom_walk))
 
-        elif mob_name in ("cod", "salmon", "dolphin", "squid"):
-            def fish_walk(bone, t, dur):
-                # Body/tail wiggle
-                a = math.sin(t / dur * 4 * math.pi) * 25
-                if "tail" in bone.lower() or "body" in bone.lower():
-                    return [0, a, 0]
-                return None
-            animations.append(make_anim("walk", 0.8, 24, fish_walk))
-
-        elif mob_name in ("bee",):
-            def bee_walk(bone, t, dur):
-                flap = math.sin(t / dur * 8 * math.pi) * 30
-                m = {
-                    "leftwing": [0, 0, -flap],
-                    "rightwing": [0, 0, flap],
-                    "body": [math.sin(t / dur * 2 * math.pi) * 3, 0, 0],
-                    # Also try capitalized
-                    "leftWing": [0, 0, -flap],
-                    "rightWing": [0, 0, flap],
-                }
+            # ── Cod (head/tailfin/leftFin/rightFin) ──
+            if mob_name == "cod":
+                sw = math.sin(t / dur * 4 * math.pi) * 25
+                m = {"tailfin": [0, sw, 0], "body": [0, sw * 0.3, 0],
+                     "leftFin": [0, 0, sw * 0.5], "rightFin": [0, 0, -sw * 0.5]}
                 return m.get(bone)
-            animations.append(make_anim("walk", 0.4, 24, bee_walk))
 
-        elif mob_name in ("endermite", "silverfish"):
-            def bug_walk(bone, t, dur):
-                # Segment wave
-                a = math.sin(t / dur * 4 * math.pi) * 15
-                if "segment" in bone.lower() or "body" in bone.lower():
-                    return [a, 0, 0]
+            # ── Salmon (body_front/body_back/tailfin) ──
+            if mob_name == "salmon":
+                sw = math.sin(t / dur * 4 * math.pi) * 25
+                m = {"body_back": [0, sw, 0], "tailfin": [0, sw * 1.3, 0],
+                     "body_front": [0, sw * 0.3, 0],
+                     "leftFin": [0, 0, sw * 0.5], "rightFin": [0, 0, -sw * 0.5]}
+                return m.get(bone)
+
+            # ── Dolphin (body/tail/tail_fin) ──
+            if mob_name == "dolphin":
+                sw = math.sin(t / dur * 3 * math.pi) * 20
+                m = {"tail": [sw, 0, 0], "tail_fin": [sw * 1.3, 0, 0],
+                     "body": [sw * 0.2, 0, 0],
+                     "left_fin": [0, 0, -sw * 0.5], "right_fin": [0, 0, sw * 0.5]}
+                return m.get(bone)
+
+            # ── Squid (tentacle1-8) ──
+            if mob_name == "squid":
+                if bone.startswith("tentacle"):
+                    idx = int(bone.replace("tentacle", "")) - 1
+                    phase = idx / 8.0 * 2 * math.pi
+                    return [math.sin(t / dur * 2 * math.pi + phase) * 20, 0, 0]
                 return None
-            animations.append(make_anim("walk", 0.6, 24, bug_walk))
 
-        elif mob_name in ("guardian",):
-            def guardian_walk(bone, t, dur):
-                # Spikes pulse, tail wave
-                a = math.sin(t / dur * 2 * math.pi) * 15
-                if "tail" in bone.lower():
-                    return [a, 0, 0]
-                if "spike" in bone.lower():
-                    return [0, 0, math.sin(t / dur * 3 * math.pi) * 10]
+            # ── Endermite (section_0-3) ──
+            if mob_name == "endermite":
+                if bone.startswith("section_"):
+                    idx = int(bone.replace("section_", ""))
+                    phase = idx / 4.0 * 2 * math.pi
+                    return [math.sin(t / dur * 4 * math.pi + phase) * 15, 0, 0]
                 return None
-            animations.append(make_anim("walk", 1.5, 12, guardian_walk))
 
-        elif mob_name in ("shulker",):
-            def shulker_walk(bone, t, dur):
-                if "lid" in bone.lower() or "head" in bone.lower():
+            # ── Silverfish (bodyPart_0-6) ──
+            if mob_name == "silverfish":
+                if bone.startswith("bodyPart_"):
+                    idx = int(bone.replace("bodyPart_", ""))
+                    phase = idx / 7.0 * 2 * math.pi
+                    return [0, math.sin(t / dur * 4 * math.pi + phase) * 20, 0]
+                return None
+
+            # ── Guardian (tailpart0-2 + spikepart0-11) ──
+            if mob_name == "guardian":
+                if bone.startswith("tailpart"):
+                    idx = int(bone.replace("tailpart", ""))
+                    return [math.sin(t / dur * 2 * math.pi) * (10 + idx * 8), 0, 0]
+                if bone.startswith("spikepart"):
+                    return [0, 0, math.sin(t / dur * 3 * math.pi) * 15]
+                return None
+
+            # ── Shulker (lid) ──
+            if mob_name == "shulker":
+                if bone == "lid":
                     return [math.sin(t / dur * math.pi) * 30, 0, 0]
                 return None
-            animations.append(make_anim("walk", 2.0, 12, shulker_walk))
 
-        elif mob_name in ("vex", "allay"):
-            def vex_walk(bone, t, dur):
+            # ── Vex (leftwing/rightwing + arms) ──
+            if mob_name == "vex":
                 flap = math.sin(t / dur * 6 * math.pi) * 30
-                m = {
-                    "leftWing": [0, 0, -flap],
-                    "rightWing": [0, 0, flap],
-                    "body": [math.sin(t / dur * 2 * math.pi) * 5, 0, 0],
-                }
+                m = {"leftwing": [0, 0, -flap], "rightwing": [0, 0, flap],
+                     "leftArm": [-a * 0.5, 0, 0], "rightArm": [a * 0.5, 0, 0],
+                     "body": [s * 5, 0, 0]}
                 return m.get(bone)
-            animations.append(make_anim("walk", 0.6, 24, vex_walk))
 
-        elif mob_name in ("wither",):
-            def wither_walk(bone, t, dur):
-                a = math.sin(t / dur * 2 * math.pi)
-                if "head" in bone.lower():
-                    return [a * 10, a * 5, 0]
-                return None
-            animations.append(make_anim("walk", 2.0, 12, wither_walk))
-
-        elif mob_name in ("breeze",):
-            def breeze_walk(bone, t, dur):
-                if bone == "body":
-                    bob = math.sin(t / dur * 2 * math.pi) * 5
-                    return [bob, 0, 0]
-                return None
-            animations.append(make_anim("walk", 1.5, 12, breeze_walk))
-
-        elif mob_name in ("parrot",):
-            def parrot_walk(bone, t, dur):
-                flap = math.sin(t / dur * 6 * math.pi) * 35
-                m = {
-                    "leftWing": [0, 0, -flap],
-                    "rightWing": [0, 0, flap],
-                    "leftLeg": [math.cos(t / dur * 2 * math.pi) * 20, 0, 0],
-                    "rightLeg": [-math.cos(t / dur * 2 * math.pi) * 20, 0, 0],
-                }
+            # ── Allay (left_wing/right_wing + arms) ──
+            if mob_name == "allay":
+                flap = math.sin(t / dur * 6 * math.pi) * 30
+                m = {"left_wing": [0, 0, -flap], "right_wing": [0, 0, flap],
+                     "left_arm": [-a * 0.3, 0, 0], "right_arm": [a * 0.3, 0, 0],
+                     "body": [s * 3, 0, 0]}
                 return m.get(bone)
-            animations.append(make_anim("walk", 0.5, 24, parrot_walk))
 
-        elif mob_name in ("frog", "axolotl"):
-            def amphibian_walk(bone, t, dur):
-                a = math.cos(t / dur * 2 * math.pi) * 30
-                m = {
-                    "left_arm": [a, 0, 0], "right_arm": [-a, 0, 0],
-                    "left_leg": [-a, 0, 0], "right_leg": [a, 0, 0],
-                    # Also try numbered legs
-                    "leg0": [a, 0, 0], "leg1": [-a, 0, 0],
-                    "leg2": [-a, 0, 0], "leg3": [a, 0, 0],
-                }
+            # ── Wither (head1/head2/head3 + upperBodyPart1-3) ──
+            if mob_name == "wither":
+                m = {"head1": [s * 10, 0, 0], "head2": [s * 8, s * 15, 0],
+                     "head3": [-s * 8, -s * 15, 0],
+                     "upperBodyPart1": [s * 3, 0, 0]}
                 return m.get(bone)
-            animations.append(make_anim("walk", 0.8, 24, amphibian_walk))
 
-        else:
-            # Generic walk: gently bob head
-            def generic_walk(bone, t, dur):
-                if bone == "head" or bone == "body":
-                    return [math.sin(t / dur * 2 * math.pi) * 5, 0, 0]
-                return None
-            animations.append(make_anim("walk", 1.5, 12, generic_walk))
+            # ── Breeze (rods/head bob) ──
+            if mob_name == "breeze":
+                m = {"rods": [0, t / dur * 360, 0],
+                     "head": [s * 5, 0, 0]}
+                return m.get(bone)
+
+            # ── Fallback: bob head/body ──
+            if bone == "head" or bone == "body":
+                return [s * 5, 0, 0]
+            return None
+
+        speed = 1.0
+        if mob_name in ("rabbit",):
+            speed = 0.5
+        elif mob_name in ("bat", "bee"):
+            speed = 0.4
+        elif mob_name in ("cat", "ocelot", "frog", "axolotl", "cod", "salmon",
+                          "dolphin", "squid", "phantom", "parrot"):
+            speed = 0.8
+        elif mob_name in ("slime", "magma_cube", "endermite", "silverfish", "vex", "allay"):
+            speed = 0.6
+        elif mob_name in ("blaze", "guardian", "shulker", "breeze", "wither", "ghast"):
+            speed = 1.5
+        animations.append(make_anim("walk", speed, 24, _walk_fn))
 
     # ── Idle ──
     if "idle" in custom_anims:
