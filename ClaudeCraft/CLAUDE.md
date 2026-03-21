@@ -36,7 +36,7 @@ Jeu voxel type Minecraft en GDScript avec Godot 4.6+, style pastel. Évolue vers
 
 ### Combat
 - **`arrow_entity.gd`** : flèche arc — gravité 20m/s², drag, dégâts 6.0, critique, knockback, particules, Label3D dégâts
-- **`passive_mob.gd`** : *(inactif — plus de spawn)* code encore présent mais non utilisé. Les animaux ont été retirés pour se concentrer sur la gestion de village
+- **`passive_mob.gd`** v3.0.0 : systeme de mobs charge depuis `data/mob_database.json` (57 mobs documentes). 3 comportements (passive/neutral/hostile) + systemes : **brulure soleil** (zombie/skeleton brulent de jour si ciel ouvert), **faim animale** (drain progressif, recherche nourriture dans rayon 4, mange vegetation/herbe, cooldown 5s), **predation** (loup chasse mouton/lapin/renard/poulet, renard chasse poulet/lapin — quand faim <50%, range 16 blocs), **pack behavior** (loups alertent meute rayon 16 quand frappes), **when_hit configurable** (flee/attack/attack_pack/attack_spit/attack_ram/flee_ink). Tables de spawn precalculees `BIOME_DAY_MOBS` et `BIOME_NIGHT_MOBS` construites au chargement du JSON. Spawn en groupes fideles MC (spawn_group_min/max, max_per_chunk, spawn_below_y)
 
 ### Joueur et UI
 - **`player.gd`** : FPS CharacterBody3D, minage progressif (`BASE_MINING_TIME=5.0` × dureté/outil), hotbar 9 slots + outils + nourriture, arc (charge MC), placement blocs. **Zoom FOV** : Alt+Molette 70°→110° (step 5°), sprint ajoute +10° delta
@@ -59,6 +59,10 @@ Jeu voxel type Minecraft en GDScript avec Godot 4.6+, style pastel. Évolue vers
 ## Scène principale (`scenes/main.tscn`)
 
 WorldManager + Player (spawn y=80) + WorldEnvironment (SSAO, ciel pastel) + DirectionalLight3D + UI layers
+
+## Donnees (`data/`)
+
+- **`mob_database.json`** : base de donnees des 57 mobs (16 convertis + 41 a convertir). Metadonnees par mob : spawn_time (day/night/both), biomes, behavior (passive/neutral/hostile/boss), when_hit, health, attack_damage, move_speed, collision_size, drops, hunger (max, drain, food_source, food_blocks, prey_mobs, eat_effect, satiation), burns_in_sunlight, fire_sensitive, weapon_effectiveness, special tags, conversion_status, chemins Bedrock (model/animation/texture)
 
 ## Structures prédéfinies (`structures/`)
 
@@ -93,7 +97,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 
 ## Direction du projet
 
-**Version actuelle : v18.6.0**
+**Version actuelle : v19.0.0**
 
 | Phase | Statut | Contenu |
 |-------|--------|---------|
@@ -144,7 +148,8 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 | 11.3 | Fait | v18.4.0 — **Fix wolf GLB** (CUBE_OFFSET_OVERRIDES body Z-2 / upperBody Z-4, ferme gap tête-corps). **Fix presets rendu** au démarrage (pas d'application avant warmup 30 frames, SSAO/SDFGI s'initialisent avec géométrie). **Texture eau** Faithful32 (water_still + UVs tilées, remplace vertex color plat). **Plus d'arbres dans l'eau** (skip végétation si height ≤ SEA_LEVEL). **Suppression filtre at_shore** eau (plus de gap 1 bloc aux rives). **Throttle chunks** : buffer instanciation (max 2/frame) + mesh apply (max 1/frame), réduit les freezes. **Villageois inhibés** (VILLAGE_NPC_COUNT=0) pour focus solo. mob_converter.py v2.4.0 |
 | 11.4 | Fait | v18.5.0 — **Fix oreilles cheval** (mob_converter.py v2.5.0). BPR_FORCE_OVERRIDES (nouveau mécanisme pour forcer rotation sur bones avec rotation existante), PIVOT_ONLY_OVERRIDES (pivot rapproché du cube pour rotation sur place), oreilles alignées avec le cou (30°X) et posées sur la tête comme le cheval MC original |
 | 11.5 | Fait | v18.6.0 — **Vue 3e personne (F5)** + outils Python enrichis. `player.gd` : 3 modes caméra F5 (FPS / 3e dos / 3e face), modèle Steve dynamique avec skin, collision caméra raycast, protection anti-terrain, pitch limité mode dos, terminal velocity + téléport sécurité. Fix spawn surface (deadlock `_spawn_grounded` supprimé). `character_viewer.py` v1.5.0 : système d'armures overlay 3D (casque/plastron/jambières/bottes × 5 matériaux cuir→diamant, textures Bedrock). `mob_gallery.py` v1.1.0 : panneau fullscreen (animations cliquables + textures Bedrock swappables + bones toggle [B]) |
-| 12 | À venir | Mobs Minecraft (98+ GLB déjà en assets), armures (texture swap 2 couches), UI craft MC (textures GUI Faithful32 disponibles) |
+| 12 | Fait | v19.0.0 — **Systeme de mobs intelligent (mob_database.json)**. `data/mob_database.json` : 57 mobs documentes avec metadonnees completes (spawn time jour/nuit, biomes, comportement passif/neutre/hostile, reaction quand frappe, points de vie, faim, predation, brulure soleil, armes efficaces, drops, sons, collision, donnees Bedrock). `passive_mob.gd` v3.0.0 : charge JSON, tables spawn precalculees par biome+heure. Nouveaux systemes : brulure soleil (zombie/skeleton brulent de jour), faim animale (drain, recherche nourriture, mange blocs herbe/vegetation), predation (loup→mouton/lapin, renard→poulet), pack behavior (meute aggro), when_hit configurable. `world_manager.gd` : spawner intelligent — plus d'enderman en plein jour, spawn en groupes fideles MC, respect spawn_below_y |
+| 12.1 | A venir | Conversion de tous les mobs Bedrock manquants (~50), armures (texture swap 2 couches), UI craft MC |
 
 **Packs GLB utilisés** : Steve GLB (modèle Bedrock converti, 28 bones, 4 anims) pour tous les PNJ avec skins par profession. Kenney.nl (18 modèles BlockPNJ — conservés mais plus utilisés). **PNJ futurs** : KayKit Adventurers (161 anims travail)
 
