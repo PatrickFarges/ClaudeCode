@@ -1,0 +1,3152 @@
+{
+  "_version": "1.0.0",
+  "_description": "Base de donnees complete des mobs ClaudeCraft - metadonnees de spawn, comportement, stats et interactions",
+  "_biomes": {
+    "0": "desert",
+    "1": "forest",
+    "2": "mountain",
+    "3": "plains"
+  },
+  "_behavior_types": {
+    "passive": "Ne attaque jamais, fuit quand frappe",
+    "neutral": "Attaque uniquement si provoque",
+    "hostile": "Attaque le joueur a vue",
+    "boss": "Mob de boss, spawn special uniquement"
+  },
+  "_locomotion_types": {
+    "land": "Terrestre - marche sur le sol",
+    "aquatic": "Aquatique - nage dans l'eau, meurt hors de l'eau",
+    "amphibian": "Amphibien - peut aller sur terre et dans l'eau",
+    "flying": "Volant - se deplace dans les airs",
+    "lava": "Nage dans la lave"
+  },
+  "_conversion_status": {
+    "converted": "GLB deja converti et present dans assets/Mobs/Bedrock/",
+    "bedrock_available": "Modele .geo.json + textures + animations disponibles dans les resource packs Bedrock",
+    "sketchfab_glb": "GLB telecharge depuis Sketchfab (qualite variable)",
+    "not_available": "Pas de modele disponible localement"
+  },
+
+  "mobs": {
+    "cow": {
+      "name_fr": "Vache",
+      "name_en": "Cow",
+      "category": "animal",
+      "behavior": "passive",
+      "when_hit": "flee",
+      "locomotion": "land",
+      "spawn_time": "day",
+      "burns_in_sunlight": false,
+      "biomes": [1, 3],
+      "spawn_light_min": 9,
+      "spawn_light_max": 15,
+      "spawn_group_min": 2,
+      "spawn_group_max": 4,
+      "max_per_chunk": 4,
+      "health": 10,
+      "attack_damage": 0,
+      "move_speed": 1.5,
+      "collision_size": [0.9, 1.4, 0.9],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "raw_beef": {"min": 1, "max": 3},
+        "leather": {"min": 0, "max": 2}
+      },
+      "hunger": {
+        "max": 100,
+        "drain_per_second": 0.05,
+        "food_source": "grass",
+        "food_blocks": ["GRASS_BLOCK", "SHORT_GRASS", "FERN"],
+        "eat_effect": "removes_block",
+        "satiation": 40
+      },
+      "fire_sensitive": true,
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "axe": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/cow/say",
+        "hurt": "mob/cow/hurt",
+        "death": "mob/cow/hurt"
+      },
+      "conversion_status": "converted",
+      "glb_path": "res://assets/Mobs/Bedrock/cow.glb",
+      "texture_path": "res://assets/Mobs/Bedrock/cow_0.png",
+      "bedrock_model": "vanilla/models/entity/cow.geo.json",
+      "bedrock_animation": "vanilla/animations/cow.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/cow/cow.png"
+    },
+
+    "pig": {
+      "name_fr": "Cochon",
+      "name_en": "Pig",
+      "category": "animal",
+      "behavior": "passive",
+      "when_hit": "flee",
+      "locomotion": "land",
+      "spawn_time": "day",
+      "burns_in_sunlight": false,
+      "biomes": [1, 3],
+      "spawn_light_min": 9,
+      "spawn_light_max": 15,
+      "spawn_group_min": 2,
+      "spawn_group_max": 4,
+      "max_per_chunk": 4,
+      "health": 10,
+      "attack_damage": 0,
+      "move_speed": 1.5,
+      "collision_size": [0.9, 0.9, 0.9],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "raw_porkchop": {"min": 1, "max": 3}
+      },
+      "hunger": {
+        "max": 100,
+        "drain_per_second": 0.05,
+        "food_source": "ground",
+        "food_blocks": ["GRASS_BLOCK", "FARMLAND"],
+        "eat_effect": "removes_block",
+        "satiation": 35
+      },
+      "fire_sensitive": true,
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "axe": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/pig/say",
+        "hurt": "mob/pig/hurt",
+        "death": "mob/pig/death"
+      },
+      "conversion_status": "converted",
+      "glb_path": "res://assets/Mobs/Bedrock/pig.glb",
+      "texture_path": "res://assets/Mobs/Bedrock/pig_0.png",
+      "bedrock_model": "vanilla/models/entity/pig.geo.json",
+      "bedrock_animation": "vanilla/animations/pig.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/pig/pig.png"
+    },
+
+    "sheep": {
+      "name_fr": "Mouton",
+      "name_en": "Sheep",
+      "category": "animal",
+      "behavior": "passive",
+      "when_hit": "flee",
+      "locomotion": "land",
+      "spawn_time": "day",
+      "burns_in_sunlight": false,
+      "biomes": [2, 3],
+      "spawn_light_min": 9,
+      "spawn_light_max": 15,
+      "spawn_group_min": 2,
+      "spawn_group_max": 4,
+      "max_per_chunk": 4,
+      "health": 8,
+      "attack_damage": 0,
+      "move_speed": 1.3,
+      "collision_size": [0.9, 1.3, 0.9],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "raw_mutton": {"min": 1, "max": 2},
+        "wool": {"min": 1, "max": 1}
+      },
+      "hunger": {
+        "max": 100,
+        "drain_per_second": 0.05,
+        "food_source": "grass",
+        "food_blocks": ["GRASS_BLOCK", "SHORT_GRASS"],
+        "eat_effect": "removes_block",
+        "satiation": 40
+      },
+      "fire_sensitive": true,
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "axe": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/sheep/say",
+        "hurt": "mob/sheep/hurt",
+        "death": "mob/sheep/hurt"
+      },
+      "conversion_status": "converted",
+      "glb_path": "res://assets/Mobs/Bedrock/sheep.glb",
+      "texture_path": "res://assets/Mobs/Bedrock/sheep_0.png",
+      "bedrock_model": "vanilla/models/entity/sheep.geo.json",
+      "bedrock_animation": "vanilla/animations/sheep.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/sheep/sheep.png"
+    },
+
+    "chicken": {
+      "name_fr": "Poulet",
+      "name_en": "Chicken",
+      "category": "animal",
+      "behavior": "passive",
+      "when_hit": "flee",
+      "locomotion": "land",
+      "spawn_time": "day",
+      "burns_in_sunlight": false,
+      "biomes": [1, 3],
+      "spawn_light_min": 9,
+      "spawn_light_max": 15,
+      "spawn_group_min": 2,
+      "spawn_group_max": 4,
+      "max_per_chunk": 4,
+      "health": 4,
+      "attack_damage": 0,
+      "move_speed": 1.2,
+      "collision_size": [0.5, 0.7, 0.5],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "raw_chicken": {"min": 1, "max": 1},
+        "feather": {"min": 0, "max": 2}
+      },
+      "hunger": {
+        "max": 80,
+        "drain_per_second": 0.04,
+        "food_source": "seeds",
+        "food_blocks": ["SHORT_GRASS", "WHEAT_STAGE_0"],
+        "eat_effect": "removes_block",
+        "satiation": 30
+      },
+      "fire_sensitive": true,
+      "special": ["slow_fall"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "axe": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/chicken/say",
+        "hurt": "mob/chicken/hurt",
+        "death": "mob/chicken/hurt"
+      },
+      "conversion_status": "converted",
+      "glb_path": "res://assets/Mobs/Bedrock/chicken.glb",
+      "texture_path": "res://assets/Mobs/Bedrock/chicken_0.png",
+      "bedrock_model": "vanilla/models/entity/chicken.geo.json",
+      "bedrock_animation": "vanilla/animations/chicken.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/chicken/chicken.png"
+    },
+
+    "rabbit": {
+      "name_fr": "Lapin",
+      "name_en": "Rabbit",
+      "category": "animal",
+      "behavior": "passive",
+      "when_hit": "flee",
+      "locomotion": "land",
+      "spawn_time": "day",
+      "burns_in_sunlight": false,
+      "biomes": [0, 3],
+      "spawn_light_min": 9,
+      "spawn_light_max": 15,
+      "spawn_group_min": 1,
+      "spawn_group_max": 3,
+      "max_per_chunk": 3,
+      "health": 3,
+      "attack_damage": 0,
+      "move_speed": 2.0,
+      "collision_size": [0.4, 0.5, 0.4],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "raw_rabbit": {"min": 1, "max": 1},
+        "rabbit_hide": {"min": 0, "max": 1}
+      },
+      "hunger": {
+        "max": 60,
+        "drain_per_second": 0.06,
+        "food_source": "vegetables",
+        "food_blocks": ["WHEAT_STAGE_3", "SHORT_GRASS", "DANDELION"],
+        "eat_effect": "removes_block",
+        "satiation": 25
+      },
+      "fire_sensitive": true,
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "axe": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/rabbit/idle",
+        "hurt": "mob/rabbit/hurt",
+        "death": "mob/rabbit/death"
+      },
+      "conversion_status": "converted",
+      "glb_path": "res://assets/Mobs/Bedrock/rabbit.glb",
+      "texture_path": "res://assets/Mobs/Bedrock/rabbit_0.png",
+      "bedrock_model": "vanilla/models/entity/rabbit.geo.json",
+      "bedrock_animation": "vanilla/animations/rabbit.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/rabbit/brown.png"
+    },
+
+    "fox": {
+      "name_fr": "Renard",
+      "name_en": "Fox",
+      "category": "animal",
+      "behavior": "passive",
+      "when_hit": "flee",
+      "locomotion": "land",
+      "spawn_time": "both",
+      "burns_in_sunlight": false,
+      "biomes": [1],
+      "spawn_light_min": 0,
+      "spawn_light_max": 15,
+      "spawn_group_min": 1,
+      "spawn_group_max": 3,
+      "max_per_chunk": 3,
+      "health": 10,
+      "attack_damage": 2,
+      "move_speed": 1.8,
+      "collision_size": [0.6, 0.7, 0.6],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {},
+      "hunger": {
+        "max": 80,
+        "drain_per_second": 0.06,
+        "food_source": "prey",
+        "food_blocks": [],
+        "prey_mobs": ["chicken", "rabbit"],
+        "eat_effect": "kills_prey",
+        "satiation": 50
+      },
+      "fire_sensitive": true,
+      "special": ["hunts_chickens", "hunts_rabbits", "nocturnal_active"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "axe": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/fox/idle",
+        "hurt": "mob/fox/hurt",
+        "death": "mob/fox/death"
+      },
+      "conversion_status": "converted",
+      "glb_path": "res://assets/Mobs/Bedrock/fox.glb",
+      "texture_path": "res://assets/Mobs/Bedrock/fox_0.png",
+      "bedrock_model": "vanilla/models/entity/fox.geo.json",
+      "bedrock_animation": "vanilla/animations/fox.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/fox/fox.png"
+    },
+
+    "cat": {
+      "name_fr": "Chat",
+      "name_en": "Cat",
+      "category": "animal",
+      "behavior": "passive",
+      "when_hit": "flee",
+      "locomotion": "land",
+      "spawn_time": "day",
+      "burns_in_sunlight": false,
+      "biomes": [1, 3],
+      "spawn_light_min": 9,
+      "spawn_light_max": 15,
+      "spawn_group_min": 1,
+      "spawn_group_max": 2,
+      "max_per_chunk": 2,
+      "health": 10,
+      "attack_damage": 0,
+      "move_speed": 1.6,
+      "collision_size": [0.6, 0.7, 0.6],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {},
+      "hunger": {
+        "max": 80,
+        "drain_per_second": 0.04,
+        "food_source": "prey",
+        "food_blocks": [],
+        "prey_mobs": ["rabbit", "chicken"],
+        "eat_effect": "kills_prey",
+        "satiation": 40
+      },
+      "fire_sensitive": true,
+      "special": ["scares_creepers", "scares_phantoms"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "axe": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/cat/meow",
+        "hurt": "mob/cat/hitt",
+        "death": "mob/cat/hitt"
+      },
+      "conversion_status": "converted",
+      "glb_path": "res://assets/Mobs/Bedrock/cat.glb",
+      "texture_path": "res://assets/Mobs/Bedrock/cat_0.png",
+      "bedrock_model": "vanilla/models/entity/cat.geo.json",
+      "bedrock_animation": "vanilla/animations/cat.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/cat/siamesecat.png"
+    },
+
+    "bat": {
+      "name_fr": "Chauve-souris",
+      "name_en": "Bat",
+      "category": "animal",
+      "behavior": "passive",
+      "when_hit": "flee",
+      "locomotion": "flying",
+      "spawn_time": "night",
+      "burns_in_sunlight": false,
+      "biomes": [0, 1, 2, 3],
+      "spawn_light_min": 0,
+      "spawn_light_max": 4,
+      "spawn_group_min": 1,
+      "spawn_group_max": 3,
+      "max_per_chunk": 3,
+      "spawn_below_y": 63,
+      "health": 3,
+      "attack_damage": 0,
+      "move_speed": 2.5,
+      "collision_size": [0.5, 0.5, 0.5],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {},
+      "hunger": {
+        "max": 50,
+        "drain_per_second": 0.03,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": true,
+      "special": ["cave_only", "flying"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "axe": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/bat/idle",
+        "hurt": "mob/bat/hurt",
+        "death": "mob/bat/death"
+      },
+      "conversion_status": "converted",
+      "glb_path": "res://assets/Mobs/Bedrock/bat.glb",
+      "texture_path": "res://assets/Mobs/Bedrock/bat_0.png",
+      "bedrock_model": "vanilla/models/entity/bat.geo.json",
+      "bedrock_animation": "vanilla/animations/bat.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/bat.png"
+    },
+
+    "horse": {
+      "name_fr": "Cheval",
+      "name_en": "Horse",
+      "category": "animal",
+      "behavior": "passive",
+      "when_hit": "flee",
+      "locomotion": "land",
+      "spawn_time": "day",
+      "burns_in_sunlight": false,
+      "biomes": [3],
+      "spawn_light_min": 9,
+      "spawn_light_max": 15,
+      "spawn_group_min": 2,
+      "spawn_group_max": 6,
+      "max_per_chunk": 4,
+      "health": 26,
+      "attack_damage": 0,
+      "move_speed": 2.2,
+      "collision_size": [1.4, 1.6, 1.4],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "leather": {"min": 0, "max": 2}
+      },
+      "hunger": {
+        "max": 120,
+        "drain_per_second": 0.04,
+        "food_source": "grass",
+        "food_blocks": ["GRASS_BLOCK", "SHORT_GRASS"],
+        "eat_effect": "removes_block",
+        "satiation": 40
+      },
+      "fire_sensitive": true,
+      "special": ["rideable", "tameable"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "axe": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/horse/idle",
+        "hurt": "mob/horse/hurt",
+        "death": "mob/horse/death"
+      },
+      "conversion_status": "converted",
+      "glb_path": "res://assets/Mobs/Bedrock/horse.glb",
+      "texture_path": "res://assets/Mobs/Bedrock/horse_0.png",
+      "bedrock_model": "vanilla/models/entity/horse_v2.geo.json",
+      "bedrock_animation": "vanilla/animations/horse_v2.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/horse/horse_brown.png"
+    },
+
+    "wolf": {
+      "name_fr": "Loup",
+      "name_en": "Wolf",
+      "category": "animal",
+      "behavior": "neutral",
+      "when_hit": "attack_pack",
+      "locomotion": "land",
+      "spawn_time": "day",
+      "burns_in_sunlight": false,
+      "biomes": [1],
+      "spawn_light_min": 7,
+      "spawn_light_max": 15,
+      "spawn_group_min": 2,
+      "spawn_group_max": 4,
+      "max_per_chunk": 4,
+      "health": 8,
+      "attack_damage": 4,
+      "move_speed": 2.0,
+      "collision_size": [0.6, 0.85, 0.6],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {},
+      "hunger": {
+        "max": 100,
+        "drain_per_second": 0.06,
+        "food_source": "prey",
+        "food_blocks": [],
+        "prey_mobs": ["sheep", "rabbit", "fox", "chicken"],
+        "eat_effect": "kills_prey",
+        "satiation": 60
+      },
+      "fire_sensitive": true,
+      "special": ["pack_behavior", "tameable", "hunts_sheep", "hunts_rabbits", "hunts_foxes"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "axe": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/wolf/bark",
+        "hurt": "mob/wolf/hurt",
+        "death": "mob/wolf/death",
+        "growl": "mob/wolf/growl"
+      },
+      "conversion_status": "converted",
+      "glb_path": "res://assets/Mobs/Bedrock/wolf.glb",
+      "texture_path": "res://assets/Mobs/Bedrock/wolf_0.png",
+      "bedrock_model": "vanilla/models/entity/wolf.geo.json",
+      "bedrock_animation": "vanilla/animations/wolf.animations.json",
+      "bedrock_texture": "vanilla/textures/entity/wolf/wolf.png"
+    },
+
+    "polar_bear": {
+      "name_fr": "Ours polaire",
+      "name_en": "Polar Bear",
+      "category": "animal",
+      "behavior": "neutral",
+      "when_hit": "attack",
+      "locomotion": "land",
+      "spawn_time": "day",
+      "burns_in_sunlight": false,
+      "biomes": [2],
+      "spawn_light_min": 7,
+      "spawn_light_max": 15,
+      "spawn_group_min": 1,
+      "spawn_group_max": 2,
+      "max_per_chunk": 2,
+      "health": 30,
+      "attack_damage": 6,
+      "move_speed": 1.8,
+      "collision_size": [1.3, 1.4, 1.3],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "raw_cod": {"min": 0, "max": 2}
+      },
+      "hunger": {
+        "max": 120,
+        "drain_per_second": 0.03,
+        "food_source": "prey",
+        "food_blocks": [],
+        "prey_mobs": ["fox", "salmon", "cod"],
+        "eat_effect": "kills_prey",
+        "satiation": 70
+      },
+      "fire_sensitive": true,
+      "special": ["protective_of_cubs"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "axe": 1.2,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/polarbear/idle",
+        "hurt": "mob/polarbear/hurt",
+        "death": "mob/polarbear/death",
+        "warning": "mob/polarbear/warning"
+      },
+      "conversion_status": "converted",
+      "glb_path": "res://assets/Mobs/Bedrock/polar_bear.glb",
+      "texture_path": "res://assets/Mobs/Bedrock/polar_bear_0.png",
+      "bedrock_model": "vanilla/models/entity/polar_bear.geo.json",
+      "bedrock_animation": "vanilla/animations/polar_bear.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/polarbear.png"
+    },
+
+    "enderman": {
+      "name_fr": "Enderman",
+      "name_en": "Enderman",
+      "category": "monster",
+      "behavior": "neutral",
+      "when_hit": "attack_teleport",
+      "locomotion": "land",
+      "spawn_time": "night",
+      "burns_in_sunlight": false,
+      "biomes": [0, 1, 2, 3],
+      "spawn_light_min": 0,
+      "spawn_light_max": 7,
+      "spawn_group_min": 1,
+      "spawn_group_max": 2,
+      "max_per_chunk": 1,
+      "health": 40,
+      "attack_damage": 7,
+      "move_speed": 2.5,
+      "collision_size": [0.6, 2.9, 0.6],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "ender_pearl": {"min": 0, "max": 1}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": false,
+      "special": ["teleports", "aggro_on_look", "hates_water", "picks_up_blocks", "night_only"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "axe": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/enderman/idle",
+        "hurt": "mob/enderman/hit",
+        "death": "mob/enderman/death",
+        "scream": "mob/enderman/scream",
+        "teleport": "mob/enderman/portal"
+      },
+      "conversion_status": "converted",
+      "glb_path": "res://assets/Mobs/Bedrock/enderman.glb",
+      "texture_path": "res://assets/Mobs/Bedrock/enderman_0.png",
+      "bedrock_model": "vanilla/models/entity/enderman.geo.json",
+      "bedrock_animation": "vanilla/animations/enderman.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/enderman/enderman.png"
+    },
+
+    "zombie": {
+      "name_fr": "Zombie",
+      "name_en": "Zombie",
+      "category": "monster",
+      "behavior": "hostile",
+      "when_hit": "attack",
+      "locomotion": "land",
+      "spawn_time": "night",
+      "burns_in_sunlight": true,
+      "biomes": [0, 1, 2, 3],
+      "spawn_light_min": 0,
+      "spawn_light_max": 7,
+      "spawn_group_min": 2,
+      "spawn_group_max": 4,
+      "max_per_chunk": 4,
+      "health": 20,
+      "attack_damage": 3,
+      "move_speed": 1.2,
+      "collision_size": [0.6, 1.95, 0.6],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "rotten_flesh": {"min": 0, "max": 2}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": true,
+      "special": ["burns_in_sun", "can_break_doors", "attracts_reinforcements"],
+      "weapon_effectiveness": {
+        "sword": 1.5,
+        "axe": 1.2,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/zombie/say",
+        "hurt": "mob/zombie/hurt",
+        "death": "mob/zombie/death",
+        "step": "mob/zombie/step"
+      },
+      "conversion_status": "converted",
+      "glb_path": "res://assets/Mobs/Bedrock/zombie.glb",
+      "texture_path": "res://assets/Mobs/Bedrock/zombie_0.png",
+      "bedrock_model": "vanilla/models/entity/zombie.geo.json",
+      "bedrock_animation": "vanilla/animations/zombie.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/zombie/zombie.png"
+    },
+
+    "skeleton": {
+      "name_fr": "Squelette",
+      "name_en": "Skeleton",
+      "category": "monster",
+      "behavior": "hostile",
+      "when_hit": "attack",
+      "locomotion": "land",
+      "spawn_time": "night",
+      "burns_in_sunlight": true,
+      "biomes": [0, 1, 2, 3],
+      "spawn_light_min": 0,
+      "spawn_light_max": 7,
+      "spawn_group_min": 1,
+      "spawn_group_max": 3,
+      "max_per_chunk": 3,
+      "health": 20,
+      "attack_damage": 3,
+      "move_speed": 1.3,
+      "collision_size": [0.6, 1.95, 0.6],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "bone": {"min": 0, "max": 2},
+        "arrow": {"min": 0, "max": 2}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": true,
+      "special": ["burns_in_sun", "ranged_attack", "seeks_shade"],
+      "weapon_effectiveness": {
+        "sword": 1.5,
+        "axe": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/skeleton/say",
+        "hurt": "mob/skeleton/hurt",
+        "death": "mob/skeleton/death",
+        "step": "mob/skeleton/step"
+      },
+      "conversion_status": "converted",
+      "glb_path": "res://assets/Mobs/Bedrock/skeleton.glb",
+      "texture_path": "res://assets/Mobs/Bedrock/skeleton_0.png",
+      "bedrock_model": "vanilla/models/entity/skeleton.geo.json",
+      "bedrock_animation": "vanilla/animations/skeleton.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/skeleton/skeleton.png"
+    },
+
+    "creeper": {
+      "name_fr": "Creeper",
+      "name_en": "Creeper",
+      "category": "monster",
+      "behavior": "hostile",
+      "when_hit": "attack",
+      "locomotion": "land",
+      "spawn_time": "night",
+      "burns_in_sunlight": false,
+      "biomes": [0, 1, 2, 3],
+      "spawn_light_min": 0,
+      "spawn_light_max": 7,
+      "spawn_group_min": 1,
+      "spawn_group_max": 1,
+      "max_per_chunk": 2,
+      "health": 20,
+      "attack_damage": 8,
+      "move_speed": 1.0,
+      "collision_size": [0.6, 1.7, 0.6],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "gunpowder": {"min": 0, "max": 2}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": false,
+      "special": ["explodes_on_contact", "scared_of_cats", "silent_approach"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "axe": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "hurt": "mob/creeper/say",
+        "death": "mob/creeper/death",
+        "fuse": "creeper/primed",
+        "explode": "random/explode"
+      },
+      "conversion_status": "converted",
+      "glb_path": "res://assets/Mobs/Bedrock/creeper.glb",
+      "texture_path": "res://assets/Mobs/Bedrock/creeper_0.png",
+      "bedrock_model": "vanilla/models/entity/creeper.geo.json",
+      "bedrock_animation": "vanilla/animations/creeper.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/creeper/creeper.png"
+    },
+
+    "spider": {
+      "name_fr": "Araignee",
+      "name_en": "Spider",
+      "category": "monster",
+      "behavior": "hostile",
+      "when_hit": "attack",
+      "locomotion": "land",
+      "spawn_time": "night",
+      "burns_in_sunlight": false,
+      "biomes": [0, 1, 2, 3],
+      "spawn_light_min": 0,
+      "spawn_light_max": 7,
+      "spawn_group_min": 1,
+      "spawn_group_max": 3,
+      "max_per_chunk": 3,
+      "health": 16,
+      "attack_damage": 2,
+      "move_speed": 1.6,
+      "collision_size": [1.4, 0.9, 1.4],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "string": {"min": 0, "max": 2},
+        "spider_eye": {"min": 0, "max": 1}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": false,
+      "special": ["neutral_day", "hostile_night", "wall_climb"],
+      "weapon_effectiveness": {
+        "sword": 1.5,
+        "axe": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/spider/say",
+        "hurt": "mob/spider/say",
+        "death": "mob/spider/death",
+        "step": "mob/spider/step"
+      },
+      "conversion_status": "converted",
+      "glb_path": "res://assets/Mobs/Bedrock/spider.glb",
+      "texture_path": "res://assets/Mobs/Bedrock/spider_0.png",
+      "bedrock_model": "vanilla/models/entity/spider.geo.json",
+      "bedrock_animation": "vanilla/animations/spider.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/spider/spider.png"
+    },
+
+    "bee": {
+      "name_fr": "Abeille",
+      "name_en": "Bee",
+      "category": "animal",
+      "behavior": "neutral",
+      "when_hit": "attack_swarm",
+      "locomotion": "flying",
+      "spawn_time": "day",
+      "burns_in_sunlight": false,
+      "biomes": [1, 3],
+      "spawn_light_min": 9,
+      "spawn_light_max": 15,
+      "spawn_group_min": 2,
+      "spawn_group_max": 4,
+      "max_per_chunk": 4,
+      "health": 10,
+      "attack_damage": 2,
+      "move_speed": 2.0,
+      "collision_size": [0.7, 0.6, 0.7],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {},
+      "hunger": {
+        "max": 60,
+        "drain_per_second": 0.08,
+        "food_source": "flowers",
+        "food_blocks": ["DANDELION", "POPPY", "CORNFLOWER"],
+        "eat_effect": "pollinates",
+        "satiation": 30
+      },
+      "fire_sensitive": true,
+      "special": ["pollinates_flowers", "stings_once_dies", "hates_rain", "flying"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "axe": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/bee/pollinate",
+        "hurt": "mob/bee/hurt",
+        "death": "mob/bee/death"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla_1.14/models/entity/bee.geo.json",
+      "bedrock_animation": "vanilla_1.14/animations/bee.animation.json",
+      "bedrock_texture": "vanilla_1.14/textures/entity/bee/bee.png"
+    },
+
+    "ocelot": {
+      "name_fr": "Ocelot",
+      "name_en": "Ocelot",
+      "category": "animal",
+      "behavior": "passive",
+      "when_hit": "flee",
+      "locomotion": "land",
+      "spawn_time": "day",
+      "burns_in_sunlight": false,
+      "biomes": [1],
+      "spawn_light_min": 9,
+      "spawn_light_max": 15,
+      "spawn_group_min": 1,
+      "spawn_group_max": 2,
+      "max_per_chunk": 2,
+      "health": 10,
+      "attack_damage": 0,
+      "move_speed": 2.0,
+      "collision_size": [0.6, 0.7, 0.6],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {},
+      "hunger": {
+        "max": 80,
+        "drain_per_second": 0.05,
+        "food_source": "prey",
+        "food_blocks": [],
+        "prey_mobs": ["chicken"],
+        "eat_effect": "kills_prey",
+        "satiation": 40
+      },
+      "fire_sensitive": true,
+      "special": ["scares_creepers", "hunts_chickens"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "axe": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/ocelot/idle",
+        "hurt": "mob/ocelot/hurt",
+        "death": "mob/ocelot/death"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/ocelot.geo.json",
+      "bedrock_animation": "vanilla/animations/ocelot.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/cat/ocelot.png"
+    },
+
+    "parrot": {
+      "name_fr": "Perroquet",
+      "name_en": "Parrot",
+      "category": "animal",
+      "behavior": "passive",
+      "when_hit": "flee",
+      "locomotion": "flying",
+      "spawn_time": "day",
+      "burns_in_sunlight": false,
+      "biomes": [1],
+      "spawn_light_min": 9,
+      "spawn_light_max": 15,
+      "spawn_group_min": 1,
+      "spawn_group_max": 2,
+      "max_per_chunk": 2,
+      "health": 6,
+      "attack_damage": 0,
+      "move_speed": 2.0,
+      "collision_size": [0.5, 0.9, 0.5],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "feather": {"min": 1, "max": 2}
+      },
+      "hunger": {
+        "max": 60,
+        "drain_per_second": 0.04,
+        "food_source": "seeds",
+        "food_blocks": ["SHORT_GRASS"],
+        "eat_effect": "removes_block",
+        "satiation": 20
+      },
+      "fire_sensitive": true,
+      "special": ["flying", "tameable", "mimics_sounds", "dances_to_music"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "axe": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/parrot/idle",
+        "hurt": "mob/parrot/hurt",
+        "death": "mob/parrot/death"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/parrot.geo.json",
+      "bedrock_animation": "vanilla/animations/parrot.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/parrot/parrot_red_blue.png"
+    },
+
+    "panda": {
+      "name_fr": "Panda",
+      "name_en": "Panda",
+      "category": "animal",
+      "behavior": "neutral",
+      "when_hit": "attack",
+      "locomotion": "land",
+      "spawn_time": "day",
+      "burns_in_sunlight": false,
+      "biomes": [1],
+      "spawn_light_min": 9,
+      "spawn_light_max": 15,
+      "spawn_group_min": 1,
+      "spawn_group_max": 2,
+      "max_per_chunk": 2,
+      "health": 20,
+      "attack_damage": 6,
+      "move_speed": 1.2,
+      "collision_size": [1.3, 1.25, 1.3],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "bamboo": {"min": 0, "max": 1}
+      },
+      "hunger": {
+        "max": 100,
+        "drain_per_second": 0.04,
+        "food_source": "grass",
+        "food_blocks": ["GRASS_BLOCK", "SHORT_GRASS", "FERN"],
+        "eat_effect": "removes_block",
+        "satiation": 50
+      },
+      "fire_sensitive": true,
+      "special": ["personality_variants"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "axe": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/panda/idle",
+        "hurt": "mob/panda/hurt",
+        "death": "mob/panda/death"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/panda.geo.json",
+      "bedrock_animation": "vanilla/animations/panda.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/panda/panda.png"
+    },
+
+    "llama": {
+      "name_fr": "Lama",
+      "name_en": "Llama",
+      "category": "animal",
+      "behavior": "neutral",
+      "when_hit": "attack_spit",
+      "locomotion": "land",
+      "spawn_time": "day",
+      "burns_in_sunlight": false,
+      "biomes": [2, 3],
+      "spawn_light_min": 9,
+      "spawn_light_max": 15,
+      "spawn_group_min": 2,
+      "spawn_group_max": 4,
+      "max_per_chunk": 4,
+      "health": 22,
+      "attack_damage": 1,
+      "move_speed": 1.6,
+      "collision_size": [0.9, 1.87, 0.9],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "leather": {"min": 0, "max": 2}
+      },
+      "hunger": {
+        "max": 100,
+        "drain_per_second": 0.04,
+        "food_source": "grass",
+        "food_blocks": ["GRASS_BLOCK", "SHORT_GRASS"],
+        "eat_effect": "removes_block",
+        "satiation": 40
+      },
+      "fire_sensitive": true,
+      "special": ["spits", "caravan_behavior"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "axe": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/llama/idle",
+        "hurt": "mob/llama/hurt",
+        "death": "mob/llama/death",
+        "spit": "mob/llama/spit"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/llama.geo.json",
+      "bedrock_animation": "vanilla/animations/llama.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/llama/brown.png"
+    },
+
+    "mooshroom": {
+      "name_fr": "Champimeuh",
+      "name_en": "Mooshroom",
+      "category": "animal",
+      "behavior": "passive",
+      "when_hit": "flee",
+      "locomotion": "land",
+      "spawn_time": "day",
+      "burns_in_sunlight": false,
+      "biomes": [3],
+      "spawn_light_min": 9,
+      "spawn_light_max": 15,
+      "spawn_group_min": 2,
+      "spawn_group_max": 4,
+      "max_per_chunk": 2,
+      "health": 10,
+      "attack_damage": 0,
+      "move_speed": 1.5,
+      "collision_size": [0.9, 1.4, 0.9],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "raw_beef": {"min": 1, "max": 3},
+        "leather": {"min": 0, "max": 2},
+        "red_mushroom": {"min": 2, "max": 5}
+      },
+      "hunger": {
+        "max": 100,
+        "drain_per_second": 0.05,
+        "food_source": "grass",
+        "food_blocks": ["GRASS_BLOCK", "SHORT_GRASS"],
+        "eat_effect": "removes_block",
+        "satiation": 40
+      },
+      "fire_sensitive": true,
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "axe": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/cow/say",
+        "hurt": "mob/cow/hurt",
+        "death": "mob/cow/hurt"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/mooshroom.geo.json",
+      "bedrock_animation": "vanilla/animations/mooshroom.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/cow/red_mooshroom.png"
+    },
+
+    "dolphin": {
+      "name_fr": "Dauphin",
+      "name_en": "Dolphin",
+      "category": "animal",
+      "behavior": "neutral",
+      "when_hit": "attack_pack",
+      "locomotion": "aquatic",
+      "spawn_time": "both",
+      "burns_in_sunlight": false,
+      "biomes": [3],
+      "spawn_light_min": 0,
+      "spawn_light_max": 15,
+      "spawn_group_min": 2,
+      "spawn_group_max": 4,
+      "max_per_chunk": 3,
+      "min_water_depth": 4,
+      "health": 10,
+      "attack_damage": 3,
+      "move_speed": 3.0,
+      "collision_size": [0.9, 0.6, 0.9],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "raw_cod": {"min": 0, "max": 1}
+      },
+      "hunger": {
+        "max": 80,
+        "drain_per_second": 0.05,
+        "food_source": "fish",
+        "food_blocks": [],
+        "prey_mobs": ["cod", "salmon"],
+        "eat_effect": "kills_prey",
+        "satiation": 40
+      },
+      "fire_sensitive": true,
+      "special": ["needs_water", "needs_air", "pack_behavior"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "axe": 0.8,
+        "trident": 2.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/dolphin/idle",
+        "hurt": "mob/dolphin/hurt",
+        "death": "mob/dolphin/death"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/dolphin.geo.json",
+      "bedrock_animation": "vanilla/animations/dolphin.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/dolphin.png"
+    },
+
+    "squid": {
+      "name_fr": "Calamar",
+      "name_en": "Squid",
+      "category": "animal",
+      "behavior": "passive",
+      "when_hit": "flee_ink",
+      "locomotion": "aquatic",
+      "spawn_time": "both",
+      "burns_in_sunlight": false,
+      "biomes": [0, 1, 2, 3],
+      "spawn_light_min": 0,
+      "spawn_light_max": 15,
+      "spawn_group_min": 1,
+      "spawn_group_max": 3,
+      "max_per_chunk": 3,
+      "min_water_depth": 3,
+      "health": 10,
+      "attack_damage": 0,
+      "move_speed": 1.5,
+      "collision_size": [0.8, 0.8, 0.8],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "ink_sac": {"min": 1, "max": 3}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": true,
+      "special": ["needs_water", "ink_cloud_on_hit"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "trident": 2.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/squid/ambient",
+        "hurt": "mob/squid/hurt",
+        "death": "mob/squid/death"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/squid.geo.json",
+      "bedrock_animation": "vanilla/animations/squid.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/squid.png"
+    },
+
+    "cod": {
+      "name_fr": "Morue",
+      "name_en": "Cod",
+      "category": "animal",
+      "behavior": "passive",
+      "when_hit": "flee",
+      "locomotion": "aquatic",
+      "spawn_time": "both",
+      "burns_in_sunlight": false,
+      "biomes": [0, 1, 2, 3],
+      "spawn_light_min": 0,
+      "spawn_light_max": 15,
+      "spawn_group_min": 3,
+      "spawn_group_max": 7,
+      "max_per_chunk": 6,
+      "min_water_depth": 2,
+      "health": 3,
+      "attack_damage": 0,
+      "move_speed": 2.0,
+      "collision_size": [0.5, 0.3, 0.5],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "raw_cod": {"min": 1, "max": 1}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": true,
+      "special": ["needs_water", "school_behavior"],
+      "weapon_effectiveness": {
+        "any": 1.0
+      },
+      "sounds": {
+        "hurt": "mob/fish/hurt",
+        "death": "mob/fish/hurt"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/cod.geo.json",
+      "bedrock_animation": "vanilla/animations/cod.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/fish/cod.png"
+    },
+
+    "salmon": {
+      "name_fr": "Saumon",
+      "name_en": "Salmon",
+      "category": "animal",
+      "behavior": "passive",
+      "when_hit": "flee",
+      "locomotion": "aquatic",
+      "spawn_time": "both",
+      "burns_in_sunlight": false,
+      "biomes": [1, 2],
+      "spawn_light_min": 0,
+      "spawn_light_max": 15,
+      "spawn_group_min": 3,
+      "spawn_group_max": 5,
+      "max_per_chunk": 5,
+      "min_water_depth": 2,
+      "health": 3,
+      "attack_damage": 0,
+      "move_speed": 2.5,
+      "collision_size": [0.7, 0.4, 0.7],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "raw_salmon": {"min": 1, "max": 1}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": true,
+      "special": ["needs_water", "school_behavior"],
+      "weapon_effectiveness": {
+        "any": 1.0
+      },
+      "sounds": {
+        "hurt": "mob/fish/hurt",
+        "death": "mob/fish/hurt"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/salmon.geo.json",
+      "bedrock_animation": "vanilla/animations/salmon.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/fish/salmon.png"
+    },
+
+    "turtle": {
+      "name_fr": "Tortue",
+      "name_en": "Turtle",
+      "category": "animal",
+      "behavior": "passive",
+      "when_hit": "flee",
+      "locomotion": "amphibian",
+      "spawn_time": "day",
+      "burns_in_sunlight": false,
+      "biomes": [0, 3],
+      "spawn_light_min": 9,
+      "spawn_light_max": 15,
+      "spawn_group_min": 2,
+      "spawn_group_max": 5,
+      "max_per_chunk": 3,
+      "health": 30,
+      "attack_damage": 0,
+      "move_speed": 0.8,
+      "collision_size": [1.2, 0.4, 1.2],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "seagrass": {"min": 0, "max": 2}
+      },
+      "hunger": {
+        "max": 80,
+        "drain_per_second": 0.03,
+        "food_source": "grass",
+        "food_blocks": ["SHORT_GRASS", "FERN"],
+        "eat_effect": "removes_block",
+        "satiation": 30
+      },
+      "fire_sensitive": true,
+      "special": ["amphibian", "lays_eggs_on_sand"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "axe": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/turtle/idle",
+        "hurt": "mob/turtle/hurt",
+        "death": "mob/turtle/death"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/turtle.geo.json",
+      "bedrock_animation": "vanilla/animations/turtle.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/sea_turtle.png"
+    },
+
+    "axolotl": {
+      "name_fr": "Axolotl",
+      "name_en": "Axolotl",
+      "category": "animal",
+      "behavior": "passive",
+      "when_hit": "flee",
+      "locomotion": "amphibian",
+      "spawn_time": "both",
+      "burns_in_sunlight": false,
+      "biomes": [1, 2],
+      "spawn_light_min": 0,
+      "spawn_light_max": 15,
+      "spawn_group_min": 1,
+      "spawn_group_max": 4,
+      "max_per_chunk": 3,
+      "min_water_depth": 2,
+      "health": 14,
+      "attack_damage": 2,
+      "move_speed": 1.5,
+      "collision_size": [0.75, 0.42, 0.75],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {},
+      "hunger": {
+        "max": 60,
+        "drain_per_second": 0.04,
+        "food_source": "fish",
+        "food_blocks": [],
+        "prey_mobs": ["cod", "salmon"],
+        "eat_effect": "kills_prey",
+        "satiation": 30
+      },
+      "fire_sensitive": true,
+      "special": ["amphibian", "plays_dead", "hunts_fish"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/axolotl/idle_water",
+        "hurt": "mob/axolotl/hurt",
+        "death": "mob/axolotl/death"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla_1.17.10/models/entity/axolotl.geo.json",
+      "bedrock_animation": "vanilla_1.17.0/animations/axolotl.animation.json",
+      "bedrock_texture": "vanilla_1.17.0/textures/entity/axolotl/axolotl_lucy.png"
+    },
+
+    "frog": {
+      "name_fr": "Grenouille",
+      "name_en": "Frog",
+      "category": "animal",
+      "behavior": "passive",
+      "when_hit": "flee",
+      "locomotion": "amphibian",
+      "spawn_time": "both",
+      "burns_in_sunlight": false,
+      "biomes": [1, 3],
+      "spawn_light_min": 0,
+      "spawn_light_max": 15,
+      "spawn_group_min": 2,
+      "spawn_group_max": 5,
+      "max_per_chunk": 4,
+      "health": 10,
+      "attack_damage": 0,
+      "move_speed": 1.5,
+      "collision_size": [0.5, 0.5, 0.5],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {},
+      "hunger": {
+        "max": 60,
+        "drain_per_second": 0.05,
+        "food_source": "insects",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 20
+      },
+      "fire_sensitive": true,
+      "special": ["amphibian", "tongue_attack", "eats_slimes"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/frog/ambient",
+        "hurt": "mob/frog/hurt",
+        "death": "mob/frog/death"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla_1.19.0/models/entity/frog.geo.json",
+      "bedrock_animation": "vanilla_1.19.0/animations/frog.animation.json",
+      "bedrock_texture": "vanilla_1.19.0/textures/entity/frog/temperate_frog.png"
+    },
+
+    "goat": {
+      "name_fr": "Chevre",
+      "name_en": "Goat",
+      "category": "animal",
+      "behavior": "neutral",
+      "when_hit": "attack_ram",
+      "locomotion": "land",
+      "spawn_time": "day",
+      "burns_in_sunlight": false,
+      "biomes": [2],
+      "spawn_light_min": 9,
+      "spawn_light_max": 15,
+      "spawn_group_min": 2,
+      "spawn_group_max": 3,
+      "max_per_chunk": 3,
+      "health": 10,
+      "attack_damage": 2,
+      "move_speed": 1.8,
+      "collision_size": [0.9, 1.3, 0.9],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {},
+      "hunger": {
+        "max": 80,
+        "drain_per_second": 0.05,
+        "food_source": "grass",
+        "food_blocks": ["GRASS_BLOCK", "SHORT_GRASS"],
+        "eat_effect": "removes_block",
+        "satiation": 35
+      },
+      "fire_sensitive": true,
+      "special": ["high_jump", "rams_entities", "mountain_climber"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "axe": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/goat/idle",
+        "hurt": "mob/goat/hurt",
+        "death": "mob/goat/death",
+        "ram": "mob/goat/ram_impact"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla_1.17.10/models/entity/goat.geo.json",
+      "bedrock_animation": "vanilla_1.17.0/animations/goat.animation.json",
+      "bedrock_texture": "vanilla_1.17.0/textures/entity/goat/goat.png"
+    },
+
+    "iron_golem": {
+      "name_fr": "Golem de fer",
+      "name_en": "Iron Golem",
+      "category": "utility",
+      "behavior": "neutral",
+      "when_hit": "attack",
+      "locomotion": "land",
+      "spawn_time": "both",
+      "burns_in_sunlight": false,
+      "biomes": [],
+      "spawn_light_min": 0,
+      "spawn_light_max": 15,
+      "spawn_group_min": 1,
+      "spawn_group_max": 1,
+      "max_per_chunk": 1,
+      "health": 100,
+      "attack_damage": 15,
+      "move_speed": 1.0,
+      "collision_size": [1.4, 2.7, 1.4],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "iron_ingot": {"min": 3, "max": 5},
+        "poppy": {"min": 0, "max": 2}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": false,
+      "special": ["village_protector", "player_built", "attacks_hostiles", "no_fall_damage", "no_knockback"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "pickaxe": 1.3,
+        "any": 1.0
+      },
+      "sounds": {
+        "hurt": "mob/irongolem/hit",
+        "death": "mob/irongolem/death",
+        "step": "mob/irongolem/walk"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla_1.21.90/models/entity/iron_golem.geo.json",
+      "bedrock_animation": "vanilla/animations/iron_golem.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/iron_golem.png"
+    },
+
+    "snow_golem": {
+      "name_fr": "Golem de neige",
+      "name_en": "Snow Golem",
+      "category": "utility",
+      "behavior": "passive",
+      "when_hit": "flee",
+      "locomotion": "land",
+      "spawn_time": "both",
+      "burns_in_sunlight": false,
+      "biomes": [],
+      "spawn_light_min": 0,
+      "spawn_light_max": 15,
+      "spawn_group_min": 1,
+      "spawn_group_max": 1,
+      "max_per_chunk": 1,
+      "health": 4,
+      "attack_damage": 0,
+      "move_speed": 1.5,
+      "collision_size": [0.7, 1.9, 0.7],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "snowball": {"min": 0, "max": 15}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": true,
+      "special": ["player_built", "throws_snowballs", "leaves_snow_trail", "dies_in_desert", "dies_in_rain"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "hurt": "mob/snowgolem/hurt",
+        "death": "mob/snowgolem/death"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/snow_golem.geo.json",
+      "bedrock_animation": "vanilla/animations/snow_golem.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/snow_golem.png"
+    },
+
+    "allay": {
+      "name_fr": "Allay",
+      "name_en": "Allay",
+      "category": "utility",
+      "behavior": "passive",
+      "when_hit": "flee",
+      "locomotion": "flying",
+      "spawn_time": "both",
+      "burns_in_sunlight": false,
+      "biomes": [],
+      "spawn_light_min": 0,
+      "spawn_light_max": 15,
+      "spawn_group_min": 1,
+      "spawn_group_max": 3,
+      "max_per_chunk": 2,
+      "health": 20,
+      "attack_damage": 0,
+      "move_speed": 2.5,
+      "collision_size": [0.35, 0.6, 0.35],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {},
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": true,
+      "special": ["flying", "collects_items", "dances_to_music"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/allay/idle",
+        "hurt": "mob/allay/hurt",
+        "death": "mob/allay/death"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla_1.19.60/models/entity/allay.geo.json",
+      "bedrock_animation": "vanilla_1.19.60/animations/vex.animation.json",
+      "bedrock_texture": "vanilla_1.19.0/textures/entity/allay/allay.png"
+    },
+
+    "blaze": {
+      "name_fr": "Blaze",
+      "name_en": "Blaze",
+      "category": "monster",
+      "behavior": "hostile",
+      "when_hit": "attack",
+      "locomotion": "flying",
+      "spawn_time": "both",
+      "burns_in_sunlight": false,
+      "biomes": [],
+      "spawn_light_min": 0,
+      "spawn_light_max": 15,
+      "spawn_group_min": 1,
+      "spawn_group_max": 2,
+      "max_per_chunk": 2,
+      "health": 20,
+      "attack_damage": 5,
+      "move_speed": 1.5,
+      "collision_size": [0.6, 1.8, 0.6],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "blaze_rod": {"min": 0, "max": 1}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": false,
+      "special": ["flying", "shoots_fireballs", "immune_fire", "hurt_by_water", "nether_only"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "snowball": 3.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/blaze/breathe",
+        "hurt": "mob/blaze/hit",
+        "death": "mob/blaze/death",
+        "shoot": "mob/blaze/shoot"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/blaze.geo.json",
+      "bedrock_animation": "vanilla/animations/blaze.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/blaze.tga"
+    },
+
+    "drowned": {
+      "name_fr": "Noye",
+      "name_en": "Drowned",
+      "category": "monster",
+      "behavior": "hostile",
+      "when_hit": "attack",
+      "locomotion": "amphibian",
+      "spawn_time": "night",
+      "burns_in_sunlight": true,
+      "biomes": [0, 1, 2, 3],
+      "spawn_light_min": 0,
+      "spawn_light_max": 7,
+      "spawn_group_min": 2,
+      "spawn_group_max": 4,
+      "max_per_chunk": 3,
+      "min_water_depth": 2,
+      "health": 20,
+      "attack_damage": 3,
+      "move_speed": 1.0,
+      "collision_size": [0.6, 1.95, 0.6],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "rotten_flesh": {"min": 0, "max": 2},
+        "gold_ingot": {"min": 0, "max": 1}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": true,
+      "special": ["burns_in_sun", "amphibian", "throws_trident", "spawns_in_water"],
+      "weapon_effectiveness": {
+        "sword": 1.5,
+        "axe": 1.2,
+        "trident": 1.5,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/drowned/say",
+        "hurt": "mob/drowned/hurt",
+        "death": "mob/drowned/death",
+        "step": "mob/drowned/step"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/drowned.geo.json",
+      "bedrock_animation": "vanilla/animations/drowned.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/zombie/drowned.png"
+    },
+
+    "husk": {
+      "name_fr": "Zombie momifie",
+      "name_en": "Husk",
+      "category": "monster",
+      "behavior": "hostile",
+      "when_hit": "attack",
+      "locomotion": "land",
+      "spawn_time": "night",
+      "burns_in_sunlight": false,
+      "biomes": [0],
+      "spawn_light_min": 0,
+      "spawn_light_max": 7,
+      "spawn_group_min": 2,
+      "spawn_group_max": 4,
+      "max_per_chunk": 4,
+      "health": 20,
+      "attack_damage": 3,
+      "move_speed": 1.2,
+      "collision_size": [0.6, 1.95, 0.6],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "rotten_flesh": {"min": 0, "max": 2}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": true,
+      "special": ["inflicts_hunger", "desert_zombie"],
+      "weapon_effectiveness": {
+        "sword": 1.5,
+        "axe": 1.2,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/husk/say",
+        "hurt": "mob/husk/hurt",
+        "death": "mob/husk/death",
+        "step": "mob/husk/step"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/husk.geo.json",
+      "bedrock_animation": "vanilla/animations/zombie.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/zombie/husk.png"
+    },
+
+    "stray": {
+      "name_fr": "Vagabond",
+      "name_en": "Stray",
+      "category": "monster",
+      "behavior": "hostile",
+      "when_hit": "attack",
+      "locomotion": "land",
+      "spawn_time": "night",
+      "burns_in_sunlight": false,
+      "biomes": [2],
+      "spawn_light_min": 0,
+      "spawn_light_max": 7,
+      "spawn_group_min": 1,
+      "spawn_group_max": 3,
+      "max_per_chunk": 3,
+      "health": 20,
+      "attack_damage": 3,
+      "move_speed": 1.3,
+      "collision_size": [0.6, 1.95, 0.6],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "bone": {"min": 0, "max": 2},
+        "arrow": {"min": 0, "max": 2}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": true,
+      "special": ["ranged_attack", "slowness_arrows", "mountain_skeleton"],
+      "weapon_effectiveness": {
+        "sword": 1.5,
+        "axe": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/stray/idle",
+        "hurt": "mob/stray/hurt",
+        "death": "mob/stray/death",
+        "step": "mob/stray/step"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/stray.geo.json",
+      "bedrock_animation": "vanilla/animations/skeleton.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/skeleton/stray.png"
+    },
+
+    "witch": {
+      "name_fr": "Sorciere",
+      "name_en": "Witch",
+      "category": "monster",
+      "behavior": "hostile",
+      "when_hit": "attack",
+      "locomotion": "land",
+      "spawn_time": "night",
+      "burns_in_sunlight": false,
+      "biomes": [1, 3],
+      "spawn_light_min": 0,
+      "spawn_light_max": 7,
+      "spawn_group_min": 1,
+      "spawn_group_max": 1,
+      "max_per_chunk": 1,
+      "health": 26,
+      "attack_damage": 0,
+      "move_speed": 1.3,
+      "collision_size": [0.6, 1.95, 0.6],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "glass_bottle": {"min": 0, "max": 2},
+        "glowstone_dust": {"min": 0, "max": 2},
+        "gunpowder": {"min": 0, "max": 2},
+        "redstone": {"min": 0, "max": 2}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": false,
+      "special": ["throws_potions", "drinks_healing_potions", "ranged_attack"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "axe": 1.2,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/witch/idle",
+        "hurt": "mob/witch/hurt",
+        "death": "mob/witch/death"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/witch.geo.json",
+      "bedrock_animation": "vanilla/animations/witch.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/witch.png"
+    },
+
+    "slime": {
+      "name_fr": "Slime",
+      "name_en": "Slime",
+      "category": "monster",
+      "behavior": "hostile",
+      "when_hit": "attack",
+      "locomotion": "land",
+      "spawn_time": "night",
+      "burns_in_sunlight": false,
+      "biomes": [1, 3],
+      "spawn_light_min": 0,
+      "spawn_light_max": 7,
+      "spawn_group_min": 1,
+      "spawn_group_max": 3,
+      "max_per_chunk": 3,
+      "spawn_below_y": 40,
+      "health": 16,
+      "attack_damage": 4,
+      "move_speed": 1.0,
+      "collision_size": [2.04, 2.04, 2.04],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "slimeball": {"min": 0, "max": 2}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": false,
+      "special": ["splits_on_death", "hops_movement"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/slime/big",
+        "hurt": "mob/slime/big",
+        "death": "mob/slime/big",
+        "squish": "mob/slime/small"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/slime.geo.json",
+      "bedrock_animation": "vanilla/animations/slime.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/slime/slime.png"
+    },
+
+    "phantom": {
+      "name_fr": "Fantome",
+      "name_en": "Phantom",
+      "category": "monster",
+      "behavior": "hostile",
+      "when_hit": "attack",
+      "locomotion": "flying",
+      "spawn_time": "night",
+      "burns_in_sunlight": true,
+      "biomes": [0, 1, 2, 3],
+      "spawn_light_min": 0,
+      "spawn_light_max": 7,
+      "spawn_group_min": 1,
+      "spawn_group_max": 3,
+      "max_per_chunk": 2,
+      "health": 20,
+      "attack_damage": 6,
+      "move_speed": 3.0,
+      "collision_size": [0.9, 0.5, 0.9],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "phantom_membrane": {"min": 0, "max": 1}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": true,
+      "special": ["burns_in_sun", "flying", "dive_attacks", "scared_of_cats", "spawns_after_insomnia"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "axe": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/phantom/idle",
+        "hurt": "mob/phantom/hurt",
+        "death": "mob/phantom/death",
+        "bite": "mob/phantom/bite"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/phantom.geo.json",
+      "bedrock_animation": "vanilla/animations/phantom.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/phantom.tga"
+    },
+
+    "endermite": {
+      "name_fr": "Endermite",
+      "name_en": "Endermite",
+      "category": "monster",
+      "behavior": "hostile",
+      "when_hit": "attack",
+      "locomotion": "land",
+      "spawn_time": "both",
+      "burns_in_sunlight": false,
+      "biomes": [],
+      "spawn_light_min": 0,
+      "spawn_light_max": 7,
+      "spawn_group_min": 1,
+      "spawn_group_max": 1,
+      "max_per_chunk": 1,
+      "health": 8,
+      "attack_damage": 2,
+      "move_speed": 1.5,
+      "collision_size": [0.4, 0.3, 0.4],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {},
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": false,
+      "special": ["spawns_from_ender_pearls", "attacked_by_endermen", "despawns_after_2min"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/endermite/say",
+        "hurt": "mob/endermite/hit",
+        "death": "mob/endermite/kill"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/endermite.geo.json",
+      "bedrock_animation": "vanilla/animations/endermite.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/endermite.png"
+    },
+
+    "silverfish": {
+      "name_fr": "Poisson d'argent",
+      "name_en": "Silverfish",
+      "category": "monster",
+      "behavior": "hostile",
+      "when_hit": "attack_swarm",
+      "locomotion": "land",
+      "spawn_time": "both",
+      "burns_in_sunlight": false,
+      "biomes": [2],
+      "spawn_light_min": 0,
+      "spawn_light_max": 11,
+      "spawn_group_min": 1,
+      "spawn_group_max": 3,
+      "max_per_chunk": 3,
+      "health": 8,
+      "attack_damage": 1,
+      "move_speed": 1.5,
+      "collision_size": [0.4, 0.3, 0.4],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {},
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": false,
+      "special": ["hides_in_stone_bricks", "calls_reinforcements"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/silverfish/say",
+        "hurt": "mob/silverfish/hit",
+        "death": "mob/silverfish/kill",
+        "step": "mob/silverfish/step"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/silverfish.geo.json",
+      "bedrock_animation": "vanilla/animations/silverfish.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/silverfish.png"
+    },
+
+    "guardian": {
+      "name_fr": "Gardien",
+      "name_en": "Guardian",
+      "category": "monster",
+      "behavior": "hostile",
+      "when_hit": "attack",
+      "locomotion": "aquatic",
+      "spawn_time": "both",
+      "burns_in_sunlight": false,
+      "biomes": [],
+      "spawn_light_min": 0,
+      "spawn_light_max": 15,
+      "spawn_group_min": 2,
+      "spawn_group_max": 4,
+      "max_per_chunk": 3,
+      "min_water_depth": 4,
+      "health": 30,
+      "attack_damage": 6,
+      "move_speed": 1.5,
+      "collision_size": [0.85, 0.85, 0.85],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "prismarine_shard": {"min": 0, "max": 2},
+        "raw_cod": {"min": 0, "max": 1}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": true,
+      "special": ["needs_water", "laser_attack", "thorns_damage"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "trident": 2.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/guardian/idle",
+        "hurt": "mob/guardian/hurt",
+        "death": "mob/guardian/death",
+        "attack": "mob/guardian/attack"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/guardian.geo.json",
+      "bedrock_animation": "vanilla/animations/guardian.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/guardian.png"
+    },
+
+    "ghast": {
+      "name_fr": "Ghast",
+      "name_en": "Ghast",
+      "category": "monster",
+      "behavior": "hostile",
+      "when_hit": "attack",
+      "locomotion": "flying",
+      "spawn_time": "both",
+      "burns_in_sunlight": false,
+      "biomes": [],
+      "spawn_light_min": 0,
+      "spawn_light_max": 15,
+      "spawn_group_min": 1,
+      "spawn_group_max": 1,
+      "max_per_chunk": 1,
+      "health": 10,
+      "attack_damage": 6,
+      "move_speed": 1.5,
+      "collision_size": [4.0, 4.0, 4.0],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "ghast_tear": {"min": 0, "max": 1},
+        "gunpowder": {"min": 0, "max": 2}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": false,
+      "special": ["flying", "shoots_fireballs", "nether_only", "fireballs_reflectable"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "bow": 2.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/ghast/moan",
+        "hurt": "mob/ghast/scream",
+        "death": "mob/ghast/death",
+        "shoot": "mob/ghast/fireball"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/ghast.geo.json",
+      "bedrock_animation": "vanilla/animations/ghast.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/ghast/ghast.png"
+    },
+
+    "magma_cube": {
+      "name_fr": "Cube de magma",
+      "name_en": "Magma Cube",
+      "category": "monster",
+      "behavior": "hostile",
+      "when_hit": "attack",
+      "locomotion": "land",
+      "spawn_time": "both",
+      "burns_in_sunlight": false,
+      "biomes": [],
+      "spawn_light_min": 0,
+      "spawn_light_max": 15,
+      "spawn_group_min": 1,
+      "spawn_group_max": 4,
+      "max_per_chunk": 3,
+      "health": 16,
+      "attack_damage": 6,
+      "move_speed": 1.5,
+      "collision_size": [2.04, 2.04, 2.04],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "magma_cream": {"min": 0, "max": 1}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": false,
+      "special": ["splits_on_death", "immune_fire", "nether_only", "hops_movement"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/magmacube/big",
+        "hurt": "mob/magmacube/big",
+        "death": "mob/magmacube/big",
+        "squish": "mob/magmacube/small"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/magma_cube.geo.json",
+      "bedrock_animation": "vanilla/animations/magma_cube.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/slime/magmacube.png"
+    },
+
+    "evoker": {
+      "name_fr": "Evocateur",
+      "name_en": "Evoker",
+      "category": "monster",
+      "behavior": "hostile",
+      "when_hit": "attack",
+      "locomotion": "land",
+      "spawn_time": "both",
+      "burns_in_sunlight": false,
+      "biomes": [],
+      "spawn_light_min": 0,
+      "spawn_light_max": 15,
+      "spawn_group_min": 1,
+      "spawn_group_max": 1,
+      "max_per_chunk": 1,
+      "health": 24,
+      "attack_damage": 6,
+      "move_speed": 1.0,
+      "collision_size": [0.6, 1.95, 0.6],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "totem_of_undying": {"min": 1, "max": 1},
+        "emerald": {"min": 0, "max": 1}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": false,
+      "special": ["summons_vexes", "summons_fangs", "raid_captain"],
+      "weapon_effectiveness": {
+        "sword": 1.5,
+        "axe": 1.5,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/evocation_illager/idle",
+        "hurt": "mob/evocation_illager/hurt",
+        "death": "mob/evocation_illager/death",
+        "cast": "mob/evocation_illager/cast"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla_1.19.60/models/entity/evoker.geo.json",
+      "bedrock_animation": "vanilla_1.19.60/animations/evoker.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/illager/evoker.png"
+    },
+
+    "vindicator": {
+      "name_fr": "Vindicateur",
+      "name_en": "Vindicator",
+      "category": "monster",
+      "behavior": "hostile",
+      "when_hit": "attack",
+      "locomotion": "land",
+      "spawn_time": "both",
+      "burns_in_sunlight": false,
+      "biomes": [],
+      "spawn_light_min": 0,
+      "spawn_light_max": 15,
+      "spawn_group_min": 1,
+      "spawn_group_max": 3,
+      "max_per_chunk": 2,
+      "health": 24,
+      "attack_damage": 8,
+      "move_speed": 1.6,
+      "collision_size": [0.6, 1.95, 0.6],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "emerald": {"min": 0, "max": 1},
+        "iron_axe": {"min": 0, "max": 1}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": false,
+      "special": ["melee_attack", "raid_mob"],
+      "weapon_effectiveness": {
+        "sword": 1.5,
+        "axe": 1.5,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/vindicator/idle",
+        "hurt": "mob/vindicator/hurt",
+        "death": "mob/vindicator/death"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/vindicator.geo.json",
+      "bedrock_animation": "vanilla/animations/vindicator.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/vindicator.png"
+    },
+
+    "pillager": {
+      "name_fr": "Pillard",
+      "name_en": "Pillager",
+      "category": "monster",
+      "behavior": "hostile",
+      "when_hit": "attack",
+      "locomotion": "land",
+      "spawn_time": "both",
+      "burns_in_sunlight": false,
+      "biomes": [1, 3],
+      "spawn_light_min": 0,
+      "spawn_light_max": 7,
+      "spawn_group_min": 2,
+      "spawn_group_max": 4,
+      "max_per_chunk": 3,
+      "health": 24,
+      "attack_damage": 4,
+      "move_speed": 1.3,
+      "collision_size": [0.6, 1.95, 0.6],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "arrow": {"min": 0, "max": 2},
+        "crossbow": {"min": 0, "max": 1}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": false,
+      "special": ["ranged_attack", "raid_captain", "patrols"],
+      "weapon_effectiveness": {
+        "sword": 1.5,
+        "axe": 1.5,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/pillager/idle",
+        "hurt": "mob/pillager/hurt",
+        "death": "mob/pillager/death"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/pillager.geo.json",
+      "bedrock_animation": "vanilla/animations/pillager.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/pillager.png"
+    },
+
+    "ravager": {
+      "name_fr": "Ravageur",
+      "name_en": "Ravager",
+      "category": "monster",
+      "behavior": "hostile",
+      "when_hit": "attack",
+      "locomotion": "land",
+      "spawn_time": "both",
+      "burns_in_sunlight": false,
+      "biomes": [],
+      "spawn_light_min": 0,
+      "spawn_light_max": 15,
+      "spawn_group_min": 1,
+      "spawn_group_max": 1,
+      "max_per_chunk": 1,
+      "health": 100,
+      "attack_damage": 12,
+      "move_speed": 1.5,
+      "collision_size": [1.95, 2.2, 1.95],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "saddle": {"min": 0, "max": 1}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": false,
+      "special": ["raid_mob", "destroys_crops", "knockback_resistant"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "axe": 1.5,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/ravager/idle",
+        "hurt": "mob/ravager/hurt",
+        "death": "mob/ravager/death",
+        "roar": "mob/ravager/roar"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/ravager.geo.json",
+      "bedrock_animation": "vanilla/animations/ravager.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/illager/ravager.png"
+    },
+
+    "vex": {
+      "name_fr": "Vex",
+      "name_en": "Vex",
+      "category": "monster",
+      "behavior": "hostile",
+      "when_hit": "attack",
+      "locomotion": "flying",
+      "spawn_time": "both",
+      "burns_in_sunlight": false,
+      "biomes": [],
+      "spawn_light_min": 0,
+      "spawn_light_max": 15,
+      "spawn_group_min": 1,
+      "spawn_group_max": 3,
+      "max_per_chunk": 3,
+      "health": 14,
+      "attack_damage": 5,
+      "move_speed": 2.5,
+      "collision_size": [0.4, 0.8, 0.4],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {},
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": false,
+      "special": ["flying", "phases_through_blocks", "summoned_by_evoker", "despawns"],
+      "weapon_effectiveness": {
+        "sword": 1.5,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/vex/idle",
+        "hurt": "mob/vex/hurt",
+        "death": "mob/vex/death",
+        "charge": "mob/vex/charge"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla_1.19.60/models/entity/vex.geo.json",
+      "bedrock_animation": "vanilla_1.19.60/animations/vex.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/vex/vex.png"
+    },
+
+    "shulker": {
+      "name_fr": "Shulker",
+      "name_en": "Shulker",
+      "category": "monster",
+      "behavior": "hostile",
+      "when_hit": "attack",
+      "locomotion": "land",
+      "spawn_time": "both",
+      "burns_in_sunlight": false,
+      "biomes": [],
+      "spawn_light_min": 0,
+      "spawn_light_max": 15,
+      "spawn_group_min": 1,
+      "spawn_group_max": 1,
+      "max_per_chunk": 1,
+      "health": 30,
+      "attack_damage": 4,
+      "move_speed": 0.0,
+      "collision_size": [1.0, 1.0, 1.0],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "shulker_shell": {"min": 0, "max": 1}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": false,
+      "special": ["stationary", "shoots_bullets", "levitation_effect", "end_only"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/shulker/idle",
+        "hurt": "mob/shulker/hurt",
+        "death": "mob/shulker/death",
+        "shoot": "mob/shulker/shoot"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/shulker.geo.json",
+      "bedrock_animation": "vanilla/animations/shulker.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/shulker/shulker_undyed.png"
+    },
+
+    "wither_skeleton": {
+      "name_fr": "Wither Squelette",
+      "name_en": "Wither Skeleton",
+      "category": "monster",
+      "behavior": "hostile",
+      "when_hit": "attack",
+      "locomotion": "land",
+      "spawn_time": "both",
+      "burns_in_sunlight": false,
+      "biomes": [],
+      "spawn_light_min": 0,
+      "spawn_light_max": 7,
+      "spawn_group_min": 1,
+      "spawn_group_max": 3,
+      "max_per_chunk": 2,
+      "health": 20,
+      "attack_damage": 5,
+      "move_speed": 1.4,
+      "collision_size": [0.7, 2.4, 0.7],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "bone": {"min": 0, "max": 2},
+        "coal": {"min": 0, "max": 1},
+        "wither_skeleton_skull": {"min": 0, "max": 1}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": false,
+      "special": ["immune_fire", "wither_effect", "nether_only", "melee_attack"],
+      "weapon_effectiveness": {
+        "sword": 1.5,
+        "axe": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/skeleton/say",
+        "hurt": "mob/skeleton/hurt",
+        "death": "mob/skeleton/death"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/wither_skeleton.geo.json",
+      "bedrock_animation": "vanilla/animations/wither_skeleton.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/skeleton/wither_skeleton.png"
+    },
+
+    "zombie_villager": {
+      "name_fr": "Zombie villageois",
+      "name_en": "Zombie Villager",
+      "category": "monster",
+      "behavior": "hostile",
+      "when_hit": "attack",
+      "locomotion": "land",
+      "spawn_time": "night",
+      "burns_in_sunlight": true,
+      "biomes": [0, 1, 2, 3],
+      "spawn_light_min": 0,
+      "spawn_light_max": 7,
+      "spawn_group_min": 1,
+      "spawn_group_max": 2,
+      "max_per_chunk": 2,
+      "health": 20,
+      "attack_damage": 3,
+      "move_speed": 1.2,
+      "collision_size": [0.6, 1.95, 0.6],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "rotten_flesh": {"min": 0, "max": 2}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": true,
+      "special": ["burns_in_sun", "curable"],
+      "weapon_effectiveness": {
+        "sword": 1.5,
+        "axe": 1.2,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/zombie_villager/say",
+        "hurt": "mob/zombie_villager/hurt",
+        "death": "mob/zombie_villager/death"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/zombie_villager.geo.json",
+      "bedrock_animation": "vanilla/animations/zombie.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/zombie_villager/zombie_villager.png"
+    },
+
+    "zombie_pigman": {
+      "name_fr": "Zombified Piglin",
+      "name_en": "Zombified Piglin",
+      "category": "monster",
+      "behavior": "neutral",
+      "when_hit": "attack_pack",
+      "locomotion": "land",
+      "spawn_time": "both",
+      "burns_in_sunlight": false,
+      "biomes": [],
+      "spawn_light_min": 0,
+      "spawn_light_max": 15,
+      "spawn_group_min": 2,
+      "spawn_group_max": 4,
+      "max_per_chunk": 4,
+      "health": 20,
+      "attack_damage": 5,
+      "move_speed": 1.3,
+      "collision_size": [0.6, 1.95, 0.6],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "rotten_flesh": {"min": 0, "max": 1},
+        "gold_nugget": {"min": 0, "max": 1},
+        "gold_ingot": {"min": 0, "max": 1}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": false,
+      "special": ["immune_fire", "pack_behavior", "nether_only"],
+      "weapon_effectiveness": {
+        "sword": 1.5,
+        "axe": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/zombie_pigman/zpig",
+        "hurt": "mob/zombie_pigman/zpighurt",
+        "death": "mob/zombie_pigman/zpigdeath"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/zombie_pigman.geo.json",
+      "bedrock_animation": "vanilla/animations/zombie.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/pig/pigzombie.png"
+    },
+
+    "hoglin": {
+      "name_fr": "Hoglin",
+      "name_en": "Hoglin",
+      "category": "monster",
+      "behavior": "hostile",
+      "when_hit": "attack",
+      "locomotion": "land",
+      "spawn_time": "both",
+      "burns_in_sunlight": false,
+      "biomes": [],
+      "spawn_light_min": 0,
+      "spawn_light_max": 15,
+      "spawn_group_min": 2,
+      "spawn_group_max": 4,
+      "max_per_chunk": 3,
+      "health": 40,
+      "attack_damage": 6,
+      "move_speed": 1.4,
+      "collision_size": [1.4, 1.4, 1.4],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "raw_porkchop": {"min": 2, "max": 4},
+        "leather": {"min": 0, "max": 2}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": false,
+      "special": ["nether_only", "scared_of_warped_fungus", "breedable"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "axe": 1.5,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/hoglin/idle",
+        "hurt": "mob/hoglin/hurt",
+        "death": "mob/hoglin/death"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla_1.16/models/entity/hoglin.geo.json",
+      "bedrock_animation": "vanilla_1.16/animations/hoglin.animation.json",
+      "bedrock_texture": "vanilla_1.16/textures/entity/hoglin/hoglin.png"
+    },
+
+    "piglin": {
+      "name_fr": "Piglin",
+      "name_en": "Piglin",
+      "category": "monster",
+      "behavior": "neutral",
+      "when_hit": "attack_pack",
+      "locomotion": "land",
+      "spawn_time": "both",
+      "burns_in_sunlight": false,
+      "biomes": [],
+      "spawn_light_min": 0,
+      "spawn_light_max": 15,
+      "spawn_group_min": 2,
+      "spawn_group_max": 4,
+      "max_per_chunk": 4,
+      "health": 16,
+      "attack_damage": 5,
+      "move_speed": 1.4,
+      "collision_size": [0.6, 1.95, 0.6],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "gold_ingot": {"min": 0, "max": 1}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": false,
+      "special": ["nether_only", "barters_gold", "hostile_without_gold_armor", "pack_behavior"],
+      "weapon_effectiveness": {
+        "sword": 1.5,
+        "axe": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/piglin/idle",
+        "hurt": "mob/piglin/hurt",
+        "death": "mob/piglin/death"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla_1.16/models/entity/piglin.geo.json",
+      "bedrock_animation": "vanilla_1.16/animations/piglin.animation.json",
+      "bedrock_texture": "vanilla_1.16/textures/entity/piglin/piglin.png"
+    },
+
+    "warden": {
+      "name_fr": "Warden",
+      "name_en": "Warden",
+      "category": "boss",
+      "behavior": "hostile",
+      "when_hit": "attack",
+      "locomotion": "land",
+      "spawn_time": "both",
+      "burns_in_sunlight": false,
+      "biomes": [],
+      "spawn_light_min": 0,
+      "spawn_light_max": 0,
+      "spawn_group_min": 1,
+      "spawn_group_max": 1,
+      "max_per_chunk": 1,
+      "health": 500,
+      "attack_damage": 30,
+      "move_speed": 1.8,
+      "collision_size": [0.9, 2.9, 0.9],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {},
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": false,
+      "special": ["blind", "detects_vibrations", "sonic_boom", "deep_dark_only", "extremely_dangerous"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "axe": 1.0,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/warden/idle",
+        "hurt": "mob/warden/hurt",
+        "death": "mob/warden/death",
+        "roar": "mob/warden/roar",
+        "sonic_boom": "mob/warden/sonic_boom"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla_1.19.0/models/entity/warden.geo.json",
+      "bedrock_animation": "vanilla_1.19.0/animations/warden.animation.json",
+      "bedrock_texture": "vanilla_1.19.0/textures/entity/warden/warden.png"
+    },
+
+    "ender_dragon": {
+      "name_fr": "Ender Dragon",
+      "name_en": "Ender Dragon",
+      "category": "boss",
+      "behavior": "hostile",
+      "when_hit": "attack",
+      "locomotion": "flying",
+      "spawn_time": "both",
+      "burns_in_sunlight": false,
+      "biomes": [],
+      "spawn_light_min": 0,
+      "spawn_light_max": 15,
+      "spawn_group_min": 1,
+      "spawn_group_max": 1,
+      "max_per_chunk": 1,
+      "health": 200,
+      "attack_damage": 10,
+      "move_speed": 4.0,
+      "collision_size": [16.0, 8.0, 16.0],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "experience": {"min": 12000, "max": 12000}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": false,
+      "special": ["flying", "end_only", "destroys_blocks", "breath_attack", "immune_to_most_damage"],
+      "weapon_effectiveness": {
+        "sword": 0.5,
+        "bow": 1.0,
+        "any": 0.25
+      },
+      "sounds": {
+        "ambient": "mob/enderdragon/growl",
+        "hurt": "mob/enderdragon/hit",
+        "death": "mob/enderdragon/death",
+        "flap": "mob/enderdragon/flap"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/ender_dragon.geo.json",
+      "bedrock_animation": "vanilla/animations/ender_dragon.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/dragon/dragon.png"
+    },
+
+    "wither": {
+      "name_fr": "Wither",
+      "name_en": "Wither",
+      "category": "boss",
+      "behavior": "hostile",
+      "when_hit": "attack",
+      "locomotion": "flying",
+      "spawn_time": "both",
+      "burns_in_sunlight": false,
+      "biomes": [],
+      "spawn_light_min": 0,
+      "spawn_light_max": 15,
+      "spawn_group_min": 1,
+      "spawn_group_max": 1,
+      "max_per_chunk": 1,
+      "health": 300,
+      "attack_damage": 8,
+      "move_speed": 2.0,
+      "collision_size": [0.9, 3.5, 0.9],
+      "model_scale": [1.0, 1.0, 1.0],
+      "drops": {
+        "nether_star": {"min": 1, "max": 1}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": false,
+      "special": ["flying", "player_built", "shoots_skulls", "destroys_blocks", "immune_fire", "wither_effect", "regenerates"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "bow": 0.5,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/wither/idle",
+        "hurt": "mob/wither/hurt",
+        "death": "mob/wither/death",
+        "shoot": "mob/wither/shoot"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/wither_boss.geo.json",
+      "bedrock_animation": "vanilla/animations/wither_boss.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/wither_boss/wither.png"
+    },
+
+    "cave_spider": {
+      "name_fr": "Araignee des cavernes",
+      "name_en": "Cave Spider",
+      "category": "monster",
+      "behavior": "hostile",
+      "when_hit": "attack",
+      "locomotion": "land",
+      "spawn_time": "night",
+      "burns_in_sunlight": false,
+      "biomes": [2],
+      "spawn_light_min": 0,
+      "spawn_light_max": 7,
+      "spawn_group_min": 1,
+      "spawn_group_max": 3,
+      "max_per_chunk": 3,
+      "spawn_below_y": 50,
+      "health": 12,
+      "attack_damage": 2,
+      "move_speed": 1.6,
+      "collision_size": [0.7, 0.5, 0.7],
+      "model_scale": [0.7, 0.7, 0.7],
+      "drops": {
+        "string": {"min": 0, "max": 2},
+        "spider_eye": {"min": 0, "max": 1}
+      },
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": false,
+      "special": ["neutral_day", "hostile_night", "wall_climb", "poison_attack", "cave_only"],
+      "weapon_effectiveness": {
+        "sword": 1.5,
+        "any": 1.0
+      },
+      "sounds": {
+        "ambient": "mob/spider/say",
+        "hurt": "mob/spider/say",
+        "death": "mob/spider/death"
+      },
+      "conversion_status": "bedrock_available",
+      "glb_path": "",
+      "texture_path": "",
+      "bedrock_model": "vanilla/models/entity/spider.geo.json",
+      "bedrock_animation": "vanilla/animations/spider.animation.json",
+      "bedrock_texture": "vanilla/textures/entity/spider/cave_spider.png"
+    },
+
+    "warden_mini": {
+      "_comment": "Placeholder — warden as encounter in deep caves, not as full boss fight. Uses same model as warden.",
+      "name_fr": "Warden",
+      "name_en": "Warden",
+      "category": "monster",
+      "behavior": "hostile",
+      "when_hit": "attack",
+      "locomotion": "land",
+      "spawn_time": "both",
+      "burns_in_sunlight": false,
+      "biomes": [],
+      "spawn_light_min": 0,
+      "spawn_light_max": 0,
+      "spawn_group_min": 1,
+      "spawn_group_max": 1,
+      "max_per_chunk": 1,
+      "spawn_below_y": 30,
+      "health": 100,
+      "attack_damage": 15,
+      "move_speed": 1.5,
+      "collision_size": [0.9, 2.9, 0.9],
+      "model_scale": [0.8, 0.8, 0.8],
+      "drops": {},
+      "hunger": {
+        "max": 0,
+        "drain_per_second": 0,
+        "food_source": "none",
+        "food_blocks": [],
+        "eat_effect": "none",
+        "satiation": 0
+      },
+      "fire_sensitive": false,
+      "special": ["blind", "detects_vibrations", "cave_only", "extremely_dangerous"],
+      "weapon_effectiveness": {
+        "sword": 1.0,
+        "any": 1.0
+      },
+      "conversion_status": "bedrock_available"
+    }
+  }
+}

@@ -726,8 +726,7 @@ func _find_ground_y_in_chunk(blocks: PackedByteArray, lx: int, lz: int) -> int:
 	return -1
 
 func _try_spawn_passive_mobs_in_chunk(chunk_pos: Vector3i, blocks: PackedByteArray):
-	"""Spawn passive mobs when a new chunk is generated (daytime animals)."""
-	# Clean dead refs
+	"""Spawn mobs when a new chunk is generated — uses mob_database.json."""
 	mobs = mobs.filter(func(m): return is_instance_valid(m))
 	if mobs.size() >= MAX_MOBS:
 		return
@@ -737,27 +736,63 @@ func _try_spawn_passive_mobs_in_chunk(chunk_pos: Vector3i, blocks: PackedByteArr
 		return
 
 	var biome = _get_biome_at_chunk(chunk_pos)
-	var mob_list = PassiveMob.BIOME_PASSIVE_MOBS.get(biome, [])
+	var is_day = true
+	var dnc = get_tree().get_first_node_in_group("day_night_cycle")
+	if dnc:
+		var hour = dnc.get_hour()
+		is_day = hour >= 6.0 and hour < 18.0
+
+	# Pick mob list based on time of day
+	var mob_list: Array = []
+	if is_day:
+		mob_list = PassiveMob.BIOME_DAY_MOBS.get(biome, [])
+	else:
+		mob_list = PassiveMob.BIOME_NIGHT_MOBS.get(biome, [])
 	if mob_list.is_empty():
 		return
 
-	# Pick 1-2 mobs
-	var count = randi_range(1, MOBS_PER_CHUNK_PASSIVE)
+	# Filter to only non-hostile during day, or include hostile at night
+	var filtered: Array = []
+	for mid in mob_list:
+		var mdata = PassiveMob.get_mob_data(mid)
+		var beh = mdata.get("behavior", "passive")
+		if is_day and (beh == "hostile" or beh == "boss"):
+			continue  # No hostile mobs during day
+		filtered.append(mid)
+	if filtered.is_empty():
+		return
+
+	# Pick 1-2 mobs — respect spawn_group for the chosen mob
+	var chosen_id: String = filtered[randi() % filtered.size()]
+	var chosen_data = PassiveMob.get_mob_data(chosen_id)
+	var group_min = int(chosen_data.get("spawn_group_min", 1))
+	var group_max = int(chosen_data.get("spawn_group_max", 2))
+	var max_chunk = int(chosen_data.get("max_per_chunk", 4))
+	var count = mini(randi_range(group_min, group_max), max_chunk)
+
+	# Count existing mobs of this type in nearby chunks
+	var existing_count = 0
+	for m in mobs:
+		if is_instance_valid(m) and m is PassiveMob and m.mob_id == chosen_id:
+			if m.chunk_position.distance_to(Vector3(chunk_pos)) < 3:
+				existing_count += 1
+	count = mini(count, max_chunk - existing_count)
+
 	for i in range(count):
 		if mobs.size() >= MAX_MOBS:
 			break
-		var mob_type = mob_list[randi() % mob_list.size()]
-		# Try several positions to find valid ground
-		var spawned = false
 		for _attempt in range(4):
 			var lx = randi_range(2, 13)
 			var lz = randi_range(2, 13)
 			var sy = _find_ground_y_in_chunk(blocks, lx, lz)
 			if sy >= 10 and sy <= 200:
+				# Check spawn_below_y constraint
+				var max_y = int(chosen_data.get("spawn_below_y", 999))
+				if sy > max_y:
+					continue
 				var wx = chunk_pos.x * Chunk.CHUNK_SIZE + lx
 				var wz = chunk_pos.z * Chunk.CHUNK_SIZE + lz
-				_spawn_mob(mob_type, Vector3(wx + 0.5, sy + 1.0, wz + 0.5), chunk_pos)
-				spawned = true
+				_spawn_mob_by_id(chosen_id, Vector3(wx + 0.5, sy + 1.0, wz + 0.5), chunk_pos)
 				break
 
 func _try_spawn_mobs():
@@ -778,15 +813,13 @@ func _try_spawn_mobs():
 	# Count current hostile mobs
 	var hostile_count = 0
 	for m in mobs:
-		if is_instance_valid(m) and m._behavior == PassiveMob.Behavior.HOSTILE:
+		if is_instance_valid(m) and m is PassiveMob and m._behavior == PassiveMob.Behavior.HOSTILE:
 			hostile_count += 1
 	if hostile_count >= 10:
-		return  # Cap hostile mobs
+		return
 
-	# Spawn 1-2 hostile mobs around the player
 	var player_pos = player.global_position
-	var attempts = 5
-	for _i in range(attempts):
+	for _i in range(5):
 		var angle = randf() * TAU
 		var dist = randf_range(MOB_SPAWN_MIN_DIST, MOB_SPAWN_MAX_DIST)
 		var spawn_x = player_pos.x + cos(angle) * dist
@@ -795,7 +828,6 @@ func _try_spawn_mobs():
 		if not chunks.has(spawn_chunk):
 			continue
 
-		# Find surface
 		var chunk = chunks[spawn_chunk]
 		var lx = int(spawn_x) - spawn_chunk.x * Chunk.CHUNK_SIZE
 		var lz = int(spawn_z) - spawn_chunk.z * Chunk.CHUNK_SIZE
@@ -806,25 +838,37 @@ func _try_spawn_mobs():
 			continue
 
 		var biome = _get_biome_at_chunk(spawn_chunk)
-		var mob_list = PassiveMob.BIOME_HOSTILE_MOBS.get(biome, [])
-		if mob_list.is_empty():
+		# Get night mobs for this biome — includes hostile mobs
+		var night_mobs: Array = PassiveMob.BIOME_NIGHT_MOBS.get(biome, [])
+		# Filter to hostile-only
+		var hostile_list: Array = []
+		for mid in night_mobs:
+			var mdata = PassiveMob.get_mob_data(mid)
+			var beh = mdata.get("behavior", "passive")
+			if beh == "hostile" or beh == "neutral":
+				# Neutral mobs that spawn at night (enderman) — include them
+				var spawn_time = mdata.get("spawn_time", "day")
+				if spawn_time == "night" or spawn_time == "both":
+					hostile_list.append(mid)
+		if hostile_list.is_empty():
 			continue
 
-		var mob_type = mob_list[randi() % mob_list.size()]
+		var chosen_id = hostile_list[randi() % hostile_list.size()]
 		var spawn_pos = Vector3(spawn_x, sy + 1.0, spawn_z)
-		_spawn_mob(mob_type, spawn_pos, spawn_chunk)
+		_spawn_mob_by_id(chosen_id, spawn_pos, spawn_chunk)
 		break  # One per cycle
 
 func _preload_mob_glbs():
-	"""Preload all mob GLB scenes into cache to avoid freeze on first spawn."""
-	for mob_type in PassiveMob.MOB_DATA:
-		var data = PassiveMob.MOB_DATA[mob_type]
+	"""Preload all mob GLB scenes + load mob database."""
+	PassiveMob.load_database()
+	for mid in PassiveMob.get_all_converted_mob_ids():
+		var data = PassiveMob.get_mob_data(mid)
 		var glb_path = data.get("glb_path", "")
 		if glb_path != "" and ResourceLoader.exists(glb_path):
 			PassiveMob._load_glb(glb_path)
 
-func _spawn_mob(mob_type: int, pos: Vector3, chunk_pos: Vector3i):
+func _spawn_mob_by_id(id: String, pos: Vector3, chunk_pos: Vector3i):
 	var mob = PassiveMob.new()
-	mob.setup(mob_type, pos, chunk_pos)
+	mob.setup_from_id(id, pos, chunk_pos)
 	add_child(mob)
 	mobs.append(mob)
