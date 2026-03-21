@@ -93,7 +93,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 
 ## Direction du projet
 
-**Version actuelle : v18.4.0**
+**Version actuelle : v18.6.0**
 
 | Phase | Statut | Contenu |
 |-------|--------|---------|
@@ -143,6 +143,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 | 11.2 | Fait | v18.3.0 — **Vrais sons Minecraft**. 3998 MP3 téléchargés depuis minecraft-sounds.vercel.app (`download_mc_sounds.py`). `audio_manager.gd` refait : dig/ (stone/wood/grass/sand/gravel/snow/cloth), step/ (stone/wood/grass/sand/gravel/snow/ladder), glass break, lantern break/place, door open/close (bois/fer), chest open/close, eating ×3, UI click MC. Blocs architecturaux mappés aux bons sons. Nouvelles banques : gravel, glass, ladder, doors, chest, lantern |
 | 11.3 | Fait | v18.4.0 — **Fix wolf GLB** (CUBE_OFFSET_OVERRIDES body Z-2 / upperBody Z-4, ferme gap tête-corps). **Fix presets rendu** au démarrage (pas d'application avant warmup 30 frames, SSAO/SDFGI s'initialisent avec géométrie). **Texture eau** Faithful32 (water_still + UVs tilées, remplace vertex color plat). **Plus d'arbres dans l'eau** (skip végétation si height ≤ SEA_LEVEL). **Suppression filtre at_shore** eau (plus de gap 1 bloc aux rives). **Throttle chunks** : buffer instanciation (max 2/frame) + mesh apply (max 1/frame), réduit les freezes. **Villageois inhibés** (VILLAGE_NPC_COUNT=0) pour focus solo. mob_converter.py v2.4.0 |
 | 11.4 | Fait | v18.5.0 — **Fix oreilles cheval** (mob_converter.py v2.5.0). BPR_FORCE_OVERRIDES (nouveau mécanisme pour forcer rotation sur bones avec rotation existante), PIVOT_ONLY_OVERRIDES (pivot rapproché du cube pour rotation sur place), oreilles alignées avec le cou (30°X) et posées sur la tête comme le cheval MC original |
+| 11.5 | Fait | v18.6.0 — **Vue 3e personne (F5)** + outils Python enrichis. `player.gd` : 3 modes caméra F5 (FPS / 3e dos / 3e face), modèle Steve dynamique avec skin, collision caméra raycast, protection anti-terrain, pitch limité mode dos, terminal velocity + téléport sécurité. Fix spawn surface (deadlock `_spawn_grounded` supprimé). `character_viewer.py` v1.5.0 : système d'armures overlay 3D (casque/plastron/jambières/bottes × 5 matériaux cuir→diamant, textures Bedrock). `mob_gallery.py` v1.1.0 : panneau fullscreen (animations cliquables + textures Bedrock swappables + bones toggle [B]) |
 | 12 | À venir | Mobs Minecraft (98+ GLB déjà en assets), armures (texture swap 2 couches), UI craft MC (textures GUI Faithful32 disponibles) |
 
 **Packs GLB utilisés** : Steve GLB (modèle Bedrock converti, 28 bones, 4 anims) pour tous les PNJ avec skins par profession. Kenney.nl (18 modèles BlockPNJ — conservés mais plus utilisés). **PNJ futurs** : KayKit Adventurers (161 anims travail)
