@@ -37,7 +37,7 @@ Changelog:
     v1.0.0 — Création : parsing .geo.json, bind_pose_rotation, Molang -> keyframes
 """
 
-APP_VERSION = "2.5.0"
+APP_VERSION = "3.0.0"
 
 import json
 import struct
@@ -57,7 +57,8 @@ except ImportError:
 
 # ─── Configuration ────────────────────────────────────────────────────────────
 
-BEDROCK_PATH = Path(r"D:\Games\Minecraft - Bedrock Edition\data\resource_packs\vanilla")
+BEDROCK_BASE = Path(r"D:\Games\Minecraft - Bedrock Edition\data\resource_packs")
+BEDROCK_PATH = BEDROCK_BASE / "vanilla"
 OUTPUT_DIR = Path(r"D:\Program\ClaudeCode\ClaudeCraft\assets\Mobs\Bedrock")
 SCALE = 1.0 / 16.0   # 16 Bedrock units = 1 Godot unit (≈ 1 block)
 
@@ -91,7 +92,9 @@ MOB_BIOMES = {
 }
 
 MOB_REGISTRY = {
-    # ── Passive mobs ──
+    # ══════════════════════════════════════════════════════════════
+    #  PASSIVE MOBS
+    # ══════════════════════════════════════════════════════════════
     "cow": {
         "geo": "models/entity/cow.geo.json",
         "geo_key": "geometry.cow",
@@ -157,7 +160,138 @@ MOB_REGISTRY = {
         "hide_bones": ["Saddle", "Bridle", "BitL", "BitR", "ReinsL", "ReinsR",
                         "BagL", "BagR", "MuleEarL", "MuleEarR"],
     },
-    # ── Neutral mobs ──
+    "ocelot": {
+        "geo": "models/entity/ocelot.geo.json",
+        "geo_key": "geometry.ocelot.v1.8",
+        "texture": "textures/entity/cat/ocelot.png",
+        "tex_size": (64, 32),
+        "custom_anims": ["walk", "idle"],
+    },
+    "parrot": {
+        "geo": "models/entity/parrot.geo.json",
+        "geo_key": "geometry.parrot",
+        "texture": "textures/entity/parrot/parrot_red_blue.png",
+        "tex_size": (32, 32),
+        "custom_anims": ["walk", "idle"],
+    },
+    "mooshroom": {
+        "geo": "models/entity/mooshroom.geo.json",
+        "geo_key": "geometry.mooshroom.v1.8",
+        "texture": "textures/entity/cow/mooshroom.png",
+        "tex_size": (64, 32),
+        "custom_anims": ["walk", "idle", "eat"],
+    },
+    "llama": {
+        "geo": "models/entity/llama.geo.json",
+        "geo_key": "geometry.llama.v1.8",
+        "texture": "textures/entity/llama/llama.png",
+        "tex_size": (128, 64),
+        "custom_anims": ["walk", "idle"],
+    },
+    "turtle": {
+        "geo": "models/entity/turtle.geo.json",
+        "geo_key": "geometry.turtle",
+        "texture": "textures/entity/sea_turtle.png",
+        "tex_size": (128, 64),
+        "custom_anims": ["walk", "idle"],
+    },
+    "dolphin": {
+        "geo": "models/entity/dolphin.geo.json",
+        "geo_key": "geometry.dolphin",
+        "texture": "textures/entity/dolphin.png",
+        "tex_size": (64, 64),
+        "custom_anims": ["walk", "idle"],
+    },
+    "squid": {
+        "geo": "models/entity/squid.geo.json",
+        "geo_key": "geometry.squid",
+        "texture": "textures/entity/squid.png",
+        "tex_size": (64, 32),
+        "custom_anims": ["walk", "idle"],
+    },
+    "cod": {
+        "geo": "models/entity/cod.geo.json",
+        "geo_key": "geometry.cod",
+        "texture": "textures/entity/fish/cod.png",
+        "tex_size": (32, 32),
+        "custom_anims": ["walk", "idle"],
+    },
+    "salmon": {
+        "geo": "models/entity/salmon.geo.json",
+        "geo_key": "geometry.salmon",
+        "texture": "textures/entity/fish/salmon.png",
+        "tex_size": (32, 32),
+        "custom_anims": ["walk", "idle"],
+    },
+    "panda": {
+        "geo": "models/entity/panda.geo.json",
+        "geo_key": "geometry.panda",
+        "texture": "textures/entity/panda/panda.png",
+        "tex_size": (64, 64),
+        "custom_anims": ["walk", "idle"],
+    },
+    # ── Versioned pack passive mobs ──
+    "bee": {
+        "pack": "vanilla_1.14",
+        "geo": "models/entity/bee.geo.json",
+        "geo_key": "geometry.bee",
+        "texture": "textures/entity/bee/bee.png",
+        "tex_size": (64, 64),
+        "custom_anims": ["walk", "idle"],
+    },
+    "axolotl": {
+        "pack": "vanilla_1.17.10",
+        "geo": "models/entity/axolotl.geo.json",
+        "geo_key": "geometry.axolotl",
+        "texture": "textures/entity/axolotl/axolotl_lucy.png",
+        "tex_size": (64, 64),
+        "pack_texture": "vanilla_1.17.0",
+        "custom_anims": ["walk", "idle"],
+    },
+    "frog": {
+        "pack": "vanilla_1.19.0",
+        "geo": "models/entity/frog.geo.json",
+        "geo_key": "geometry.frog",
+        "texture": "textures/entity/frog/temperate_frog.png",
+        "tex_size": (48, 48),
+        "custom_anims": ["walk", "idle"],
+    },
+    "goat": {
+        "pack": "vanilla_1.17.10",
+        "geo": "models/entity/goat.geo.json",
+        "geo_key": "geometry.goat",
+        "texture": "textures/entity/goat/goat.png",
+        "tex_size": (64, 64),
+        "pack_texture": "vanilla_1.17.0",
+        "custom_anims": ["walk", "idle"],
+    },
+    "camel": {
+        "pack": "vanilla_1.20.0",
+        "geo": "models/entity/camel.geo.json",
+        "geo_key": "geometry.camel",
+        "texture": "textures/entity/camel/camel.png",
+        "tex_size": (128, 128),
+        "custom_anims": ["walk", "idle"],
+    },
+    "sniffer": {
+        "pack": "vanilla_1.20.0",
+        "geo": "models/entity/sniffer.geo.json",
+        "geo_key": "geometry.sniffer",
+        "texture": "textures/entity/sniffer/sniffer.png",
+        "tex_size": (192, 192),
+        "custom_anims": ["walk", "idle"],
+    },
+    "armadillo": {
+        "pack": "vanilla_1.20.80",
+        "geo": "models/entity/armadillo.geo.json",
+        "geo_key": "geometry.armadillo",
+        "texture": "textures/entity/armadillo.png",
+        "tex_size": (64, 64),
+        "custom_anims": ["walk", "idle"],
+    },
+    # ══════════════════════════════════════════════════════════════
+    #  NEUTRAL MOBS
+    # ══════════════════════════════════════════════════════════════
     "wolf": {
         "geo": "models/entity/wolf.geo.json",
         "geo_key": "geometry.wolf",
@@ -179,7 +313,49 @@ MOB_REGISTRY = {
         "tex_size": (64, 32),
         "custom_anims": ["walk", "idle"],
     },
-    # ── Hostile mobs ──
+    "iron_golem": {
+        "pack": "vanilla_1.21.90",
+        "geo": "models/entity/iron_golem.geo.json",
+        "geo_key": "geometry.irongolem",
+        "texture": "textures/entity/iron_golem.png",
+        "tex_size": (128, 128),
+        "pack_texture": "vanilla",
+        "custom_anims": ["walk", "idle"],
+    },
+    "snow_golem": {
+        "geo": "models/entity/snow_golem.geo.json",
+        "geo_key": "geometry.snowgolem.v1.8",
+        "texture": "textures/entity/snow_golem.png",
+        "tex_size": (64, 64),
+        "custom_anims": ["walk", "idle"],
+    },
+    "allay": {
+        "pack": "vanilla_1.19.60",
+        "geo": "models/entity/allay.geo.json",
+        "geo_key": "geometry.allay",
+        "texture": "textures/entity/allay/allay.png",
+        "tex_size": (32, 32),
+        "pack_texture": "vanilla_1.19.0",
+        "custom_anims": ["walk", "idle"],
+    },
+    "piglin": {
+        "pack": "vanilla_1.16",
+        "geo": "models/entity/piglin.geo.json",
+        "geo_key": "geometry.piglin",
+        "texture": "textures/entity/piglin/piglin.png",
+        "tex_size": (64, 64),
+        "custom_anims": ["walk", "idle"],
+    },
+    "zombie_pigman": {
+        "geo": "models/entity/zombie_pigman.geo.json",
+        "geo_key": "geometry.pigzombie.v1.8",
+        "texture": "textures/entity/pig/pigzombie.png",
+        "tex_size": (64, 32),
+        "custom_anims": ["walk", "idle"],
+    },
+    # ══════════════════════════════════════════════════════════════
+    #  HOSTILE MOBS
+    # ══════════════════════════════════════════════════════════════
     "zombie": {
         "geo": "models/entity/zombie.geo.json",
         "geo_key": "geometry.zombie",
@@ -206,6 +382,204 @@ MOB_REGISTRY = {
         "geo_key": "geometry.spider",
         "texture": "textures/entity/spider/spider.tga",
         "tex_size": (64, 32),
+        "custom_anims": ["walk", "idle"],
+    },
+    "cave_spider": {
+        "geo": "models/entity/spider.geo.json",
+        "geo_key": "geometry.spider",
+        "texture": "textures/entity/spider/cave_spider.tga",
+        "tex_size": (64, 32),
+        "custom_anims": ["walk", "idle"],
+    },
+    "blaze": {
+        "geo": "models/entity/blaze.geo.json",
+        "geo_key": "geometry.blaze",
+        "texture": "textures/entity/blaze.tga",
+        "tex_size": (64, 32),
+        "custom_anims": ["walk", "idle"],
+    },
+    "drowned": {
+        "geo": "models/entity/drowned.geo.json",
+        "geo_key": "geometry.zombie.drowned.v1.16",
+        "texture": "textures/entity/zombie/drowned.tga",
+        "tex_size": (64, 64),
+        "custom_anims": ["walk", "idle", "attack"],
+    },
+    "husk": {
+        "geo": "models/entity/husk.geo.json",
+        "geo_key": "geometry.zombie.husk.v1.8",
+        "texture": "textures/entity/zombie/husk.png",
+        "tex_size": (64, 32),
+        "custom_anims": ["walk", "idle", "attack"],
+    },
+    "stray": {
+        "geo": "models/entity/stray.geo.json",
+        "geo_key": "geometry.skeleton.stray.v1.8",
+        "texture": "textures/entity/skeleton/stray.png",
+        "tex_size": (64, 32),
+        "custom_anims": ["walk", "idle", "attack"],
+    },
+    "wither_skeleton": {
+        "geo": "models/entity/wither_skeleton.geo.json",
+        "geo_key": "geometry.skeleton.wither.v1.8",
+        "texture": "textures/entity/skeleton/wither_skeleton.png",
+        "tex_size": (64, 32),
+        "custom_anims": ["walk", "idle", "attack"],
+    },
+    "zombie_villager": {
+        "geo": "models/entity/zombie_villager.geo.json",
+        "geo_key": "geometry.zombie.villager.v1.8",
+        "texture": "textures/entity/zombie_villager/zombie_villager.png",
+        "tex_size": (64, 64),
+        "custom_anims": ["walk", "idle", "attack"],
+    },
+    "witch": {
+        "geo": "models/entity/witch.geo.json",
+        "geo_key": "geometry.villager.witch.v1.8",
+        "texture": "textures/entity/witch.png",
+        "tex_size": (64, 128),
+        "custom_anims": ["walk", "idle"],
+    },
+    "slime": {
+        "geo": "models/entity/slime.geo.json",
+        "geo_key": "geometry.slime",
+        "texture": "textures/entity/slime/slime.png",
+        "tex_size": (64, 32),
+        "custom_anims": ["walk", "idle"],
+    },
+    "magma_cube": {
+        "geo": "models/entity/magma_cube.geo.json",
+        "geo_key": "geometry.lavaslime",
+        "texture": "textures/entity/slime/magmacube.tga",
+        "tex_size": (64, 32),
+        "custom_anims": ["walk", "idle"],
+    },
+    "ghast": {
+        "geo": "models/entity/ghast.geo.json",
+        "geo_key": "geometry.ghast",
+        "texture": "textures/entity/ghast/ghast.png",
+        "tex_size": (64, 32),
+        "custom_anims": ["walk", "idle"],
+    },
+    "phantom": {
+        "geo": "models/entity/phantom.geo.json",
+        "geo_key": "geometry.phantom",
+        "texture": "textures/entity/phantom.tga",
+        "tex_size": (64, 64),
+        "custom_anims": ["walk", "idle"],
+    },
+    "endermite": {
+        "geo": "models/entity/endermite.geo.json",
+        "geo_key": "geometry.endermite",
+        "texture": "textures/entity/endermite.png",
+        "tex_size": (64, 32),
+        "custom_anims": ["walk", "idle"],
+    },
+    "silverfish": {
+        "geo": "models/entity/silverfish.geo.json",
+        "geo_key": "geometry.silverfish",
+        "texture": "textures/entity/silverfish.png",
+        "tex_size": (64, 32),
+        "custom_anims": ["walk", "idle"],
+    },
+    "guardian": {
+        "geo": "models/entity/guardian.geo.json",
+        "geo_key": "geometry.guardian.v1.8",
+        "texture": "textures/entity/guardian.png",
+        "tex_size": (64, 64),
+        "custom_anims": ["walk", "idle"],
+    },
+    "shulker": {
+        "geo": "models/entity/shulker.geo.json",
+        "geo_key": "geometry.shulker.v1.8",
+        "texture": "textures/entity/shulker/shulker_undyed.png",
+        "tex_size": (64, 64),
+        "custom_anims": ["walk", "idle"],
+    },
+    "pillager": {
+        "geo": "models/entity/pillager.geo.json",
+        "geo_key": "geometry.pillager",
+        "texture": "textures/entity/pillager.png",
+        "tex_size": (64, 64),
+        "custom_anims": ["walk", "idle", "attack"],
+    },
+    "vindicator": {
+        "geo": "models/entity/vindicator.geo.json",
+        "geo_key": "geometry.vindicator.v1.8",
+        "texture": "textures/entity/vindicator.png",
+        "tex_size": (64, 64),
+        "custom_anims": ["walk", "idle", "attack"],
+    },
+    "evoker": {
+        "geo": "models/entity/evoker.geo.json",
+        "geo_key": "geometry.evoker",
+        "texture": "textures/entity/illager/evoker.png",
+        "tex_size": (64, 64),
+        "custom_anims": ["walk", "idle"],
+    },
+    "ravager": {
+        "geo": "models/entity/ravager.geo.json",
+        "geo_key": "geometry.ravager",
+        "texture": "textures/entity/illager/ravager.png",
+        "tex_size": (128, 128),
+        "custom_anims": ["walk", "idle"],
+    },
+    "vex": {
+        "geo": "models/entity/vex.geo.json",
+        "geo_key": "geometry.vex.v1.8",
+        "texture": "textures/entity/vex/vex.png",
+        "tex_size": (64, 64),
+        "pack_texture": "vanilla_1.19.60",
+        "custom_anims": ["walk", "idle"],
+    },
+    "hoglin": {
+        "pack": "vanilla_1.16",
+        "geo": "models/entity/hoglin.geo.json",
+        "geo_key": "geometry.hoglin",
+        "texture": "textures/entity/hoglin/hoglin.png",
+        "tex_size": (128, 64),
+        "custom_anims": ["walk", "idle"],
+    },
+    "warden": {
+        "pack": "vanilla_1.19.0",
+        "geo": "models/entity/warden.geo.json",
+        "geo_key": "geometry.warden",
+        "texture": "textures/entity/warden/warden.png",
+        "tex_size": (128, 128),
+        "custom_anims": ["walk", "idle"],
+    },
+    "bogged": {
+        "pack": "vanilla_1.21.0",
+        "geo": "models/entity/bogged.geo.json",
+        "geo_key": "geometry.skeleton.bogged",
+        "texture": "textures/entity/skeleton/bogged.png",
+        "tex_size": (64, 32),
+        "custom_anims": ["walk", "idle", "attack"],
+    },
+    "breeze": {
+        "pack": "vanilla_1.21.0",
+        "geo": "models/entity/breeze.geo.json",
+        "geo_key": "geometry.breeze",
+        "texture": "textures/entity/breeze/breeze.png",
+        "tex_size": (32, 32),
+        "custom_anims": ["walk", "idle"],
+    },
+    "creaking": {
+        "pack": "vanilla_1.21.50",
+        "geo": "models/entity/creaking.geo.json",
+        "geo_key": "geometry.creaking",
+        "texture": "textures/entity/creaking/creaking.png",
+        "tex_size": (64, 64),
+        "custom_anims": ["walk", "idle"],
+    },
+    # ══════════════════════════════════════════════════════════════
+    #  BOSS MOBS
+    # ══════════════════════════════════════════════════════════════
+    "wither": {
+        "geo": "models/entity/wither_boss.geo.json",
+        "geo_key": "geometry.witherBoss",
+        "texture": "textures/entity/wither_boss/wither.png",
+        "tex_size": (64, 64),
         "custom_anims": ["walk", "idle"],
     },
 }
@@ -385,7 +759,8 @@ def parse_geo_json(mob_info, mob_name=None):
     Returns list of bone dicts with: name, parent, pivot, cubes, bind_pose_rotation, mirror.
     If mob_name is given, applies PARENT_OVERRIDES for mobs with missing hierarchy.
     """
-    geo_path = BEDROCK_PATH / mob_info["geo"]
+    pack = mob_info.get("pack", "vanilla")
+    geo_path = BEDROCK_BASE / pack / mob_info["geo"]
     with open(geo_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
@@ -810,9 +1185,18 @@ def bake_mob_animations(mob_name, mob_info, bone_names, bone_map, mesh_data):
         return {"name": name, "timestamps": timestamps,
                 "channels": channels, "pos_channels": pos_channels}
 
-    # ── Quadruped walk (cow, pig, sheep, wolf, polar_bear, fox) ──
+    # ── Quadruped walk (cow, pig, sheep, wolf, polar_bear, fox, llama, mooshroom, goat, panda, hoglin, ravager, camel, sniffer) ──
+    QUADRUPEDS = ("cow", "pig", "sheep", "wolf", "horse", "polar_bear", "fox",
+                  "llama", "mooshroom", "goat", "panda", "hoglin", "ravager",
+                  "camel", "sniffer", "armadillo", "turtle")
+    HUMANOIDS = ("zombie", "skeleton", "enderman", "drowned", "husk", "stray",
+                 "wither_skeleton", "zombie_villager", "zombie_pigman",
+                 "pillager", "vindicator", "evoker", "witch", "piglin",
+                 "warden", "bogged", "creaking", "iron_golem", "snow_golem")
+    SPIDERS = ("spider", "cave_spider")
+
     if "walk" in custom_anims:
-        if mob_name in ("cow", "pig", "sheep", "wolf", "horse", "polar_bear", "fox"):
+        if mob_name in QUADRUPEDS:
             def quad_walk(bone, t, dur):
                 a = math.cos(t / dur * 2 * math.pi) * 40
                 m = {
@@ -893,7 +1277,7 @@ def bake_mob_animations(mob_name, mob_info, bone_names, bone_map, mesh_data):
                 return m.get(bone)
             animations.append(make_anim("walk", 1.0, 24, creeper_walk))
 
-        elif mob_name in ("zombie", "skeleton", "enderman"):
+        elif mob_name in HUMANOIDS:
             def humanoid_walk(bone, t, dur):
                 a = math.cos(t / dur * 2 * math.pi) * 40
                 m = {
@@ -903,7 +1287,7 @@ def bake_mob_animations(mob_name, mob_info, bone_names, bone_map, mesh_data):
                 return m.get(bone)
             animations.append(make_anim("walk", 1.0, 24, humanoid_walk))
 
-        elif mob_name == "spider":
+        elif mob_name in SPIDERS:
             def spider_walk(bone, t, dur):
                 phase_offsets = {
                     "leg0": 0, "leg1": 0, "leg2": 90, "leg3": 90,
@@ -919,6 +1303,170 @@ def bake_mob_animations(mob_name, mob_info, bone_names, bone_map, mesh_data):
                 sign_z = 1 if bone in ("leg0", "leg2", "leg4", "leg6") else -1
                 return [0, sign_y * y_swing, sign_z * z_swing]
             animations.append(make_anim("walk", 1.0, 24, spider_walk))
+
+        elif mob_name in ("ocelot", "cat"):
+            def cat_ocelot_walk(bone, t, dur):
+                a = math.cos(t / dur * 2 * math.pi) * 35
+                m = {
+                    "frontLegL": [a, 0, 0], "frontLegR": [-a, 0, 0],
+                    "backLegL": [-a, 0, 0], "backLegR": [a, 0, 0],
+                    "tail1": [0, math.sin(t / dur * 4 * math.pi) * 25, 0],
+                    "tail2": [0, math.sin(t / dur * 4 * math.pi + 0.5) * 15, 0],
+                    # Also support ocelot bone names (leg0-3)
+                    "leg0": [a, 0, 0], "leg1": [-a, 0, 0],
+                    "leg2": [-a, 0, 0], "leg3": [a, 0, 0],
+                }
+                return m.get(bone)
+            animations.append(make_anim("walk", 0.8, 24, cat_ocelot_walk))
+
+        elif mob_name in ("blaze",):
+            def blaze_walk(bone, t, dur):
+                # Blaze rods rotate
+                if "rod" in bone.lower():
+                    a = math.sin(t / dur * 4 * math.pi) * 15
+                    return [a, t / dur * 360, 0]
+                if bone == "head":
+                    return [math.sin(t / dur * 2 * math.pi) * 5, 0, 0]
+                return None
+            animations.append(make_anim("walk", 1.5, 12, blaze_walk))
+
+        elif mob_name in ("ghast",):
+            def ghast_walk(bone, t, dur):
+                # Tentacles wave
+                if "tentacle" in bone.lower():
+                    a = math.sin(t / dur * 2 * math.pi) * 20
+                    return [a, 0, 0]
+                return None
+            animations.append(make_anim("walk", 2.0, 12, ghast_walk))
+
+        elif mob_name in ("slime", "magma_cube"):
+            def slime_walk(bone, t, dur):
+                # Hop
+                phase = (t / dur) % 1.0
+                squish = abs(math.sin(phase * math.pi))
+                return {"rot": [0, 0, 0], "pos": [0, squish * 0.5 * SCALE, 0]} if bone == "body" else None
+            animations.append(make_anim("walk", 0.6, 24, slime_walk))
+
+        elif mob_name in ("phantom",):
+            def phantom_walk(bone, t, dur):
+                flap = math.sin(t / dur * 4 * math.pi) * 30
+                m = {
+                    "leftWing": [0, 0, -flap],
+                    "rightWing": [0, 0, flap],
+                    "tailBase": [math.sin(t / dur * 2 * math.pi) * 10, 0, 0],
+                }
+                return m.get(bone)
+            animations.append(make_anim("walk", 0.8, 24, phantom_walk))
+
+        elif mob_name in ("cod", "salmon", "dolphin", "squid"):
+            def fish_walk(bone, t, dur):
+                # Body/tail wiggle
+                a = math.sin(t / dur * 4 * math.pi) * 25
+                if "tail" in bone.lower() or "body" in bone.lower():
+                    return [0, a, 0]
+                return None
+            animations.append(make_anim("walk", 0.8, 24, fish_walk))
+
+        elif mob_name in ("bee",):
+            def bee_walk(bone, t, dur):
+                flap = math.sin(t / dur * 8 * math.pi) * 30
+                m = {
+                    "leftwing": [0, 0, -flap],
+                    "rightwing": [0, 0, flap],
+                    "body": [math.sin(t / dur * 2 * math.pi) * 3, 0, 0],
+                    # Also try capitalized
+                    "leftWing": [0, 0, -flap],
+                    "rightWing": [0, 0, flap],
+                }
+                return m.get(bone)
+            animations.append(make_anim("walk", 0.4, 24, bee_walk))
+
+        elif mob_name in ("endermite", "silverfish"):
+            def bug_walk(bone, t, dur):
+                # Segment wave
+                a = math.sin(t / dur * 4 * math.pi) * 15
+                if "segment" in bone.lower() or "body" in bone.lower():
+                    return [a, 0, 0]
+                return None
+            animations.append(make_anim("walk", 0.6, 24, bug_walk))
+
+        elif mob_name in ("guardian",):
+            def guardian_walk(bone, t, dur):
+                # Spikes pulse, tail wave
+                a = math.sin(t / dur * 2 * math.pi) * 15
+                if "tail" in bone.lower():
+                    return [a, 0, 0]
+                if "spike" in bone.lower():
+                    return [0, 0, math.sin(t / dur * 3 * math.pi) * 10]
+                return None
+            animations.append(make_anim("walk", 1.5, 12, guardian_walk))
+
+        elif mob_name in ("shulker",):
+            def shulker_walk(bone, t, dur):
+                if "lid" in bone.lower() or "head" in bone.lower():
+                    return [math.sin(t / dur * math.pi) * 30, 0, 0]
+                return None
+            animations.append(make_anim("walk", 2.0, 12, shulker_walk))
+
+        elif mob_name in ("vex", "allay"):
+            def vex_walk(bone, t, dur):
+                flap = math.sin(t / dur * 6 * math.pi) * 30
+                m = {
+                    "leftWing": [0, 0, -flap],
+                    "rightWing": [0, 0, flap],
+                    "body": [math.sin(t / dur * 2 * math.pi) * 5, 0, 0],
+                }
+                return m.get(bone)
+            animations.append(make_anim("walk", 0.6, 24, vex_walk))
+
+        elif mob_name in ("wither",):
+            def wither_walk(bone, t, dur):
+                a = math.sin(t / dur * 2 * math.pi)
+                if "head" in bone.lower():
+                    return [a * 10, a * 5, 0]
+                return None
+            animations.append(make_anim("walk", 2.0, 12, wither_walk))
+
+        elif mob_name in ("breeze",):
+            def breeze_walk(bone, t, dur):
+                if bone == "body":
+                    bob = math.sin(t / dur * 2 * math.pi) * 5
+                    return [bob, 0, 0]
+                return None
+            animations.append(make_anim("walk", 1.5, 12, breeze_walk))
+
+        elif mob_name in ("parrot",):
+            def parrot_walk(bone, t, dur):
+                flap = math.sin(t / dur * 6 * math.pi) * 35
+                m = {
+                    "leftWing": [0, 0, -flap],
+                    "rightWing": [0, 0, flap],
+                    "leftLeg": [math.cos(t / dur * 2 * math.pi) * 20, 0, 0],
+                    "rightLeg": [-math.cos(t / dur * 2 * math.pi) * 20, 0, 0],
+                }
+                return m.get(bone)
+            animations.append(make_anim("walk", 0.5, 24, parrot_walk))
+
+        elif mob_name in ("frog", "axolotl"):
+            def amphibian_walk(bone, t, dur):
+                a = math.cos(t / dur * 2 * math.pi) * 30
+                m = {
+                    "left_arm": [a, 0, 0], "right_arm": [-a, 0, 0],
+                    "left_leg": [-a, 0, 0], "right_leg": [a, 0, 0],
+                    # Also try numbered legs
+                    "leg0": [a, 0, 0], "leg1": [-a, 0, 0],
+                    "leg2": [-a, 0, 0], "leg3": [a, 0, 0],
+                }
+                return m.get(bone)
+            animations.append(make_anim("walk", 0.8, 24, amphibian_walk))
+
+        else:
+            # Generic walk: gently bob head
+            def generic_walk(bone, t, dur):
+                if bone == "head" or bone == "body":
+                    return [math.sin(t / dur * 2 * math.pi) * 5, 0, 0]
+                return None
+            animations.append(make_anim("walk", 1.5, 12, generic_walk))
 
     # ── Idle ──
     if "idle" in custom_anims:
@@ -1340,7 +1888,8 @@ def main():
                   f"{len(a['timestamps'])} frames")
 
         # 4. Texture
-        tex_path = BEDROCK_PATH / mob_info["texture"]
+        tex_pack = mob_info.get("pack_texture", mob_info.get("pack", "vanilla"))
+        tex_path = BEDROCK_BASE / tex_pack / mob_info["texture"]
         if tex_path.exists():
             print(f"Texture : {tex_path}")
             # Copy texture alongside GLB (convert TGA to PNG if needed)
