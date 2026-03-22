@@ -24,11 +24,16 @@ var should_exit: bool = false
 var world_seed: int = 0
 var _structure_placements: Array = []
 
-# Biome noises (copies for public access from main thread)
+# Noises publiques (copies for main thread access: get_biome_at, get_height_at)
 var _biome_temp_noise: FastNoiseLite = null
 var _biome_humid_noise: FastNoiseLite = null
 var _biome_terrain_noise: FastNoiseLite = null
 var _biome_continental_noise: FastNoiseLite = null
+var _pub_terrain_noise: FastNoiseLite = null
+var _pub_warp1: FastNoiseLite = null
+var _pub_warp2: FastNoiseLite = null
+var _pub_erosion: FastNoiseLite = null
+var _pub_river: FastNoiseLite = null
 
 func set_world_seed(seed_value: int):
 	world_seed = seed_value
@@ -55,6 +60,37 @@ func set_world_seed(seed_value: int):
 	_biome_continental_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
 	_biome_continental_noise.fractal_octaves = 3
 	_biome_continental_noise.fractal_gain = 0.4
+	# Terrain noises pour get_height_at() depuis le main thread
+	_pub_terrain_noise = FastNoiseLite.new()
+	_pub_terrain_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	_pub_terrain_noise.seed = seed_base + 1234
+	_pub_terrain_noise.frequency = 0.005
+	_pub_terrain_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
+	_pub_terrain_noise.fractal_octaves = 5
+	_pub_terrain_noise.fractal_lacunarity = 2.0
+	_pub_terrain_noise.fractal_gain = 0.45
+	_pub_warp1 = FastNoiseLite.new()
+	_pub_warp1.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	_pub_warp1.seed = seed_base + 7777
+	_pub_warp1.frequency = 0.003
+	_pub_warp2 = FastNoiseLite.new()
+	_pub_warp2.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	_pub_warp2.seed = seed_base + 8877
+	_pub_warp2.frequency = 0.003
+	_pub_erosion = FastNoiseLite.new()
+	_pub_erosion.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	_pub_erosion.seed = seed_base + 2222
+	_pub_erosion.frequency = 0.0015
+	_pub_erosion.fractal_type = FastNoiseLite.FRACTAL_FBM
+	_pub_erosion.fractal_octaves = 3
+	_pub_erosion.fractal_gain = 0.4
+	_pub_river = FastNoiseLite.new()
+	_pub_river.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	_pub_river.seed = seed_base + 5555
+	_pub_river.frequency = 0.002
+	_pub_river.fractal_type = FastNoiseLite.FRACTAL_FBM
+	_pub_river.fractal_octaves = 3
+	_pub_river.fractal_gain = 0.5
 
 func set_structure_placements(data: Array):
 	_structure_placements = data
@@ -812,6 +848,21 @@ func get_biome_at(wx: int, wz: int) -> int:
 		var c = (_biome_continental_noise.get_noise_2d(wx, wz) + 1.0) / 2.0
 		return _get_biome(t, h, 0, c)
 	return 3  # default plains
+
+func get_height_at(wx: int, wz: int) -> int:
+	"""Public terrain height query (main thread safe). Meme calcul que _generate_chunk_data."""
+	if not _pub_terrain_noise:
+		return 80
+	var warp_x = _pub_warp1.get_noise_2d(wx, wz) * 50.0
+	var warp_z = _pub_warp2.get_noise_2d(wx, wz) * 50.0
+	var n = (_pub_terrain_noise.get_noise_2d(wx + warp_x, wz + warp_z) + 1.0) / 2.0
+	n = clampf(n, 0.0, 1.0)
+	var c = (_biome_continental_noise.get_noise_2d(wx, wz) + 1.0) / 2.0
+	c = clampf(c, 0.0, 1.0)
+	var e = (_pub_erosion.get_noise_2d(wx, wz) + 1.0) / 2.0
+	e = clampf(e, 0.0, 1.0)
+	var rv = abs(_pub_river.get_noise_2d(wx, wz))
+	return _get_terrain_height(n, c, e, rv)
 
 func _is_cave(x: int, y: int, z: int, n1: FastNoiseLite, n2: FastNoiseLite, n3: FastNoiseLite) -> bool:
 	# Grottes de type "spaghetti" — deux noises multipliés créent des tunnels fins
