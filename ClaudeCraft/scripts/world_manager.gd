@@ -191,8 +191,42 @@ func _ready():
 	player = get_tree().get_first_node_in_group("player")
 
 	if player:
+		# Trouver un spawn terrestre (evite les oceans)
+		_ensure_land_spawn()
 		last_player_chunk = _world_to_chunk(player.global_position)
 		_update_chunks()
+
+func _ensure_land_spawn():
+	"""Repositionne le joueur sur terre si le spawn est en ocean."""
+	if not chunk_generator or not player:
+		return
+	var px = int(player.global_position.x)
+	var pz = int(player.global_position.z)
+	var biome = chunk_generator.get_biome_at(px, pz)
+	if biome != 4:  # Pas ocean, spawn OK
+		return
+	# Chercher la terre la plus proche en spirale
+	print("WorldManager: spawn en ocean, recherche de terre...")
+	for radius in range(1, 200):
+		for dx in range(-radius, radius + 1, 4):
+			for dz in [-radius, radius]:
+				var wx = px + dx * 16
+				var wz = pz + dz * 16
+				if chunk_generator.get_biome_at(wx, wz) < 4:  # Terre (0-3)
+					player.global_position = Vector3(wx, 80, wz)
+					player.spawn_position = player.global_position
+					print("WorldManager: spawn terrestre trouve a (%d, 80, %d)" % [wx, wz])
+					return
+			for dz in range(-radius + 1, radius):
+				for dx2 in [-radius, radius]:
+					var wx = px + dx2 * 16
+					var wz = pz + dz * 16
+					if chunk_generator.get_biome_at(wx, wz) < 4:
+						player.global_position = Vector3(wx, 80, wz)
+						player.spawn_position = player.global_position
+						print("WorldManager: spawn terrestre trouve a (%d, 80, %d)" % [wx, wz])
+						return
+	print("WorldManager: AUCUNE terre trouvee, spawn par defaut")
 
 func _process(_delta):
 	# Instancier les chunks en attente (max 2/frame)
