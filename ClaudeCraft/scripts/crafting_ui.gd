@@ -20,6 +20,7 @@ var _craft_texture: TextureRect = null
 var _title_label: Label = null
 var _station_label: Label = null
 var _grid_slots: Array = []       # 9 TextureRect pour la grille 3x3
+var _grid_count_labels: Array = [] # 9 Labels compteurs pour la grille
 var _output_slot: TextureRect = null
 var _output_count_label: Label = null
 var _recipe_buttons: Array = []   # boutons dans les slots inventaire
@@ -114,6 +115,7 @@ func _build_ui():
 	add_child(_station_label)
 
 	# Grille craft 3x3 (affichage seulement — montre les ingredients de la recette selectionnee)
+	_grid_count_labels = []
 	for r in range(3):
 		for c in range(3):
 			var sx = tex_left + (CRAFT_GRID_X + c * CRAFT_SLOT_STEP) * GUI_SCALE
@@ -130,6 +132,22 @@ func _build_ui():
 			tex_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			add_child(tex_rect)
 			_grid_slots.append(tex_rect)
+			# Label compteur (ex: "x4" en bas a droite du slot)
+			var grid_count = Label.new()
+			grid_count.set_anchors_preset(Control.PRESET_CENTER)
+			grid_count.offset_left = sx + slot_px - 28 * GUI_SCALE
+			grid_count.offset_right = sx + slot_px - 2
+			grid_count.offset_top = sy + slot_px - 14 * GUI_SCALE
+			grid_count.offset_bottom = sy + slot_px
+			grid_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			grid_count.add_theme_font_size_override("font_size", 14)
+			grid_count.add_theme_color_override("font_color", Color.WHITE)
+			grid_count.add_theme_color_override("font_shadow_color", Color(0.2, 0.2, 0.2, 1))
+			grid_count.add_theme_constant_override("shadow_offset_x", 2)
+			grid_count.add_theme_constant_override("shadow_offset_y", 2)
+			grid_count.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			add_child(grid_count)
+			_grid_count_labels.append(grid_count)
 
 	# Slot output
 	var ox = tex_left + OUTPUT_X * GUI_SCALE
@@ -296,15 +314,17 @@ func _populate_recipes():
 			slot["recipe"] = recipe
 			var output_tex = _load_block_icon(recipe["output_type"])
 			slot["tex_rect"].texture = output_tex
-			var can_craft = CraftRegistry.can_craft(recipe, inventory)
-			slot["tex_rect"].modulate = Color.WHITE if can_craft else Color(0.4, 0.4, 0.4, 0.6)
-			slot["count_label"].text = "x%d" % recipe["output_count"] if recipe["output_count"] > 1 else ""
+			var can_do = CraftRegistry.can_craft(recipe, inventory)
+			slot["tex_rect"].modulate = Color.WHITE if can_do else Color(0.4, 0.4, 0.4, 0.6)
+			# Afficher le nombre en stock de l'output
+			var have = inventory.get(recipe["output_type"], 0)
+			slot["count_label"].text = str(have) if have > 0 else ""
 			slot["button"].visible = true
 		else:
 			slot["recipe"] = {}
 			slot["tex_rect"].texture = null
 			slot["count_label"].text = ""
-			slot["button"].visible = true  # garder cliquable pour deselectionner
+			slot["button"].visible = true
 
 	# Selectionner la premiere recette craftable
 	_selected_recipe = {}
@@ -325,8 +345,10 @@ func _on_recipe_slot_pressed(index: int):
 
 func _update_craft_preview():
 	# Vider la grille
-	for tex in _grid_slots:
-		tex.texture = null
+	for i in range(9):
+		_grid_slots[i].texture = null
+		if i < _grid_count_labels.size():
+			_grid_count_labels[i].text = ""
 	_output_slot.texture = null
 	_output_count_label.text = ""
 
@@ -334,15 +356,18 @@ func _update_craft_preview():
 		return
 
 	# Afficher les ingredients dans la grille 3x3
-	# Placer les ingredients lineairement dans la grille
 	var inputs: Array = _selected_recipe.get("inputs", [])
 	for i in range(min(inputs.size(), 9)):
 		var block_type = inputs[i][0]
 		var count = inputs[i][1]
 		_grid_slots[i].texture = _load_block_icon(block_type)
-		# Colorer en vert si assez, rouge sinon
 		var have = player.get_inventory_count(block_type) if player else 0
 		_grid_slots[i].modulate = Color(0.5, 1.0, 0.5, 1) if have >= count else Color(1.0, 0.4, 0.4, 1)
+		# Compteur : "have/need" (ex: "4/6")
+		if i < _grid_count_labels.size():
+			_grid_count_labels[i].text = "%d/%d" % [min(have, count), count]
+			_grid_count_labels[i].add_theme_color_override("font_color",
+				Color(0.5, 1.0, 0.5, 1) if have >= count else Color(1.0, 0.5, 0.5, 1))
 
 	# Afficher l'output
 	_output_slot.texture = _load_block_icon(_selected_recipe["output_type"])
