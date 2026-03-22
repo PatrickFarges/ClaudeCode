@@ -1111,21 +1111,32 @@ func _handle_block_interaction(delta: float):
 		var player_head = (global_position + Vector3(0, 1, 0)).floor()
 
 		# Bridge assist : si place_pos est bloque par les pieds du joueur,
-		# rediriger vers la face laterale SEULEMENT si :
-		# - le joueur est au sol (pas en train de sauter/pillar-up)
-		# - le joueur regarde vers le bas (pitch < -30°)
+		# essayer les 4 faces laterales du bloc en dessous et prendre
+		# celle la plus proche de la direction du regard
 		var is_blocked_by_player = place_pos == player_feet or place_pos == player_head
 		if is_blocked_by_player and is_on_floor() and camera.rotation.x < deg_to_rad(-30.0):
-			var cam_dir = -camera.global_basis.z
-			var best_dir = Vector3.ZERO
-			if abs(cam_dir.x) > abs(cam_dir.z):
-				best_dir = Vector3(sign(cam_dir.x), 0, 0)
-			else:
-				best_dir = Vector3(0, 0, sign(cam_dir.z))
-			var side_pos = Vector3(break_pos) + best_dir
-			var side_type = world_manager.get_block_at_position(side_pos)
-			if (side_type == BlockRegistry.BlockType.AIR or side_type == BlockRegistry.BlockType.WATER) and side_pos != player_feet and side_pos != player_head:
-				place_pos = side_pos
+			var cam_forward = -camera.global_basis.z
+			var cam_h = Vector3(cam_forward.x, 0, cam_forward.z).normalized()
+			# Tester les 4 directions, scorer par alignement avec le regard
+			var candidates: Array = [
+				Vector3(1, 0, 0), Vector3(-1, 0, 0),
+				Vector3(0, 0, 1), Vector3(0, 0, -1),
+			]
+			var best_score = -2.0
+			var best_pos = Vector3(-9999, -9999, -9999)
+			for dir in candidates:
+				var test_pos = Vector3(break_pos) + dir
+				var test_type = world_manager.get_block_at_position(test_pos)
+				if test_pos == player_feet or test_pos == player_head:
+					continue
+				if test_type != BlockRegistry.BlockType.AIR and test_type != BlockRegistry.BlockType.WATER and not BlockRegistry.is_cross_mesh(test_type):
+					continue
+				var score = cam_h.dot(dir)
+				if score > best_score:
+					best_score = score
+					best_pos = test_pos
+			if best_pos.x > -9000:
+				place_pos = best_pos
 
 		var place_block_type = world_manager.get_block_at_position(place_pos)
 		var is_flora = BlockRegistry.is_cross_mesh(place_block_type)
