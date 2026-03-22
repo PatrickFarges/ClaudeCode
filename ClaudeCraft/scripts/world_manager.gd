@@ -191,56 +191,97 @@ func _ready():
 	player = get_tree().get_first_node_in_group("player")
 
 	if player:
-		# Trouver un spawn terrestre (evite les oceans)
-		_ensure_land_spawn()
+		# Phase 1 : trouver les coordonnees XZ terrestres (noise, instantane)
+		_find_land_spawn_xz()
+		# Mettre le joueur en hauteur et invisible pendant le chargement
+		player.global_position.y = 200.0
+		player.set_physics_process(false)
+		player.visible = false
+		_spawn_pending = true
 		last_player_chunk = _world_to_chunk(player.global_position)
 		_update_chunks()
 
-func _ensure_land_spawn():
-	"""Repositionne le joueur sur terre ferme (pas ocean, plage basse, riviere)."""
+# === SPAWN ROBUSTE ===
+var _spawn_pending: bool = false
+
+func _find_land_spawn_xz():
+	"""Phase 1 : trouver des coordonnees XZ sur terre ferme via noise (instantane)."""
 	if not chunk_generator or not player:
-		print("WorldManager: _ensure_land_spawn SKIP — pas de chunk_generator ou player")
 		return
 	var px = int(player.global_position.x)
 	var pz = int(player.global_position.z)
 	var start_biome = chunk_generator.get_biome_at(px, pz)
-	print("WorldManager: spawn biome check (%d, %d) = biome %d" % [px, pz, start_biome])
 	if start_biome <= 3:
-		# Biome terrestre — toujours ajuster Y au terrain reel + marge
-		var ground_y = chunk_generator.get_height_at(px, pz) + 3
-		player.global_position.y = maxf(player.global_position.y, ground_y)
-		player.spawn_position = player.global_position
-		print("WorldManager: spawn OK (biome %d, Y=%.0f, terrain=%d)" % [start_biome, player.global_position.y, ground_y - 3])
+		print("WorldManager: spawn XZ OK (%d, %d) biome=%d" % [px, pz, start_biome])
 		return
 	# Chercher la terre la plus proche en spirale
-	print("WorldManager: spawn en eau (biome %d), recherche de terre ferme..." % start_biome)
+	print("WorldManager: spawn en eau (biome %d), recherche spirale..." % start_biome)
 	for radius in range(1, 500):
 		var steps = maxi(radius * 8, 8)
 		for step in range(steps):
 			var angle = step * TAU / steps
 			var wx = px + int(cos(angle) * radius * 8)
 			var wz = pz + int(sin(angle) * radius * 8)
-			var b = chunk_generator.get_biome_at(wx, wz)
-			if b <= 3:
-				# Verifier aussi 4 points autour pour etre sur qu'on est pas au bord de l'eau
-				var all_land = true
-				for d in [Vector2i(8, 0), Vector2i(-8, 0), Vector2i(0, 8), Vector2i(0, -8)]:
-					if chunk_generator.get_biome_at(wx + d.x, wz + d.y) > 3:
-						all_land = false
-						break
-				if all_land:
-					# Calculer la VRAIE hauteur du terrain + marge
-					var spawn_y = chunk_generator.get_height_at(wx, wz) + 3
-					player.global_position = Vector3(wx, spawn_y, wz)
-					player.spawn_position = player.global_position
-					print("WorldManager: spawn terrestre a (%d, %d, %d) biome=%d rayon=%d" % [wx, spawn_y, wz, b, radius])
-					return
-	print("WorldManager: AUCUNE terre trouvee apres 500 rayons — spawn par defaut")
+			if chunk_generator.get_biome_at(wx, wz) <= 3:
+				player.global_position.x = wx
+				player.global_position.z = wz
+				print("WorldManager: terre trouvee a (%d, %d) rayon=%d" % [wx, wz, radius])
+				return
+	print("WorldManager: pas de terre trouvee, spawn par defaut")
+
+func _finalize_spawn():
+	"""Phase 2 : une fois le chunk genere, scanner les blocs reels pour trouver le sol."""
+	var spawn_chunk = _world_to_chunk(player.global_position)
+	if not chunks.has(spawn_chunk):
+		return  # Chunk pas encore pret, on reessaie au prochain frame
+	var chunk = chunks[spawn_chunk]
+	if not chunk.is_mesh_built:
+		return  # Mesh pas encore construit
+	# Scanner du haut vers le bas pour trouver le sol solide
+	var lx = int(player.global_position.x) - spawn_chunk.x * Chunk.CHUNK_SIZE
+	var lz = int(player.global_position.z) - spawn_chunk.z * Chunk.CHUNK_SIZE
+	lx = clampi(lx, 1, Chunk.CHUNK_SIZE - 2)
+	lz = clampi(lz, 1, Chunk.CHUNK_SIZE - 2)
+	var offset = lx * Chunk.CHUNK_SIZE * Chunk.CHUNK_HEIGHT + lz * Chunk.CHUNK_HEIGHT
+	for y in range(Chunk.CHUNK_HEIGHT - 1, 0, -1):
+		var bt = chunk.blocks[offset + y]
+		if bt == 0 or bt == BlockRegistry.BlockType.WATER:
+			continue
+		# Ignorer feuilles, troncs, vegetation, torches
+		if bt == BlockRegistry.BlockType.LEAVES or bt == BlockRegistry.BlockType.WOOD:
+			continue
+		if bt >= BlockRegistry.BlockType.SPRUCE_LOG and bt <= BlockRegistry.BlockType.CHERRY_LEAVES:
+			continue
+		if bt >= 98 and bt <= 103:  # Cross-mesh vegetation
+			continue
+		if bt == BlockRegistry.BlockType.TORCH or bt == BlockRegistry.BlockType.LANTERN:
+			continue
+		# Sol solide trouve !
+		var spawn_y = y + 1
+		player.global_position.y = spawn_y
+		player.spawn_position = player.global_position
+		player.set_physics_process(true)
+		player.visible = true
+		_spawn_pending = false
+		print("WorldManager: SPAWN FINAL a (%d, %d, %d) bloc=%d" % [
+			int(player.global_position.x), spawn_y, int(player.global_position.z), bt])
+		return
+	# Aucun sol trouve (chunk vide?) — fallback
+	player.global_position.y = 80
+	player.spawn_position = player.global_position
+	player.set_physics_process(true)
+	player.visible = true
+	_spawn_pending = false
+	print("WorldManager: SPAWN fallback Y=80 (pas de sol dans le chunk)")
 
 func _process(_delta):
 	# Instancier les chunks en attente (max 2/frame)
 	if _pending_chunk_data.size() > 0:
 		_process_pending_chunks()
+
+	# Spawn en attente — verifier si le chunk est pret
+	if _spawn_pending:
+		_finalize_spawn()
 
 	# Collision différée : créer/supprimer selon distance joueur (1/frame)
 	if player:
