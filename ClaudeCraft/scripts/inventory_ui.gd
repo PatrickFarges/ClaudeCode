@@ -1,4 +1,4 @@
-# inventory_ui.gd v2.0.0
+# inventory_ui.gd v2.1.0
 # Inventaire style Minecraft avec texture Faithful32 (inventory.png)
 # Ouvert avec I — affiche tous les blocs disponibles dans une grille MC
 
@@ -172,6 +172,35 @@ func _build_ui():
 		tex_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(tex_rect)
 
+		# Fond semi-transparent pour le nom (meilleure lisibilite)
+		var name_bg = ColorRect.new()
+		name_bg.set_anchors_preset(Control.PRESET_CENTER)
+		name_bg.offset_left = pos.x + 1
+		name_bg.offset_right = pos.x + slot_px - 1
+		name_bg.offset_top = pos.y + 1
+		name_bg.offset_bottom = pos.y + slot_px - 1
+		name_bg.color = Color(0, 0, 0, 0.45)
+		name_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(name_bg)
+
+		# Nom de l'item (affiche directement sur le slot)
+		var name_label = Label.new()
+		name_label.set_anchors_preset(Control.PRESET_CENTER)
+		name_label.offset_left = pos.x + 2
+		name_label.offset_right = pos.x + slot_px - 2
+		name_label.offset_top = pos.y + 2
+		name_label.offset_bottom = pos.y + slot_px - 2
+		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		name_label.add_theme_font_size_override("font_size", 9)
+		name_label.add_theme_color_override("font_color", Color.WHITE)
+		name_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 1))
+		name_label.add_theme_constant_override("shadow_offset_x", 1)
+		name_label.add_theme_constant_override("shadow_offset_y", 1)
+		name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(name_label)
+
 		var count_label = Label.new()
 		count_label.set_anchors_preset(Control.PRESET_CENTER)
 		count_label.offset_left = pos.x + slot_px - 30 * GUI_SCALE
@@ -190,6 +219,8 @@ func _build_ui():
 		_slot_buttons.append({
 			"button": btn,
 			"tex_rect": tex_rect,
+			"name_bg": name_bg,
+			"name_label": name_label,
 			"count_label": count_label,
 			"block_type": block_type,
 		})
@@ -239,6 +270,15 @@ func _refresh_slots():
 		slot["tex_rect"].texture = tex
 		slot["tex_rect"].modulate = Color.WHITE if count > 0 else Color(0.4, 0.4, 0.4, 0.6)
 		slot["count_label"].text = str(count) if count > 0 else ""
+		# Nom de l'item sur le slot
+		var block_name = BlockRegistry.get_block_name(bt)
+		slot["name_label"].text = block_name
+		if count > 0:
+			slot["name_bg"].color = Color(0, 0, 0, 0.45)
+			slot["name_label"].add_theme_color_override("font_color", Color.WHITE)
+		else:
+			slot["name_bg"].color = Color(0, 0, 0, 0.3)
+			slot["name_label"].add_theme_color_override("font_color", Color(0.6, 0.6, 0.6, 0.6))
 
 func open_inventory():
 	is_open = true
