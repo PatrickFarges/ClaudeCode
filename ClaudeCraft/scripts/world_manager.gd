@@ -751,13 +751,16 @@ func _try_spawn_passive_mobs_in_chunk(chunk_pos: Vector3i, blocks: PackedByteArr
 	if mob_list.is_empty():
 		return
 
-	# Filter to only non-hostile during day, or include hostile at night
+	# Filter to only non-hostile during day, exclude aquatic mobs (needs_water)
 	var filtered: Array = []
 	for mid in mob_list:
 		var mdata = PassiveMob.get_mob_data(mid)
 		var beh = mdata.get("behavior", "passive")
 		if is_day and (beh == "hostile" or beh == "boss"):
 			continue  # No hostile mobs during day
+		var special: Array = mdata.get("special", [])
+		if "needs_water" in special:
+			continue  # Aquatic mobs — pas de spawn terrestre
 		filtered.append(mid)
 	if filtered.is_empty():
 		return
@@ -840,13 +843,15 @@ func _try_spawn_mobs():
 		var biome = _get_biome_at_chunk(spawn_chunk)
 		# Get night mobs for this biome — includes hostile mobs
 		var night_mobs: Array = PassiveMob.BIOME_NIGHT_MOBS.get(biome, [])
-		# Filter to hostile-only
+		# Filter to hostile-only, exclude aquatic
 		var hostile_list: Array = []
 		for mid in night_mobs:
 			var mdata = PassiveMob.get_mob_data(mid)
+			var special: Array = mdata.get("special", [])
+			if "needs_water" in special:
+				continue
 			var beh = mdata.get("behavior", "passive")
 			if beh == "hostile" or beh == "neutral":
-				# Neutral mobs that spawn at night (enderman) — include them
 				var spawn_time = mdata.get("spawn_time", "day")
 				if spawn_time == "night" or spawn_time == "both":
 					hostile_list.append(mid)
