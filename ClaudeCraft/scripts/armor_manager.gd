@@ -70,6 +70,7 @@ const ARMOR_NODE_PREFIX = "armor_"
 static var _mesh_cache: Dictionary = {}      # piece_name -> ArrayMesh
 static var _tex_cache: Dictionary = {}       # path -> ImageTexture
 static var _mat_cache: Dictionary = {}       # "material_layer" -> StandardMaterial3D
+static var _skin_cache: Skin = null          # Skin du modele Steve (partagee)
 
 
 # === API PUBLIQUE ===
@@ -87,16 +88,22 @@ static func equip(skeleton: Skeleton3D, piece_name: String, armor_material: Stri
 	var mesh = _get_or_create_mesh(skeleton, piece_name)
 	if not mesh:
 		return
+	# Recuperer le Skin du modele Steve existant (necessaire pour le skinning GPU)
+	var skin = _get_or_create_skin(skeleton)
+	if not skin:
+		push_warning("ArmorManager: impossible de trouver/creer un Skin pour le skeleton")
+		return
 	# Creer le MeshInstance3D
 	var mi = MeshInstance3D.new()
 	mi.name = ARMOR_NODE_PREFIX + piece_name
 	mi.mesh = mesh
+	mi.skin = skin
 	# Materiau avec la texture d'armure
 	var layer = ARMOR_PIECES[piece_name]["layer"]
 	var mat = _get_or_create_material(armor_material, layer)
 	if mat:
 		mi.set_surface_override_material(0, mat)
-	# Ajouter comme enfant du Skeleton3D — le skinning GPU est automatique
+	# Ajouter comme enfant du Skeleton3D — le skinning GPU suit les animations
 	skeleton.add_child(mi)
 
 
@@ -127,6 +134,25 @@ static func get_equipped_pieces(skeleton: Skeleton3D) -> Array:
 		if has_piece(skeleton, piece_name):
 			result.append(piece_name)
 	return result
+
+
+# === SKIN ===
+
+static func _get_or_create_skin(skeleton: Skeleton3D) -> Skin:
+	if _skin_cache:
+		return _skin_cache
+	# Chercher le Skin existant dans les MeshInstance3D enfants du Skeleton
+	for child in skeleton.get_children():
+		if child is MeshInstance3D and child.skin:
+			_skin_cache = child.skin
+			return _skin_cache
+	# Fallback : creer un Skin programmatiquement
+	var skin = Skin.new()
+	for i in range(skeleton.get_bone_count()):
+		skin.add_bind(i, skeleton.get_bone_rest(i).affine_inverse())
+		skin.set_bind_name(i, skeleton.get_bone_name(i))
+	_skin_cache = skin
+	return skin
 
 
 # === GENERATION MESH ===
