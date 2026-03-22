@@ -197,36 +197,30 @@ func _ready():
 		_update_chunks()
 
 func _ensure_land_spawn():
-	"""Repositionne le joueur sur terre si le spawn est en ocean."""
+	"""Repositionne le joueur sur terre ferme (pas ocean, plage basse, riviere)."""
 	if not chunk_generator or not player:
 		return
 	var px = int(player.global_position.x)
 	var pz = int(player.global_position.z)
-	var biome = chunk_generator.get_biome_at(px, pz)
-	if biome != 4:  # Pas ocean, spawn OK
+	if _is_safe_spawn(px, pz):
 		return
 	# Chercher la terre la plus proche en spirale
-	print("WorldManager: spawn en ocean, recherche de terre...")
-	for radius in range(1, 200):
-		for dx in range(-radius, radius + 1, 4):
-			for dz in [-radius, radius]:
-				var wx = px + dx * 16
-				var wz = pz + dz * 16
-				if chunk_generator.get_biome_at(wx, wz) not in [4, 6]:  # Pas ocean/riviere
-					player.global_position = Vector3(wx, 80, wz)
-					player.spawn_position = player.global_position
-					print("WorldManager: spawn terrestre trouve a (%d, 80, %d)" % [wx, wz])
-					return
-			for dz in range(-radius + 1, radius):
-				for dx2 in [-radius, radius]:
-					var wx = px + dx2 * 16
-					var wz = pz + dz * 16
-					if chunk_generator.get_biome_at(wx, wz) < 4:
-						player.global_position = Vector3(wx, 80, wz)
-						player.spawn_position = player.global_position
-						print("WorldManager: spawn terrestre trouve a (%d, 80, %d)" % [wx, wz])
-						return
-	print("WorldManager: AUCUNE terre trouvee, spawn par defaut")
+	print("WorldManager: spawn en eau, recherche de terre ferme...")
+	for radius in range(1, 300):
+		for step in range(radius * 8):
+			var angle = step * TAU / (radius * 8)
+			var wx = px + int(cos(angle) * radius * 16)
+			var wz = pz + int(sin(angle) * radius * 16)
+			if _is_safe_spawn(wx, wz):
+				player.global_position = Vector3(wx, 80, wz)
+				player.spawn_position = player.global_position
+				print("WorldManager: spawn terrestre a (%d, 80, %d)" % [wx, wz])
+				return
+	print("WorldManager: AUCUNE terre trouvee — spawn par defaut")
+
+func _is_safe_spawn(wx: int, wz: int) -> bool:
+	var biome = chunk_generator.get_biome_at(wx, wz)
+	return biome <= 3  # 0=desert, 1=forest, 2=mountain, 3=plains
 
 func _process(_delta):
 	# Instancier les chunks en attente (max 2/frame)

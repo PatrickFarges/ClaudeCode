@@ -51,6 +51,19 @@ var _armor_cycle_index: int = 0
 # Boussole HUD
 var _compass_label: Label = null
 
+# Effet sous l'eau
+var _water_overlay: ColorRect = null
+var _water_canvas: CanvasLayer = null
+var _was_in_water: bool = false
+var _underwater_player: AudioStreamPlayer = null
+var _swim_timer: float = 0.0
+const SWIM_SOUND_INTERVAL = 0.8
+var _drown_timer: float = 0.0
+const DROWN_TIME = 15.0  # secondes avant de commencer a se noyer
+const DROWN_DAMAGE_INTERVAL = 1.0
+var _drown_damage_timer: float = 0.0
+var _air_supply: float = 15.0  # secondes d'air restantes
+
 # ============================================================
 # INVENTAIRE
 # ============================================================
@@ -177,6 +190,7 @@ func _ready():
 	# Modèle 3e personne chargé en différé
 	call_deferred("_create_player_model")
 	_create_compass()
+	_create_water_overlay()
 	
 	await get_tree().process_frame
 	inventory_ui = get_tree().get_first_node_in_group("inventory_ui")
@@ -741,6 +755,98 @@ func _update_compass():
 			bar += "  %s  " % d
 	_compass_label.text = bar
 
+func _create_water_overlay():
+	_water_canvas = CanvasLayer.new()
+	_water_canvas.layer = 5
+	add_child(_water_canvas)
+	_water_overlay = ColorRect.new()
+	_water_overlay.color = Color(0.05, 0.15, 0.4, 0.45)
+	_water_overlay.anchor_right = 1.0
+	_water_overlay.anchor_bottom = 1.0
+	_water_overlay.visible = false
+	_water_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_water_canvas.add_child(_water_overlay)
+	# Son ambiant sous-marin (loop)
+	_underwater_player = AudioStreamPlayer.new()
+	var water_snd = load("res://assets/Audio/Minecraft/liquid/water.mp3")
+	if water_snd:
+		_underwater_player.stream = water_snd
+		_underwater_player.volume_db = -8.0
+	add_child(_underwater_player)
+
+func _update_underwater(delta: float):
+	var head_underwater = false
+	if world_manager:
+		var head_pos = (global_position + Vector3(0, 1.5, 0)).floor()
+		head_underwater = world_manager.get_block_at_position(head_pos) == BlockRegistry.BlockType.WATER
+
+	if head_underwater:
+		_water_overlay.visible = true
+		# Son ambiant
+		if not _underwater_player.playing:
+			_underwater_player.play()
+		# Reduire le fog de la camera pour effet murky
+		if camera:
+			camera.attributes = null  # Reset
+			var env = get_viewport().world_3d.environment
+			if env:
+				env.fog_enabled = true
+				env.fog_light_color = Color(0.05, 0.15, 0.35)
+				env.fog_density = 0.08
+				env.fog_sky_affect = 0.0
+		# Son de nage quand on bouge
+		if velocity.length() > 1.0:
+			_swim_timer += delta
+			if _swim_timer >= SWIM_SOUND_INTERVAL:
+				_swim_timer = 0.0
+				_play_swim_sound()
+		# Noyade — timer d'air
+		_air_supply -= delta
+		if _air_supply <= 0.0:
+			_drown_damage_timer += delta
+			if _drown_damage_timer >= DROWN_DAMAGE_INTERVAL:
+				_drown_damage_timer = 0.0
+				take_damage(2)
+		# Splash a l'entree dans l'eau
+		if not _was_in_water:
+			_play_splash_sound()
+	else:
+		_water_overlay.visible = false
+		_air_supply = DROWN_TIME  # Reset air
+		_drown_damage_timer = 0.0
+		_swim_timer = 0.0
+		if _underwater_player.playing:
+			_underwater_player.stop()
+		# Restaurer le fog normal
+		var env = get_viewport().world_3d.environment
+		if env and env.fog_density > 0.01:
+			env.fog_enabled = false
+			env.fog_density = 0.0
+	_was_in_water = head_underwater
+
+func _play_swim_sound():
+	var idx = randi_range(1, 18)
+	var path = "res://assets/Audio/Minecraft/liquid/swim%d.mp3" % idx
+	var snd = load(path)
+	if snd:
+		var asp = AudioStreamPlayer.new()
+		asp.stream = snd
+		asp.volume_db = -12.0
+		add_child(asp)
+		asp.play()
+		asp.finished.connect(asp.queue_free)
+
+func _play_splash_sound():
+	var path = "res://assets/Audio/Minecraft/liquid/splash.mp3"
+	var snd = load(path)
+	if snd:
+		var asp = AudioStreamPlayer.new()
+		asp.stream = snd
+		asp.volume_db = -6.0
+		add_child(asp)
+		asp.play()
+		asp.finished.connect(asp.queue_free)
+
 func _physics_process(delta):
 	_update_compass()
 	# Gestion de la mort
@@ -760,6 +866,9 @@ func _physics_process(delta):
 		var head_block = world_manager.get_block_at_position(head_pos)
 		in_water = feet_block == BlockRegistry.BlockType.WATER or head_block == BlockRegistry.BlockType.WATER
 		on_ladder = feet_block == BlockRegistry.BlockType.LADDER or head_block == BlockRegistry.BlockType.LADDER
+
+	# Effet visuel + sonore sous l'eau + noyade
+	_update_underwater(delta)
 
 	# Sécurité : si le joueur tombe sous le monde, le remonter en surface
 	if global_position.y < -20.0:
