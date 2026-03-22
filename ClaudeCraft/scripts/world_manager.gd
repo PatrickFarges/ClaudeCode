@@ -199,28 +199,37 @@ func _ready():
 func _ensure_land_spawn():
 	"""Repositionne le joueur sur terre ferme (pas ocean, plage basse, riviere)."""
 	if not chunk_generator or not player:
+		print("WorldManager: _ensure_land_spawn SKIP — pas de chunk_generator ou player")
 		return
 	var px = int(player.global_position.x)
 	var pz = int(player.global_position.z)
-	if _is_safe_spawn(px, pz):
+	var start_biome = chunk_generator.get_biome_at(px, pz)
+	print("WorldManager: spawn biome check (%d, %d) = biome %d" % [px, pz, start_biome])
+	if start_biome <= 3:
+		print("WorldManager: spawn OK (biome terrestre %d)" % start_biome)
 		return
 	# Chercher la terre la plus proche en spirale
-	print("WorldManager: spawn en eau, recherche de terre ferme...")
-	for radius in range(1, 300):
-		for step in range(radius * 8):
-			var angle = step * TAU / (radius * 8)
-			var wx = px + int(cos(angle) * radius * 16)
-			var wz = pz + int(sin(angle) * radius * 16)
-			if _is_safe_spawn(wx, wz):
-				player.global_position = Vector3(wx, 80, wz)
-				player.spawn_position = player.global_position
-				print("WorldManager: spawn terrestre a (%d, 80, %d)" % [wx, wz])
-				return
-	print("WorldManager: AUCUNE terre trouvee — spawn par defaut")
-
-func _is_safe_spawn(wx: int, wz: int) -> bool:
-	var biome = chunk_generator.get_biome_at(wx, wz)
-	return biome <= 3  # 0=desert, 1=forest, 2=mountain, 3=plains
+	print("WorldManager: spawn en eau (biome %d), recherche de terre ferme..." % start_biome)
+	for radius in range(1, 500):
+		var steps = maxi(radius * 8, 8)
+		for step in range(steps):
+			var angle = step * TAU / steps
+			var wx = px + int(cos(angle) * radius * 8)
+			var wz = pz + int(sin(angle) * radius * 8)
+			var b = chunk_generator.get_biome_at(wx, wz)
+			if b <= 3:
+				# Verifier aussi 4 points autour pour etre sur qu'on est pas au bord de l'eau
+				var all_land = true
+				for d in [Vector2i(8, 0), Vector2i(-8, 0), Vector2i(0, 8), Vector2i(0, -8)]:
+					if chunk_generator.get_biome_at(wx + d.x, wz + d.y) > 3:
+						all_land = false
+						break
+				if all_land:
+					player.global_position = Vector3(wx, 80, wz)
+					player.spawn_position = player.global_position
+					print("WorldManager: spawn terrestre a (%d, 80, %d) biome=%d rayon=%d" % [wx, wz, b, radius])
+					return
+	print("WorldManager: AUCUNE terre trouvee apres 500 rayons — spawn par defaut")
 
 func _process(_delta):
 	# Instancier les chunks en attente (max 2/frame)

@@ -1003,7 +1003,7 @@ func _handle_block_interaction(delta: float):
 
 	var break_block_type = world_manager.get_block_at_position(break_pos)
 	look_block_type = break_block_type
-	var can_break = break_block_type != BlockRegistry.BlockType.AIR and break_block_type != BlockRegistry.BlockType.WATER and (BlockRegistry.is_solid(break_block_type) or break_block_type == BlockRegistry.BlockType.TORCH or break_block_type == BlockRegistry.BlockType.LANTERN)
+	var can_break = break_block_type != BlockRegistry.BlockType.AIR and break_block_type != BlockRegistry.BlockType.WATER and (BlockRegistry.is_solid(break_block_type) or break_block_type == BlockRegistry.BlockType.TORCH or break_block_type == BlockRegistry.BlockType.LANTERN or BlockRegistry.is_cross_mesh(break_block_type))
 	
 	# Highlighter
 	if block_highlighter and can_break:
@@ -1167,7 +1167,19 @@ func _break_block(pos: Vector3, block_type: BlockRegistry.BlockType):
 	var is_door = BlockRegistry.is_door(block_type)
 	world_manager.break_block_at_position(pos)
 	if not is_door:
-		_add_to_inventory(block_type)
+		# Drops speciaux pour la vegetation cross-mesh (comme Minecraft)
+		if block_type == BlockRegistry.BlockType.SHORT_GRASS or block_type == BlockRegistry.BlockType.FERN:
+			# 12.5% de chance de dropper des graines de ble
+			if randf() < 0.125:
+				_add_to_inventory(BlockRegistry.BlockType.WHEAT_ITEM)
+			# Sinon : rien (l'herbe disparait)
+		elif block_type == BlockRegistry.BlockType.DEAD_BUSH:
+			pass  # Buisson mort ne donne rien
+		elif BlockRegistry.is_cross_mesh(block_type):
+			# Fleurs : droppent elles-memes (pissenlit, coquelicot, bleuet)
+			_add_to_inventory(block_type)
+		else:
+			_add_to_inventory(block_type)
 	_spawn_break_particles(pos, block_type)
 	if audio_manager:
 		audio_manager.play_break_sound(block_type, pos)
