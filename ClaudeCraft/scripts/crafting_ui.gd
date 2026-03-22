@@ -21,6 +21,7 @@ var _title_label: Label = null
 var _station_label: Label = null
 var _grid_slots: Array = []       # 9 TextureRect pour la grille 3x3
 var _grid_count_labels: Array = [] # 9 Labels compteurs pour la grille
+var _grid_hover_buttons: Array = [] # 9 Buttons invisibles pour hover grille
 var _output_slot: TextureRect = null
 var _output_count_label: Label = null
 var _recipe_buttons: Array = []   # boutons dans les slots inventaire
@@ -119,6 +120,7 @@ func _build_ui():
 
 	# Grille craft 3x3 (affichage seulement — montre les ingredients de la recette selectionnee)
 	_grid_count_labels = []
+	_grid_hover_buttons = []
 	for r in range(3):
 		for c in range(3):
 			var sx = tex_left + (CRAFT_GRID_X + c * CRAFT_SLOT_STEP) * GUI_SCALE
@@ -135,6 +137,19 @@ func _build_ui():
 			tex_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			add_child(tex_rect)
 			_grid_slots.append(tex_rect)
+			# Bouton invisible pour capter le hover sur le slot de la grille
+			var grid_btn = Button.new()
+			grid_btn.set_anchors_preset(Control.PRESET_CENTER)
+			grid_btn.offset_left = sx
+			grid_btn.offset_right = sx + slot_px
+			grid_btn.offset_top = sy
+			grid_btn.offset_bottom = sy + slot_px
+			grid_btn.flat = true
+			var grid_idx = r * 3 + c
+			grid_btn.mouse_entered.connect(_on_grid_hover.bind(grid_idx))
+			grid_btn.mouse_exited.connect(_on_slot_unhover)
+			add_child(grid_btn)
+			_grid_hover_buttons.append(grid_btn)
 			# Label compteur (ex: "x4" en bas a droite du slot)
 			var grid_count = Label.new()
 			grid_count.set_anchors_preset(Control.PRESET_CENTER)
@@ -332,6 +347,20 @@ func _build_ui():
 		var btn = _recipe_buttons[i]["button"]
 		btn.mouse_entered.connect(_on_recipe_hover.bind(i))
 		btn.mouse_exited.connect(_on_slot_unhover)
+
+func _on_grid_hover(grid_index: int):
+	if _selected_recipe.is_empty():
+		return
+	var inputs: Array = _selected_recipe.get("inputs", [])
+	if grid_index < inputs.size():
+		var block_type = inputs[grid_index][0]
+		var count = inputs[grid_index][1]
+		var have = player.get_inventory_count(block_type) if player else 0
+		var name = BlockRegistry.get_block_name(block_type)
+		_tooltip_label.text = "%s (%d/%d)" % [name, min(have, count), count]
+		_tooltip_label.visible = true
+	else:
+		_tooltip_label.visible = false
 
 func _on_recipe_hover(index: int):
 	if index < _recipe_buttons.size():
