@@ -1,16 +1,17 @@
-# armor_manager.gd v1.0.0
-# Systeme d'armures in-game — genere des mesh overlay skinnes au Skeleton3D Steve
-# Supporte 5 materiaux (leather, chain, iron, gold, diamond) x 4 pieces (helmet, chestplate, leggings, boots)
+# armor_manager.gd v2.0.0
+# Systeme d'armures in-game via BoneAttachment3D
+# Chaque cube d'armure est attache a son bone — suit les animations automatiquement
 #
 # Usage:
-#   ArmorManager.equip(skeleton, "helmet", "iron")
-#   ArmorManager.equip_set(skeleton, "diamond")
-#   ArmorManager.unequip(skeleton, "chestplate")
-#   ArmorManager.unequip_all(skeleton)
+#   ArmorMgr.equip(skeleton, "helmet", "iron")
+#   ArmorMgr.equip_set(skeleton, "diamond")
+#   ArmorMgr.unequip(skeleton, "chestplate")
+#   ArmorMgr.unequip_all(skeleton)
 #
 # Changelog:
-#   v1.0.0 — Creation initiale : mesh d'armure generes via ArrayMesh,
-#            skinning GPU automatique via Skeleton3D, cache mesh/textures
+#   v2.0.0 — Refonte BoneAttachment3D : chaque cube est un MeshInstance3D
+#            enfant d'un BoneAttachment3D, suit les animations sans Skin
+#   v1.0.0 — Creation initiale (ArrayMesh + Skin — skinning non fonctionnel)
 
 class_name ArmorManager
 
@@ -63,14 +64,12 @@ const ARMOR_PIECES = {
 	},
 }
 
-# Node name prefix pour identifier les MeshInstance3D d'armure
-const ARMOR_NODE_PREFIX = "armor_"
+# Prefixe pour identifier les nodes d'armure
+const ARMOR_PREFIX = "armor_"
 
 # Cache statique
-static var _mesh_cache: Dictionary = {}      # piece_name -> ArrayMesh
 static var _tex_cache: Dictionary = {}       # path -> ImageTexture
 static var _mat_cache: Dictionary = {}       # "material_layer" -> StandardMaterial3D
-static var _skin_cache: Skin = null          # Skin du modele Steve (partagee)
 
 
 # === API PUBLIQUE ===
@@ -82,36 +81,65 @@ static func equip(skeleton: Skeleton3D, piece_name: String, armor_material: Stri
 	if not ARMOR_MATERIAL_FILES.has(armor_material):
 		push_warning("ArmorManager: materiau inconnu '%s'" % armor_material)
 		return
-	# Retirer l'ancienne piece si presente
 	unequip(skeleton, piece_name)
-	# Creer ou recuperer le mesh cache
-	var mesh = _get_or_create_mesh(skeleton, piece_name)
-	if not mesh:
-		return
-	# Recuperer le Skin du modele Steve existant (necessaire pour le skinning GPU)
-	var skin = _get_or_create_skin(skeleton)
-	if not skin:
-		push_warning("ArmorManager: impossible de trouver/creer un Skin pour le skeleton")
-		return
-	# Creer le MeshInstance3D
-	var mi = MeshInstance3D.new()
-	mi.name = ARMOR_NODE_PREFIX + piece_name
-	mi.mesh = mesh
-	mi.skin = skin
-	# Materiau avec la texture d'armure
-	var layer = ARMOR_PIECES[piece_name]["layer"]
+
+	var piece = ARMOR_PIECES[piece_name]
+	var layer: int = piece["layer"]
 	var mat = _get_or_create_material(armor_material, layer)
-	if mat:
-		mi.set_surface_override_material(0, mat)
-	# Ajouter comme enfant du Skeleton3D — le skinning GPU suit les animations
-	skeleton.add_child(mi)
+
+	for cube in piece["cubes"]:
+		var bone_name: String = cube[0]
+		var bone_idx: int = skeleton.find_bone(bone_name)
+		if bone_idx < 0:
+			push_warning("ArmorManager: bone '%s' introuvable" % bone_name)
+			continue
+
+		# Generer le mesh du cube en espace modele
+		var faces = _generate_box_faces(cube[1], cube[2], cube[3], cube[4], cube[5])
+
+		# Transformer les vertices en espace local du bone
+		var bone_global_rest: Transform3D = skeleton.get_bone_global_rest(bone_idx)
+		var inv_rest: Transform3D = bone_global_rest.affine_inverse()
+
+		var verts = PackedVector3Array()
+		var norms = PackedVector3Array()
+		var uvs = PackedVector2Array()
+		for f in faces:
+			verts.append(inv_rest * f[0])
+			norms.append(inv_rest.basis * f[1])
+			uvs.append(f[2])
+
+		var arrays = []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = verts
+		arrays[Mesh.ARRAY_NORMAL] = norms
+		arrays[Mesh.ARRAY_TEX_UV] = uvs
+
+		var mesh = ArrayMesh.new()
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+
+		# BoneAttachment3D suit le bone pendant les animations
+		var ba = BoneAttachment3D.new()
+		ba.bone_name = bone_name
+		ba.name = ARMOR_PREFIX + piece_name + "_" + bone_name
+
+		var mi = MeshInstance3D.new()
+		mi.mesh = mesh
+		if mat:
+			mi.set_surface_override_material(0, mat)
+		ba.add_child(mi)
+		skeleton.add_child(ba)
 
 
 static func unequip(skeleton: Skeleton3D, piece_name: String) -> void:
-	var node_name = ARMOR_NODE_PREFIX + piece_name
-	var existing = skeleton.get_node_or_null(node_name)
-	if existing:
-		existing.queue_free()
+	var prefix = ARMOR_PREFIX + piece_name + "_"
+	# Collecter d'abord, supprimer ensuite (evite modifier la liste pendant l'iteration)
+	var to_remove: Array = []
+	for child in skeleton.get_children():
+		if child.name.begins_with(prefix):
+			to_remove.append(child)
+	for node in to_remove:
+		node.queue_free()
 
 
 static func equip_set(skeleton: Skeleton3D, armor_material: String) -> void:
@@ -125,92 +153,11 @@ static func unequip_all(skeleton: Skeleton3D) -> void:
 
 
 static func has_piece(skeleton: Skeleton3D, piece_name: String) -> bool:
-	return skeleton.get_node_or_null(ARMOR_NODE_PREFIX + piece_name) != null
-
-
-static func get_equipped_pieces(skeleton: Skeleton3D) -> Array:
-	var result = []
-	for piece_name in ARMOR_PIECES:
-		if has_piece(skeleton, piece_name):
-			result.append(piece_name)
-	return result
-
-
-# === SKIN ===
-
-static func _get_or_create_skin(skeleton: Skeleton3D) -> Skin:
-	if _skin_cache:
-		return _skin_cache
-	# Chercher le Skin existant dans les MeshInstance3D enfants du Skeleton
+	var prefix = ARMOR_PREFIX + piece_name + "_"
 	for child in skeleton.get_children():
-		if child is MeshInstance3D and child.skin:
-			_skin_cache = child.skin
-			return _skin_cache
-	# Fallback : creer un Skin programmatiquement
-	var skin = Skin.new()
-	for i in range(skeleton.get_bone_count()):
-		skin.add_bind(i, skeleton.get_bone_rest(i).affine_inverse())
-		skin.set_bind_name(i, skeleton.get_bone_name(i))
-	_skin_cache = skin
-	return skin
-
-
-# === GENERATION MESH ===
-
-static func _get_or_create_mesh(skeleton: Skeleton3D, piece_name: String) -> ArrayMesh:
-	if _mesh_cache.has(piece_name):
-		return _mesh_cache[piece_name]
-	var mesh = _build_armor_mesh(skeleton, piece_name)
-	if mesh:
-		_mesh_cache[piece_name] = mesh
-	return mesh
-
-
-static func _build_armor_mesh(skeleton: Skeleton3D, piece_name: String) -> ArrayMesh:
-	var piece = ARMOR_PIECES[piece_name]
-	var cubes: Array = piece["cubes"]
-
-	var verts = PackedVector3Array()
-	var norms = PackedVector3Array()
-	var uvs = PackedVector2Array()
-	var bones_arr = PackedInt32Array()
-	var weights_arr = PackedFloat32Array()
-
-	for cube in cubes:
-		var bone_name: String = cube[0]
-		var origin: Array = cube[1]
-		var size: Array = cube[2]
-		var uv_offset: Array = cube[3]
-		var inflate: float = cube[4]
-		var mirror: bool = cube[5]
-
-		var bone_idx = skeleton.find_bone(bone_name)
-		if bone_idx < 0:
-			push_warning("ArmorManager: bone '%s' introuvable dans le skeleton" % bone_name)
-			continue
-
-		var faces = _generate_box_faces(origin, size, uv_offset, inflate, mirror)
-		for f in faces:
-			verts.append(f[0])
-			norms.append(f[1])
-			uvs.append(f[2])
-			bones_arr.append_array(PackedInt32Array([bone_idx, 0, 0, 0]))
-			weights_arr.append_array(PackedFloat32Array([1.0, 0.0, 0.0, 0.0]))
-
-	if verts.is_empty():
-		return null
-
-	var arrays = []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = verts
-	arrays[Mesh.ARRAY_NORMAL] = norms
-	arrays[Mesh.ARRAY_TEX_UV] = uvs
-	arrays[Mesh.ARRAY_BONES] = bones_arr
-	arrays[Mesh.ARRAY_WEIGHTS] = weights_arr
-
-	var mesh = ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	return mesh
+		if child.name.begins_with(prefix):
+			return true
+	return false
 
 
 # === GENERATION BOX FACES (meme algorithme que character_viewer.py) ===
@@ -226,7 +173,6 @@ static func _generate_box_faces(origin: Array, size: Array, uv_offset: Array, in
 	var v0: float = uv_offset[1]
 	var S: float = BEDROCK_SCALE
 
-	# Coins du box inflates en espace GLB
 	var x0: float = (ox - inflate) * S
 	var y0: float = (oy - inflate) * S
 	var z0: float = (oz - inflate) * S
@@ -238,32 +184,18 @@ static func _generate_box_faces(origin: Array, size: Array, uv_offset: Array, in
 	var th: float = ARMOR_TEX_H
 	var result: Array = []
 
-	# Bedrock box UV layout (depuis uv_offset [u0, v0], taille box [w, h, d]):
-	# Top:    (u0+d, v0)          taille w x d
-	# Bottom: (u0+d+w, v0)        taille w x d
-	# Left:   (u0, v0+d)          taille d x h
-	# Front:  (u0+d, v0+d)        taille w x h
-	# Right:  (u0+d+w, v0+d)      taille d x h
-	# Back:   (u0+d+w+d, v0+d)    taille w x h
-
-	# [p0, p1, p2, p3, normal, face_u, face_v, face_w, face_h]
+	# Bedrock box UV layout
 	var faces: Array = [
-		# Front (-Z)
 		[Vector3(x0,y0,z0), Vector3(x1,y0,z0), Vector3(x1,y1,z0), Vector3(x0,y1,z0),
 		 Vector3(0,0,-1), u0+d, v0+d, w, h],
-		# Back (+Z)
 		[Vector3(x1,y0,z1), Vector3(x0,y0,z1), Vector3(x0,y1,z1), Vector3(x1,y1,z1),
 		 Vector3(0,0,1), u0+d+w+d, v0+d, w, h],
-		# Right (+X)
 		[Vector3(x1,y0,z0), Vector3(x1,y0,z1), Vector3(x1,y1,z1), Vector3(x1,y1,z0),
 		 Vector3(1,0,0), u0+d+w, v0+d, d, h],
-		# Left (-X)
 		[Vector3(x0,y0,z1), Vector3(x0,y0,z0), Vector3(x0,y1,z0), Vector3(x0,y1,z1),
 		 Vector3(-1,0,0), u0, v0+d, d, h],
-		# Top (+Y)
 		[Vector3(x0,y1,z0), Vector3(x1,y1,z0), Vector3(x1,y1,z1), Vector3(x0,y1,z1),
 		 Vector3(0,1,0), u0+d, v0, w, d],
-		# Bottom (-Y)
 		[Vector3(x0,y0,z1), Vector3(x1,y0,z1), Vector3(x1,y0,z0), Vector3(x0,y0,z0),
 		 Vector3(0,-1,0), u0+d+w, v0, w, d],
 	]
@@ -285,11 +217,9 @@ static func _generate_box_faces(origin: Array, size: Array, uv_offset: Array, in
 		var uv3 = Vector2(fu / tw, fv / th)
 
 		if mirror:
-			# Flip UVs horizontalement (swap 0<->1 et 2<->3)
 			var tmp = uv0; uv0 = uv1; uv1 = tmp
 			tmp = uv2; uv2 = uv3; uv3 = tmp
 
-		# Deux triangles: 0-1-2 et 0-2-3
 		var quad_verts = [p0, p1, p2, p3]
 		var quad_uvs = [uv0, uv1, uv2, uv3]
 		for idx in [0, 1, 2, 0, 2, 3]:
@@ -304,15 +234,13 @@ static func _get_or_create_material(armor_material: String, layer: int) -> Stand
 	var key = "%s_%d" % [armor_material, layer]
 	if _mat_cache.has(key):
 		return _mat_cache[key].duplicate() as StandardMaterial3D
-	# Charger la texture
 	var files = ARMOR_MATERIAL_FILES[armor_material]
-	var tex_file = files[layer - 1]  # layer 1 = index 0, layer 2 = index 1
+	var tex_file = files[layer - 1]
 	var tex_path = ARMOR_DIR + tex_file
 	var tex = _load_texture(tex_path)
 	if not tex:
 		push_warning("ArmorManager: texture introuvable '%s'" % tex_path)
 		return null
-	# Creer le materiau
 	var mat = StandardMaterial3D.new()
 	mat.albedo_texture = tex
 	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
@@ -322,7 +250,6 @@ static func _get_or_create_material(armor_material: String, layer: int) -> Stand
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
 	mat.metallic = 0.0
 	mat.roughness = 1.0
-	# Cache le materiau de base
 	_mat_cache[key] = mat
 	return mat.duplicate() as StandardMaterial3D
 
@@ -330,12 +257,10 @@ static func _get_or_create_material(armor_material: String, layer: int) -> Stand
 static func _load_texture(path: String) -> Texture2D:
 	if _tex_cache.has(path):
 		return _tex_cache[path]
-	# Essayer load() (Godot import)
 	var tex = load(path) as Texture2D
 	if tex:
 		_tex_cache[path] = tex
 		return tex
-	# Fallback : charger le PNG via Image
 	var img = Image.load_from_file(path)
 	if img:
 		var itex = ImageTexture.create_from_image(img)
