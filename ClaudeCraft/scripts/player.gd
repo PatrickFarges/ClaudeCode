@@ -992,8 +992,9 @@ func _handle_block_interaction(delta: float):
 	
 	var collision_point = raycast.get_collision_point()
 	var normal = raycast.get_collision_normal()
-	var break_pos = (collision_point - normal * 0.5).floor()
-	var place_pos = (collision_point + normal * 0.5).floor()
+	# Nudge le point de collision vers l'interieur du bloc pour eviter les erreurs de precision aux aretes
+	var break_pos = (collision_point - normal * 0.01).floor()
+	var place_pos = Vector3(break_pos) + normal
 
 	# Si le bloc devant la face visée est une torche/lanterne/porte, cibler ce bloc
 	var front_type = world_manager.get_block_at_position(place_pos)
@@ -1376,7 +1377,8 @@ func _get_selected_tool() -> ToolRegistry.ToolType:
 # COMBAT MÊLÉE
 # ============================================================
 func _handle_melee(delta: float):
-	if not Input.is_action_just_pressed("break_block") or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+	# is_action_pressed (pas just_pressed) = mode turbo, attaque en continu
+	if not Input.is_action_pressed("break_block") or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		return
 	if melee_cooldown > 0 or is_drawing_bow or _is_any_ui_open():
 		return
