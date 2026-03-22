@@ -212,7 +212,7 @@ func _ensure_land_spawn():
 			for dz in [-radius, radius]:
 				var wx = px + dx * 16
 				var wz = pz + dz * 16
-				if chunk_generator.get_biome_at(wx, wz) < 4:  # Terre (0-3)
+				if chunk_generator.get_biome_at(wx, wz) not in [4, 6]:  # Pas ocean/riviere
 					player.global_position = Vector3(wx, 80, wz)
 					player.spawn_position = player.global_position
 					print("WorldManager: spawn terrestre trouve a (%d, 80, %d)" % [wx, wz])

@@ -749,31 +749,32 @@ func _apply_structures(blocks: Array, chunk_pos: Vector3i) -> Vector2i:
 func _get_terrain_height(noise: float, continental: float, erosion: float, river_val: float = 1.0) -> int:
 	# Base terrain pres du niveau de la mer
 	var base = SEA_LEVEL - 2.0 + noise * 8.0
-	# Zones continentales legerement plus hautes
-	var inland = _smoothstep(0.3, 0.6, continental) * 12.0
+	# Zones continentales legerement plus hautes (seuils releves pour laisser place a l'ocean)
+	var inland = _smoothstep(0.48, 0.65, continental) * 12.0
 	# Anti-erosion : 1.0 = terrain intact (pics), 0.0 = erode/plat (vallees)
 	var anti_erosion = 1.0 - _smoothstep(0.2, 0.7, erosion)
 	# Collines — moderees en zones continentales, reduites par l'erosion
-	var hill_factor = _smoothstep(0.2, 0.5, continental) * (0.4 + 0.6 * anti_erosion)
+	var hill_factor = _smoothstep(0.4, 0.6, continental) * (0.4 + 0.6 * anti_erosion)
 	var hills = noise * 22.0 * hill_factor
 	# Montagnes — seulement en zones tres continentales avec faible erosion
-	var mountain_factor = _smoothstep(0.55, 0.85, continental) * anti_erosion
+	var mountain_factor = _smoothstep(0.65, 0.85, continental) * anti_erosion
 	var mountain_height = pow(noise, 1.5) * 100.0 * mountain_factor
 
 	# Ocean — continental bas : terrain descend sous SEA_LEVEL
-	# continental < 0.15 = ocean profond (~30 blocs sous la mer)
-	# continental 0.15-0.35 = transition cote/plateau sous-marin
-	var ocean_factor = 1.0 - _smoothstep(0.15, 0.35, continental)
+	# Simplex FBM (3 oct, gain 0.4) : valeurs typiques 0.25-0.75
+	# continental < 0.30 = ocean profond (~30 blocs sous la mer)
+	# continental 0.30-0.45 = transition cote/plateau sous-marin
+	var ocean_factor = 1.0 - _smoothstep(0.30, 0.45, continental)
 	var ocean_depth = ocean_factor * 30.0
 
 	# Rivieres — bande etroite du noise creuse sous SEA_LEVEL
-	# Seulement sur terre (continental > 0.35), pas en montagne
+	# Seulement sur terre (continental > 0.48), pas en montagne
 	var river_carve = 0.0
-	if continental > 0.35 and river_val < 0.03:
+	if continental > 0.48 and river_val < 0.03:
 		var river_strength = 1.0 - (river_val / 0.03)  # 1.0 au centre, 0.0 aux bords
 		river_strength *= river_strength  # profil parabolique (lit en V)
 		# Pas de riviere en haute montagne
-		var mountain_block = _smoothstep(0.7, 0.85, continental)
+		var mountain_block = _smoothstep(0.75, 0.85, continental)
 		river_carve = river_strength * (1.0 - mountain_block) * 8.0
 
 	var total = base + inland + hills + mountain_height - ocean_depth - river_carve
@@ -781,14 +782,14 @@ func _get_terrain_height(noise: float, continental: float, erosion: float, river
 
 # Biomes : 0=DESERT, 1=FOREST, 2=MOUNTAIN, 3=PLAINS, 4=OCEAN, 5=BEACH, 6=RIVER
 func _get_biome(temp: float, humid: float, height: int = 0, continental: float = 0.5, river_val: float = 1.0) -> int:
-	# Ocean — continental tres bas
-	if continental < 0.2:
+	# Ocean — continental bas (~25-30% du monde)
+	if continental < 0.35:
 		return 4  # OCEAN
 	# Plage — bande cotiere entre ocean et terre
-	if continental < 0.32 and height <= SEA_LEVEL + 2:
+	if continental < 0.45 and height <= SEA_LEVEL + 2:
 		return 5  # BEACH
 	# Riviere — bande etroite sur terre
-	if river_val < 0.02 and continental > 0.35 and height <= SEA_LEVEL:
+	if river_val < 0.02 and continental > 0.48 and height <= SEA_LEVEL:
 		return 6  # RIVER
 	# Haute altitude = montagne quel que soit le climat
 	if height > 110:

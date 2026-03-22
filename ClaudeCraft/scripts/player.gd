@@ -48,6 +48,9 @@ var equipped_armor: Dictionary = {}  # piece_name -> material_name
 const ARMOR_MATERIALS_CYCLE = ["", "leather", "chain", "iron", "gold", "diamond"]
 var _armor_cycle_index: int = 0
 
+# Boussole HUD
+var _compass_label: Label = null
+
 # ============================================================
 # INVENTAIRE
 # ============================================================
@@ -173,6 +176,7 @@ func _ready():
 	_update_selected_block()
 	# Modèle 3e personne chargé en différé
 	call_deferred("_create_player_model")
+	_create_compass()
 	
 	await get_tree().process_frame
 	inventory_ui = get_tree().get_first_node_in_group("inventory_ui")
@@ -695,7 +699,50 @@ func _input(event):
 			selected_slot = (selected_slot + 1) % hotbar_slots.size()
 			_update_selected_block()
 
+func _create_compass():
+	var canvas = CanvasLayer.new()
+	canvas.layer = 10
+	add_child(canvas)
+	_compass_label = Label.new()
+	_compass_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_compass_label.anchor_left = 0.5
+	_compass_label.anchor_right = 0.5
+	_compass_label.anchor_top = 0.0
+	_compass_label.anchor_bottom = 0.0
+	_compass_label.offset_left = -200
+	_compass_label.offset_right = 200
+	_compass_label.offset_top = 8
+	_compass_label.offset_bottom = 40
+	_compass_label.add_theme_font_size_override("font_size", 18)
+	_compass_label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.85))
+	_compass_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.6))
+	_compass_label.add_theme_constant_override("shadow_offset_x", 1)
+	_compass_label.add_theme_constant_override("shadow_offset_y", 1)
+	canvas.add_child(_compass_label)
+
+func _update_compass():
+	if not _compass_label:
+		return
+	# Heading : rotation Y du joueur (radians → degres, 0=Nord/-Z)
+	var yaw_deg = fmod(rad_to_deg(-rotation.y) + 360.0, 360.0)
+	# Directions cardinales
+	const DIRS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+	var idx = int(round(yaw_deg / 45.0)) % 8
+	var cardinal = DIRS[idx]
+	# Bande horizontale avec marqueurs
+	var bar = ""
+	for i in range(-3, 4):
+		var angle = fmod(yaw_deg + i * 45.0 + 360.0, 360.0)
+		var dir_idx = int(round(angle / 45.0)) % 8
+		var d = DIRS[dir_idx]
+		if i == 0:
+			bar += "[ %s ]" % d
+		else:
+			bar += "  %s  " % d
+	_compass_label.text = bar
+
 func _physics_process(delta):
+	_update_compass()
 	# Gestion de la mort
 	if is_dead:
 		respawn_timer -= delta
