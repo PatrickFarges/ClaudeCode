@@ -120,7 +120,7 @@ static func _build_spawn_tables():
 	"""Precalcule les tables de spawn par biome et heure."""
 	BIOME_DAY_MOBS.clear()
 	BIOME_NIGHT_MOBS.clear()
-	for biome_id in range(4):  # 0=desert, 1=forest, 2=mountain, 3=plains
+	for biome_id in range(7):  # 0=desert, 1=forest, 2=mountain, 3=plains, 4=ocean, 5=beach, 6=river
 		BIOME_DAY_MOBS[biome_id] = []
 		BIOME_NIGHT_MOBS[biome_id] = []
 
@@ -144,7 +144,7 @@ static func _build_spawn_tables():
 
 		for biome_id_raw in biomes:
 			var biome_id: int = int(biome_id_raw)
-			if biome_id < 0 or biome_id > 3:
+			if biome_id < 0 or biome_id > 6:
 				continue
 			if spawn_time == "day" or spawn_time == "both":
 				if mob_id not in BIOME_DAY_MOBS[biome_id]:
@@ -154,8 +154,8 @@ static func _build_spawn_tables():
 					BIOME_NIGHT_MOBS[biome_id].append(mob_id)
 
 	# Debug print
-	for b in range(4):
-		var biome_names = ["desert", "forest", "mountain", "plains"]
+	for b in range(7):
+		var biome_names = ["desert", "forest", "mountain", "plains", "ocean", "beach", "river"]
 		print("[MobSystem] %s — jour: %s | nuit: %s" % [
 			biome_names[b],
 			str(BIOME_DAY_MOBS[b]),

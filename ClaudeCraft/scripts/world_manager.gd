@@ -751,16 +751,20 @@ func _try_spawn_passive_mobs_in_chunk(chunk_pos: Vector3i, blocks: PackedByteArr
 	if mob_list.is_empty():
 		return
 
-	# Filter to only non-hostile during day, exclude aquatic mobs (needs_water)
+	# Filter mobs : aquatiques seulement en ocean/riviere, terrestres ailleurs
+	var is_water_biome = biome == 4 or biome == 6  # OCEAN ou RIVER
 	var filtered: Array = []
 	for mid in mob_list:
 		var mdata = PassiveMob.get_mob_data(mid)
 		var beh = mdata.get("behavior", "passive")
 		if is_day and (beh == "hostile" or beh == "boss"):
-			continue  # No hostile mobs during day
+			continue
 		var special: Array = mdata.get("special", [])
-		if "needs_water" in special:
-			continue  # Aquatic mobs — pas de spawn terrestre
+		var is_aquatic = "needs_water" in special
+		if is_aquatic and not is_water_biome:
+			continue  # Pas de mobs aquatiques sur terre
+		if not is_aquatic and is_water_biome:
+			continue  # Pas de mobs terrestres dans l'ocean
 		filtered.append(mid)
 	if filtered.is_empty():
 		return

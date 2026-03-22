@@ -28,6 +28,7 @@ var _structure_placements: Array = []
 var _biome_temp_noise: FastNoiseLite = null
 var _biome_humid_noise: FastNoiseLite = null
 var _biome_terrain_noise: FastNoiseLite = null
+var _biome_continental_noise: FastNoiseLite = null
 
 func set_world_seed(seed_value: int):
 	world_seed = seed_value
@@ -47,6 +48,13 @@ func set_world_seed(seed_value: int):
 	_biome_humid_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
 	_biome_humid_noise.fractal_octaves = 2
 	_biome_humid_noise.fractal_gain = 0.4
+	_biome_continental_noise = FastNoiseLite.new()
+	_biome_continental_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	_biome_continental_noise.seed = seed_base + 1111
+	_biome_continental_noise.frequency = 0.0008
+	_biome_continental_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
+	_biome_continental_noise.fractal_octaves = 3
+	_biome_continental_noise.fractal_gain = 0.4
 
 func set_structure_placements(data: Array):
 	_structure_placements = data
@@ -185,6 +193,15 @@ func _generate_chunk_data(chunk_pos: Vector3i) -> Dictionary:
 	ore_noise.seed = seed_base + 4444
 	ore_noise.frequency = 0.1
 
+	# Noise pour les rivieres — bande etroite pres de zero = lit de riviere
+	var river_noise = FastNoiseLite.new()
+	river_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	river_noise.seed = seed_base + 5555
+	river_noise.frequency = 0.002
+	river_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
+	river_noise.fractal_octaves = 3
+	river_noise.fractal_gain = 0.5
+
 	# Noise pour les variantes de pierre souterraine
 	var stone_var_noise = FastNoiseLite.new()
 	stone_var_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
@@ -230,8 +247,11 @@ func _generate_chunk_data(chunk_pos: Vector3i) -> Dictionary:
 			var t = (temp_noise.get_noise_2d(wx, wz) + 1.0) / 2.0
 			var h = (humid_noise.get_noise_2d(wx, wz) + 1.0) / 2.0
 
-			var height = _get_terrain_height(n, continental, erosion)
-			var biome = _get_biome(t, h, height)
+			# Riviere : bande etroite du noise = lit de riviere
+			var river_val = abs(river_noise.get_noise_2d(wx, wz))
+
+			var height = _get_terrain_height(n, continental, erosion, river_val)
+			var biome = _get_biome(t, h, height, continental, river_val)
 
 			heightmap[x][z] = height
 			biome_map[x][z] = biome
@@ -726,7 +746,7 @@ func _apply_structures(blocks: Array, chunk_pos: Vector3i) -> Vector2i:
 # TERRAIN
 # ============================================================
 
-func _get_terrain_height(noise: float, continental: float, erosion: float) -> int:
+func _get_terrain_height(noise: float, continental: float, erosion: float, river_val: float = 1.0) -> int:
 	# Base terrain pres du niveau de la mer
 	var base = SEA_LEVEL - 2.0 + noise * 8.0
 	# Zones continentales legerement plus hautes
@@ -739,10 +759,37 @@ func _get_terrain_height(noise: float, continental: float, erosion: float) -> in
 	# Montagnes — seulement en zones tres continentales avec faible erosion
 	var mountain_factor = _smoothstep(0.55, 0.85, continental) * anti_erosion
 	var mountain_height = pow(noise, 1.5) * 100.0 * mountain_factor
-	var total = base + inland + hills + mountain_height
+
+	# Ocean — continental bas : terrain descend sous SEA_LEVEL
+	# continental < 0.15 = ocean profond (~30 blocs sous la mer)
+	# continental 0.15-0.35 = transition cote/plateau sous-marin
+	var ocean_factor = 1.0 - _smoothstep(0.15, 0.35, continental)
+	var ocean_depth = ocean_factor * 30.0
+
+	# Rivieres — bande etroite du noise creuse sous SEA_LEVEL
+	# Seulement sur terre (continental > 0.35), pas en montagne
+	var river_carve = 0.0
+	if continental > 0.35 and river_val < 0.03:
+		var river_strength = 1.0 - (river_val / 0.03)  # 1.0 au centre, 0.0 aux bords
+		river_strength *= river_strength  # profil parabolique (lit en V)
+		# Pas de riviere en haute montagne
+		var mountain_block = _smoothstep(0.7, 0.85, continental)
+		river_carve = river_strength * (1.0 - mountain_block) * 8.0
+
+	var total = base + inland + hills + mountain_height - ocean_depth - river_carve
 	return int(clampf(total, 5.0, CHUNK_HEIGHT - 20.0))
 
-func _get_biome(temp: float, humid: float, height: int = 0) -> int:
+# Biomes : 0=DESERT, 1=FOREST, 2=MOUNTAIN, 3=PLAINS, 4=OCEAN, 5=BEACH, 6=RIVER
+func _get_biome(temp: float, humid: float, height: int = 0, continental: float = 0.5, river_val: float = 1.0) -> int:
+	# Ocean — continental tres bas
+	if continental < 0.2:
+		return 4  # OCEAN
+	# Plage — bande cotiere entre ocean et terre
+	if continental < 0.32 and height <= SEA_LEVEL + 2:
+		return 5  # BEACH
+	# Riviere — bande etroite sur terre
+	if river_val < 0.02 and continental > 0.35 and height <= SEA_LEVEL:
+		return 6  # RIVER
 	# Haute altitude = montagne quel que soit le climat
 	if height > 110:
 		return 2  # MOUNTAIN
@@ -757,10 +804,11 @@ func _get_biome(temp: float, humid: float, height: int = 0) -> int:
 
 func get_biome_at(wx: int, wz: int) -> int:
 	"""Public biome query for mob spawning (main thread safe)."""
-	if _biome_temp_noise and _biome_humid_noise:
+	if _biome_temp_noise and _biome_humid_noise and _biome_continental_noise:
 		var t = (_biome_temp_noise.get_noise_2d(wx, wz) + 1.0) / 2.0
 		var h = (_biome_humid_noise.get_noise_2d(wx, wz) + 1.0) / 2.0
-		return _get_biome(t, h)
+		var c = (_biome_continental_noise.get_noise_2d(wx, wz) + 1.0) / 2.0
+		return _get_biome(t, h, 0, c)
 	return 3  # default plains
 
 func _is_cave(x: int, y: int, z: int, n1: FastNoiseLite, n2: FastNoiseLite, n3: FastNoiseLite) -> bool:
@@ -788,16 +836,16 @@ func _get_block(y: int, surface: int, biome: int) -> int:
 		return BlockRegistry.BlockType.STONE
 
 	match biome:
-		0:
+		0:  # DESERT
 			return BlockRegistry.BlockType.SAND if depth <= 4 else BlockRegistry.BlockType.STONE
-		1:
+		1:  # FOREST
 			if depth == 1:
 				return BlockRegistry.BlockType.DARK_GRASS
 			elif depth <= 4:
 				return BlockRegistry.BlockType.DIRT
 			else:
 				return BlockRegistry.BlockType.STONE
-		2:
+		2:  # MOUNTAIN
 			if depth == 1 and surface > 130:
 				return BlockRegistry.BlockType.SNOW
 			elif depth == 1 and surface > 100:
@@ -808,11 +856,27 @@ func _get_block(y: int, surface: int, biome: int) -> int:
 				return BlockRegistry.BlockType.GRAVEL
 			else:
 				return BlockRegistry.BlockType.STONE
-		3:
+		3:  # PLAINS
 			if depth == 1:
 				return BlockRegistry.BlockType.GRASS
 			elif depth <= 4:
 				return BlockRegistry.BlockType.DIRT
+			else:
+				return BlockRegistry.BlockType.STONE
+		4:  # OCEAN — fond marin sableux + gravier
+			if depth <= 2:
+				return BlockRegistry.BlockType.SAND
+			elif depth <= 4:
+				return BlockRegistry.BlockType.GRAVEL
+			else:
+				return BlockRegistry.BlockType.STONE
+		5:  # BEACH — sable
+			return BlockRegistry.BlockType.SAND if depth <= 4 else BlockRegistry.BlockType.STONE
+		6:  # RIVER — lit de sable et argile
+			if depth <= 2:
+				return BlockRegistry.BlockType.SAND
+			elif depth <= 4:
+				return BlockRegistry.BlockType.CLAY
 			else:
 				return BlockRegistry.BlockType.STONE
 		_:
