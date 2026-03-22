@@ -980,26 +980,52 @@ func _handle_footsteps(delta: float, direction: Vector3):
 func _handle_block_interaction(delta: float):
 	if not world_manager or not raycast:
 		return
-	
+
+	# Raywalk manuel pour detecter les cross-mesh (pas de collision physique)
+	var cross_pos = _find_cross_mesh_along_ray()
+	var hitting_cross = cross_pos.x > -9000
+
 	raycast.force_raycast_update()
-	
-	if not raycast.is_colliding():
+
+	if not raycast.is_colliding() and not hitting_cross:
 		_cancel_mining()
 		look_block_type = BlockRegistry.BlockType.AIR
 		if block_highlighter:
 			block_highlighter.hide_highlight()
 		return
-	
-	var collision_point = raycast.get_collision_point()
-	var normal = raycast.get_collision_normal()
-	# Nudge le point de collision vers l'interieur du bloc pour eviter les erreurs de precision aux aretes
-	var break_pos = (collision_point - normal * 0.01).floor()
-	var place_pos = Vector3(break_pos) + normal
+
+	var break_pos: Vector3
+	var place_pos: Vector3
+
+	if hitting_cross:
+		# Cross-mesh detecte par raywalk — priorite sur le raycast
+		var ray_dist_cross = camera.global_position.distance_to(cross_pos + Vector3(0.5, 0.5, 0.5))
+		var ray_dist_solid = 9999.0
+		if raycast.is_colliding():
+			ray_dist_solid = camera.global_position.distance_to(raycast.get_collision_point())
+		if ray_dist_cross <= ray_dist_solid:
+			break_pos = cross_pos
+			place_pos = cross_pos  # Pas de placement sur cross-mesh
+		else:
+			# Le bloc solide est plus proche que le cross-mesh
+			hitting_cross = false
+
+	if not hitting_cross:
+		if not raycast.is_colliding():
+			_cancel_mining()
+			if block_highlighter:
+				block_highlighter.hide_highlight()
+			return
+		var collision_point = raycast.get_collision_point()
+		var normal = raycast.get_collision_normal()
+		break_pos = (collision_point - normal * 0.01).floor()
+		place_pos = Vector3(break_pos) + normal
 
 	# Si le bloc devant la face visée est une torche/lanterne/porte, cibler ce bloc
-	var front_type = world_manager.get_block_at_position(place_pos)
-	if front_type == BlockRegistry.BlockType.TORCH or front_type == BlockRegistry.BlockType.LANTERN or BlockRegistry.is_door(front_type):
-		break_pos = place_pos
+	if not hitting_cross:
+		var front_type = world_manager.get_block_at_position(place_pos)
+		if front_type == BlockRegistry.BlockType.TORCH or front_type == BlockRegistry.BlockType.LANTERN or BlockRegistry.is_door(front_type):
+			break_pos = place_pos
 
 	var break_block_type = world_manager.get_block_at_position(break_pos)
 	look_block_type = break_block_type
@@ -1096,7 +1122,9 @@ func _handle_block_interaction(delta: float):
 
 		# Sinon, placement normal
 		var place_block_type = world_manager.get_block_at_position(place_pos)
-		var player_aabb = AABB(global_position - Vector3(0.4, 0, 0.4), Vector3(0.8, 1.8, 0.8))
+		# AABB reduit pour permettre le placement au bord (ponts dans le vide)
+		# 0.25 au lieu de 0.4 = le joueur peut poser un bloc adjacent meme au bord
+		var player_aabb = AABB(global_position - Vector3(0.25, 0, 0.25), Vector3(0.5, 1.8, 0.5))
 		var block_aabb = AABB(place_pos, Vector3.ONE)
 		var is_flora = BlockRegistry.is_cross_mesh(place_block_type)
 		var can_place = (place_block_type == BlockRegistry.BlockType.AIR or place_block_type == BlockRegistry.BlockType.WATER or is_flora) and not player_aabb.intersects(block_aabb)
@@ -1162,6 +1190,25 @@ func _handle_block_interaction(delta: float):
 	# Arrêter de manger si clic droit relâché
 	if not Input.is_action_pressed("place_block") and is_eating:
 		_cancel_eating()
+
+func _find_cross_mesh_along_ray() -> Vector3:
+	"""Raywalk manuel pour detecter les cross-mesh le long du regard."""
+	var origin = camera.global_position
+	var dir = -camera.global_basis.z
+	var last_block = Vector3i(-9999, -9999, -9999)
+	for i in range(int(reach_distance * 8)):
+		var t = i * 0.125  # pas de 1/8 de bloc
+		var pos = origin + dir * t
+		var block_pos = Vector3i(int(floor(pos.x)), int(floor(pos.y)), int(floor(pos.z)))
+		if block_pos == last_block:
+			continue
+		last_block = block_pos
+		var bt = world_manager.get_block_at_position(Vector3(block_pos))
+		if BlockRegistry.is_cross_mesh(bt):
+			return Vector3(block_pos)
+		if bt != BlockRegistry.BlockType.AIR and bt != BlockRegistry.BlockType.WATER and BlockRegistry.is_solid(bt):
+			break  # Touche un bloc solide, arret
+	return Vector3(-9999, -9999, -9999)
 
 func _break_block(pos: Vector3, block_type: BlockRegistry.BlockType):
 	var is_door = BlockRegistry.is_door(block_type)
