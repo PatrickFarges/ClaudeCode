@@ -80,12 +80,12 @@ func _build_ui():
 	_background.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(_background)
 
-	# Texture inventaire MC comme fond
-	var inv_tex = load(GUI_DIR + "container/inventory.png") as Texture2D
-	if not inv_tex:
-		var img = Image.load_from_file(GUI_DIR + "container/inventory.png")
-		if img:
-			inv_tex = ImageTexture.create_from_image(img)
+	# Texture inventaire MC — cropper a la zone de contenu (352x332 dans le 512x512)
+	var inv_img = Image.load_from_file(GUI_DIR + "container/inventory.png")
+	var inv_tex: ImageTexture = null
+	if inv_img:
+		var cropped = inv_img.get_region(Rect2i(0, 0, TEX_W, TEX_H))
+		inv_tex = ImageTexture.create_from_image(cropped)
 
 	_inv_texture = TextureRect.new()
 	_inv_texture.texture = inv_tex

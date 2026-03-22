@@ -64,21 +64,7 @@ func _load_tex(path: String) -> Texture2D:
 	return null
 
 func _build_hud():
-	# ============================================================
-	# CROSSHAIR (centre ecran)
-	# ============================================================
-	_crosshair = TextureRect.new()
-	_crosshair.texture = _load_tex(GUI_DIR + "sprites/hud/crosshair_attack_indicator_full.png")
-	_crosshair.set_anchors_preset(Control.PRESET_CENTER)
-	_crosshair.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	var cross_size = 32
-	_crosshair.offset_left = -cross_size / 2
-	_crosshair.offset_right = cross_size / 2
-	_crosshair.offset_top = -cross_size / 2
-	_crosshair.offset_bottom = cross_size / 2
-	_crosshair.modulate = Color(1, 1, 1, 0.8)
-	_crosshair.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_crosshair)
+	# Crosshair = gere par la scene Crosshair existante dans main.tscn
 
 	# ============================================================
 	# HOTBAR (bas centre)
