@@ -25,6 +25,9 @@ var _output_slot: TextureRect = null
 var _output_count_label: Label = null
 var _recipe_buttons: Array = []   # boutons dans les slots inventaire
 var _selected_recipe: Dictionary = {}
+var _tooltip_label: Label = null   # nom de l'item au survol
+var _hint_label: Label = null      # instruction en bas
+var _output_name_label: Label = null  # nom de l'output
 
 # Texture content area (meme que inventory.png)
 const TEX_W = 352
@@ -261,6 +264,87 @@ func _build_ui():
 			"recipe": {},
 		})
 
+	# Nom de l'output (au-dessus du slot output)
+	_output_name_label = Label.new()
+	_output_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_output_name_label.set_anchors_preset(Control.PRESET_CENTER)
+	var out_cx = tex_left + (OUTPUT_X + SLOT_SIZE / 2) * GUI_SCALE
+	_output_name_label.offset_left = out_cx - 80
+	_output_name_label.offset_right = out_cx + 80
+	_output_name_label.offset_top = tex_top + OUTPUT_Y * GUI_SCALE - 18
+	_output_name_label.offset_bottom = tex_top + OUTPUT_Y * GUI_SCALE - 2
+	_output_name_label.add_theme_font_size_override("font_size", 12)
+	_output_name_label.add_theme_color_override("font_color", Color(1, 1, 0.8, 1))
+	_output_name_label.add_theme_color_override("font_shadow_color", Color(0.15, 0.15, 0.15, 1))
+	_output_name_label.add_theme_constant_override("shadow_offset_x", 1)
+	_output_name_label.add_theme_constant_override("shadow_offset_y", 1)
+	_output_name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_output_name_label)
+
+	# Tooltip flottant (suit la souris)
+	_tooltip_label = Label.new()
+	_tooltip_label.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_tooltip_label.add_theme_font_size_override("font_size", 14)
+	_tooltip_label.add_theme_color_override("font_color", Color.WHITE)
+	_tooltip_label.add_theme_color_override("font_shadow_color", Color(0.1, 0.1, 0.1, 1))
+	_tooltip_label.add_theme_constant_override("shadow_offset_x", 2)
+	_tooltip_label.add_theme_constant_override("shadow_offset_y", 2)
+	_tooltip_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tooltip_label.visible = false
+	# Fond du tooltip
+	var tip_style = StyleBoxFlat.new()
+	tip_style.bg_color = Color(0.1, 0.05, 0.15, 0.9)
+	tip_style.border_color = Color(0.4, 0.2, 0.6, 0.8)
+	tip_style.border_width_left = 2
+	tip_style.border_width_top = 2
+	tip_style.border_width_right = 2
+	tip_style.border_width_bottom = 2
+	tip_style.corner_radius_top_left = 4
+	tip_style.corner_radius_top_right = 4
+	tip_style.corner_radius_bottom_left = 4
+	tip_style.corner_radius_bottom_right = 4
+	tip_style.content_margin_left = 6
+	tip_style.content_margin_right = 6
+	tip_style.content_margin_top = 3
+	tip_style.content_margin_bottom = 3
+	_tooltip_label.add_theme_stylebox_override("normal", tip_style)
+	add_child(_tooltip_label)
+
+	# Hint en bas
+	_hint_label = Label.new()
+	_hint_label.text = "Cliquer une recette pour la selectionner, puis cliquer l'output pour crafter"
+	_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hint_label.set_anchors_preset(Control.PRESET_CENTER)
+	_hint_label.offset_left = -disp_w / 2
+	_hint_label.offset_right = disp_w / 2
+	_hint_label.offset_top = disp_h / 2 + 6
+	_hint_label.offset_bottom = disp_h / 2 + 24
+	_hint_label.add_theme_font_size_override("font_size", 13)
+	_hint_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.7, 0.8))
+	_hint_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
+	_hint_label.add_theme_constant_override("shadow_offset_x", 1)
+	_hint_label.add_theme_constant_override("shadow_offset_y", 1)
+	_hint_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_hint_label)
+
+	# Connecter le hover sur les boutons recettes
+	for i in range(_recipe_buttons.size()):
+		var btn = _recipe_buttons[i]["button"]
+		btn.mouse_entered.connect(_on_recipe_hover.bind(i))
+		btn.mouse_exited.connect(_on_slot_unhover)
+
+func _on_recipe_hover(index: int):
+	if index < _recipe_buttons.size():
+		var slot = _recipe_buttons[index]
+		if not slot["recipe"].is_empty():
+			var recipe = slot["recipe"]
+			var name = BlockRegistry.get_block_name(recipe["output_type"])
+			_tooltip_label.text = name
+			_tooltip_label.visible = true
+
+func _on_slot_unhover():
+	_tooltip_label.visible = false
+
 func open_crafting(tier: int = 0, furnace: bool = false):
 	is_open = true
 	current_tier = tier
@@ -363,11 +447,13 @@ func _update_craft_preview():
 		_grid_slots[i].texture = _load_block_icon(block_type)
 		var have = player.get_inventory_count(block_type) if player else 0
 		_grid_slots[i].modulate = Color(0.5, 1.0, 0.5, 1) if have >= count else Color(1.0, 0.4, 0.4, 1)
-		# Compteur : "have/need" (ex: "4/6")
+		# Compteur : "have/need" (ex: "4/6") avec nom abrege
 		if i < _grid_count_labels.size():
+			var ing_name = BlockRegistry.get_block_name(block_type)
 			_grid_count_labels[i].text = "%d/%d" % [min(have, count), count]
 			_grid_count_labels[i].add_theme_color_override("font_color",
 				Color(0.5, 1.0, 0.5, 1) if have >= count else Color(1.0, 0.5, 0.5, 1))
+			_grid_count_labels[i].tooltip_text = ing_name
 
 	# Afficher l'output
 	_output_slot.texture = _load_block_icon(_selected_recipe["output_type"])
@@ -376,6 +462,9 @@ func _update_craft_preview():
 	_output_slot.modulate = Color.WHITE if can_craft else Color(0.4, 0.4, 0.4, 0.6)
 	var oc = _selected_recipe["output_count"]
 	_output_count_label.text = "x%d" % oc if oc > 1 else ""
+	# Nom de l'output
+	var output_name = BlockRegistry.get_block_name(_selected_recipe["output_type"])
+	_output_name_label.text = output_name
 
 func _on_craft_output_pressed():
 	if _selected_recipe.is_empty() or not player:
@@ -396,7 +485,12 @@ func _on_craft_output_pressed():
 	_populate_recipes()
 
 func _process(_delta):
-	pass
+	if _tooltip_label and _tooltip_label.visible:
+		var mpos = get_viewport().get_mouse_position()
+		_tooltip_label.offset_left = mpos.x + 16
+		_tooltip_label.offset_top = mpos.y - 10
+		_tooltip_label.offset_right = mpos.x + 250
+		_tooltip_label.offset_bottom = mpos.y + 16
 
 # ============================================================
 # ICON LOADING
