@@ -1,181 +1,286 @@
+# crafting_ui.gd v2.0.0
+# UI de crafting style Minecraft avec texture crafting_table.png Faithful32
+# Grille 3x3, slot output, liste de recettes dans les slots inventaire
+
 extends CanvasLayer
 
-# Écran de crafting — ouvert avec C
-# Liste de recettes, clic pour crafter
+const GC = preload("res://scripts/game_config.gd")
+const GUI_DIR = "res://TexturesPack/Faithful32/assets/minecraft/textures/gui/"
+const GUI_SCALE = 2
 
 var player: CharacterBody3D = null
 var is_open: bool = false
 var current_tier: int = 0
 var has_furnace: bool = false
+var _icon_cache: Dictionary = {}
 
-# UI elements
-var background: ColorRect
-var panel: PanelContainer
-var title_label: Label
-var station_label: Label
-var scroll: ScrollContainer
-var recipe_list: VBoxContainer
-var hint_label: Label
-var recipe_rows: Array = []  # Array of {container, button, recipe, ...}
+# UI nodes
+var _background: ColorRect = null
+var _craft_texture: TextureRect = null
+var _title_label: Label = null
+var _station_label: Label = null
+var _grid_slots: Array = []       # 9 TextureRect pour la grille 3x3
+var _output_slot: TextureRect = null
+var _output_count_label: Label = null
+var _recipe_buttons: Array = []   # boutons dans les slots inventaire
+var _selected_recipe: Dictionary = {}
+
+# Texture content area (meme que inventory.png)
+const TEX_W = 352
+const TEX_H = 332
+
+# Slot positions in Faithful32 crafting_table.png
+const CRAFT_GRID_X = 60
+const CRAFT_GRID_Y = 34
+const CRAFT_SLOT_STEP = 36
+const OUTPUT_X = 248
+const OUTPUT_Y = 70
+const INV_X = 14
+const INV_Y = 166
+const HOTBAR_Y = 282
+const SLOT_SIZE = 36
 
 func _ready():
 	layer = 10
 	visible = false
 	add_to_group("crafting_ui")
-	
 	await get_tree().process_frame
 	player = get_tree().get_first_node_in_group("player")
-	
 	_build_ui()
 
 func _build_ui():
-	# ============================================================
-	# FOND SOMBRE
-	# ============================================================
-	background = ColorRect.new()
-	background.color = Color(0, 0, 0, 0.6)
-	background.set_anchors_preset(Control.PRESET_FULL_RECT)
-	background.mouse_filter = Control.MOUSE_FILTER_STOP
-	add_child(background)
-	
-	# ============================================================
-	# PANNEAU CENTRAL
-	# ============================================================
-	var center = CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(center)
-	
-	panel = PanelContainer.new()
-	panel.custom_minimum_size = Vector2(700, 420)
-	var panel_style = StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.12, 0.12, 0.15, 0.95)
-	panel_style.border_width_left = 2
-	panel_style.border_width_top = 2
-	panel_style.border_width_right = 2
-	panel_style.border_width_bottom = 2
-	panel_style.border_color = Color(0.5, 0.5, 0.6, 0.8)
-	panel_style.corner_radius_top_left = 8
-	panel_style.corner_radius_top_right = 8
-	panel_style.corner_radius_bottom_left = 8
-	panel_style.corner_radius_bottom_right = 8
-	panel_style.content_margin_left = 20
-	panel_style.content_margin_right = 20
-	panel_style.content_margin_top = 16
-	panel_style.content_margin_bottom = 16
-	panel.add_theme_stylebox_override("panel", panel_style)
-	center.add_child(panel)
-	
-	var content_vbox = VBoxContainer.new()
-	content_vbox.add_theme_constant_override("separation", 10)
-	panel.add_child(content_vbox)
-	
-	# ============================================================
-	# TITRE
-	# ============================================================
-	title_label = Label.new()
-	title_label.text = Locale.tr_ui("crafting_title")
-	title_label.add_theme_font_size_override("font_size", 22)
-	title_label.add_theme_color_override("font_color", Color(1, 0.9, 0.7, 1))
-	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	content_vbox.add_child(title_label)
-	
-	# Label station
-	station_label = Label.new()
-	station_label.text = Locale.tr_ui("craft_hand")
-	station_label.add_theme_font_size_override("font_size", 14)
-	station_label.add_theme_color_override("font_color", Color(0.6, 0.75, 0.9, 1))
-	station_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	content_vbox.add_child(station_label)
-	
-	var sep = HSeparator.new()
-	sep.add_theme_constant_override("separation", 6)
-	content_vbox.add_child(sep)
-	
-	# ============================================================
-	# LISTE SCROLLABLE DES RECETTES
-	# ============================================================
-	scroll = ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(0, 280)
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content_vbox.add_child(scroll)
-	
-	recipe_list = VBoxContainer.new()
-	recipe_list.add_theme_constant_override("separation", 4)
-	recipe_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(recipe_list)
-	
-	# ============================================================
-	# INSTRUCTIONS
-	# ============================================================
-	var sep2 = HSeparator.new()
-	sep2.add_theme_constant_override("separation", 6)
-	content_vbox.add_child(sep2)
-	
-	hint_label = Label.new()
-	hint_label.text = Locale.tr_ui("craft_hint")
-	hint_label.add_theme_font_size_override("font_size", 12)
-	hint_label.add_theme_color_override("font_color", Color(0.55, 0.55, 0.55, 1))
-	hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	content_vbox.add_child(hint_label)
+	# Fond sombre
+	_background = ColorRect.new()
+	_background.color = Color(0, 0, 0, 0.65)
+	_background.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_background.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(_background)
+
+	# Texture crafting table MC (croppee a 352x332)
+	var craft_img = Image.load_from_file(GUI_DIR + "container/crafting_table.png")
+	var craft_tex: ImageTexture = null
+	if craft_img:
+		var cropped = craft_img.get_region(Rect2i(0, 0, TEX_W, TEX_H))
+		craft_tex = ImageTexture.create_from_image(cropped)
+
+	_craft_texture = TextureRect.new()
+	_craft_texture.texture = craft_tex
+	_craft_texture.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_craft_texture.set_anchors_preset(Control.PRESET_CENTER)
+	var disp_w = TEX_W * GUI_SCALE
+	var disp_h = TEX_H * GUI_SCALE
+	_craft_texture.offset_left = -disp_w / 2
+	_craft_texture.offset_right = disp_w / 2
+	_craft_texture.offset_top = -disp_h / 2
+	_craft_texture.offset_bottom = disp_h / 2
+	_craft_texture.stretch_mode = TextureRect.STRETCH_SCALE
+	_craft_texture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_craft_texture)
+
+	var tex_left = -disp_w / 2.0
+	var tex_top = -disp_h / 2.0
+	var icon_size = 28 * GUI_SCALE
+	var slot_px = SLOT_SIZE * GUI_SCALE
+	var pad = (slot_px - icon_size) / 2.0
+
+	# Titre
+	_title_label = Label.new()
+	_title_label.text = "Crafting"
+	_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_title_label.set_anchors_preset(Control.PRESET_CENTER)
+	_title_label.offset_left = -150
+	_title_label.offset_right = 150
+	_title_label.offset_top = tex_top + 6 * GUI_SCALE
+	_title_label.offset_bottom = tex_top + 20 * GUI_SCALE
+	_title_label.add_theme_font_size_override("font_size", 16)
+	_title_label.add_theme_color_override("font_color", Color(0.25, 0.25, 0.25, 1))
+	_title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_title_label)
+
+	# Station label (sous le titre)
+	_station_label = Label.new()
+	_station_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_station_label.set_anchors_preset(Control.PRESET_CENTER)
+	_station_label.offset_left = -200
+	_station_label.offset_right = 200
+	_station_label.offset_top = tex_top - 24
+	_station_label.offset_bottom = tex_top - 4
+	_station_label.add_theme_font_size_override("font_size", 14)
+	_station_label.add_theme_color_override("font_color", Color(1, 0.9, 0.7, 1))
+	_station_label.add_theme_color_override("font_shadow_color", Color(0.15, 0.15, 0.15, 1))
+	_station_label.add_theme_constant_override("shadow_offset_x", 2)
+	_station_label.add_theme_constant_override("shadow_offset_y", 2)
+	_station_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_station_label)
+
+	# Grille craft 3x3 (affichage seulement — montre les ingredients de la recette selectionnee)
+	for r in range(3):
+		for c in range(3):
+			var sx = tex_left + (CRAFT_GRID_X + c * CRAFT_SLOT_STEP) * GUI_SCALE
+			var sy = tex_top + (CRAFT_GRID_Y + r * CRAFT_SLOT_STEP) * GUI_SCALE
+			var tex_rect = TextureRect.new()
+			tex_rect.set_anchors_preset(Control.PRESET_CENTER)
+			tex_rect.offset_left = sx + pad
+			tex_rect.offset_right = sx + pad + icon_size
+			tex_rect.offset_top = sy + pad
+			tex_rect.offset_bottom = sy + pad + icon_size
+			tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			tex_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+			tex_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			add_child(tex_rect)
+			_grid_slots.append(tex_rect)
+
+	# Slot output
+	var ox = tex_left + OUTPUT_X * GUI_SCALE
+	var oy = tex_top + OUTPUT_Y * GUI_SCALE
+	_output_slot = TextureRect.new()
+	_output_slot.set_anchors_preset(Control.PRESET_CENTER)
+	_output_slot.offset_left = ox + pad
+	_output_slot.offset_right = ox + pad + icon_size
+	_output_slot.offset_top = oy + pad
+	_output_slot.offset_bottom = oy + pad + icon_size
+	_output_slot.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_output_slot.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_output_slot.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_output_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_output_slot)
+
+	_output_count_label = Label.new()
+	_output_count_label.set_anchors_preset(Control.PRESET_CENTER)
+	_output_count_label.offset_left = ox + slot_px - 26 * GUI_SCALE
+	_output_count_label.offset_right = ox + slot_px - 2
+	_output_count_label.offset_top = oy + slot_px - 14 * GUI_SCALE
+	_output_count_label.offset_bottom = oy + slot_px
+	_output_count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_output_count_label.add_theme_font_size_override("font_size", 14)
+	_output_count_label.add_theme_color_override("font_color", Color.WHITE)
+	_output_count_label.add_theme_color_override("font_shadow_color", Color(0.2, 0.2, 0.2, 1))
+	_output_count_label.add_theme_constant_override("shadow_offset_x", 2)
+	_output_count_label.add_theme_constant_override("shadow_offset_y", 2)
+	_output_count_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_output_count_label)
+
+	# Bouton craft sur le slot output (clic = crafter)
+	var output_btn = Button.new()
+	output_btn.set_anchors_preset(Control.PRESET_CENTER)
+	output_btn.offset_left = ox
+	output_btn.offset_right = ox + slot_px
+	output_btn.offset_top = oy
+	output_btn.offset_bottom = oy + slot_px
+	output_btn.flat = true
+	output_btn.pressed.connect(_on_craft_output_pressed)
+	add_child(output_btn)
+
+	# Slots inventaire/hotbar = recettes disponibles (cliquables)
+	var all_slots: Array = []
+	for row in range(3):
+		for col in range(9):
+			var sx = tex_left + (INV_X + col * SLOT_SIZE) * GUI_SCALE
+			var sy = tex_top + (INV_Y + row * SLOT_SIZE) * GUI_SCALE
+			all_slots.append(Vector2(sx, sy))
+	for col in range(9):
+		var sx = tex_left + (INV_X + col * SLOT_SIZE) * GUI_SCALE
+		var sy = tex_top + HOTBAR_Y * GUI_SCALE
+		all_slots.append(Vector2(sx, sy))
+
+	for i in range(all_slots.size()):
+		var pos = all_slots[i]
+		var btn = Button.new()
+		btn.set_anchors_preset(Control.PRESET_CENTER)
+		btn.offset_left = pos.x
+		btn.offset_right = pos.x + slot_px
+		btn.offset_top = pos.y
+		btn.offset_bottom = pos.y + slot_px
+		btn.flat = true
+		btn.pressed.connect(_on_recipe_slot_pressed.bind(i))
+		add_child(btn)
+
+		var tex_rect = TextureRect.new()
+		tex_rect.set_anchors_preset(Control.PRESET_CENTER)
+		tex_rect.offset_left = pos.x + pad
+		tex_rect.offset_right = pos.x + pad + icon_size
+		tex_rect.offset_top = pos.y + pad
+		tex_rect.offset_bottom = pos.y + pad + icon_size
+		tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tex_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		tex_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(tex_rect)
+
+		var name_label = Label.new()
+		name_label.set_anchors_preset(Control.PRESET_CENTER)
+		name_label.offset_left = pos.x
+		name_label.offset_right = pos.x + slot_px
+		name_label.offset_top = pos.y + slot_px
+		name_label.offset_bottom = pos.y + slot_px + 14
+		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		name_label.add_theme_font_size_override("font_size", 8)
+		name_label.add_theme_color_override("font_color", Color(0.9, 0.9, 0.9, 0.8))
+		name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		name_label.visible = false  # trop petit pour etre lisible
+		add_child(name_label)
+
+		var count_label = Label.new()
+		count_label.set_anchors_preset(Control.PRESET_CENTER)
+		count_label.offset_left = pos.x + slot_px - 26 * GUI_SCALE
+		count_label.offset_right = pos.x + slot_px - 2
+		count_label.offset_top = pos.y + slot_px - 14 * GUI_SCALE
+		count_label.offset_bottom = pos.y + slot_px
+		count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		count_label.add_theme_font_size_override("font_size", 14)
+		count_label.add_theme_color_override("font_color", Color.WHITE)
+		count_label.add_theme_color_override("font_shadow_color", Color(0.2, 0.2, 0.2, 1))
+		count_label.add_theme_constant_override("shadow_offset_x", 2)
+		count_label.add_theme_constant_override("shadow_offset_y", 2)
+		count_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(count_label)
+
+		_recipe_buttons.append({
+			"button": btn,
+			"tex_rect": tex_rect,
+			"count_label": count_label,
+			"recipe": {},
+		})
 
 func open_crafting(tier: int = 0, furnace: bool = false):
-	"""Ouvrir l'écran de crafting"""
 	is_open = true
 	current_tier = tier
 	has_furnace = furnace
 	visible = true
-	_rebuild_recipe_list()
+	_update_station_label()
+	_populate_recipes()
 
 func close_crafting():
-	"""Fermer l'écran de crafting"""
 	is_open = false
 	visible = false
 
-func _rebuild_recipe_list():
-	"""Reconstruire la liste des recettes"""
-	# Vider la liste
-	for child in recipe_list.get_children():
-		child.queue_free()
-	recipe_rows.clear()
-	
-	var recipes = CraftRegistry.get_all_recipes()
-
-	# Mettre à jour le label de station
+func _update_station_label():
 	if has_furnace:
-		station_label.text = Locale.tr_ui("craft_furnace")
-		station_label.add_theme_color_override("font_color", Color(0.9, 0.5, 0.3, 1))
+		_station_label.text = Locale.tr_ui("craft_furnace")
 	elif current_tier >= 4:
-		station_label.text = Locale.tr_ui("craft_tier_4")
-		station_label.add_theme_color_override("font_color", Color(0.95, 0.85, 0.3, 1))
+		_station_label.text = Locale.tr_ui("craft_tier_4")
 	elif current_tier == 3:
-		station_label.text = Locale.tr_ui("craft_tier_3")
-		station_label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.8, 1))
+		_station_label.text = Locale.tr_ui("craft_tier_3")
 	elif current_tier == 2:
-		station_label.text = Locale.tr_ui("craft_tier_2")
-		station_label.add_theme_color_override("font_color", Color(0.7, 0.65, 0.6, 1))
+		_station_label.text = Locale.tr_ui("craft_tier_2")
 	elif current_tier == 1:
-		station_label.text = Locale.tr_ui("craft_tier_1")
-		station_label.add_theme_color_override("font_color", Color(0.9, 0.8, 0.4, 1))
+		_station_label.text = Locale.tr_ui("craft_tier_1")
 	else:
-		station_label.text = Locale.tr_ui("craft_hand")
-		station_label.add_theme_color_override("font_color", Color(0.6, 0.75, 0.9, 1))
+		_station_label.text = Locale.tr_ui("craft_hand")
 
-	# Mettre à jour le hint
-	if current_tier == 0 and not has_furnace:
-		hint_label.text = Locale.tr_ui("craft_hint_hand")
-	else:
-		hint_label.text = Locale.tr_ui("craft_hint_station")
-
-	# Filtrer : ne garder que les recettes de cette station
+func _populate_recipes():
+	var recipes = CraftRegistry.get_all_recipes()
 	var inventory = player.get_all_inventory() if player else {}
-	var filtered_recipes: Array = []
+
+	# Filtrer les recettes disponibles pour cette station
+	var filtered: Array = []
 	for recipe in recipes:
 		if CraftRegistry.is_recipe_available(recipe, current_tier, has_furnace):
-			filtered_recipes.append(recipe)
+			filtered.append(recipe)
 
 	# Trier : craftables en premier
-	filtered_recipes.sort_custom(func(a, b):
+	filtered.sort_custom(func(a, b):
 		var can_a = CraftRegistry.can_craft(a, inventory)
 		var can_b = CraftRegistry.can_craft(b, inventory)
 		if can_a != can_b:
@@ -183,183 +288,116 @@ func _rebuild_recipe_list():
 		return false
 	)
 
-	for recipe in filtered_recipes:
-		_add_recipe_row(recipe)
-
-func _add_recipe_row(recipe: Dictionary):
-	"""Ajouter une ligne de recette"""
-	var inventory = player.get_all_inventory() if player else {}
-	var is_craftable = CraftRegistry.can_craft(recipe, inventory)
-
-	# Container horizontal pour la ligne
-	var row = HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-
-	# Style fond de la ligne
-	var row_panel = PanelContainer.new()
-	var row_style = StyleBoxFlat.new()
-	row_style.corner_radius_top_left = 4
-	row_style.corner_radius_top_right = 4
-	row_style.corner_radius_bottom_left = 4
-	row_style.corner_radius_bottom_right = 4
-	row_style.content_margin_left = 10
-	row_style.content_margin_right = 10
-	row_style.content_margin_top = 6
-	row_style.content_margin_bottom = 6
-
-	if is_craftable:
-		row_style.bg_color = Color(0.18, 0.22, 0.18, 1.0)
-		row_style.border_color = Color(0.4, 0.6, 0.4, 0.6)
-	else:
-		row_style.bg_color = Color(0.18, 0.18, 0.18, 1.0)
-		row_style.border_color = Color(0.35, 0.35, 0.35, 0.4)
-	
-	row_style.border_width_left = 1
-	row_style.border_width_top = 1
-	row_style.border_width_right = 1
-	row_style.border_width_bottom = 1
-	row_panel.add_theme_stylebox_override("panel", row_style)
-	row_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row_panel.add_child(row)
-	recipe_list.add_child(row_panel)
-	
-	# === Couleur de l'output ===
-	var output_color = ColorRect.new()
-	output_color.custom_minimum_size = Vector2(28, 28)
-	output_color.color = BlockRegistry.get_block_color(recipe["output_type"])
-	if not is_craftable:
-		output_color.color = output_color.color * 0.4
-	output_color.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(output_color)
-	
-	# === Nom + quantité output ===
-	var output_label = Label.new()
-	output_label.text = "%s  x%d" % [Locale.tr_recipe(recipe["name"]), recipe["output_count"]]
-	output_label.add_theme_font_size_override("font_size", 15)
-	output_label.custom_minimum_size = Vector2(160, 0)
-	output_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if is_craftable:
-		output_label.add_theme_color_override("font_color", Color(1, 1, 0.9, 1))
-	else:
-		output_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6, 1))
-	row.add_child(output_label)
-	
-	# === Flèche ===
-	var arrow = Label.new()
-	arrow.text = "←"
-	arrow.add_theme_font_size_override("font_size", 14)
-	arrow.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5, 1))
-	arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(arrow)
-	
-	# === Ingrédients ===
-	var ingredients_box = HBoxContainer.new()
-	ingredients_box.add_theme_constant_override("separation", 4)
-	ingredients_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	ingredients_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(ingredients_box)
-	
-	for input_item in recipe["inputs"]:
-		var block_type = input_item[0]
-		var required = input_item[1]
-		var have = inventory.get(block_type, 0)
-		var ing_name = BlockRegistry.get_block_name(block_type)
-		
-		# Couleur de l'ingrédient
-		var ing_color = ColorRect.new()
-		ing_color.custom_minimum_size = Vector2(14, 14)
-		ing_color.color = BlockRegistry.get_block_color(block_type)
-		if not is_craftable:
-			ing_color.color = ing_color.color * 0.5
-		ing_color.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		ingredients_box.add_child(ing_color)
-		
-		# Nom + quantité de l'ingrédient (TOUJOURS visible)
-		var ing_label = Label.new()
-		ing_label.text = "%s %d/%d" % [ing_name, min(have, required), required]
-		ing_label.add_theme_font_size_override("font_size", 13)
-		ing_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		if have >= required:
-			ing_label.add_theme_color_override("font_color", Color(0.5, 0.9, 0.5, 1))
+	# Remplir les slots avec les recettes
+	for i in range(_recipe_buttons.size()):
+		var slot = _recipe_buttons[i]
+		if i < filtered.size():
+			var recipe = filtered[i]
+			slot["recipe"] = recipe
+			var output_tex = _load_block_icon(recipe["output_type"])
+			slot["tex_rect"].texture = output_tex
+			var can_craft = CraftRegistry.can_craft(recipe, inventory)
+			slot["tex_rect"].modulate = Color.WHITE if can_craft else Color(0.4, 0.4, 0.4, 0.6)
+			slot["count_label"].text = "x%d" % recipe["output_count"] if recipe["output_count"] > 1 else ""
+			slot["button"].visible = true
 		else:
-			ing_label.add_theme_color_override("font_color", Color(0.9, 0.4, 0.4, 1))
-		ingredients_box.add_child(ing_label)
-	
-	# === Bouton Crafter ===
-	var craft_btn = Button.new()
-	craft_btn.custom_minimum_size = Vector2(80, 30)
-	craft_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	
-	if is_craftable:
-		craft_btn.text = Locale.tr_ui("craft_btn")
-		craft_btn.disabled = false
+			slot["recipe"] = {}
+			slot["tex_rect"].texture = null
+			slot["count_label"].text = ""
+			slot["button"].visible = true  # garder cliquable pour deselectionner
 
-		var btn_style = StyleBoxFlat.new()
-		btn_style.bg_color = Color(0.25, 0.45, 0.25, 1.0)
-		btn_style.corner_radius_top_left = 4
-		btn_style.corner_radius_top_right = 4
-		btn_style.corner_radius_bottom_left = 4
-		btn_style.corner_radius_bottom_right = 4
-		btn_style.border_width_left = 1
-		btn_style.border_width_top = 1
-		btn_style.border_width_right = 1
-		btn_style.border_width_bottom = 1
-		btn_style.border_color = Color(0.4, 0.7, 0.4, 0.8)
-		craft_btn.add_theme_stylebox_override("normal", btn_style)
+	# Selectionner la premiere recette craftable
+	_selected_recipe = {}
+	for recipe in filtered:
+		if CraftRegistry.can_craft(recipe, inventory):
+			_selected_recipe = recipe
+			break
+	if _selected_recipe.is_empty() and not filtered.is_empty():
+		_selected_recipe = filtered[0]
+	_update_craft_preview()
 
-		var btn_hover = btn_style.duplicate()
-		btn_hover.bg_color = Color(0.3, 0.55, 0.3, 1.0)
-		btn_hover.border_color = Color(0.5, 0.8, 0.5, 1.0)
-		craft_btn.add_theme_stylebox_override("hover", btn_hover)
+func _on_recipe_slot_pressed(index: int):
+	if index < _recipe_buttons.size():
+		var slot = _recipe_buttons[index]
+		if not slot["recipe"].is_empty():
+			_selected_recipe = slot["recipe"]
+			_update_craft_preview()
 
-		var btn_pressed = btn_style.duplicate()
-		btn_pressed.bg_color = Color(0.2, 0.35, 0.2, 1.0)
-		craft_btn.add_theme_stylebox_override("pressed", btn_pressed)
+func _update_craft_preview():
+	# Vider la grille
+	for tex in _grid_slots:
+		tex.texture = null
+	_output_slot.texture = null
+	_output_count_label.text = ""
 
-		craft_btn.add_theme_color_override("font_color", Color(0.9, 1, 0.9, 1))
-		craft_btn.add_theme_font_size_override("font_size", 13)
-	else:
-		craft_btn.text = Locale.tr_ui("craft_missing")
-		craft_btn.disabled = true
-		craft_btn.add_theme_color_override("font_color", Color(0.5, 0.4, 0.4, 1))
-		craft_btn.add_theme_font_size_override("font_size", 12)
-	
-	craft_btn.pressed.connect(_on_craft_pressed.bind(recipe))
-	row.add_child(craft_btn)
-	
-	recipe_rows.append({
-		"panel": row_panel,
-		"button": craft_btn,
-		"recipe": recipe
-	})
-
-func _on_craft_pressed(recipe: Dictionary):
-	"""Crafter une recette"""
-	if not player:
+	if _selected_recipe.is_empty():
 		return
-	
+
+	# Afficher les ingredients dans la grille 3x3
+	# Placer les ingredients lineairement dans la grille
+	var inputs: Array = _selected_recipe.get("inputs", [])
+	for i in range(min(inputs.size(), 9)):
+		var block_type = inputs[i][0]
+		var count = inputs[i][1]
+		_grid_slots[i].texture = _load_block_icon(block_type)
+		# Colorer en vert si assez, rouge sinon
+		var have = player.get_inventory_count(block_type) if player else 0
+		_grid_slots[i].modulate = Color(0.5, 1.0, 0.5, 1) if have >= count else Color(1.0, 0.4, 0.4, 1)
+
+	# Afficher l'output
+	_output_slot.texture = _load_block_icon(_selected_recipe["output_type"])
+	var inventory = player.get_all_inventory() if player else {}
+	var can_craft = CraftRegistry.can_craft(_selected_recipe, inventory)
+	_output_slot.modulate = Color.WHITE if can_craft else Color(0.4, 0.4, 0.4, 0.6)
+	var oc = _selected_recipe["output_count"]
+	_output_count_label.text = "x%d" % oc if oc > 1 else ""
+
+func _on_craft_output_pressed():
+	if _selected_recipe.is_empty() or not player:
+		return
 	var inventory = player.get_all_inventory()
-	if not CraftRegistry.can_craft(recipe, inventory):
+	if not CraftRegistry.can_craft(_selected_recipe, inventory):
 		return
-	
-	# Retirer les ingrédients
-	for input_item in recipe["inputs"]:
-		var block_type = input_item[0]
-		var count = input_item[1]
-		player._remove_from_inventory(block_type, count)
-	
-	# Ajouter le résultat
-	player._add_to_inventory(recipe["output_type"], recipe["output_count"])
-	
-	# Son de craft réussi
+	# Retirer les ingredients
+	for input_item in _selected_recipe["inputs"]:
+		player._remove_from_inventory(input_item[0], input_item[1])
+	# Ajouter le resultat
+	player._add_to_inventory(_selected_recipe["output_type"], _selected_recipe["output_count"])
+	# Son
 	var audio = get_tree().get_first_node_in_group("audio_manager")
 	if audio:
 		audio.play_craft_success()
-	
-	# Rebuild la liste pour mettre à jour les quantités
-	_rebuild_recipe_list()
+	# Refresh
+	_populate_recipes()
 
 func _process(_delta):
-	# Pas besoin de mise à jour continue — on rebuild quand on craft
 	pass
+
+# ============================================================
+# ICON LOADING
+# ============================================================
+func _load_block_icon(block_type: BlockRegistry.BlockType) -> ImageTexture:
+	var cache_key = "block_" + str(block_type)
+	if _icon_cache.has(cache_key):
+		return _icon_cache[cache_key]
+	var tex_name = BlockRegistry.get_face_texture(block_type, "top")
+	if tex_name == "dirt" and block_type != BlockRegistry.BlockType.DIRT:
+		tex_name = BlockRegistry.get_face_texture(block_type, "all")
+	var abs_path = GC.resolve_block_texture(tex_name)
+	if abs_path.is_empty():
+		_icon_cache[cache_key] = null
+		return null
+	var img = Image.new()
+	if img.load(abs_path) != OK:
+		_icon_cache[cache_key] = null
+		return null
+	img.convert(Image.FORMAT_RGBA8)
+	var tint = BlockRegistry.get_block_tint(block_type, "top")
+	if tint != Color(1,1,1,1):
+		for y in range(img.get_height()):
+			for x in range(img.get_width()):
+				var c = img.get_pixel(x, y)
+				img.set_pixel(x, y, Color(c.r * tint.r, c.g * tint.g, c.b * tint.b, c.a))
+	var tex = ImageTexture.create_from_image(img)
+	_icon_cache[cache_key] = tex
+	return tex
