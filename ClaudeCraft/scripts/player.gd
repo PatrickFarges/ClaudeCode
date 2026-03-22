@@ -1122,20 +1122,21 @@ func _handle_block_interaction(delta: float):
 
 		# Sinon, placement normal
 		var place_block_type = world_manager.get_block_at_position(place_pos)
-		# AABB reduit pour permettre le placement au bord (ponts dans le vide)
-		# 0.25 au lieu de 0.4 = le joueur peut poser un bloc adjacent meme au bord
-		var player_aabb = AABB(global_position - Vector3(0.25, 0, 0.25), Vector3(0.5, 1.8, 0.5))
-		var block_aabb = AABB(place_pos, Vector3.ONE)
 		var is_flora = BlockRegistry.is_cross_mesh(place_block_type)
-		var can_place = (place_block_type == BlockRegistry.BlockType.AIR or place_block_type == BlockRegistry.BlockType.WATER or is_flora) and not player_aabb.intersects(block_aabb)
+		# Check simple comme Minecraft : interdire seulement de poser dans le bloc
+		# exact des pieds ou de la tete (pas d'AABB complexe qui bloque les ponts)
+		var player_feet = global_position.floor()
+		var player_head = (global_position + Vector3(0, 1, 0)).floor()
+		var blocks_player = place_pos == player_feet or place_pos == player_head
+		var can_place = (place_block_type == BlockRegistry.BlockType.AIR or place_block_type == BlockRegistry.BlockType.WATER or is_flora) and not blocks_player
 
 		if can_place and get_inventory_count(selected_block_type) > 0:
 			# Placement spécial : portes = 2 blocs de haut avec orientation
 			if BlockRegistry.is_door(selected_block_type):
 				var above_pos = place_pos + Vector3(0, 1, 0)
 				var above_type = world_manager.get_block_at_position(above_pos)
-				var above_aabb = AABB(above_pos, Vector3.ONE)
-				if (above_type == BlockRegistry.BlockType.AIR or above_type == BlockRegistry.BlockType.WATER) and not player_aabb.intersects(above_aabb):
+				var above_blocked = above_pos.floor() == player_feet or above_pos.floor() == player_head
+				if (above_type == BlockRegistry.BlockType.AIR or above_type == BlockRegistry.BlockType.WATER) and not above_blocked:
 					# Déterminer l'orientation : direction dans laquelle le joueur regarde
 					var yaw = camera.global_rotation.y
 					var facing: int
