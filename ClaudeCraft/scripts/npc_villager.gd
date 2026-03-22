@@ -3,6 +3,7 @@ class_name NpcVillager
 
 const VProfession = preload("res://scripts/villager_profession.gd")
 const GC = preload("res://scripts/game_config.gd")
+const ArmorMgr = preload("res://scripts/armor_manager.gd")
 
 const INVALID_POS = Vector3i(-9999, -9999, -9999)
 
@@ -223,6 +224,17 @@ func _create_model():
 	elif villager_index == 0:
 		print("NpcVillager: AUCUN Skeleton3D trouvé dans le modèle")
 	_setup_held_tools()
+	_setup_armor()
+
+func _setup_armor():
+	if not _skeleton:
+		return
+	# Professions militaires portent des armures
+	match profession:
+		VProfession.Profession.SOLDAT, VProfession.Profession.GARDE:
+			ArmorMgr.equip_set(_skeleton, "iron")
+		VProfession.Profession.CAPITAINE:
+			ArmorMgr.equip_set(_skeleton, "gold")
 
 static func _load_skin_texture(skin_path: String) -> Texture2D:
 	# Essayer le cache d'abord

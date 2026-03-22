@@ -463,7 +463,7 @@ func _is_food_block(block_type: int, food_blocks: Array) -> bool:
 		# Match block type enum names
 		match fb_name:
 			"GRASS_BLOCK":
-				if block_type == BlockRegistry.BlockType.GRASS_BLOCK:
+				if block_type == BlockRegistry.BlockType.GRASS:
 					return true
 			"SHORT_GRASS":
 				if block_type == BlockRegistry.BlockType.SHORT_GRASS:
@@ -533,7 +533,7 @@ func _finish_eating():
 						# Only eat vegetation (SHORT_GRASS, FERN, flowers), not GRASS_BLOCK
 						if block >= 98 and block <= 103:
 							world_manager.set_block_at_position(check, 0)
-						elif block == BlockRegistry.BlockType.GRASS_BLOCK:
+						elif block == BlockRegistry.BlockType.GRASS:
 							# Turn grass block into dirt
 							world_manager.set_block_at_position(check, BlockRegistry.BlockType.DIRT)
 						return

@@ -1,5 +1,7 @@
 extends CharacterBody3D
 
+const ArmorMgr = preload("res://scripts/armor_manager.gd")
+
 # Paramètres de mouvement
 @export var speed: float = 5.0
 @export var sprint_speed: float = 8.5
@@ -39,6 +41,12 @@ var _player_anim: AnimationPlayer = null
 const STEVE_GLB = "res://assets/PlayerModel/steve.glb"
 const STEVE_SKIN = "res://assets/PlayerModel/steve_skin.png"
 static var _steve_packed: PackedScene = null
+var _player_skeleton: Skeleton3D = null
+
+# Armure equipee sur le joueur
+var equipped_armor: Dictionary = {}  # piece_name -> material_name
+const ARMOR_MATERIALS_CYCLE = ["", "leather", "chain", "iron", "gold", "diamond"]
+var _armor_cycle_index: int = 0
 
 # ============================================================
 # INVENTAIRE
@@ -319,6 +327,40 @@ func _create_player_model():
 	if _player_anim:
 		_player_anim.deterministic = true
 		print("Player: modèle 3e personne prêt (%d anims)" % _player_anim.get_animation_list().size())
+	# Trouver le skeleton pour le systeme d'armure
+	_player_skeleton = _find_skeleton(_player_model)
+
+func _find_skeleton(node: Node) -> Skeleton3D:
+	if node is Skeleton3D:
+		return node
+	for child in node.get_children():
+		var found = _find_skeleton(child)
+		if found:
+			return found
+	return null
+
+func equip_armor_set(armor_material: String) -> void:
+	if not _player_skeleton:
+		return
+	if armor_material.is_empty():
+		ArmorMgr.unequip_all(_player_skeleton)
+		equipped_armor.clear()
+		print("Player: armure retirée")
+	else:
+		ArmorMgr.equip_set(_player_skeleton, armor_material)
+		for piece in ["helmet", "chestplate", "leggings", "boots"]:
+			equipped_armor[piece] = armor_material
+		print("Player: armure %s équipée" % armor_material)
+
+func equip_armor_piece(piece_name: String, armor_material: String) -> void:
+	if not _player_skeleton:
+		return
+	if armor_material.is_empty():
+		ArmorMgr.unequip(_player_skeleton, piece_name)
+		equipped_armor.erase(piece_name)
+	else:
+		ArmorMgr.equip(_player_skeleton, piece_name, armor_material)
+		equipped_armor[piece_name] = armor_material
 
 func _apply_steve_skin():
 	if not _player_model:
@@ -564,6 +606,11 @@ func _input(event):
 		# Touche F5 — cycle vue caméra (1ère/3ème dos/3ème face)
 		if event.physical_keycode == KEY_F5:
 			_cycle_camera_mode()
+			return
+		# Touche P — cycler armures (aucune → cuir → chaine → fer → or → diamant)
+		if event.physical_keycode == KEY_P:
+			_armor_cycle_index = (_armor_cycle_index + 1) % ARMOR_MATERIALS_CYCLE.size()
+			equip_armor_set(ARMOR_MATERIALS_CYCLE[_armor_cycle_index])
 			return
 
 	# Gestion Escape : 3 cas
