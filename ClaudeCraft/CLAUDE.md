@@ -34,6 +34,9 @@ Jeu voxel type Minecraft en GDScript avec Godot 4.6+, style pastel. Évolue vers
 - **`war_manager.gd`** : orchestrateur de guerre — espionnage (4 espions cardinaux, 8 blocs/s, portée 1200), armée en marche (4 blocs/s, résolution combat force vs défense), attaque ennemie possible, phases PEACE→ESPIONAGE→PREPARATION→WAR→VICTORY/DEFEAT
 - **`generate_castle.py`** : générateur Python de 4 structures château JSON (rempart, tour_defense, donjon, caserne) avec palette commune 12 blocs
 
+### Armures
+- **`armor_manager.gd`** v2.0.0 : système d'armures in-game via BoneAttachment3D. 5 matériaux (leather/chain/iron/gold/diamond) × 4 pièces (helmet/chestplate/leggings/boots). Textures Bedrock 64×32 (layer 1 + layer 2). `equip()`, `unequip()`, `equip_set()`. Vertices en espace local du bone via `get_bone_global_rest()`. PNJ militaires auto-armurés. Joueur : touche P cycle armures
+
 ### Combat
 - **`arrow_entity.gd`** : flèche arc — gravité 20m/s², drag, dégâts 6.0, critique, knockback, particules, Label3D dégâts
 - **`passive_mob.gd`** v3.0.0 : systeme de mobs charge depuis `data/mob_database.json` (57 mobs documentes). 3 comportements (passive/neutral/hostile) + systemes : **brulure soleil** (zombie/skeleton brulent de jour si ciel ouvert), **faim animale** (drain progressif, recherche nourriture dans rayon 4, mange vegetation/herbe, cooldown 5s), **predation** (loup chasse mouton/lapin/renard/poulet, renard chasse poulet/lapin — quand faim <50%, range 16 blocs), **pack behavior** (loups alertent meute rayon 16 quand frappes), **when_hit configurable** (flee/attack/attack_pack/attack_spit/attack_ram/flee_ink). Tables de spawn precalculees `BIOME_DAY_MOBS` et `BIOME_NIGHT_MOBS` construites au chargement du JSON. Spawn en groupes fideles MC (spawn_group_min/max, max_per_chunk, spawn_below_y)
@@ -54,7 +57,7 @@ Jeu voxel type Minecraft en GDScript avec Godot 4.6+, style pastel. Évolue vers
 
 ## Biomes
 
-**4 biomes procéduraux :** Désert (temp>0.65, humid<0.35), Forêt (temp 0.45-0.7, humid>0.55), Montagne (temp<0.35), Plaines (défaut)
+**7 biomes procéduraux :** Désert (0), Forêt (1), Montagne (2), Plaines (3), Océan (4, continental<0.35), Plage (5, continental 0.35-0.45), Rivière (6, river noise bande étroite)
 
 ## Scène principale (`scenes/main.tscn`)
 
@@ -97,7 +100,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 
 ## Direction du projet
 
-**Version actuelle : v19.0.0**
+**Version actuelle : v19.5.2**
 
 | Phase | Statut | Contenu |
 |-------|--------|---------|
@@ -149,7 +152,12 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 | 11.4 | Fait | v18.5.0 — **Fix oreilles cheval** (mob_converter.py v2.5.0). BPR_FORCE_OVERRIDES (nouveau mécanisme pour forcer rotation sur bones avec rotation existante), PIVOT_ONLY_OVERRIDES (pivot rapproché du cube pour rotation sur place), oreilles alignées avec le cou (30°X) et posées sur la tête comme le cheval MC original |
 | 11.5 | Fait | v18.6.0 — **Vue 3e personne (F5)** + outils Python enrichis. `player.gd` : 3 modes caméra F5 (FPS / 3e dos / 3e face), modèle Steve dynamique avec skin, collision caméra raycast, protection anti-terrain, pitch limité mode dos, terminal velocity + téléport sécurité. Fix spawn surface (deadlock `_spawn_grounded` supprimé). `character_viewer.py` v1.5.0 : système d'armures overlay 3D (casque/plastron/jambières/bottes × 5 matériaux cuir→diamant, textures Bedrock). `mob_gallery.py` v1.1.0 : panneau fullscreen (animations cliquables + textures Bedrock swappables + bones toggle [B]) |
 | 12 | Fait | v19.0.0 — **Systeme de mobs intelligent (mob_database.json)**. `data/mob_database.json` : 57 mobs documentes avec metadonnees completes (spawn time jour/nuit, biomes, comportement passif/neutre/hostile, reaction quand frappe, points de vie, faim, predation, brulure soleil, armes efficaces, drops, sons, collision, donnees Bedrock). `passive_mob.gd` v3.0.0 : charge JSON, tables spawn precalculees par biome+heure. Nouveaux systemes : brulure soleil (zombie/skeleton brulent de jour), faim animale (drain, recherche nourriture, mange blocs herbe/vegetation), predation (loup→mouton/lapin, renard→poulet), pack behavior (meute aggro), when_hit configurable. `world_manager.gd` : spawner intelligent — plus d'enderman en plein jour, spawn en groupes fideles MC, respect spawn_below_y |
-| 12.1 | A venir | Conversion de tous les mobs Bedrock manquants (~50), armures (texture swap 2 couches), UI craft MC |
+| 12.1 | Fait | v19.1.1 — 65 mobs Bedrock convertis (mob_converter v3.0.0), fix animations walk |
+| 13 | Fait | v19.2.0 — **Armures in-game** (`armor_manager.gd` v2.0.0). BoneAttachment3D par pièce, 5 matériaux (cuir/chaîne/fer/or/diamant) × 4 pièces (casque/plastron/jambières/bottes). PNJ militaires armurés auto (soldats=fer, capitaine=or). Joueur : touche P cycle armures en 3e personne. Textures Bedrock vanilla |
+| 14 | Fait | v19.3.x — **Océans, plages, rivières**. 3 nouveaux biomes (OCEAN=4, BEACH=5, RIVER=6). Continentalness < 0.35 = océan (terrain 30 blocs sous SEA_LEVEL). River noise dédié (bande étroite). Fond marin sable/gravier. Spawner aquatique (needs_water en OCEAN). Effet sous-marin (overlay bleu + son water.mp3 + swim sounds + noyade 15s). Boussole HUD. Spawn robuste 2 phases (noise XZ + scan chunk réel). get_height_at() public |
+| 15 | Fait | v19.4.0 — **Fixes critiques audit**. Nourriture consommée après manger (B1), attaque bloquée pendant minage (B2), village_inv_open dans _is_any_ui_open (B3), floori() coords négatives (B4), _path_blocks clear (B5), is_instance_valid ajouté (B6). Cueillette herbes/fleurs (raywalk cross-mesh). Bridge assist placement blocs. Attaque continue clic maintenu |
+| 16 | Fait | v19.5.x — **GUI Minecraft Faithful32**. HUD : hotbar.png + hotbar_selection.png, 10 coeurs MC (full/half), barre de faim, armure, XP bar prête. Inventaire : inventory.png croppée 352×332 @ scale 2x, 36 slots MC, tooltips noms+quantités. Crafting : crafting_table.png, grille 3×3 ingrédients (have/need), recettes triées par craftabilité, tooltips partout. 1396 recettes MC extraites (minecraft_recipes.json, 706 shaped avec patterns 3×3) |
+| 16.1 | A venir | Optimisation P1-P8 (audit), drag & drop craft MC, pathfinding mobs, système skills joueur |
 
 **Packs GLB utilisés** : Steve GLB (modèle Bedrock converti, 28 bones, 4 anims) pour tous les PNJ avec skins par profession. Kenney.nl (18 modèles BlockPNJ — conservés mais plus utilisés). **PNJ futurs** : KayKit Adventurers (161 anims travail)
 
