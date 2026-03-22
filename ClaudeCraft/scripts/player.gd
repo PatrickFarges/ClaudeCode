@@ -1121,12 +1121,34 @@ func _handle_block_interaction(delta: float):
 			return
 
 		# Sinon, placement normal
-		var place_block_type = world_manager.get_block_at_position(place_pos)
-		var is_flora = BlockRegistry.is_cross_mesh(place_block_type)
-		# Check simple comme Minecraft : interdire seulement de poser dans le bloc
-		# exact des pieds ou de la tete (pas d'AABB complexe qui bloque les ponts)
 		var player_feet = global_position.floor()
 		var player_head = (global_position + Vector3(0, 1, 0)).floor()
+
+		# Bridge assist : si place_pos est bloque (pieds/tete du joueur),
+		# rediriger vers la face laterale dans la direction du regard
+		if place_pos == player_feet or place_pos == player_head:
+			var cam_dir = -camera.global_basis.z
+			# Direction horizontale principale du regard
+			var best_dir = Vector3.ZERO
+			if abs(cam_dir.x) > abs(cam_dir.z):
+				best_dir = Vector3(sign(cam_dir.x), 0, 0)
+			else:
+				best_dir = Vector3(0, 0, sign(cam_dir.z))
+			# Essayer de placer sur le cote du bloc vise (break_pos)
+			var side_pos = Vector3(break_pos) + best_dir
+			var side_type = world_manager.get_block_at_position(side_pos)
+			if (side_type == BlockRegistry.BlockType.AIR or side_type == BlockRegistry.BlockType.WATER) and side_pos != player_feet and side_pos != player_head:
+				place_pos = side_pos
+			else:
+				# Essayer la direction secondaire
+				var alt_dir = Vector3(0, 0, sign(cam_dir.z)) if abs(cam_dir.x) > abs(cam_dir.z) else Vector3(sign(cam_dir.x), 0, 0)
+				var alt_pos = Vector3(break_pos) + alt_dir
+				var alt_type = world_manager.get_block_at_position(alt_pos)
+				if (alt_type == BlockRegistry.BlockType.AIR or alt_type == BlockRegistry.BlockType.WATER) and alt_pos != player_feet and alt_pos != player_head:
+					place_pos = alt_pos
+
+		var place_block_type = world_manager.get_block_at_position(place_pos)
+		var is_flora = BlockRegistry.is_cross_mesh(place_block_type)
 		var blocks_player = place_pos == player_feet or place_pos == player_head
 		var can_place = (place_block_type == BlockRegistry.BlockType.AIR or place_block_type == BlockRegistry.BlockType.WATER or is_flora) and not blocks_player
 
