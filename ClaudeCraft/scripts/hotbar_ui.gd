@@ -1,176 +1,352 @@
+# hotbar_ui.gd v2.0.0
+# HUD Minecraft complet : hotbar + coeurs + faim + armure + XP bar + crosshair
+# Utilise les textures Faithful32 GUI (sprites/hud/*)
+
 extends CanvasLayer
 
 const GC = preload("res://scripts/game_config.gd")
-@onready var hotbar: HBoxContainer = $MarginContainer/HBoxContainer
-var slot_panels: Array = []
-var player: CharacterBody3D
-var name_label: Label
 
 const NUM_SLOTS = 9
+const GUI_SCALE = 2  # Faithful32 = 2x vanilla, scale 2x pour 1080p
+const GUI_DIR = "res://TexturesPack/Faithful32/assets/minecraft/textures/gui/"
+
+# Chemins des textures HUD
+const TEX_HOTBAR = GUI_DIR + "sprites/hud/hotbar.png"
+const TEX_SELECTION = GUI_DIR + "sprites/hud/hotbar_selection.png"
+const TEX_HEART_FULL = GUI_DIR + "sprites/hud/heart/full.png"
+const TEX_HEART_HALF = GUI_DIR + "sprites/hud/heart/half.png"
+const TEX_HEART_BG = GUI_DIR + "sprites/hud/heart/container.png"
+const TEX_FOOD_FULL = GUI_DIR + "sprites/hud/food_full_hunger.png"
+const TEX_FOOD_HALF = GUI_DIR + "sprites/hud/food_half_hunger.png"
+const TEX_FOOD_EMPTY = GUI_DIR + "sprites/hud/food_empty_hunger.png"
+const TEX_ARMOR_FULL = GUI_DIR + "sprites/hud/armor_full.png"
+const TEX_ARMOR_HALF = GUI_DIR + "sprites/hud/armor_half.png"
+const TEX_ARMOR_EMPTY = GUI_DIR + "sprites/hud/armor_empty.png"
+const TEX_XP_BG = GUI_DIR + "sprites/hud/experience_bar_background.png"
+const TEX_XP_FILL = GUI_DIR + "sprites/hud/experience_bar_progress.png"
+
+var player: CharacterBody3D
 var _icon_cache: Dictionary = {}
+
+# References nodes HUD
+var _hotbar_rect: TextureRect = null       # hotbar.png background
+var _selection_rect: TextureRect = null     # hotbar_selection.png
+var _slot_icons: Array = []                # [{tex_rect, count_label}, ...]
+var _name_label: Label = null
+var _heart_icons: Array = []               # [TextureRect x 10]
+var _heart_bgs: Array = []                 # [TextureRect x 10]
+var _food_icons: Array = []                # [TextureRect x 10]
+var _armor_icons: Array = []               # [TextureRect x 10]
+var _xp_bg: TextureRect = null
+var _xp_fill: TextureRect = null
+var _crosshair: TextureRect = null
+
+# Textures chargees
+var _tex_cache: Dictionary = {}
 
 func _ready():
 	await get_tree().process_frame
 	player = get_tree().get_first_node_in_group("player")
+	_build_hud()
 
-	_create_name_label()
-	_create_hotbar_slots()
-	_update_hotbar()
+func _load_tex(path: String) -> Texture2D:
+	if _tex_cache.has(path):
+		return _tex_cache[path]
+	var tex = load(path) as Texture2D
+	if tex:
+		_tex_cache[path] = tex
+		return tex
+	var img = Image.load_from_file(path)
+	if img:
+		var itex = ImageTexture.create_from_image(img)
+		_tex_cache[path] = itex
+		return itex
+	return null
 
-func _create_name_label():
-	name_label = Label.new()
-	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	name_label.offset_left = -200
-	name_label.offset_right = 200
-	name_label.offset_top = -100
-	name_label.offset_bottom = -82
-	name_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	name_label.add_theme_font_size_override("font_size", 16)
-	name_label.add_theme_color_override("font_color", Color.WHITE)
-	name_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 1.0))
-	name_label.add_theme_constant_override("shadow_offset_x", 1)
-	name_label.add_theme_constant_override("shadow_offset_y", 1)
-	name_label.add_theme_constant_override("outline_size", 4)
-	name_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 1.0))
-	add_child(name_label)
+func _build_hud():
+	# ============================================================
+	# CROSSHAIR (centre ecran)
+	# ============================================================
+	_crosshair = TextureRect.new()
+	_crosshair.texture = _load_tex(GUI_DIR + "sprites/hud/crosshair_attack_indicator_full.png")
+	_crosshair.set_anchors_preset(Control.PRESET_CENTER)
+	_crosshair.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	var cross_size = 32
+	_crosshair.offset_left = -cross_size / 2
+	_crosshair.offset_right = cross_size / 2
+	_crosshair.offset_top = -cross_size / 2
+	_crosshair.offset_bottom = cross_size / 2
+	_crosshair.modulate = Color(1, 1, 1, 0.8)
+	_crosshair.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_crosshair)
 
-func _create_hotbar_slots():
+	# ============================================================
+	# HOTBAR (bas centre)
+	# ============================================================
+	# Hotbar background (364x44 @ scale 2 = 728x88)
+	var hotbar_tex = _load_tex(TEX_HOTBAR)
+	_hotbar_rect = TextureRect.new()
+	_hotbar_rect.texture = hotbar_tex
+	_hotbar_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_hotbar_rect.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	var hw = 364 * GUI_SCALE
+	var hh = 44 * GUI_SCALE
+	_hotbar_rect.offset_left = -hw / 2
+	_hotbar_rect.offset_right = hw / 2
+	_hotbar_rect.offset_top = -hh - 2
+	_hotbar_rect.offset_bottom = -2
+	_hotbar_rect.stretch_mode = TextureRect.STRETCH_SCALE
+	_hotbar_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_hotbar_rect)
+
+	# Selection highlight (48x46 @ scale 2 = 96x92)
+	_selection_rect = TextureRect.new()
+	_selection_rect.texture = _load_tex(TEX_SELECTION)
+	_selection_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_selection_rect.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_selection_rect.stretch_mode = TextureRect.STRETCH_SCALE
+	_selection_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_selection_rect)
+
+	# Slot item icons (9 slots, chaque slot = 40px dans la texture hotbar a scale 2)
+	var slot_size = 40 * GUI_SCALE  # 80px par slot
+	var icon_size = 32 * GUI_SCALE  # 64px icone
+	var hotbar_left = -hw / 2.0
+	var slot_start_x = hotbar_left + 6 * GUI_SCALE  # 6px de marge dans la texture
+	var slot_y = -hh - 2 + 6 * GUI_SCALE  # 6px depuis le haut de la hotbar
+
 	for i in range(NUM_SLOTS):
-		var panel = Panel.new()
-		panel.custom_minimum_size = Vector2(56, 56)
+		var slot_x = slot_start_x + i * slot_size
 
-		var style = StyleBoxFlat.new()
-		style.bg_color = Color(0.15, 0.15, 0.15, 0.8)
-		style.border_width_left = 2
-		style.border_width_top = 2
-		style.border_width_right = 2
-		style.border_width_bottom = 2
-		style.border_color = Color(0.5, 0.5, 0.5, 1.0)
-		style.corner_radius_top_left = 3
-		style.corner_radius_top_right = 3
-		style.corner_radius_bottom_left = 3
-		style.corner_radius_bottom_right = 3
-		panel.add_theme_stylebox_override("panel", style)
-
-		var num_label = Label.new()
-		num_label.text = str(i + 1)
-		num_label.position = Vector2(3, 1)
-		num_label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7, 0.7))
-		num_label.add_theme_font_size_override("font_size", 10)
-		panel.add_child(num_label)
-
-		# ColorRect (fallback pour les blocs sans texture)
-		var color_rect = ColorRect.new()
-		color_rect.size = Vector2(36, 36)
-		color_rect.position = Vector2(10, 12)
-		panel.add_child(color_rect)
-
-		# TextureRect pour les icones (blocs et outils)
 		var tex_rect = TextureRect.new()
-		tex_rect.size = Vector2(36, 36)
-		tex_rect.position = Vector2(10, 12)
+		tex_rect.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		tex_rect.offset_left = slot_x + (slot_size - icon_size) / 2.0
+		tex_rect.offset_right = tex_rect.offset_left + icon_size
+		tex_rect.offset_top = slot_y + (slot_size - icon_size) / 2.0 - 4
+		tex_rect.offset_bottom = tex_rect.offset_top + icon_size
 		tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		tex_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		tex_rect.visible = false
-		panel.add_child(tex_rect)
+		tex_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(tex_rect)
 
 		var count_label = Label.new()
-		count_label.text = "0"
+		count_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		count_label.offset_left = slot_x + slot_size - 28 * GUI_SCALE
+		count_label.offset_right = slot_x + slot_size - 2 * GUI_SCALE
+		count_label.offset_top = slot_y + slot_size - 16 * GUI_SCALE
+		count_label.offset_bottom = slot_y + slot_size
 		count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		count_label.size = Vector2(48, 20)
-		count_label.position = Vector2(4, 36)
+		count_label.add_theme_font_size_override("font_size", 16)
 		count_label.add_theme_color_override("font_color", Color.WHITE)
-		count_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 1.0))
-		count_label.add_theme_constant_override("shadow_offset_x", 1)
-		count_label.add_theme_constant_override("shadow_offset_y", 1)
-		count_label.add_theme_font_size_override("font_size", 14)
-		count_label.add_theme_constant_override("outline_size", 3)
-		count_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 1.0))
-		panel.add_child(count_label)
+		count_label.add_theme_color_override("font_shadow_color", Color(0.2, 0.2, 0.2, 1.0))
+		count_label.add_theme_constant_override("shadow_offset_x", 2)
+		count_label.add_theme_constant_override("shadow_offset_y", 2)
+		count_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(count_label)
 
-		hotbar.add_child(panel)
-		slot_panels.append({
-			"panel": panel,
-			"color_rect": color_rect,
-			"tex_rect": tex_rect,
-			"style": style,
-			"count_label": count_label
-		})
+		_slot_icons.append({"tex_rect": tex_rect, "count_label": count_label})
+
+	# Item name label (above hotbar)
+	_name_label = Label.new()
+	_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_name_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_name_label.offset_left = -300
+	_name_label.offset_right = 300
+	_name_label.offset_top = -hh - 24
+	_name_label.offset_bottom = -hh - 4
+	_name_label.add_theme_font_size_override("font_size", 16)
+	_name_label.add_theme_color_override("font_color", Color.WHITE)
+	_name_label.add_theme_color_override("font_shadow_color", Color(0.2, 0.2, 0.2, 1.0))
+	_name_label.add_theme_constant_override("shadow_offset_x", 2)
+	_name_label.add_theme_constant_override("shadow_offset_y", 2)
+	_name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_name_label)
+
+	# ============================================================
+	# COEURS (au-dessus de la hotbar, cote gauche)
+	# ============================================================
+	var icon_s = 18 * GUI_SCALE  # 36px
+	var icon_spacing = 16 * GUI_SCALE  # 32px (chevauche un peu comme MC)
+	var hearts_y = -hh - 8 - icon_s  # au-dessus de la hotbar
+	var hearts_x = hotbar_left + 2 * GUI_SCALE
+
+	for i in range(10):
+		var bg = TextureRect.new()
+		bg.texture = _load_tex(TEX_HEART_BG)
+		bg.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		bg.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		bg.offset_left = hearts_x + i * icon_spacing
+		bg.offset_right = bg.offset_left + icon_s
+		bg.offset_top = hearts_y
+		bg.offset_bottom = hearts_y + icon_s
+		bg.stretch_mode = TextureRect.STRETCH_SCALE
+		bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(bg)
+		_heart_bgs.append(bg)
+
+		var heart = TextureRect.new()
+		heart.texture = _load_tex(TEX_HEART_FULL)
+		heart.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		heart.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		heart.offset_left = bg.offset_left
+		heart.offset_right = bg.offset_right
+		heart.offset_top = bg.offset_top
+		heart.offset_bottom = bg.offset_bottom
+		heart.stretch_mode = TextureRect.STRETCH_SCALE
+		heart.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(heart)
+		_heart_icons.append(heart)
+
+	# ============================================================
+	# FAIM (au-dessus de la hotbar, cote droit — miroir des coeurs)
+	# ============================================================
+	var food_x_start = -hotbar_left - 2 * GUI_SCALE  # cote droit
+	for i in range(10):
+		var food = TextureRect.new()
+		food.texture = _load_tex(TEX_FOOD_FULL)
+		food.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		food.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		# Miroir : de droite a gauche
+		food.offset_right = food_x_start - i * icon_spacing
+		food.offset_left = food.offset_right - icon_s
+		food.offset_top = hearts_y
+		food.offset_bottom = hearts_y + icon_s
+		food.stretch_mode = TextureRect.STRETCH_SCALE
+		food.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(food)
+		_food_icons.append(food)
+
+	# ============================================================
+	# ARMURE (au-dessus des coeurs)
+	# ============================================================
+	var armor_y = hearts_y - icon_s - 2
+	for i in range(10):
+		var armor = TextureRect.new()
+		armor.texture = _load_tex(TEX_ARMOR_EMPTY)
+		armor.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		armor.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		armor.offset_left = hearts_x + i * icon_spacing
+		armor.offset_right = armor.offset_left + icon_s
+		armor.offset_top = armor_y
+		armor.offset_bottom = armor_y + icon_s
+		armor.stretch_mode = TextureRect.STRETCH_SCALE
+		armor.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		armor.visible = false  # Cache par defaut, visible quand armure equipee
+		add_child(armor)
+		_armor_icons.append(armor)
+
+	# ============================================================
+	# BARRE XP (juste au-dessus de la hotbar)
+	# ============================================================
+	_xp_bg = TextureRect.new()
+	_xp_bg.texture = _load_tex(TEX_XP_BG)
+	_xp_bg.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_xp_bg.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	var xp_w = 364 * GUI_SCALE
+	var xp_h = 10 * GUI_SCALE
+	_xp_bg.offset_left = -xp_w / 2
+	_xp_bg.offset_right = xp_w / 2
+	_xp_bg.offset_top = -hh - 4
+	_xp_bg.offset_bottom = -hh - 4 + xp_h
+	_xp_bg.stretch_mode = TextureRect.STRETCH_SCALE
+	_xp_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_xp_bg.visible = false  # Pas de systeme XP encore
+	add_child(_xp_bg)
 
 func _process(_delta):
 	if player:
 		_update_hotbar()
+		_update_hearts()
+		_update_food()
 
+# ============================================================
+# HOTBAR UPDATE
+# ============================================================
 func _update_hotbar():
-	if not player:
-		return
+	# Selection highlight position
+	if _selection_rect and _hotbar_rect:
+		var slot_size = 40 * GUI_SCALE
+		var hw = 364 * GUI_SCALE
+		var sel_w = 48 * GUI_SCALE
+		var sel_h = 46 * GUI_SCALE
+		var slot_start_x = -hw / 2.0 + 6 * GUI_SCALE
+		var sel_x = slot_start_x + player.selected_slot * slot_size - (sel_w - slot_size) / 2.0
+		_selection_rect.offset_left = sel_x
+		_selection_rect.offset_right = sel_x + sel_w
+		var hh = 44 * GUI_SCALE
+		_selection_rect.offset_top = -hh - 2 - (sel_h - hh) / 2.0
+		_selection_rect.offset_bottom = _selection_rect.offset_top + sel_h
 
-	if name_label and player.selected_slot >= 0 and player.selected_slot < player.hotbar_slots.size():
+	# Item name
+	if _name_label:
 		var tool_type = player._get_selected_tool()
 		if tool_type != ToolRegistry.ToolType.NONE:
-			name_label.text = ToolRegistry.get_tool_name(tool_type)
+			_name_label.text = ToolRegistry.get_tool_name(tool_type)
 		else:
 			var block_type = player.hotbar_slots[player.selected_slot]
-			name_label.text = BlockRegistry.get_block_name(block_type)
+			_name_label.text = BlockRegistry.get_block_name(block_type)
 
-	for i in range(min(slot_panels.size(), player.hotbar_slots.size())):
-		var slot = slot_panels[i]
+	# Slot icons + counts
+	for i in range(min(_slot_icons.size(), player.hotbar_slots.size())):
+		var slot = _slot_icons[i]
 		var tool_type = ToolRegistry.ToolType.NONE
 		if i < player.hotbar_tool_slots.size():
 			tool_type = player.hotbar_tool_slots[i]
 
 		if tool_type != ToolRegistry.ToolType.NONE:
-			# Slot outil — afficher la texture d'item
 			var tex = _load_item_icon(ToolRegistry.get_item_texture_path(tool_type))
-			if tex:
-				slot["tex_rect"].texture = tex
-				slot["tex_rect"].visible = true
-				slot["color_rect"].visible = false
-			else:
-				slot["color_rect"].color = Color(0.6, 0.55, 0.5, 1.0)
-				slot["color_rect"].visible = true
-				slot["tex_rect"].visible = false
-			slot["count_label"].text = "1"
-			slot["count_label"].add_theme_color_override("font_color", Color(1, 1, 1, 1))
-			slot["count_label"].add_theme_color_override("font_outline_color", Color(0, 0, 0, 1.0))
+			slot["tex_rect"].texture = tex
+			slot["tex_rect"].modulate = Color.WHITE
+			slot["count_label"].text = ""
 		else:
 			var block_type = player.hotbar_slots[i]
 			var count = player.get_inventory_count(block_type)
-			# Essayer d'afficher la texture du bloc (face top ou all)
 			var block_tex = _load_block_icon(block_type)
-			if block_tex:
-				slot["tex_rect"].texture = block_tex
-				slot["tex_rect"].visible = true
-				slot["tex_rect"].modulate = Color(1,1,1,1) if count > 0 else Color(0.4, 0.4, 0.4, 0.6)
-				slot["color_rect"].visible = false
-			else:
-				var color = BlockRegistry.get_block_color(block_type)
-				slot["color_rect"].color = color if count > 0 else color * 0.35
-				slot["color_rect"].visible = true
-				slot["tex_rect"].visible = false
-			slot["count_label"].text = str(count)
+			slot["tex_rect"].texture = block_tex
+			slot["tex_rect"].modulate = Color.WHITE if count > 0 else Color(0.4, 0.4, 0.4, 0.6)
+			slot["count_label"].text = str(count) if count > 1 else ""
 			if count == 0:
-				slot["count_label"].add_theme_color_override("font_color", Color(0.4, 0.3, 0.3, 0.6))
-				slot["count_label"].add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.3))
+				slot["count_label"].add_theme_color_override("font_color", Color(0.5, 0.5, 0.5, 0.6))
 			else:
-				slot["count_label"].add_theme_color_override("font_color", Color(1, 1, 1, 1))
-				slot["count_label"].add_theme_color_override("font_outline_color", Color(0, 0, 0, 1.0))
+				slot["count_label"].add_theme_color_override("font_color", Color.WHITE)
 
-		if i == player.selected_slot:
-			slot["style"].border_color = Color(1.0, 1.0, 0.5, 1.0)
-			slot["style"].border_width_left = 3
-			slot["style"].border_width_top = 3
-			slot["style"].border_width_right = 3
-			slot["style"].border_width_bottom = 3
+# ============================================================
+# HEARTS UPDATE
+# ============================================================
+func _update_hearts():
+	var hp = player.current_health
+	for i in range(10):
+		var heart_val = hp - i * 2  # chaque coeur = 2 HP
+		if heart_val >= 2:
+			_heart_icons[i].texture = _load_tex(TEX_HEART_FULL)
+			_heart_icons[i].visible = true
+		elif heart_val == 1:
+			_heart_icons[i].texture = _load_tex(TEX_HEART_HALF)
+			_heart_icons[i].visible = true
 		else:
-			slot["style"].border_color = Color(0.5, 0.5, 0.5, 1.0)
-			slot["style"].border_width_left = 2
-			slot["style"].border_width_top = 2
-			slot["style"].border_width_right = 2
-			slot["style"].border_width_bottom = 2
+			_heart_icons[i].visible = false
 
+# ============================================================
+# FOOD UPDATE
+# ============================================================
+func _update_food():
+	# Pour l'instant air supply sous l'eau / toujours plein sinon
+	var food_val = 20  # Max = 20 (10 icons x 2)
+	if player.has_method("get") and "_air_supply" in player:
+		pass  # Futur systeme de faim
+	for i in range(10):
+		var val = food_val - i * 2
+		if val >= 2:
+			_food_icons[i].texture = _load_tex(TEX_FOOD_FULL)
+		elif val == 1:
+			_food_icons[i].texture = _load_tex(TEX_FOOD_HALF)
+		else:
+			_food_icons[i].texture = _load_tex(TEX_FOOD_EMPTY)
+
+# ============================================================
+# ICON LOADING (meme systeme que l'ancien hotbar)
+# ============================================================
 func _load_item_icon(tex_path: String) -> ImageTexture:
 	if tex_path.is_empty():
 		return null
@@ -203,7 +379,6 @@ func _load_block_icon(block_type: BlockRegistry.BlockType) -> ImageTexture:
 		_icon_cache[cache_key] = null
 		return null
 	img.convert(Image.FORMAT_RGBA8)
-	# Appliquer le tint si necessaire
 	var tint = BlockRegistry.get_block_tint(block_type, "top")
 	if tint != Color(1,1,1,1):
 		for y in range(img.get_height()):
