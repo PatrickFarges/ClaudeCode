@@ -491,12 +491,13 @@ func _world_to_chunk(world_pos: Vector3) -> Vector3i:
 
 func get_block_at_position(world_pos: Vector3) -> BlockRegistry.BlockType:
 	var chunk_pos = _world_to_chunk(world_pos)
+	# floori au lieu de int() — int() tronque vers 0, floori vers -inf
 	var local_pos = Vector3i(
-		int(world_pos.x) % Chunk.CHUNK_SIZE,
-		int(world_pos.y),
-		int(world_pos.z) % Chunk.CHUNK_SIZE
+		floori(world_pos.x) % Chunk.CHUNK_SIZE,
+		floori(world_pos.y),
+		floori(world_pos.z) % Chunk.CHUNK_SIZE
 	)
-	
+
 	if local_pos.x < 0:
 		local_pos.x += Chunk.CHUNK_SIZE
 	if local_pos.z < 0:
@@ -510,11 +511,11 @@ func get_block_at_position(world_pos: Vector3) -> BlockRegistry.BlockType:
 func set_block_at_position(world_pos: Vector3, block_type: BlockRegistry.BlockType):
 	var chunk_pos = _world_to_chunk(world_pos)
 	var local_pos = Vector3i(
-		int(world_pos.x) % Chunk.CHUNK_SIZE,
-		int(world_pos.y),
-		int(world_pos.z) % Chunk.CHUNK_SIZE
+		floori(world_pos.x) % Chunk.CHUNK_SIZE,
+		floori(world_pos.y),
+		floori(world_pos.z) % Chunk.CHUNK_SIZE
 	)
-	
+
 	if local_pos.x < 0:
 		local_pos.x += Chunk.CHUNK_SIZE
 	if local_pos.z < 0:

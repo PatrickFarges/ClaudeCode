@@ -287,9 +287,9 @@ func _init_inventory():
 	inventory[BlockRegistry.BlockType.IRON_DOOR] = 0
 	inventory[BlockRegistry.BlockType.LANTERN] = 0
 	inventory[BlockRegistry.BlockType.IRON_BARS] = 0
-	inventory[BlockRegistry.BlockType.OAK_DOOR] = 2  # TEST TEMPORAIRE — supprimer après test
-	inventory[BlockRegistry.BlockType.IRON_DOOR] = 1  # TEST TEMPORAIRE — supprimer après test
-	inventory[BlockRegistry.BlockType.GLASS_PANE] = 2  # TEST TEMPORAIRE — supprimer après test
+	inventory[BlockRegistry.BlockType.OAK_DOOR] = 0
+	inventory[BlockRegistry.BlockType.IRON_DOOR] = 0
+	inventory[BlockRegistry.BlockType.GLASS_PANE] = 0
 
 func _create_block_highlighter():
 	block_highlighter = BlockHighlighter.new()
@@ -527,7 +527,7 @@ func assign_hotbar_slot(slot_index: int, block_type: BlockRegistry.BlockType):
 			_update_selected_block()
 
 func _is_any_ui_open() -> bool:
-	return inventory_open or crafting_open or (pause_menu and pause_menu.is_open)
+	return inventory_open or crafting_open or village_inv_open or (pause_menu and pause_menu.is_open)
 
 func _close_all_ui():
 	if inventory_open:
@@ -1321,6 +1321,11 @@ func _handle_eating(delta: float):
 	# Fin du repas
 	if eating_progress >= 1.0:
 		heal(EATING_HEAL_AMOUNT)
+		# Consommer la nourriture du slot
+		var food_bt = hotbar_slots[selected_slot]
+		_remove_from_inventory(food_bt)
+		if get_inventory_count(food_bt) <= 0:
+			hotbar_food_slots[selected_slot] = false
 		is_eating = false
 		eating_progress = 0.0
 		eating_particle_timer = 0.0
@@ -1453,7 +1458,7 @@ func _handle_melee(delta: float):
 	# is_action_pressed (pas just_pressed) = mode turbo, attaque en continu
 	if not Input.is_action_pressed("break_block") or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		return
-	if melee_cooldown > 0 or is_drawing_bow or _is_any_ui_open():
+	if melee_cooldown > 0 or is_drawing_bow or is_mining or _is_any_ui_open():
 		return
 
 	# Chercher le mob le plus proche devant la caméra

@@ -1874,7 +1874,7 @@ func _add_mine_gallery_tasks(count: int):
 			existing += 1
 	# Aussi compter les villageois déjà en train de miner
 	for v in villagers:
-		if v.current_task.get("type", "") == "mine_gallery":
+		if is_instance_valid(v) and v.current_task.get("type", "") == "mine_gallery":
 			existing += 1
 	if existing >= capped:
 		return
@@ -2358,11 +2358,13 @@ func _try_queue_path():
 		if t["type"] == "build_path":
 			return
 	for v in villagers:
-		if v.current_task.get("type", "") == "build_path":
+		if is_instance_valid(v) and v.current_task.get("type", "") == "build_path":
 			return
 
-	# Générer le plan de la place du village
-	if _path_blocks.size() == 0:
+	# Générer le plan de la place du village (une seule fois)
+	if _path_blocks.size() == 0 or _path_index >= _path_blocks.size():
+		_path_blocks.clear()
+		_path_index = 0
 		_generate_plaza_plan()
 
 	# Vérifier qu'on a assez de pierre
