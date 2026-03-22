@@ -17,7 +17,7 @@ V7.3 :
 - Lancement en mode administrateur (auto-élévation UAC)
 """
 
-APP_VERSION = "7.3"
+APP_VERSION = "7.3.1"
 
 import sys
 import os
@@ -1319,7 +1319,7 @@ class ClaudeLauncher(QMainWindow):
 
         # Onglet Jeux
         self.games_list = QListWidget()
-        self.games_list.itemDoubleClicked.connect(self.launch_program)
+        self.games_list.itemActivated.connect(self.launch_program)
         self.games_list.itemClicked.connect(self.show_program_info)
         self.games_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.games_list.customContextMenuRequested.connect(self.show_context_menu)
@@ -1328,7 +1328,7 @@ class ClaudeLauncher(QMainWindow):
         
         # Onglet Applications
         self.apps_list = QListWidget()
-        self.apps_list.itemDoubleClicked.connect(self.launch_program)
+        self.apps_list.itemActivated.connect(self.launch_program)
         self.apps_list.itemClicked.connect(self.show_program_info)
         self.apps_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.apps_list.customContextMenuRequested.connect(self.show_context_menu)
@@ -1337,7 +1337,7 @@ class ClaudeLauncher(QMainWindow):
         
         # Onglet Favoris
         self.favorites_list = QListWidget()
-        self.favorites_list.itemDoubleClicked.connect(self.launch_program)
+        self.favorites_list.itemActivated.connect(self.launch_program)
         self.favorites_list.itemClicked.connect(self.show_program_info)
         self.favorites_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.favorites_list.customContextMenuRequested.connect(self.show_context_menu)
@@ -1346,7 +1346,7 @@ class ClaudeLauncher(QMainWindow):
         
         # Onglet Plus utilisés
         self.most_used_list = QListWidget()
-        self.most_used_list.itemDoubleClicked.connect(self.launch_program)
+        self.most_used_list.itemActivated.connect(self.launch_program)
         self.most_used_list.itemClicked.connect(self.show_program_info)
         self.most_used_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.most_used_list.customContextMenuRequested.connect(self.show_context_menu)
