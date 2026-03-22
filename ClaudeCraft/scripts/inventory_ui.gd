@@ -1,726 +1,223 @@
+# inventory_ui.gd v2.0.0
+# Inventaire style Minecraft avec texture Faithful32 (inventory.png)
+# Ouvert avec I — affiche tous les blocs disponibles dans une grille MC
+
 extends CanvasLayer
 
 const GC = preload("res://scripts/game_config.gd")
-# Ecran d'inventaire complet — ouvert avec I
-# 7 onglets : TOUT, Terrain, Bois, Pierre, Minerais, Deco, Stations
+const GUI_DIR = "res://TexturesPack/Faithful32/assets/minecraft/textures/gui/"
+const GUI_SCALE = 2
 
 var player: CharacterBody3D = null
 var is_open: bool = false
-var current_tab: int = 0
-var is_sorted: bool = false
 var _icon_cache: Dictionary = {}
+var _background: ColorRect = null
+var _inv_texture: TextureRect = null
+var _title_label: Label = null
+var _slot_buttons: Array = []  # [{button, tex_rect, count_label, block_type}, ...]
+var _tab_buttons: Array = []
+var _current_tab: int = 0
 
-var background: ColorRect
-var panel: PanelContainer
-var scroll: ScrollContainer
-var grid: GridContainer
-var placeholder_label: Label
-var title_label: Label
-var hint_label: Label
-var slot_label: Label
-var sort_button: Button
-var tab_buttons: Array = []
-var block_buttons: Array = []
+# Texture content area (Faithful32 = 2x vanilla MC 176x166)
+const TEX_W = 352  # pixels dans la texture
+const TEX_H = 332
 
-# Tous les types de blocs solides (tout sauf AIR et WATER)
-const ALL_BLOCK_TYPES = [
-	BlockRegistry.BlockType.DIRT,
-	BlockRegistry.BlockType.GRASS,
-	BlockRegistry.BlockType.DARK_GRASS,
-	BlockRegistry.BlockType.STONE,
-	BlockRegistry.BlockType.SAND,
-	BlockRegistry.BlockType.GRAVEL,
-	BlockRegistry.BlockType.WOOD,
-	BlockRegistry.BlockType.LEAVES,
-	BlockRegistry.BlockType.SNOW,
-	BlockRegistry.BlockType.CACTUS,
-	BlockRegistry.BlockType.PLANKS,
-	BlockRegistry.BlockType.CRAFTING_TABLE,
-	BlockRegistry.BlockType.BRICK,
-	BlockRegistry.BlockType.SANDSTONE,
-	BlockRegistry.BlockType.COAL_ORE,
-	BlockRegistry.BlockType.IRON_ORE,
-	BlockRegistry.BlockType.GOLD_ORE,
-	BlockRegistry.BlockType.IRON_INGOT,
-	BlockRegistry.BlockType.GOLD_INGOT,
-	BlockRegistry.BlockType.FURNACE,
-	BlockRegistry.BlockType.STONE_TABLE,
-	BlockRegistry.BlockType.IRON_TABLE,
-	BlockRegistry.BlockType.GOLD_TABLE,
-	BlockRegistry.BlockType.COBBLESTONE,
-	BlockRegistry.BlockType.MOSSY_COBBLESTONE,
-	BlockRegistry.BlockType.ANDESITE,
-	BlockRegistry.BlockType.GRANITE,
-	BlockRegistry.BlockType.DIORITE,
-	BlockRegistry.BlockType.DEEPSLATE,
-	BlockRegistry.BlockType.SMOOTH_STONE,
-	BlockRegistry.BlockType.SPRUCE_LOG,
-	BlockRegistry.BlockType.BIRCH_LOG,
-	BlockRegistry.BlockType.JUNGLE_LOG,
-	BlockRegistry.BlockType.ACACIA_LOG,
-	BlockRegistry.BlockType.DARK_OAK_LOG,
-	BlockRegistry.BlockType.SPRUCE_PLANKS,
-	BlockRegistry.BlockType.BIRCH_PLANKS,
-	BlockRegistry.BlockType.JUNGLE_PLANKS,
-	BlockRegistry.BlockType.ACACIA_PLANKS,
-	BlockRegistry.BlockType.DARK_OAK_PLANKS,
-	BlockRegistry.BlockType.CHERRY_LOG,
-	BlockRegistry.BlockType.CHERRY_PLANKS,
-	BlockRegistry.BlockType.SPRUCE_LEAVES,
-	BlockRegistry.BlockType.BIRCH_LEAVES,
-	BlockRegistry.BlockType.JUNGLE_LEAVES,
-	BlockRegistry.BlockType.ACACIA_LEAVES,
-	BlockRegistry.BlockType.DARK_OAK_LEAVES,
-	BlockRegistry.BlockType.CHERRY_LEAVES,
-	BlockRegistry.BlockType.DIAMOND_ORE,
-	BlockRegistry.BlockType.COPPER_ORE,
-	BlockRegistry.BlockType.DIAMOND_BLOCK,
-	BlockRegistry.BlockType.COPPER_BLOCK,
-	BlockRegistry.BlockType.COPPER_INGOT,
-	BlockRegistry.BlockType.COAL_BLOCK,
-	BlockRegistry.BlockType.CLAY,
-	BlockRegistry.BlockType.PODZOL,
-	BlockRegistry.BlockType.ICE,
-	BlockRegistry.BlockType.PACKED_ICE,
-	BlockRegistry.BlockType.MOSS_BLOCK,
-	BlockRegistry.BlockType.GLASS,
-	BlockRegistry.BlockType.BOOKSHELF,
-	BlockRegistry.BlockType.HAY_BLOCK,
-	BlockRegistry.BlockType.BARREL,
-	# Blocs architecturaux
+# Tous les blocs disponibles (meme liste que l'ancienne version)
+const ALL_BLOCKS = [
+	BlockRegistry.BlockType.DIRT, BlockRegistry.BlockType.GRASS,
+	BlockRegistry.BlockType.DARK_GRASS, BlockRegistry.BlockType.STONE,
+	BlockRegistry.BlockType.SAND, BlockRegistry.BlockType.GRAVEL,
+	BlockRegistry.BlockType.WOOD, BlockRegistry.BlockType.LEAVES,
+	BlockRegistry.BlockType.SNOW, BlockRegistry.BlockType.CACTUS,
+	BlockRegistry.BlockType.PLANKS, BlockRegistry.BlockType.CRAFTING_TABLE,
+	BlockRegistry.BlockType.BRICK, BlockRegistry.BlockType.SANDSTONE,
+	BlockRegistry.BlockType.COAL_ORE, BlockRegistry.BlockType.IRON_ORE,
+	BlockRegistry.BlockType.GOLD_ORE, BlockRegistry.BlockType.IRON_INGOT,
+	BlockRegistry.BlockType.GOLD_INGOT, BlockRegistry.BlockType.FURNACE,
+	BlockRegistry.BlockType.STONE_TABLE, BlockRegistry.BlockType.IRON_TABLE,
+	BlockRegistry.BlockType.GOLD_TABLE, BlockRegistry.BlockType.COBBLESTONE,
+	BlockRegistry.BlockType.DIAMOND_ORE, BlockRegistry.BlockType.COPPER_ORE,
+	BlockRegistry.BlockType.SPRUCE_LOG, BlockRegistry.BlockType.BIRCH_LOG,
+	BlockRegistry.BlockType.JUNGLE_LOG, BlockRegistry.BlockType.ACACIA_LOG,
+	BlockRegistry.BlockType.DARK_OAK_LOG, BlockRegistry.BlockType.CHERRY_LOG,
+	BlockRegistry.BlockType.SPRUCE_LEAVES, BlockRegistry.BlockType.BIRCH_LEAVES,
+	BlockRegistry.BlockType.JUNGLE_LEAVES, BlockRegistry.BlockType.ACACIA_LEAVES,
+	BlockRegistry.BlockType.DARK_OAK_LEAVES, BlockRegistry.BlockType.CHERRY_LEAVES,
+	BlockRegistry.BlockType.ANDESITE, BlockRegistry.BlockType.GRANITE,
+	BlockRegistry.BlockType.DIORITE, BlockRegistry.BlockType.DEEPSLATE,
+	BlockRegistry.BlockType.CLAY, BlockRegistry.BlockType.PODZOL,
+	BlockRegistry.BlockType.MOSS_BLOCK, BlockRegistry.BlockType.ICE,
+	BlockRegistry.BlockType.GLASS, BlockRegistry.BlockType.TORCH,
+	BlockRegistry.BlockType.LANTERN, BlockRegistry.BlockType.CHEST,
+	BlockRegistry.BlockType.FARMLAND, BlockRegistry.BlockType.WHEAT_ITEM,
+	BlockRegistry.BlockType.BREAD,
 	BlockRegistry.BlockType.STONE_BRICKS,
-	BlockRegistry.BlockType.OAK_STAIRS,
-	BlockRegistry.BlockType.COBBLESTONE_STAIRS,
+	BlockRegistry.BlockType.OAK_STAIRS, BlockRegistry.BlockType.COBBLESTONE_STAIRS,
 	BlockRegistry.BlockType.STONE_BRICK_STAIRS,
-	BlockRegistry.BlockType.OAK_SLAB,
-	BlockRegistry.BlockType.COBBLESTONE_SLAB,
+	BlockRegistry.BlockType.OAK_SLAB, BlockRegistry.BlockType.COBBLESTONE_SLAB,
 	BlockRegistry.BlockType.STONE_SLAB,
-	BlockRegistry.BlockType.OAK_DOOR,
-	BlockRegistry.BlockType.OAK_FENCE,
-	BlockRegistry.BlockType.GLASS_PANE,
-	BlockRegistry.BlockType.LADDER,
-	BlockRegistry.BlockType.OAK_TRAPDOOR,
-	BlockRegistry.BlockType.IRON_DOOR,
-	BlockRegistry.BlockType.TORCH,
-	BlockRegistry.BlockType.LANTERN,
+	BlockRegistry.BlockType.OAK_DOOR, BlockRegistry.BlockType.IRON_DOOR,
+	BlockRegistry.BlockType.OAK_FENCE, BlockRegistry.BlockType.GLASS_PANE,
+	BlockRegistry.BlockType.LADDER, BlockRegistry.BlockType.OAK_TRAPDOOR,
 	BlockRegistry.BlockType.IRON_BARS,
+	BlockRegistry.BlockType.SHORT_GRASS, BlockRegistry.BlockType.FERN,
+	BlockRegistry.BlockType.DANDELION, BlockRegistry.BlockType.POPPY,
+	BlockRegistry.BlockType.CORNFLOWER,
 ]
-
-const TAB_TERRAIN = [
-	BlockRegistry.BlockType.DIRT,
-	BlockRegistry.BlockType.GRASS,
-	BlockRegistry.BlockType.DARK_GRASS,
-	BlockRegistry.BlockType.STONE,
-	BlockRegistry.BlockType.SAND,
-	BlockRegistry.BlockType.GRAVEL,
-	BlockRegistry.BlockType.SNOW,
-	BlockRegistry.BlockType.CACTUS,
-	BlockRegistry.BlockType.CLAY,
-	BlockRegistry.BlockType.PODZOL,
-	BlockRegistry.BlockType.MOSS_BLOCK,
-	BlockRegistry.BlockType.ICE,
-	BlockRegistry.BlockType.PACKED_ICE,
-]
-
-const TAB_WOOD = [
-	BlockRegistry.BlockType.WOOD,
-	BlockRegistry.BlockType.PLANKS,
-	BlockRegistry.BlockType.SPRUCE_LOG,
-	BlockRegistry.BlockType.SPRUCE_PLANKS,
-	BlockRegistry.BlockType.BIRCH_LOG,
-	BlockRegistry.BlockType.BIRCH_PLANKS,
-	BlockRegistry.BlockType.JUNGLE_LOG,
-	BlockRegistry.BlockType.JUNGLE_PLANKS,
-	BlockRegistry.BlockType.ACACIA_LOG,
-	BlockRegistry.BlockType.ACACIA_PLANKS,
-	BlockRegistry.BlockType.DARK_OAK_LOG,
-	BlockRegistry.BlockType.DARK_OAK_PLANKS,
-	BlockRegistry.BlockType.CHERRY_LOG,
-	BlockRegistry.BlockType.CHERRY_PLANKS,
-	BlockRegistry.BlockType.OAK_STAIRS,
-	BlockRegistry.BlockType.OAK_SLAB,
-	BlockRegistry.BlockType.OAK_DOOR,
-	BlockRegistry.BlockType.OAK_FENCE,
-	BlockRegistry.BlockType.OAK_TRAPDOOR,
-	BlockRegistry.BlockType.LADDER,
-]
-
-const TAB_STONE = [
-	BlockRegistry.BlockType.STONE,
-	BlockRegistry.BlockType.COBBLESTONE,
-	BlockRegistry.BlockType.MOSSY_COBBLESTONE,
-	BlockRegistry.BlockType.ANDESITE,
-	BlockRegistry.BlockType.GRANITE,
-	BlockRegistry.BlockType.DIORITE,
-	BlockRegistry.BlockType.DEEPSLATE,
-	BlockRegistry.BlockType.SMOOTH_STONE,
-	BlockRegistry.BlockType.BRICK,
-	BlockRegistry.BlockType.SANDSTONE,
-	BlockRegistry.BlockType.STONE_BRICKS,
-	BlockRegistry.BlockType.COBBLESTONE_STAIRS,
-	BlockRegistry.BlockType.STONE_BRICK_STAIRS,
-	BlockRegistry.BlockType.COBBLESTONE_SLAB,
-	BlockRegistry.BlockType.STONE_SLAB,
-	BlockRegistry.BlockType.IRON_BARS,
-	BlockRegistry.BlockType.IRON_DOOR,
-]
-
-const TAB_ORES = [
-	BlockRegistry.BlockType.COAL_ORE,
-	BlockRegistry.BlockType.IRON_ORE,
-	BlockRegistry.BlockType.GOLD_ORE,
-	BlockRegistry.BlockType.COPPER_ORE,
-	BlockRegistry.BlockType.DIAMOND_ORE,
-	BlockRegistry.BlockType.IRON_INGOT,
-	BlockRegistry.BlockType.GOLD_INGOT,
-	BlockRegistry.BlockType.COPPER_INGOT,
-	BlockRegistry.BlockType.DIAMOND_BLOCK,
-	BlockRegistry.BlockType.COAL_BLOCK,
-	BlockRegistry.BlockType.COPPER_BLOCK,
-]
-
-const TAB_DECO = [
-	BlockRegistry.BlockType.TORCH,
-	BlockRegistry.BlockType.GLASS,
-	BlockRegistry.BlockType.GLASS_PANE,
-	BlockRegistry.BlockType.BOOKSHELF,
-	BlockRegistry.BlockType.HAY_BLOCK,
-	BlockRegistry.BlockType.BARREL,
-	BlockRegistry.BlockType.LANTERN,
-	BlockRegistry.BlockType.LEAVES,
-	BlockRegistry.BlockType.SPRUCE_LEAVES,
-	BlockRegistry.BlockType.BIRCH_LEAVES,
-	BlockRegistry.BlockType.JUNGLE_LEAVES,
-	BlockRegistry.BlockType.ACACIA_LEAVES,
-	BlockRegistry.BlockType.DARK_OAK_LEAVES,
-	BlockRegistry.BlockType.CHERRY_LEAVES,
-]
-
-const TAB_STATIONS = [
-	BlockRegistry.BlockType.CRAFTING_TABLE,
-	BlockRegistry.BlockType.FURNACE,
-	BlockRegistry.BlockType.STONE_TABLE,
-	BlockRegistry.BlockType.IRON_TABLE,
-	BlockRegistry.BlockType.GOLD_TABLE,
-	BlockRegistry.BlockType.BARREL,
-]
-
-# Valeurs de tri (plus haut = plus rare, affiche en premier)
-var SORT_VALUES: Dictionary = {}
-
-const TAB_KEYS = ["inv_tab_all", "inv_tab_terrain", "inv_tab_wood", "inv_tab_stone", "inv_tab_ores", "inv_tab_deco", "inv_tab_stations"]
 
 func _ready():
 	layer = 10
-	visible = false
-	add_to_group("inventory_ui")
-
-	_init_sort_values()
-
 	await get_tree().process_frame
 	player = get_tree().get_first_node_in_group("player")
-
 	_build_ui()
-
-func _init_sort_values():
-	SORT_VALUES[BlockRegistry.BlockType.GOLD_TABLE] = 200
-	SORT_VALUES[BlockRegistry.BlockType.GOLD_INGOT] = 195
-	SORT_VALUES[BlockRegistry.BlockType.GOLD_ORE] = 190
-	SORT_VALUES[BlockRegistry.BlockType.IRON_TABLE] = 185
-	SORT_VALUES[BlockRegistry.BlockType.IRON_INGOT] = 180
-	SORT_VALUES[BlockRegistry.BlockType.IRON_ORE] = 175
-	SORT_VALUES[BlockRegistry.BlockType.DIAMOND_BLOCK] = 170
-	SORT_VALUES[BlockRegistry.BlockType.DIAMOND_ORE] = 165
-	SORT_VALUES[BlockRegistry.BlockType.STONE_TABLE] = 160
-	SORT_VALUES[BlockRegistry.BlockType.FURNACE] = 155
-	SORT_VALUES[BlockRegistry.BlockType.CRAFTING_TABLE] = 150
-	SORT_VALUES[BlockRegistry.BlockType.BARREL] = 145
-	SORT_VALUES[BlockRegistry.BlockType.COPPER_BLOCK] = 140
-	SORT_VALUES[BlockRegistry.BlockType.COPPER_INGOT] = 135
-	SORT_VALUES[BlockRegistry.BlockType.COPPER_ORE] = 130
-	SORT_VALUES[BlockRegistry.BlockType.COAL_BLOCK] = 125
-	SORT_VALUES[BlockRegistry.BlockType.COAL_ORE] = 120
-	SORT_VALUES[BlockRegistry.BlockType.BOOKSHELF] = 115
-	SORT_VALUES[BlockRegistry.BlockType.GLASS] = 110
-	SORT_VALUES[BlockRegistry.BlockType.HAY_BLOCK] = 105
-	SORT_VALUES[BlockRegistry.BlockType.DEEPSLATE] = 100
-	SORT_VALUES[BlockRegistry.BlockType.SMOOTH_STONE] = 95
-	SORT_VALUES[BlockRegistry.BlockType.BRICK] = 90
-	SORT_VALUES[BlockRegistry.BlockType.SANDSTONE] = 85
-	SORT_VALUES[BlockRegistry.BlockType.MOSSY_COBBLESTONE] = 80
-	SORT_VALUES[BlockRegistry.BlockType.COBBLESTONE] = 75
-	SORT_VALUES[BlockRegistry.BlockType.ANDESITE] = 70
-	SORT_VALUES[BlockRegistry.BlockType.GRANITE] = 68
-	SORT_VALUES[BlockRegistry.BlockType.DIORITE] = 66
-	SORT_VALUES[BlockRegistry.BlockType.PACKED_ICE] = 64
-	SORT_VALUES[BlockRegistry.BlockType.ICE] = 62
-	SORT_VALUES[BlockRegistry.BlockType.PLANKS] = 60
-	SORT_VALUES[BlockRegistry.BlockType.SPRUCE_PLANKS] = 59
-	SORT_VALUES[BlockRegistry.BlockType.BIRCH_PLANKS] = 58
-	SORT_VALUES[BlockRegistry.BlockType.JUNGLE_PLANKS] = 57
-	SORT_VALUES[BlockRegistry.BlockType.ACACIA_PLANKS] = 56
-	SORT_VALUES[BlockRegistry.BlockType.DARK_OAK_PLANKS] = 55
-	SORT_VALUES[BlockRegistry.BlockType.CHERRY_PLANKS] = 54
-	SORT_VALUES[BlockRegistry.BlockType.STONE] = 50
-	SORT_VALUES[BlockRegistry.BlockType.GRAVEL] = 45
-	SORT_VALUES[BlockRegistry.BlockType.WOOD] = 40
-	SORT_VALUES[BlockRegistry.BlockType.SPRUCE_LOG] = 39
-	SORT_VALUES[BlockRegistry.BlockType.BIRCH_LOG] = 38
-	SORT_VALUES[BlockRegistry.BlockType.JUNGLE_LOG] = 37
-	SORT_VALUES[BlockRegistry.BlockType.ACACIA_LOG] = 36
-	SORT_VALUES[BlockRegistry.BlockType.DARK_OAK_LOG] = 35
-	SORT_VALUES[BlockRegistry.BlockType.CHERRY_LOG] = 34
-	SORT_VALUES[BlockRegistry.BlockType.SAND] = 30
-	SORT_VALUES[BlockRegistry.BlockType.CLAY] = 28
-	SORT_VALUES[BlockRegistry.BlockType.PODZOL] = 26
-	SORT_VALUES[BlockRegistry.BlockType.MOSS_BLOCK] = 24
-	SORT_VALUES[BlockRegistry.BlockType.SNOW] = 20
-	SORT_VALUES[BlockRegistry.BlockType.CACTUS] = 18
-	SORT_VALUES[BlockRegistry.BlockType.DARK_GRASS] = 15
-	SORT_VALUES[BlockRegistry.BlockType.CHERRY_LEAVES] = 13
-	SORT_VALUES[BlockRegistry.BlockType.LEAVES] = 12
-	SORT_VALUES[BlockRegistry.BlockType.SPRUCE_LEAVES] = 11
-	SORT_VALUES[BlockRegistry.BlockType.BIRCH_LEAVES] = 10
-	SORT_VALUES[BlockRegistry.BlockType.JUNGLE_LEAVES] = 9
-	SORT_VALUES[BlockRegistry.BlockType.ACACIA_LEAVES] = 8
-	SORT_VALUES[BlockRegistry.BlockType.DARK_OAK_LEAVES] = 7
-	SORT_VALUES[BlockRegistry.BlockType.GRASS] = 5
-	SORT_VALUES[BlockRegistry.BlockType.DIRT] = 3
+	visible = false
 
 func _build_ui():
-	# ============================================================
-	# FOND SOMBRE
-	# ============================================================
-	background = ColorRect.new()
-	background.color = Color(0, 0, 0, 0.6)
-	background.set_anchors_preset(Control.PRESET_FULL_RECT)
-	background.mouse_filter = Control.MOUSE_FILTER_STOP
-	add_child(background)
+	# Fond sombre semi-transparent
+	_background = ColorRect.new()
+	_background.color = Color(0, 0, 0, 0.65)
+	_background.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_background.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(_background)
 
-	# ============================================================
-	# PANNEAU CENTRAL
-	# ============================================================
-	var center = CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(center)
+	# Texture inventaire MC comme fond
+	var inv_tex = load(GUI_DIR + "container/inventory.png") as Texture2D
+	if not inv_tex:
+		var img = Image.load_from_file(GUI_DIR + "container/inventory.png")
+		if img:
+			inv_tex = ImageTexture.create_from_image(img)
 
-	panel = PanelContainer.new()
-	panel.custom_minimum_size = Vector2(780, 0)
-	var panel_style = StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.12, 0.12, 0.15, 0.95)
-	panel_style.border_width_left = 2
-	panel_style.border_width_top = 2
-	panel_style.border_width_right = 2
-	panel_style.border_width_bottom = 2
-	panel_style.border_color = Color(0.5, 0.5, 0.6, 0.8)
-	panel_style.corner_radius_top_left = 8
-	panel_style.corner_radius_top_right = 8
-	panel_style.corner_radius_bottom_left = 8
-	panel_style.corner_radius_bottom_right = 8
-	panel_style.content_margin_left = 20
-	panel_style.content_margin_right = 20
-	panel_style.content_margin_top = 16
-	panel_style.content_margin_bottom = 16
-	panel.add_theme_stylebox_override("panel", panel_style)
-	center.add_child(panel)
+	_inv_texture = TextureRect.new()
+	_inv_texture.texture = inv_tex
+	_inv_texture.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_inv_texture.set_anchors_preset(Control.PRESET_CENTER)
+	var disp_w = TEX_W * GUI_SCALE
+	var disp_h = TEX_H * GUI_SCALE
+	_inv_texture.offset_left = -disp_w / 2
+	_inv_texture.offset_right = disp_w / 2
+	_inv_texture.offset_top = -disp_h / 2
+	_inv_texture.offset_bottom = disp_h / 2
+	_inv_texture.stretch_mode = TextureRect.STRETCH_SCALE
+	_inv_texture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_inv_texture)
 
-	var content_vbox = VBoxContainer.new()
-	content_vbox.add_theme_constant_override("separation", 10)
-	panel.add_child(content_vbox)
+	# Titre "Inventaire"
+	_title_label = Label.new()
+	_title_label.text = "Inventaire"
+	_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_title_label.set_anchors_preset(Control.PRESET_CENTER)
+	_title_label.offset_left = -150
+	_title_label.offset_right = 150
+	_title_label.offset_top = -disp_h / 2 - 30
+	_title_label.offset_bottom = -disp_h / 2 - 4
+	_title_label.add_theme_font_size_override("font_size", 20)
+	_title_label.add_theme_color_override("font_color", Color(1, 1, 0.9, 1))
+	_title_label.add_theme_color_override("font_shadow_color", Color(0.15, 0.15, 0.15, 1))
+	_title_label.add_theme_constant_override("shadow_offset_x", 2)
+	_title_label.add_theme_constant_override("shadow_offset_y", 2)
+	_title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_title_label)
 
-	# ============================================================
-	# TITRE
-	# ============================================================
-	title_label = Label.new()
-	title_label.text = Locale.tr_ui("inv_title")
-	title_label.add_theme_font_size_override("font_size", 22)
-	title_label.add_theme_color_override("font_color", Color(1, 1, 0.85, 1))
-	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	content_vbox.add_child(title_label)
+	# Creer les boutons de slot dans la grille inventaire (3x9 + hotbar 1x9)
+	# Les slots de la texture sont a des positions fixes
+	# Inventaire 3x9 : commence a (14, 166) dans la texture, pas de 36px
+	# Hotbar 1x9 : commence a (14, 282)
+	var tex_offset_x = -disp_w / 2.0
+	var tex_offset_y = -disp_h / 2.0
+	var slot_px = 36 * GUI_SCALE  # taille slot a l'ecran
+	var icon_px = 28 * GUI_SCALE  # taille icone dans le slot
+	var slot_padding = (slot_px - icon_px) / 2.0
 
-	var separator = HSeparator.new()
-	separator.add_theme_constant_override("separation", 6)
-	content_vbox.add_child(separator)
+	# On utilise la zone inventaire (3x9 = 27 slots + 9 hotbar = 36 slots)
+	# pour afficher les blocs disponibles
+	var all_slots_pos: Array = []
+	# 3 rangees inventaire
+	for row in range(3):
+		for col in range(9):
+			var sx = tex_offset_x + (14 + col * 36) * GUI_SCALE
+			var sy = tex_offset_y + (166 + row * 36) * GUI_SCALE
+			all_slots_pos.append(Vector2(sx, sy))
+	# 1 rangee hotbar
+	for col in range(9):
+		var sx = tex_offset_x + (14 + col * 36) * GUI_SCALE
+		var sy = tex_offset_y + 282 * GUI_SCALE
+		all_slots_pos.append(Vector2(sx, sy))
 
-	# ============================================================
-	# SLOT ACTIF
-	# ============================================================
-	slot_label = Label.new()
-	slot_label.text = "Slot actif : 1"
-	slot_label.add_theme_font_size_override("font_size", 14)
-	slot_label.add_theme_color_override("font_color", Color(0.7, 0.8, 1.0, 1))
-	slot_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	content_vbox.add_child(slot_label)
+	# Creer un bouton invisible par slot
+	for i in range(min(all_slots_pos.size(), ALL_BLOCKS.size())):
+		var pos = all_slots_pos[i]
+		var block_type = ALL_BLOCKS[i]
 
-	# ============================================================
-	# BARRE D'ONGLETS
-	# ============================================================
-	var tab_bar = HBoxContainer.new()
-	tab_bar.add_theme_constant_override("separation", 4)
-	content_vbox.add_child(tab_bar)
+		var btn = Button.new()
+		btn.set_anchors_preset(Control.PRESET_CENTER)
+		btn.offset_left = pos.x
+		btn.offset_right = pos.x + slot_px
+		btn.offset_top = pos.y
+		btn.offset_bottom = pos.y + slot_px
+		btn.flat = true  # pas de fond de bouton (la texture MC fait le fond)
+		btn.mouse_filter = Control.MOUSE_FILTER_STOP
+		btn.pressed.connect(_on_slot_pressed.bind(block_type))
+		add_child(btn)
 
-	for i in range(TAB_KEYS.size()):
-		var tab_btn = Button.new()
-		tab_btn.text = Locale.tr_ui(TAB_KEYS[i])
-		tab_btn.custom_minimum_size = Vector2(0, 32)
-		tab_btn.add_theme_font_size_override("font_size", 13)
-		tab_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		tab_btn.pressed.connect(_switch_tab.bind(i))
-		tab_bar.add_child(tab_btn)
-		tab_buttons.append(tab_btn)
+		var tex_rect = TextureRect.new()
+		tex_rect.set_anchors_preset(Control.PRESET_CENTER)
+		tex_rect.offset_left = pos.x + slot_padding
+		tex_rect.offset_right = pos.x + slot_padding + icon_px
+		tex_rect.offset_top = pos.y + slot_padding
+		tex_rect.offset_bottom = pos.y + slot_padding + icon_px
+		tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tex_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		tex_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(tex_rect)
 
-	# Spacer
-	var spacer = Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tab_bar.add_child(spacer)
+		var count_label = Label.new()
+		count_label.set_anchors_preset(Control.PRESET_CENTER)
+		count_label.offset_left = pos.x + slot_px - 30 * GUI_SCALE
+		count_label.offset_right = pos.x + slot_px - 2
+		count_label.offset_top = pos.y + slot_px - 14 * GUI_SCALE
+		count_label.offset_bottom = pos.y + slot_px
+		count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		count_label.add_theme_font_size_override("font_size", 14)
+		count_label.add_theme_color_override("font_color", Color.WHITE)
+		count_label.add_theme_color_override("font_shadow_color", Color(0.2, 0.2, 0.2, 1))
+		count_label.add_theme_constant_override("shadow_offset_x", 2)
+		count_label.add_theme_constant_override("shadow_offset_y", 2)
+		count_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(count_label)
 
-	# Bouton Trier
-	sort_button = Button.new()
-	sort_button.text = Locale.tr_ui("inv_sort")
-	sort_button.custom_minimum_size = Vector2(0, 32)
-	sort_button.add_theme_font_size_override("font_size", 13)
-	sort_button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	sort_button.pressed.connect(_toggle_sort)
-	tab_bar.add_child(sort_button)
+		_slot_buttons.append({
+			"button": btn,
+			"tex_rect": tex_rect,
+			"count_label": count_label,
+			"block_type": block_type,
+		})
 
-	_update_tab_styles()
-	_update_sort_style()
+	# Charger les icones
+	_refresh_slots()
 
-	# ============================================================
-	# SEPARATEUR
-	# ============================================================
-	var sep2 = HSeparator.new()
-	sep2.add_theme_constant_override("separation", 6)
-	content_vbox.add_child(sep2)
-
-	# ============================================================
-	# ZONE DE CONTENU SCROLLABLE
-	# ============================================================
-	scroll = ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(0, 360)
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content_vbox.add_child(scroll)
-
-	grid = GridContainer.new()
-	grid.columns = 8
-	grid.add_theme_constant_override("h_separation", 6)
-	grid.add_theme_constant_override("v_separation", 6)
-	scroll.add_child(grid)
-
-	placeholder_label = Label.new()
-	placeholder_label.text = Locale.tr_ui("inv_coming_soon")
-	placeholder_label.add_theme_font_size_override("font_size", 18)
-	placeholder_label.add_theme_color_override("font_color", Color(0.5, 0.5, 0.55, 1))
-	placeholder_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	placeholder_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	placeholder_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	placeholder_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	placeholder_label.visible = false
-	scroll.add_child(placeholder_label)
-
-	# ============================================================
-	# INSTRUCTIONS
-	# ============================================================
-	var hint_separator = HSeparator.new()
-	hint_separator.add_theme_constant_override("separation", 6)
-	content_vbox.add_child(hint_separator)
-
-	hint_label = Label.new()
-	hint_label.text = Locale.tr_ui("inv_hint")
-	hint_label.add_theme_font_size_override("font_size", 13)
-	hint_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6, 1))
-	hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	content_vbox.add_child(hint_label)
-
-	# Construire la grille initiale (onglet TOUT)
-	_rebuild_grid()
-
-func _switch_tab(index: int):
-	current_tab = index
-	_update_tab_styles()
-	_rebuild_grid()
-
-func _toggle_sort():
-	is_sorted = not is_sorted
-	_update_sort_style()
-	_rebuild_grid()
-
-func _update_tab_styles():
-	for i in range(tab_buttons.size()):
-		var btn: Button = tab_buttons[i]
-		var style = StyleBoxFlat.new()
-		style.corner_radius_top_left = 4
-		style.corner_radius_top_right = 4
-		style.corner_radius_bottom_left = 4
-		style.corner_radius_bottom_right = 4
-		style.border_width_left = 1
-		style.border_width_top = 1
-		style.border_width_right = 1
-		style.border_width_bottom = 1
-		style.content_margin_left = 8
-		style.content_margin_right = 8
-		style.content_margin_top = 4
-		style.content_margin_bottom = 4
-
-		if i == current_tab:
-			style.bg_color = Color(0.25, 0.25, 0.2, 1.0)
-			style.border_color = Color(1, 1, 0.5, 0.8)
-			btn.add_theme_color_override("font_color", Color(1, 1, 0.7, 1))
-		else:
-			style.bg_color = Color(0.18, 0.18, 0.2, 1.0)
-			style.border_color = Color(0.4, 0.4, 0.45, 0.6)
-			btn.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7, 1))
-
-		btn.add_theme_stylebox_override("normal", style)
-
-		var hover_style = style.duplicate()
-		hover_style.bg_color = style.bg_color.lightened(0.1)
-		hover_style.border_color = Color(0.8, 0.8, 0.5, 0.8)
-		btn.add_theme_stylebox_override("hover", hover_style)
-
-		var pressed_style = style.duplicate()
-		pressed_style.bg_color = style.bg_color.darkened(0.1)
-		btn.add_theme_stylebox_override("pressed", pressed_style)
-
-func _update_sort_style():
-	var style = StyleBoxFlat.new()
-	style.corner_radius_top_left = 4
-	style.corner_radius_top_right = 4
-	style.corner_radius_bottom_left = 4
-	style.corner_radius_bottom_right = 4
-	style.border_width_left = 1
-	style.border_width_top = 1
-	style.border_width_right = 1
-	style.border_width_bottom = 1
-	style.content_margin_left = 8
-	style.content_margin_right = 8
-	style.content_margin_top = 4
-	style.content_margin_bottom = 4
-
-	if is_sorted:
-		style.bg_color = Color(0.35, 0.2, 0.45, 1.0)
-		style.border_color = Color(0.7, 0.4, 0.9, 0.8)
-		sort_button.text = Locale.tr_ui("inv_sort_active")
-		sort_button.add_theme_color_override("font_color", Color(0.9, 0.7, 1.0, 1))
-	else:
-		style.bg_color = Color(0.22, 0.18, 0.28, 1.0)
-		style.border_color = Color(0.5, 0.35, 0.6, 0.6)
-		sort_button.text = Locale.tr_ui("inv_sort")
-		sort_button.add_theme_color_override("font_color", Color(0.7, 0.6, 0.8, 1))
-
-	sort_button.add_theme_stylebox_override("normal", style)
-
-	var hover_style = style.duplicate()
-	hover_style.bg_color = style.bg_color.lightened(0.1)
-	sort_button.add_theme_stylebox_override("hover", hover_style)
-
-	var pressed_style = style.duplicate()
-	pressed_style.bg_color = style.bg_color.darkened(0.1)
-	sort_button.add_theme_stylebox_override("pressed", pressed_style)
-
-func _rebuild_grid():
-	# Vider la grille
-	for child in grid.get_children():
-		child.queue_free()
-	block_buttons.clear()
-
-	# Determiner les blocs a afficher selon l'onglet
-	var blocks: Array = []
-	match current_tab:
-		0: blocks = ALL_BLOCK_TYPES.duplicate()
-		1: blocks = TAB_TERRAIN.duplicate()
-		2: blocks = TAB_WOOD.duplicate()
-		3: blocks = TAB_STONE.duplicate()
-		4: blocks = TAB_ORES.duplicate()
-		5: blocks = TAB_DECO.duplicate()
-		6: blocks = TAB_STATIONS.duplicate()
-
-	# Onglets vides : afficher le placeholder
-	if blocks.is_empty():
-		grid.visible = false
-		placeholder_label.visible = true
-		return
-
-	grid.visible = true
-	placeholder_label.visible = false
-
-	# Tri par rarete si active
-	if is_sorted:
-		blocks.sort_custom(func(a, b):
-			var val_a = SORT_VALUES.get(a, 0)
-			var val_b = SORT_VALUES.get(b, 0)
-			return val_a > val_b
-		)
-
-	# Creer les boutons
-	for block_type in blocks:
-		var btn_data = _create_block_button(block_type)
-		grid.add_child(btn_data["button"])
-		block_buttons.append(btn_data)
-
-	# Mettre a jour les compteurs
-	_update_display()
-
-func _create_block_button(block_type: BlockRegistry.BlockType) -> Dictionary:
-	var button = Button.new()
-	button.custom_minimum_size = Vector2(72, 72)
-	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-
-	var normal_style = StyleBoxFlat.new()
-	normal_style.bg_color = Color(0.2, 0.2, 0.22, 1.0)
-	normal_style.border_width_left = 1
-	normal_style.border_width_top = 1
-	normal_style.border_width_right = 1
-	normal_style.border_width_bottom = 1
-	normal_style.border_color = Color(0.4, 0.4, 0.45, 1.0)
-	normal_style.corner_radius_top_left = 4
-	normal_style.corner_radius_top_right = 4
-	normal_style.corner_radius_bottom_left = 4
-	normal_style.corner_radius_bottom_right = 4
-	button.add_theme_stylebox_override("normal", normal_style)
-
-	var hover_style = normal_style.duplicate()
-	hover_style.bg_color = Color(0.3, 0.3, 0.35, 1.0)
-	hover_style.border_color = Color(1, 1, 0.5, 0.8)
-	hover_style.border_width_left = 2
-	hover_style.border_width_top = 2
-	hover_style.border_width_right = 2
-	hover_style.border_width_bottom = 2
-	button.add_theme_stylebox_override("hover", hover_style)
-
-	var pressed_style = normal_style.duplicate()
-	pressed_style.bg_color = Color(0.15, 0.15, 0.18, 1.0)
-	button.add_theme_stylebox_override("pressed", pressed_style)
-
-	var vbox = VBoxContainer.new()
-	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
-	vbox.add_theme_constant_override("separation", 1)
-	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	button.add_child(vbox)
-
-	var color_container = CenterContainer.new()
-	color_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	vbox.add_child(color_container)
-
-	var color_rect = ColorRect.new()
-	color_rect.custom_minimum_size = Vector2(30, 30)
-	color_rect.color = BlockRegistry.get_block_color(block_type)
-	color_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	color_container.add_child(color_rect)
-
-	# Texture du bloc par dessus le ColorRect (fallback couleur si pas de texture)
-	var tex_rect = TextureRect.new()
-	tex_rect.custom_minimum_size = Vector2(30, 30)
-	tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	tex_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	tex_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var block_tex = _load_block_icon(block_type)
-	if block_tex:
-		tex_rect.texture = block_tex
-		tex_rect.visible = true
-		color_rect.visible = false
-	else:
-		tex_rect.visible = false
-	color_container.add_child(tex_rect)
-
-	var name_label = Label.new()
-	name_label.text = BlockRegistry.get_block_name(block_type)
-	name_label.add_theme_font_size_override("font_size", 10)
-	name_label.add_theme_color_override("font_color", Color(0.85, 0.85, 0.85, 1))
-	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	name_label.custom_minimum_size.x = 70
-	name_label.size.x = 70
-	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	vbox.add_child(name_label)
-
-	var count_label = Label.new()
-	count_label.text = "x0"
-	count_label.add_theme_font_size_override("font_size", 11)
-	count_label.add_theme_color_override("font_color", Color(0.7, 0.9, 0.7, 1))
-	count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	count_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	vbox.add_child(count_label)
-
-	button.pressed.connect(_on_block_button_pressed.bind(block_type))
-	button.gui_input.connect(_on_block_gui_input.bind(block_type))
-
-	return {
-		"button": button,
-		"color_rect": color_rect,
-		"tex_rect": tex_rect,
-		"count_label": count_label,
-		"name_label": name_label,
-		"block_type": block_type,
-		"normal_style": normal_style
-	}
-
-func _on_block_button_pressed(block_type: BlockRegistry.BlockType):
-	if not player:
-		return
-	player.assign_hotbar_slot(player.selected_slot, block_type)
-
-func _on_block_gui_input(event: InputEvent, block_type: BlockRegistry.BlockType):
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
-		if not player:
-			return
-		player.assign_hotbar_slot(player.selected_slot, block_type)
+func _refresh_slots():
+	for slot in _slot_buttons:
+		var bt = slot["block_type"]
+		var count = player.get_inventory_count(bt) if player else 0
+		var tex = _load_block_icon(bt)
+		slot["tex_rect"].texture = tex
+		slot["tex_rect"].modulate = Color.WHITE if count > 0 else Color(0.4, 0.4, 0.4, 0.6)
+		slot["count_label"].text = str(count) if count > 0 else ""
 
 func open_inventory():
 	is_open = true
 	visible = true
-	_rebuild_grid()
+	_refresh_slots()
 
 func close_inventory():
 	is_open = false
 	visible = false
 
-func _process(_delta):
-	if is_open and player:
-		_update_display()
-
-func _update_display():
-	if not player:
-		return
-
-	slot_label.text = Locale.tr_ui("inv_active_slot") % [
-		player.selected_slot + 1,
-		BlockRegistry.get_block_name(player.selected_block_type)
-	]
-
-	for btn_data in block_buttons:
-		var count = player.get_inventory_count(btn_data["block_type"])
-		btn_data["count_label"].text = "x%d" % count
-
-		if count == 0:
-			btn_data["color_rect"].color = BlockRegistry.get_block_color(btn_data["block_type"]) * 0.35
-			if btn_data.has("tex_rect"):
-				btn_data["tex_rect"].modulate = Color(0.4, 0.4, 0.4, 0.6)
-			btn_data["count_label"].add_theme_color_override("font_color", Color(0.5, 0.4, 0.4, 1))
-			btn_data["name_label"].add_theme_color_override("font_color", Color(0.5, 0.5, 0.5, 1))
-		else:
-			btn_data["color_rect"].color = BlockRegistry.get_block_color(btn_data["block_type"])
-			if btn_data.has("tex_rect"):
-				btn_data["tex_rect"].modulate = Color(1, 1, 1, 1)
-			btn_data["count_label"].add_theme_color_override("font_color", Color(0.7, 0.9, 0.7, 1))
-			btn_data["name_label"].add_theme_color_override("font_color", Color(0.85, 0.85, 0.85, 1))
-
-		var is_active = player.hotbar_slots[player.selected_slot] == btn_data["block_type"]
-		if is_active:
-			btn_data["normal_style"].border_color = Color(1, 1, 0.5, 0.9)
-			btn_data["normal_style"].border_width_left = 2
-			btn_data["normal_style"].border_width_top = 2
-			btn_data["normal_style"].border_width_right = 2
-			btn_data["normal_style"].border_width_bottom = 2
-		else:
-			btn_data["normal_style"].border_color = Color(0.4, 0.4, 0.45, 1.0)
-			btn_data["normal_style"].border_width_left = 1
-			btn_data["normal_style"].border_width_top = 1
-			btn_data["normal_style"].border_width_right = 1
-			btn_data["normal_style"].border_width_bottom = 1
+func _on_slot_pressed(block_type: BlockRegistry.BlockType):
+	if player and player.has_method("assign_hotbar_slot"):
+		player.assign_hotbar_slot(player.selected_slot, block_type)
+		_refresh_slots()
 
 func _load_block_icon(block_type: BlockRegistry.BlockType) -> ImageTexture:
 	var cache_key = "block_" + str(block_type)
@@ -739,7 +236,7 @@ func _load_block_icon(block_type: BlockRegistry.BlockType) -> ImageTexture:
 		return null
 	img.convert(Image.FORMAT_RGBA8)
 	var tint = BlockRegistry.get_block_tint(block_type, "top")
-	if tint != Color(1, 1, 1, 1):
+	if tint != Color(1,1,1,1):
 		for y in range(img.get_height()):
 			for x in range(img.get_width()):
 				var c = img.get_pixel(x, y)

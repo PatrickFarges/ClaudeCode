@@ -203,6 +203,7 @@ func _ready():
 
 # === SPAWN ROBUSTE ===
 var _spawn_pending: bool = false
+var _spawn_enable_timer: int = 0  # frames avant de reactiver le joueur
 
 func _find_land_spawn_xz():
 	"""Phase 1 : trouver des coordonnees XZ sur terre ferme via noise (instantane)."""
@@ -256,23 +257,23 @@ func _finalize_spawn():
 			continue
 		if bt == BlockRegistry.BlockType.TORCH or bt == BlockRegistry.BlockType.LANTERN:
 			continue
-		# Sol solide trouve !
-		var spawn_y = y + 1
+		# Sol solide trouve — spawn 3 blocs au-dessus + attendre collision
+		var spawn_y = y + 3
 		player.global_position.y = spawn_y
+		player.velocity = Vector3.ZERO
 		player.spawn_position = player.global_position
-		player.set_physics_process(true)
-		player.visible = true
 		_spawn_pending = false
+		_spawn_enable_timer = 10  # attendre 10 frames pour la collision
 		print("WorldManager: SPAWN FINAL a (%d, %d, %d) bloc=%d" % [
 			int(player.global_position.x), spawn_y, int(player.global_position.z), bt])
 		return
-	# Aucun sol trouve (chunk vide?) — fallback
-	player.global_position.y = 80
+	# Aucun sol trouve — fallback haut
+	player.global_position.y = 120
+	player.velocity = Vector3.ZERO
 	player.spawn_position = player.global_position
-	player.set_physics_process(true)
-	player.visible = true
 	_spawn_pending = false
-	print("WorldManager: SPAWN fallback Y=80 (pas de sol dans le chunk)")
+	_spawn_enable_timer = 10
+	print("WorldManager: SPAWN fallback Y=120 (pas de sol dans le chunk)")
 
 func _process(_delta):
 	# Instancier les chunks en attente (max 2/frame)
@@ -282,6 +283,14 @@ func _process(_delta):
 	# Spawn en attente — verifier si le chunk est pret
 	if _spawn_pending:
 		_finalize_spawn()
+
+	# Attendre que la collision soit creee avant d'activer le joueur
+	if _spawn_enable_timer > 0:
+		_spawn_enable_timer -= 1
+		if _spawn_enable_timer == 0 and player:
+			player.set_physics_process(true)
+			player.visible = true
+			print("WorldManager: joueur active (collision prete)")
 
 	# Collision différée : créer/supprimer selon distance joueur (1/frame)
 	if player:
