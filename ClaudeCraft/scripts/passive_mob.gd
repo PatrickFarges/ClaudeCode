@@ -142,7 +142,8 @@ static func _build_spawn_tables():
 		if "nether_only" in special or "end_only" in special:
 			continue
 
-		for biome_id in biomes:
+		for biome_id_raw in biomes:
+			var biome_id: int = int(biome_id_raw)
 			if biome_id < 0 or biome_id > 3:
 				continue
 			if spawn_time == "day" or spawn_time == "both":
