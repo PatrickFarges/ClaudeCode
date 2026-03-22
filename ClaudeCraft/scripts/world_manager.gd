@@ -206,14 +206,11 @@ func _ensure_land_spawn():
 	var start_biome = chunk_generator.get_biome_at(px, pz)
 	print("WorldManager: spawn biome check (%d, %d) = biome %d" % [px, pz, start_biome])
 	if start_biome <= 3:
-		# Biome terrestre mais verifier que le Y est au-dessus du terrain
-		var ground_y = chunk_generator.get_height_at(px, pz) + 2
-		if player.global_position.y < ground_y:
-			player.global_position.y = ground_y
-			player.spawn_position = player.global_position
-			print("WorldManager: spawn Y corrige a %d (terrain)" % ground_y)
-		else:
-			print("WorldManager: spawn OK (biome %d, Y=%.0f)" % [start_biome, player.global_position.y])
+		# Biome terrestre — toujours ajuster Y au terrain reel + marge
+		var ground_y = chunk_generator.get_height_at(px, pz) + 3
+		player.global_position.y = maxf(player.global_position.y, ground_y)
+		player.spawn_position = player.global_position
+		print("WorldManager: spawn OK (biome %d, Y=%.0f, terrain=%d)" % [start_biome, player.global_position.y, ground_y - 3])
 		return
 	# Chercher la terre la plus proche en spirale
 	print("WorldManager: spawn en eau (biome %d), recherche de terre ferme..." % start_biome)
@@ -232,8 +229,8 @@ func _ensure_land_spawn():
 						all_land = false
 						break
 				if all_land:
-					# Calculer la VRAIE hauteur du terrain (pas Y=80 en dur)
-					var spawn_y = chunk_generator.get_height_at(wx, wz) + 2
+					# Calculer la VRAIE hauteur du terrain + marge
+					var spawn_y = chunk_generator.get_height_at(wx, wz) + 3
 					player.global_position = Vector3(wx, spawn_y, wz)
 					player.spawn_position = player.global_position
 					print("WorldManager: spawn terrestre a (%d, %d, %d) biome=%d rayon=%d" % [wx, spawn_y, wz, b, radius])
