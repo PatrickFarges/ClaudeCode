@@ -17,6 +17,7 @@ var _title_label: Label = null
 var _slot_buttons: Array = []  # [{button, tex_rect, count_label, block_type}, ...]
 var _tab_buttons: Array = []
 var _current_tab: int = 0
+var _tooltip_label: Label = null
 
 # Texture content area (Faithful32 = 2x vanilla MC 176x166)
 const TEX_W = 352  # pixels dans la texture
@@ -193,6 +194,40 @@ func _build_ui():
 			"block_type": block_type,
 		})
 
+	# Hover tooltip sur chaque slot
+	for i in range(_slot_buttons.size()):
+		var btn = _slot_buttons[i]["button"]
+		btn.mouse_entered.connect(_on_slot_hover.bind(i))
+		btn.mouse_exited.connect(_on_slot_unhover)
+
+	# Tooltip flottant
+	_tooltip_label = Label.new()
+	_tooltip_label.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_tooltip_label.add_theme_font_size_override("font_size", 14)
+	_tooltip_label.add_theme_color_override("font_color", Color.WHITE)
+	_tooltip_label.add_theme_color_override("font_shadow_color", Color(0.1, 0.1, 0.1, 1))
+	_tooltip_label.add_theme_constant_override("shadow_offset_x", 2)
+	_tooltip_label.add_theme_constant_override("shadow_offset_y", 2)
+	_tooltip_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tooltip_label.visible = false
+	var tip_style = StyleBoxFlat.new()
+	tip_style.bg_color = Color(0.1, 0.05, 0.15, 0.9)
+	tip_style.border_color = Color(0.4, 0.2, 0.6, 0.8)
+	tip_style.border_width_left = 2
+	tip_style.border_width_top = 2
+	tip_style.border_width_right = 2
+	tip_style.border_width_bottom = 2
+	tip_style.corner_radius_top_left = 4
+	tip_style.corner_radius_top_right = 4
+	tip_style.corner_radius_bottom_left = 4
+	tip_style.corner_radius_bottom_right = 4
+	tip_style.content_margin_left = 6
+	tip_style.content_margin_right = 6
+	tip_style.content_margin_top = 3
+	tip_style.content_margin_bottom = 3
+	_tooltip_label.add_theme_stylebox_override("normal", tip_style)
+	add_child(_tooltip_label)
+
 	# Charger les icones
 	_refresh_slots()
 
@@ -213,6 +248,26 @@ func open_inventory():
 func close_inventory():
 	is_open = false
 	visible = false
+
+func _process(_delta):
+	if _tooltip_label and _tooltip_label.visible:
+		var mpos = get_viewport().get_mouse_position()
+		_tooltip_label.offset_left = mpos.x + 16
+		_tooltip_label.offset_top = mpos.y - 10
+		_tooltip_label.offset_right = mpos.x + 250
+		_tooltip_label.offset_bottom = mpos.y + 16
+
+func _on_slot_hover(index: int):
+	if index < _slot_buttons.size():
+		var bt = _slot_buttons[index]["block_type"]
+		var name = BlockRegistry.get_block_name(bt)
+		var count = player.get_inventory_count(bt) if player else 0
+		_tooltip_label.text = "%s (x%d)" % [name, count]
+		_tooltip_label.visible = true
+
+func _on_slot_unhover():
+	if _tooltip_label:
+		_tooltip_label.visible = false
 
 func _on_slot_pressed(block_type: BlockRegistry.BlockType):
 	if player and player.has_method("assign_hotbar_slot"):
