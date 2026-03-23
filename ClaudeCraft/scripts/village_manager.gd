@@ -200,36 +200,21 @@ func _are_village_chunks_loaded() -> bool:
 		return false
 	var cx = int(village_center.x)
 	var cz = int(village_center.z)
-	# Vérifier que tous les chunks couvrant la zone de flatten sont chargés
 	var min_cx = floori(float(cx - FLATTEN_RADIUS) / CHUNK_SIZE)
 	var max_cx = floori(float(cx + FLATTEN_RADIUS) / CHUNK_SIZE)
 	var min_cz = floori(float(cz - FLATTEN_RADIUS) / CHUNK_SIZE)
 	var max_cz = floori(float(cz + FLATTEN_RADIUS) / CHUNK_SIZE)
 	for chunk_x in range(min_cx, max_cx + 1):
 		for chunk_z in range(min_cz, max_cz + 1):
-			var chunk_pos = Vector3i(chunk_x, 0, chunk_z)
-			if not world_manager.chunks.has(chunk_pos):
+			if not world_manager.is_chunk_loaded(Vector3i(chunk_x, 0, chunk_z)):
 				return false
 	return true
 
 func _find_ground_y(wx: int, wz: int) -> int:
-	# Trouver le Y du SOL (bloc solide non-végétal) — ignore feuilles, troncs, herbe
-	# Utilisé pour le flatten au lieu de _find_surface_y qui renvoie le sommet des arbres
-	var leaf_set = { 6: true, 44: true, 45: true, 46: true, 47: true, 48: true, 49: true }
-	var trunk_set = { 5: true, 32: true, 33: true, 34: true, 35: true, 36: true, 42: true }
-	var flora_set = { 77: true, 78: true, 79: true, 80: true, 81: true, 82: true }  # Cross mesh vegetation
-	var chunk_pos = Vector3i(floori(float(wx) / CHUNK_SIZE), 0, floori(float(wz) / CHUNK_SIZE))
-	var start_y = 120
-	if world_manager.chunks.has(chunk_pos):
-		start_y = mini(world_manager.chunks[chunk_pos].y_max + 1, CHUNK_HEIGHT - 1)
-	for y in range(start_y, 0, -1):
-		var bt = world_manager.get_block_at_position(Vector3(wx, y, wz))
-		if bt == BlockRegistry.BlockType.AIR or bt == BlockRegistry.BlockType.WATER:
-			continue
-		if leaf_set.has(bt) or trunk_set.has(bt) or flora_set.has(bt):
-			continue
-		return y
-	return -1
+	# Délègue à world_manager.find_ground_y()
+	if not world_manager:
+		return -1
+	return world_manager.find_ground_y(wx, wz)
 
 func _generate_flatten_plan():
 	# Génère une liste de colonnes (x,z) à visiter, triées par distance au centre.
@@ -311,37 +296,27 @@ func get_next_flatten_column() -> Dictionary:
 
 func clear_column_above_ref_batched(wx: int, wz: int, affected_chunks: Dictionary):
 	# Détruit tous les blocs au-dessus de ref_y dans la colonne (x,z)
-	# BATCHED : modifie les blocs directement sans rebuild, collecte les chunks affectés
+	# BATCHED : utilise set_block_raw (pas de rebuild par bloc), collecte les chunks affectés
 	var top_y = _find_surface_y(wx, wz)
 	if top_y <= village_ref_y:
 		return
-	var cx = floori(float(wx) / CHUNK_SIZE)
-	var cz = floori(float(wz) / CHUNK_SIZE)
-	var chunk_key = Vector3i(cx, 0, cz)
-	if not world_manager.chunks.has(chunk_key):
+	if not world_manager:
 		return
-	var chunk = world_manager.chunks[chunk_key]
-	var lx = wx - cx * CHUNK_SIZE
-	var lz = wz - cz * CHUNK_SIZE
-	if lx < 0:
-		lx += CHUNK_SIZE
-	if lz < 0:
-		lz += CHUNK_SIZE
 	for y in range(top_y, village_ref_y, -1):
-		var bt = chunk.blocks[lx * 4096 + lz * 256 + y]
+		var bt = world_manager.get_block_at_position(Vector3(wx, y, wz))
 		if bt != BlockRegistry.BlockType.AIR:
 			if BlockRegistry.is_workstation(bt):
 				continue
-			chunk.blocks[lx * 4096 + lz * 256 + y] = 0  # AIR
-			chunk.is_modified = true
-			affected_chunks[chunk_key] = chunk
-			# Pas de drop pendant le flatten — ça saturait le stock (4000+ pavés)
-			# et bloquait les mineurs via is_mine_stock_full()
+			var cp = world_manager.set_block_raw(Vector3(wx, y, wz), 0)  # AIR
+			if cp != Vector3i(-9999, 0, -9999):
+				affected_chunks[cp] = true
 
 func flush_affected_chunks(affected_chunks: Dictionary):
 	# Rebuild mesh UNE SEULE FOIS par chunk affecté
-	for chunk in affected_chunks.values():
-		chunk._rebuild_mesh()
+	if not world_manager:
+		return
+	for cp in affected_chunks:
+		world_manager.rebuild_chunk_by_key(cp)
 
 func _cleanup_orphan_leaves():
 	# Scan périodique : détruire les feuilles orphelines dans la zone village
@@ -413,23 +388,12 @@ func _cleanup_orphan_leaves():
 	if orphan_leaves.is_empty():
 		return
 
-	# Détruire en batch
+	# Détruire en batch via set_block_raw
 	var affected_chunks_cleanup: Dictionary = {}
 	for leaf_pos in orphan_leaves:
-		var chunk_cx = floori(float(leaf_pos.x) / CHUNK_SIZE)
-		var chunk_cz = floori(float(leaf_pos.z) / CHUNK_SIZE)
-		var chunk_key = Vector3i(chunk_cx, 0, chunk_cz)
-		if world_manager.chunks.has(chunk_key):
-			var chunk = world_manager.chunks[chunk_key]
-			var lx = leaf_pos.x - chunk_cx * CHUNK_SIZE
-			var lz = leaf_pos.z - chunk_cz * CHUNK_SIZE
-			if lx < 0:
-				lx += CHUNK_SIZE
-			if lz < 0:
-				lz += CHUNK_SIZE
-			chunk.blocks[lx * 4096 + lz * 256 + leaf_pos.y] = 0
-			chunk.is_modified = true
-			affected_chunks_cleanup[chunk_key] = chunk
+		var cp = world_manager.set_block_raw(Vector3(leaf_pos.x, leaf_pos.y, leaf_pos.z), 0)
+		if cp != Vector3i(-9999, 0, -9999):
+			affected_chunks_cleanup[cp] = true
 
 	flush_affected_chunks(affected_chunks_cleanup)
 
@@ -1407,19 +1371,9 @@ func find_nearest_block(block_type: int, from_pos: Vector3, radius: float = 32.0
 			if best != Vector3i(-9999, -9999, -9999):
 				return best
 
-	# === SCAN OPTIMISÉ ===
-	# Rayon de chunk réduit (max 2 chunks = 32 blocs) au lieu de radius/16
-	# + early exit dès qu'on trouve un résultat valide proche
-	var results: Array = []
-	var from_chunk = Vector3i(
-		floori(from_pos.x / CHUNK_SIZE),
-		0,
-		floori(from_pos.z / CHUNK_SIZE)
-	)
-	# Limiter à 2 chunks de rayon max (5x5 = 25 chunks max au lieu de potentiellement 81+)
+	# === SCAN OPTIMISÉ — délégué à world_manager ===
 	var chunk_radius = mini(ceili(radius / CHUNK_SIZE) + 1, 2)
 
-	# Set pour lookup rapide des types acceptables
 	var acceptable_set: Dictionary = {}
 	if block_type == 5:  # WOOD -> accepter toutes les essences
 		for bt in [5, 32, 33, 34, 35, 36, 42]:
@@ -1427,45 +1381,11 @@ func find_nearest_block(block_type: int, from_pos: Vector3, radius: float = 32.0
 	else:
 		acceptable_set[block_type] = true
 
-	# Scan spirale depuis le chunk du joueur (chunks les plus proches en premier)
-	var chunk_list: Array = []
-	for cx in range(from_chunk.x - chunk_radius, from_chunk.x + chunk_radius + 1):
-		for cz in range(from_chunk.z - chunk_radius, from_chunk.z + chunk_radius + 1):
-			var cp = Vector3i(cx, 0, cz)
-			if world_manager.chunks.has(cp):
-				chunk_list.append(cp)
-	# Trier par distance au joueur
-	chunk_list.sort_custom(func(a, b):
-		var da = abs(a.x - from_chunk.x) + abs(a.z - from_chunk.z)
-		var db = abs(b.x - from_chunk.x) + abs(b.z - from_chunk.z)
-		return da < db)
+	var results: Array = world_manager.scan_blocks_in_chunks(from_pos, chunk_radius, acceptable_set, 20, 2)
 
-	for chunk_pos in chunk_list:
-		var chunk = world_manager.chunks[chunk_pos]
-		var blocks = chunk.blocks
-		var y_start = maxi(chunk.y_min, 1)
-		var y_end = mini(chunk.y_max + 1, CHUNK_HEIGHT)
-
-		# Échantillonnage : scanner 1 colonne sur 2 pour diviser le coût par 4
-		for lx in range(0, CHUNK_SIZE, 2):
-			var x_off = lx * CHUNK_SIZE * CHUNK_HEIGHT
-			for lz in range(0, CHUNK_SIZE, 2):
-				var xz_off = x_off + lz * CHUNK_HEIGHT
-				for ly in range(y_start, y_end):
-					var bt = blocks[xz_off + ly]
-					if acceptable_set.has(bt):
-						var world_pos = Vector3i(
-							chunk_pos.x * CHUNK_SIZE + lx,
-							ly,
-							chunk_pos.z * CHUNK_SIZE + lz
-						)
-						var d = from_pos.distance_to(Vector3(world_pos.x, world_pos.y, world_pos.z))
-						if d <= radius:
-							results.append(world_pos)
-
-		# Early exit : si on a déjà trouvé assez de résultats dans les chunks proches
-		if results.size() >= 20:
-			break
+	# Filtrer par rayon
+	results = results.filter(func(pos):
+		return from_pos.distance_to(Vector3(pos.x, pos.y, pos.z)) <= radius)
 
 	# Mettre en cache
 	_scan_cache[cache_key] = { "results": results, "time": now }
@@ -1485,17 +1405,11 @@ func find_nearest_block(block_type: int, from_pos: Vector3, radius: float = 32.0
 
 func find_nearest_surface_block(block_type: int, from_pos: Vector3, radius: float = 32.0, ignore_village_dist: bool = false) -> Vector3i:
 	# Comme find_nearest_block mais ne retourne que les blocs en surface (avec AIR au-dessus)
-	# OPTIMISÉ : rayon de chunk limité + échantillonnage
-	# ignore_village_dist: si true, pas de distance min du village (pour sable, etc.)
+	# Scan délégué à world_manager, filtrage local (claimed, distance village)
 	if not world_manager:
 		return Vector3i(-9999, -9999, -9999)
 
-	var from_chunk = Vector3i(
-		floori(from_pos.x / CHUNK_SIZE),
-		0,
-		floori(from_pos.z / CHUNK_SIZE)
-	)
-	var chunk_radius = mini(ceili(radius / CHUNK_SIZE) + 1, 5)  # max 5 chunks (~80 blocs) pour trouver du sable lointain
+	var chunk_radius = mini(ceili(radius / CHUNK_SIZE) + 1, 5)
 	var best = Vector3i(-9999, -9999, -9999)
 	var best_dist = INF
 
@@ -1506,41 +1420,19 @@ func find_nearest_surface_block(block_type: int, from_pos: Vector3, radius: floa
 	else:
 		acceptable_set[block_type] = true
 
-	for cx in range(from_chunk.x - chunk_radius, from_chunk.x + chunk_radius + 1):
-		for cz in range(from_chunk.z - chunk_radius, from_chunk.z + chunk_radius + 1):
-			var chunk_pos = Vector3i(cx, 0, cz)
-			if not world_manager.chunks.has(chunk_pos):
+	var results = world_manager.scan_surface_blocks_in_chunks(from_pos, chunk_radius, acceptable_set, 2)
+
+	for world_pos in results:
+		if claimed_positions.has(world_pos):
+			continue
+		if not ignore_village_dist:
+			var dist_to_village = Vector2(world_pos.x - village_center.x, world_pos.z - village_center.z).length()
+			if dist_to_village < 30.0:
 				continue
-
-			var chunk = world_manager.chunks[chunk_pos]
-			var blocks_data = chunk.blocks
-			var y_start = maxi(chunk.y_min, 1)
-			var y_end = mini(chunk.y_max + 1, CHUNK_HEIGHT - 1)
-
-			for lx in range(0, CHUNK_SIZE, 2):
-				var x_off = lx * CHUNK_SIZE * CHUNK_HEIGHT
-				for lz in range(0, CHUNK_SIZE, 2):
-					var xz_off = x_off + lz * CHUNK_HEIGHT
-					for ly in range(y_start, y_end):
-						var bt = blocks_data[xz_off + ly]
-						if acceptable_set.has(bt):
-							if blocks_data[xz_off + ly + 1] == 0:  # AIR au-dessus
-								var world_pos = Vector3i(
-									cx * CHUNK_SIZE + lx,
-									ly,
-									cz * CHUNK_SIZE + lz
-								)
-								if claimed_positions.has(world_pos):
-									continue
-								# Ne pas miner trop près du village center (sauf si ignore)
-								if not ignore_village_dist:
-									var dist_to_village = Vector2(world_pos.x - village_center.x, world_pos.z - village_center.z).length()
-									if dist_to_village < 30.0:
-										continue
-								var d = from_pos.distance_to(Vector3(world_pos.x, world_pos.y, world_pos.z))
-								if d <= radius and d < best_dist:
-									best_dist = d
-									best = world_pos
+		var d = from_pos.distance_to(Vector3(world_pos.x, world_pos.y, world_pos.z))
+		if d <= radius and d < best_dist:
+			best_dist = d
+			best = world_pos
 
 	return best
 
@@ -2003,16 +1895,10 @@ func find_flat_spot_near_center(radius: float = 8.0) -> Vector3i:
 	return Vector3i(-9999, -9999, -9999)
 
 func _find_surface_y(wx: int, wz: int) -> int:
-	# Trouver le Y de surface à une position monde — optimisé : commence depuis y_max du chunk
-	var chunk_pos = Vector3i(floori(float(wx) / CHUNK_SIZE), 0, floori(float(wz) / CHUNK_SIZE))
-	var start_y = 120  # par défaut raisonnable
-	if world_manager.chunks.has(chunk_pos):
-		start_y = mini(world_manager.chunks[chunk_pos].y_max + 1, CHUNK_HEIGHT - 1)
-	for y in range(start_y, 0, -1):
-		var bt = world_manager.get_block_at_position(Vector3(wx, y, wz))
-		if bt != BlockRegistry.BlockType.AIR and bt != BlockRegistry.BlockType.WATER and not BlockRegistry.is_cross_mesh(bt):
-			return y
-	return -1
+	# Délègue à world_manager.find_surface_y()
+	if not world_manager:
+		return -1
+	return world_manager.find_surface_y(wx, wz)
 
 func place_workstation_at(block_type: int, pos: Vector3i):
 	if world_manager:
@@ -2022,15 +1908,12 @@ func place_workstation_at(block_type: int, pos: Vector3i):
 		print("VillageManager: workstation %d placée à %s" % [block_type, str(pos)])
 
 		# Scanner le chunk pour les POI
-		if world_manager.poi_manager:
-			var chunk_pos = Vector3i(
-				floori(float(pos.x) / CHUNK_SIZE),
-				0,
-				floori(float(pos.z) / CHUNK_SIZE)
-			)
-			if world_manager.chunks.has(chunk_pos):
-				var chunk = world_manager.chunks[chunk_pos]
-				world_manager.poi_manager.scan_chunk(chunk_pos, chunk.blocks, chunk.y_min, chunk.y_max)
+		var chunk_pos = Vector3i(
+			floori(float(pos.x) / CHUNK_SIZE),
+			0,
+			floori(float(pos.z) / CHUNK_SIZE)
+		)
+		world_manager.scan_poi_at_chunk(chunk_pos)
 
 # ============================================================
 # CONSTRUCTION
@@ -2990,10 +2873,7 @@ func _spawn_new_villager(spawn_pos: Vector3, prof: int):
 	var NpcVillagerScript = preload("res://scripts/npc_villager.gd")
 	var npc = NpcVillagerScript.new()
 	npc.setup(villager_index, spawn_pos, chunk_pos, prof)
-	if world_manager.poi_manager:
-		npc.poi_manager = world_manager.poi_manager
-	world_manager.get_parent().call_deferred("add_child", npc)
-	world_manager.npcs.append({"npc": npc, "chunk_pos": chunk_pos})
+	world_manager.add_npc_to_world(npc, chunk_pos)
 	register_villager(npc)
 
 # ============================================================

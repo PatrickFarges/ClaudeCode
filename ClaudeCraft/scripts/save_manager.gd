@@ -69,17 +69,15 @@ func save_world(world_name: String) -> bool:
 	file.store_string(json_str)
 	file.close()
 
-	# Sauvegarder les chunks modifies
+	# Sauvegarder les chunks modifies (via API world_manager)
 	var saved_count = 0
-	for chunk_pos in world_manager.chunks:
-		var chunk = world_manager.chunks[chunk_pos]
-		if chunk.is_modified:
-			if _save_chunk(chunks_dir, chunk_pos, chunk.blocks):
-				saved_count += 1
+	for chunk_info in world_manager.get_modified_chunks_data():
+		if _save_chunk(chunks_dir, chunk_info["pos"], chunk_info["blocks"]):
+			saved_count += 1
 
 	# Sauvegarder aussi les chunks deja dans saved_chunk_data (dechargees mais modifiees)
 	for chunk_pos in world_manager.saved_chunk_data:
-		if not world_manager.chunks.has(chunk_pos):
+		if not world_manager.is_chunk_loaded(chunk_pos):
 			var blocks_data = world_manager.saved_chunk_data[chunk_pos]
 			if _save_chunk_raw(chunks_dir, chunk_pos, blocks_data):
 				saved_count += 1
@@ -187,11 +185,8 @@ func _clear_world():
 	# Vider la queue de generation
 	world_manager.chunk_generator.clear_queue()
 
-	# Supprimer tous les chunks
-	for chunk_pos in world_manager.chunks.keys():
-		var chunk = world_manager.chunks[chunk_pos]
-		chunk.queue_free()
-	world_manager.chunks.clear()
+	# Supprimer tous les chunks (via API world_manager)
+	world_manager.free_all_chunks()
 
 	# Supprimer les mobs
 	for mob_data in world_manager.mobs:

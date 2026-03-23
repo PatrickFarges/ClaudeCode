@@ -595,6 +595,195 @@ func place_block_at_position(world_pos: Vector3, block_type: BlockRegistry.Block
 	set_block_at_position(world_pos, block_type)
 
 # ============================================================
+# API MONDE — interface découplée pour village_manager / npc_villager
+# Les modules externes passent UNIQUEMENT par ces méthodes.
+# Les accès directs à chunks[], chunk.blocks[], chunk._rebuild_mesh()
+# sont interdits en dehors de world_manager.gd et chunk.gd.
+# ============================================================
+
+func is_chunk_loaded(chunk_pos: Vector3i) -> bool:
+	return chunks.has(chunk_pos)
+
+func get_chunk_y_max(chunk_pos: Vector3i) -> int:
+	if chunks.has(chunk_pos):
+		return chunks[chunk_pos].y_max
+	return 120
+
+func get_chunk_y_min(chunk_pos: Vector3i) -> int:
+	if chunks.has(chunk_pos):
+		return chunks[chunk_pos].y_min
+	return 0
+
+func find_surface_y(wx: int, wz: int) -> int:
+	# Trouver le Y de surface (bloc solide le plus haut, ignore eau et cross-mesh)
+	var chunk_pos = Vector3i(floori(float(wx) / Chunk.CHUNK_SIZE), 0, floori(float(wz) / Chunk.CHUNK_SIZE))
+	var start_y = 120
+	if chunks.has(chunk_pos):
+		start_y = mini(chunks[chunk_pos].y_max + 1, Chunk.CHUNK_HEIGHT - 1)
+	for y in range(start_y, 0, -1):
+		var bt = get_block_at_position(Vector3(wx, y, wz))
+		if bt != BlockRegistry.BlockType.AIR and bt != BlockRegistry.BlockType.WATER and not BlockRegistry.is_cross_mesh(bt):
+			return y
+	return -1
+
+func find_ground_y(wx: int, wz: int) -> int:
+	# Trouver le Y du SOL (ignore feuilles, troncs, herbe, végétation)
+	var leaf_set = { 6: true, 44: true, 45: true, 46: true, 47: true, 48: true, 49: true }
+	var trunk_set = { 5: true, 32: true, 33: true, 34: true, 35: true, 36: true, 42: true }
+	var flora_set = { 77: true, 78: true, 79: true, 80: true, 81: true, 82: true }
+	var chunk_pos = Vector3i(floori(float(wx) / Chunk.CHUNK_SIZE), 0, floori(float(wz) / Chunk.CHUNK_SIZE))
+	var start_y = 120
+	if chunks.has(chunk_pos):
+		start_y = mini(chunks[chunk_pos].y_max + 1, Chunk.CHUNK_HEIGHT - 1)
+	for y in range(start_y, 0, -1):
+		var bt = get_block_at_position(Vector3(wx, y, wz))
+		if bt == BlockRegistry.BlockType.AIR or bt == BlockRegistry.BlockType.WATER:
+			continue
+		if leaf_set.has(bt) or trunk_set.has(bt) or flora_set.has(bt):
+			continue
+		return y
+	return -1
+
+func set_block_raw(world_pos: Vector3, block_type: int) -> Vector3i:
+	# Set un bloc SANS rebuild mesh — pour les opérations batch.
+	# Retourne le chunk_pos affecté (pour rebuild groupé après).
+	var chunk_pos = _world_to_chunk(world_pos)
+	if not chunks.has(chunk_pos):
+		return Vector3i(-9999, 0, -9999)
+	var local_x = floori(world_pos.x) % Chunk.CHUNK_SIZE
+	var local_z = floori(world_pos.z) % Chunk.CHUNK_SIZE
+	if local_x < 0:
+		local_x += Chunk.CHUNK_SIZE
+	if local_z < 0:
+		local_z += Chunk.CHUNK_SIZE
+	var local_y = floori(world_pos.y)
+	if local_y < 0 or local_y >= Chunk.CHUNK_HEIGHT:
+		return Vector3i(-9999, 0, -9999)
+	chunks[chunk_pos].blocks[local_x * 4096 + local_z * 256 + local_y] = block_type
+	chunks[chunk_pos].is_modified = true
+	return chunk_pos
+
+func rebuild_chunk_by_key(chunk_pos: Vector3i):
+	# Rebuild mesh d'un chunk identifié par sa clé Vector3i
+	if chunks.has(chunk_pos):
+		chunks[chunk_pos]._rebuild_mesh()
+
+func get_block_raw_in_chunk(chunk_pos: Vector3i, lx: int, ly: int, lz: int) -> int:
+	# Lecture brute d'un bloc par coordonnées locales dans un chunk.
+	# Pour les scans bulk haute perf (find_closest_block, etc.)
+	if not chunks.has(chunk_pos):
+		return 0
+	return chunks[chunk_pos].blocks[lx * 4096 + lz * 256 + ly]
+
+func scan_blocks_in_chunks(from_pos: Vector3, chunk_radius: int, acceptable_set: Dictionary, max_results: int = 20, sampling: int = 2) -> Array:
+	# Scan bulk : cherche des blocs d'un type donné dans les chunks chargés.
+	# Retourne un Array de Vector3i (positions monde). Échantillonnage 1/sampling.
+	var results: Array = []
+	var from_chunk = _world_to_chunk(from_pos)
+	var chunk_list: Array = []
+	for cx in range(from_chunk.x - chunk_radius, from_chunk.x + chunk_radius + 1):
+		for cz in range(from_chunk.z - chunk_radius, from_chunk.z + chunk_radius + 1):
+			var cp = Vector3i(cx, 0, cz)
+			if chunks.has(cp):
+				chunk_list.append(cp)
+	chunk_list.sort_custom(func(a, b):
+		var da = abs(a.x - from_chunk.x) + abs(a.z - from_chunk.z)
+		var db = abs(b.x - from_chunk.x) + abs(b.z - from_chunk.z)
+		return da < db)
+
+	for cp in chunk_list:
+		var chunk = chunks[cp]
+		var blocks = chunk.blocks
+		var y_start = maxi(chunk.y_min, 1)
+		var y_end = mini(chunk.y_max + 1, Chunk.CHUNK_HEIGHT)
+		for lx in range(0, Chunk.CHUNK_SIZE, sampling):
+			var x_off = lx * Chunk.CHUNK_SIZE * Chunk.CHUNK_HEIGHT
+			for lz in range(0, Chunk.CHUNK_SIZE, sampling):
+				var xz_off = x_off + lz * Chunk.CHUNK_HEIGHT
+				for ly in range(y_start, y_end):
+					var bt = blocks[xz_off + ly]
+					if acceptable_set.has(bt):
+						results.append(Vector3i(
+							cp.x * Chunk.CHUNK_SIZE + lx,
+							ly,
+							cp.z * Chunk.CHUNK_SIZE + lz
+						))
+		if results.size() >= max_results:
+			break
+	return results
+
+func scan_surface_blocks_in_chunks(from_pos: Vector3, chunk_radius: int, acceptable_set: Dictionary, sampling: int = 2) -> Array:
+	# Scan bulk surface : ne retourne que les blocs avec AIR au-dessus.
+	# Retourne un Array de Vector3i + distance (pour tri côté appelant).
+	var results: Array = []
+	var from_chunk = _world_to_chunk(from_pos)
+	for cx in range(from_chunk.x - chunk_radius, from_chunk.x + chunk_radius + 1):
+		for cz in range(from_chunk.z - chunk_radius, from_chunk.z + chunk_radius + 1):
+			var cp = Vector3i(cx, 0, cz)
+			if not chunks.has(cp):
+				continue
+			var chunk = chunks[cp]
+			var blocks_data = chunk.blocks
+			var y_start = maxi(chunk.y_min, 1)
+			var y_end = mini(chunk.y_max + 1, Chunk.CHUNK_HEIGHT - 1)
+			for lx in range(0, Chunk.CHUNK_SIZE, sampling):
+				var x_off = lx * Chunk.CHUNK_SIZE * Chunk.CHUNK_HEIGHT
+				for lz in range(0, Chunk.CHUNK_SIZE, sampling):
+					var xz_off = x_off + lz * Chunk.CHUNK_HEIGHT
+					for ly in range(y_start, y_end):
+						var bt = blocks_data[xz_off + ly]
+						if acceptable_set.has(bt):
+							if blocks_data[xz_off + ly + 1] == 0:  # AIR au-dessus
+								results.append(Vector3i(
+									cx * Chunk.CHUNK_SIZE + lx,
+									ly,
+									cz * Chunk.CHUNK_SIZE + lz
+								))
+	return results
+
+func scan_poi_at_chunk(chunk_pos: Vector3i):
+	# Scanner les POI d'un chunk — encapsule l'accès à poi_manager + chunk.blocks
+	if poi_manager and chunks.has(chunk_pos):
+		var chunk = chunks[chunk_pos]
+		poi_manager.scan_chunk(chunk_pos, chunk.blocks, chunk.y_min, chunk.y_max)
+
+func add_npc_to_world(npc: Node, chunk_pos: Vector3i):
+	# Ajouter un PNJ au monde — encapsule l'accès à npcs[] et poi_manager
+	if poi_manager:
+		npc.poi_manager = poi_manager
+	get_parent().call_deferred("add_child", npc)
+	npcs.append({"npc": npc, "chunk_pos": chunk_pos})
+
+func get_loaded_chunk_keys_in_range(center: Vector3i, radius_blocks: int) -> Array:
+	# Retourne les clés des chunks chargés dans un rayon donné (en blocs)
+	var result: Array = []
+	var min_cx = floori(float(center.x - radius_blocks) / Chunk.CHUNK_SIZE)
+	var max_cx = floori(float(center.x + radius_blocks) / Chunk.CHUNK_SIZE)
+	var min_cz = floori(float(center.z - radius_blocks) / Chunk.CHUNK_SIZE)
+	var max_cz = floori(float(center.z + radius_blocks) / Chunk.CHUNK_SIZE)
+	for cx_i in range(min_cx, max_cx + 1):
+		for cz_i in range(min_cz, max_cz + 1):
+			var cp = Vector3i(cx_i, 0, cz_i)
+			if chunks.has(cp):
+				result.append(cp)
+	return result
+
+func get_modified_chunks_data() -> Array:
+	# Retourne les chunks modifiés pour la sauvegarde : [{pos: Vector3i, blocks: PackedByteArray}]
+	var result: Array = []
+	for chunk_pos in chunks:
+		var chunk = chunks[chunk_pos]
+		if chunk.is_modified:
+			result.append({"pos": chunk_pos, "blocks": chunk.blocks})
+	return result
+
+func free_all_chunks():
+	# Supprime tous les chunks du monde (pour le chargement d'une sauvegarde)
+	for chunk_pos in chunks.keys():
+		chunks[chunk_pos].queue_free()
+	chunks.clear()
+
+# ============================================================
 # PNJ VILLAGEOIS
 # ============================================================
 

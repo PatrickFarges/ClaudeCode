@@ -959,27 +959,16 @@ func _harvest_leaves_around(center_pos: Vector3i):
 	if orphan_leaves.is_empty():
 		return
 
-	# Phase 3 : détruire les feuilles orphelines en batch (1 rebuild par chunk)
+	# Phase 3 : détruire les feuilles orphelines en batch via set_block_raw
 	var affected_chunks: Dictionary = {}
 	for leaf_pos in orphan_leaves:
-		var cx = floori(float(leaf_pos.x) / 16.0)
-		var cz = floori(float(leaf_pos.z) / 16.0)
-		var chunk_key = Vector3i(cx, 0, cz)
-		if world_manager.chunks.has(chunk_key):
-			var chunk = world_manager.chunks[chunk_key]
-			var lx = leaf_pos.x - cx * 16
-			var lz = leaf_pos.z - cz * 16
-			if lx < 0:
-				lx += 16
-			if lz < 0:
-				lz += 16
-			chunk.blocks[lx * 4096 + lz * 256 + leaf_pos.y] = 0  # AIR
-			chunk.is_modified = true
-			affected_chunks[chunk_key] = chunk
+		var cp = world_manager.set_block_raw(Vector3(leaf_pos.x, leaf_pos.y, leaf_pos.z), 0)
+		if cp != Vector3i(-9999, 0, -9999):
+			affected_chunks[cp] = true
 
 	# Rebuild mesh UNE SEULE FOIS par chunk affecté
-	for chunk in affected_chunks.values():
-		chunk._rebuild_mesh()
+	for cp in affected_chunks:
+		world_manager.rebuild_chunk_by_key(cp)
 
 	# Feuilles détruites — pas d'ajout à l'inventaire (inutile, pollue le stock)
 
