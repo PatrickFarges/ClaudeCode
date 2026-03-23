@@ -198,6 +198,32 @@ func _thread_entry():
 	_compute_mesh_arrays()
 	call_deferred("_apply_mesh_data")
 
+## P1 — Block property caches (populated once per mesh build, avoids thousands of registry lookups)
+var _tint_cache: Dictionary = {}   # "bt:face" -> Color
+var _tex_cache: Dictionary = {}    # "bt:face" -> String
+var _layer_cache: Dictionary = {}  # tex_name -> float
+
+## P5 — AO is a stub (returns 1.0), pre-compute constant
+const _AO_FULL: Array = [1.0, 1.0, 1.0, 1.0]
+
+## P1 — Cached block property accessors
+func _cached_tint(bt: int, face: String) -> Color:
+	var key: int = bt * 8 + face.hash()
+	if _tint_cache.has(key):
+		return _tint_cache[key]
+	var val: Color = BlockRegistry.get_block_tint(bt, face)
+	_tint_cache[key] = val
+	return val
+
+func _cached_tex_layer(bt: int, face: String) -> float:
+	var key: int = bt * 8 + face.hash()
+	if _layer_cache.has(key):
+		return _layer_cache[key]
+	var tex_name: String = BlockRegistry.get_face_texture(bt, face)
+	var layer: float = float(TextureManager.get_layer_index(tex_name))
+	_layer_cache[key] = layer
+	return layer
+
 func _compute_mesh_arrays():
 	_vertices = PackedVector3Array()
 	_normals = PackedVector3Array()
@@ -217,6 +243,11 @@ func _compute_mesh_arrays():
 	_flora_indices = PackedInt32Array()
 	_flora_uvs = PackedVector2Array()
 	_flora_custom0 = PackedFloat32Array()
+
+	# P1 — Clear caches for this build
+	_tint_cache.clear()
+	_tex_cache.clear()
+	_layer_cache.clear()
 
 	if y_min <= y_max:
 		_greedy_mesh_y_faces()
@@ -463,11 +494,14 @@ func _run_greedy(mask: Array, u_size: int, v_size: int) -> Array:
 # ============================================================
 
 func _greedy_mesh_y_faces():
+	# P2 — Pre-allocate mask once, clear per Y-level
 	var mask: Array = []
 	mask.resize(CHUNK_SIZE)
 	for i in range(CHUNK_SIZE):
 		mask[i] = []
 		mask[i].resize(CHUNK_SIZE)
+		for j in range(CHUNK_SIZE):
+			mask[i][j] = -1
 
 	for y in range(y_min, y_max + 1):
 		# --- UP (+Y) ---
@@ -491,17 +525,12 @@ func _greedy_mesh_y_faces():
 			var quads = _run_greedy(mask, CHUNK_SIZE, CHUNK_SIZE)
 			for q in quads:
 				var u: int = q[0]; var v: int = q[1]; var w: int = q[2]; var h: int = q[3]; var bt: int = q[4]
-				var tint: Color = BlockRegistry.get_block_tint(bt, "top")
-				var tex_name: String = BlockRegistry.get_face_texture(bt, "top")
-				var layer: float = float(TextureManager.get_layer_index(tex_name))
-				var ao0 = _calculate_ao_for_face(Vector3.UP, u, y, v)
-				var ao1 = _calculate_ao_for_face(Vector3.UP, u + w - 1, y, v)
-				var ao2 = _calculate_ao_for_face(Vector3.UP, u + w - 1, y, v + h - 1)
-				var ao3 = _calculate_ao_for_face(Vector3.UP, u, y, v + h - 1)
+				var tint: Color = _cached_tint(bt, "top")
+				var layer: float = _cached_tex_layer(bt, "top")
 				_emit_quad(
 					Vector3(u, y + 1, v), Vector3(u + w, y + 1, v),
 					Vector3(u + w, y + 1, v + h), Vector3(u, y + 1, v + h),
-					Vector3.UP, tint, [ao0[0], ao1[1], ao2[2], ao3[3]], float(w), float(h), layer)
+					Vector3.UP, tint, _AO_FULL, float(w), float(h), layer)
 
 		# --- DOWN (-Y) ---
 		has_faces = false
@@ -524,17 +553,12 @@ func _greedy_mesh_y_faces():
 			var quads = _run_greedy(mask, CHUNK_SIZE, CHUNK_SIZE)
 			for q in quads:
 				var u: int = q[0]; var v: int = q[1]; var w: int = q[2]; var h: int = q[3]; var bt: int = q[4]
-				var tint: Color = BlockRegistry.get_block_tint(bt, "bottom") * 0.6
-				var tex_name: String = BlockRegistry.get_face_texture(bt, "bottom")
-				var layer: float = float(TextureManager.get_layer_index(tex_name))
-				var ao0 = _calculate_ao_for_face(Vector3.DOWN, u, y, v + h - 1)
-				var ao1 = _calculate_ao_for_face(Vector3.DOWN, u + w - 1, y, v + h - 1)
-				var ao2 = _calculate_ao_for_face(Vector3.DOWN, u + w - 1, y, v)
-				var ao3 = _calculate_ao_for_face(Vector3.DOWN, u, y, v)
+				var tint: Color = _cached_tint(bt, "bottom") * 0.6
+				var layer: float = _cached_tex_layer(bt, "bottom")
 				_emit_quad(
 					Vector3(u, y, v + h), Vector3(u + w, y, v + h),
 					Vector3(u + w, y, v), Vector3(u, y, v),
-					Vector3.DOWN, tint, [ao0[0], ao1[1], ao2[2], ao3[3]], float(w), float(h), layer)
+					Vector3.DOWN, tint, _AO_FULL, float(w), float(h), layer)
 
 # ============================================================
 # FACES Z (BACK / FORWARD) — masque u=x, v=y (réduit à y_range)
@@ -544,11 +568,14 @@ func _greedy_mesh_z_faces():
 	var y_range: int = y_max - y_min + 1
 	if y_range <= 0:
 		return
+	# P2 — Pre-allocate mask once
 	var mask: Array = []
 	mask.resize(CHUNK_SIZE)
 	for i in range(CHUNK_SIZE):
 		mask[i] = []
 		mask[i].resize(y_range)
+		for j in range(y_range):
+			mask[i][j] = -1
 
 	for z in range(CHUNK_SIZE):
 		# --- BACK (+Z) ---
@@ -574,17 +601,12 @@ func _greedy_mesh_z_faces():
 			var quads = _run_greedy(mask, CHUNK_SIZE, y_range)
 			for q in quads:
 				var u: int = q[0]; var v: int = q[1] + y_min; var w: int = q[2]; var h: int = q[3]; var bt: int = q[4]
-				var tint: Color = BlockRegistry.get_block_tint(bt, "back") * 0.8
-				var tex_name: String = BlockRegistry.get_face_texture(bt, "back")
-				var layer: float = float(TextureManager.get_layer_index(tex_name))
-				var ao0 = _calculate_ao_for_face(Vector3.BACK, u + w - 1, v, z)
-				var ao1 = _calculate_ao_for_face(Vector3.BACK, u, v, z)
-				var ao2 = _calculate_ao_for_face(Vector3.BACK, u, v + h - 1, z)
-				var ao3 = _calculate_ao_for_face(Vector3.BACK, u + w - 1, v + h - 1, z)
+				var tint: Color = _cached_tint(bt, "back") * 0.8
+				var layer: float = _cached_tex_layer(bt, "back")
 				_emit_quad(
 					Vector3(u + w, v, z + 1), Vector3(u, v, z + 1),
 					Vector3(u, v + h, z + 1), Vector3(u + w, v + h, z + 1),
-					Vector3.BACK, tint, [ao0[0], ao1[1], ao2[2], ao3[3]], float(w), float(h), layer)
+					Vector3.BACK, tint, _AO_FULL, float(w), float(h), layer)
 
 		# --- FORWARD (-Z) ---
 		has_faces = false
@@ -609,17 +631,12 @@ func _greedy_mesh_z_faces():
 			var quads = _run_greedy(mask, CHUNK_SIZE, y_range)
 			for q in quads:
 				var u: int = q[0]; var v: int = q[1] + y_min; var w: int = q[2]; var h: int = q[3]; var bt: int = q[4]
-				var tint: Color = BlockRegistry.get_block_tint(bt, "front") * 0.8
-				var tex_name: String = BlockRegistry.get_face_texture(bt, "front")
-				var layer: float = float(TextureManager.get_layer_index(tex_name))
-				var ao0 = _calculate_ao_for_face(Vector3.FORWARD, u, v, z)
-				var ao1 = _calculate_ao_for_face(Vector3.FORWARD, u + w - 1, v, z)
-				var ao2 = _calculate_ao_for_face(Vector3.FORWARD, u + w - 1, v + h - 1, z)
-				var ao3 = _calculate_ao_for_face(Vector3.FORWARD, u, v + h - 1, z)
+				var tint: Color = _cached_tint(bt, "front") * 0.8
+				var layer: float = _cached_tex_layer(bt, "front")
 				_emit_quad(
 					Vector3(u, v, z), Vector3(u + w, v, z),
 					Vector3(u + w, v + h, z), Vector3(u, v + h, z),
-					Vector3.FORWARD, tint, [ao0[0], ao1[1], ao2[2], ao3[3]], float(w), float(h), layer)
+					Vector3.FORWARD, tint, _AO_FULL, float(w), float(h), layer)
 
 # ============================================================
 # FACES X (RIGHT / LEFT) — masque u=z, v=y (réduit à y_range)
@@ -629,11 +646,14 @@ func _greedy_mesh_x_faces():
 	var y_range: int = y_max - y_min + 1
 	if y_range <= 0:
 		return
+	# P2 — Pre-allocate mask once
 	var mask: Array = []
 	mask.resize(CHUNK_SIZE)
 	for i in range(CHUNK_SIZE):
 		mask[i] = []
 		mask[i].resize(y_range)
+		for j in range(y_range):
+			mask[i][j] = -1
 
 	for x in range(CHUNK_SIZE):
 		var x_off: int = x * 4096
@@ -661,17 +681,12 @@ func _greedy_mesh_x_faces():
 			var quads = _run_greedy(mask, CHUNK_SIZE, y_range)
 			for q in quads:
 				var u: int = q[0]; var v: int = q[1] + y_min; var w: int = q[2]; var h: int = q[3]; var bt: int = q[4]
-				var tint: Color = BlockRegistry.get_block_tint(bt, "right") * 0.9
-				var tex_name: String = BlockRegistry.get_face_texture(bt, "right")
-				var layer: float = float(TextureManager.get_layer_index(tex_name))
-				var ao0 = _calculate_ao_for_face(Vector3.RIGHT, x, v, u)
-				var ao1 = _calculate_ao_for_face(Vector3.RIGHT, x, v, u + w - 1)
-				var ao2 = _calculate_ao_for_face(Vector3.RIGHT, x, v + h - 1, u + w - 1)
-				var ao3 = _calculate_ao_for_face(Vector3.RIGHT, x, v + h - 1, u)
+				var tint: Color = _cached_tint(bt, "right") * 0.9
+				var layer: float = _cached_tex_layer(bt, "right")
 				_emit_quad(
 					Vector3(x + 1, v, u), Vector3(x + 1, v, u + w),
 					Vector3(x + 1, v + h, u + w), Vector3(x + 1, v + h, u),
-					Vector3.RIGHT, tint, [ao0[0], ao1[1], ao2[2], ao3[3]], float(w), float(h), layer)
+					Vector3.RIGHT, tint, _AO_FULL, float(w), float(h), layer)
 
 		# --- LEFT (-X) ---
 		has_faces = false
@@ -694,17 +709,12 @@ func _greedy_mesh_x_faces():
 			var quads = _run_greedy(mask, CHUNK_SIZE, y_range)
 			for q in quads:
 				var u: int = q[0]; var v: int = q[1] + y_min; var w: int = q[2]; var h: int = q[3]; var bt: int = q[4]
-				var tint: Color = BlockRegistry.get_block_tint(bt, "left") * 0.9
-				var tex_name: String = BlockRegistry.get_face_texture(bt, "left")
-				var layer: float = float(TextureManager.get_layer_index(tex_name))
-				var ao0 = _calculate_ao_for_face(Vector3.LEFT, x, v, u + w - 1)
-				var ao1 = _calculate_ao_for_face(Vector3.LEFT, x, v, u)
-				var ao2 = _calculate_ao_for_face(Vector3.LEFT, x, v + h - 1, u)
-				var ao3 = _calculate_ao_for_face(Vector3.LEFT, x, v + h - 1, u + w - 1)
+				var tint: Color = _cached_tint(bt, "left") * 0.9
+				var layer: float = _cached_tex_layer(bt, "left")
 				_emit_quad(
 					Vector3(x, v, u + w), Vector3(x, v, u),
 					Vector3(x, v + h, u), Vector3(x, v + h, u + w),
-					Vector3.LEFT, tint, [ao0[0], ao1[1], ao2[2], ao3[3]], float(w), float(h), layer)
+					Vector3.LEFT, tint, _AO_FULL, float(w), float(h), layer)
 
 # ============================================================
 # EMISSION D'UN QUAD FUSIONNE
@@ -713,48 +723,16 @@ func _greedy_mesh_x_faces():
 func _emit_quad(v0: Vector3, v1: Vector3, v2: Vector3, v3: Vector3, normal: Vector3, color: Color, ao: Array, uv_w: float = 1.0, uv_h: float = 1.0, layer: float = 0.0, skip_collision: bool = false):
 	var base: int = _vertices.size()
 
-	_vertices.append(v0)
-	_vertices.append(v1)
-	_vertices.append(v2)
-	_vertices.append(v3)
+	# P6 — Batch appends
+	_vertices.append_array([v0, v1, v2, v3])
+	_normals.append_array([normal, normal, normal, normal])
+	_colors.append_array([color * ao[0], color * ao[1], color * ao[2], color * ao[3]])
+	_uvs.append_array([Vector2(0, uv_h), Vector2(uv_w, uv_h), Vector2(uv_w, 0), Vector2(0, 0)])
+	_custom0.append_array([layer, layer, layer, layer])
+	_indices.append_array([base, base + 1, base + 2, base + 2, base + 3, base])
 
-	_normals.append(normal)
-	_normals.append(normal)
-	_normals.append(normal)
-	_normals.append(normal)
-
-	_colors.append(color * ao[0])
-	_colors.append(color * ao[1])
-	_colors.append(color * ao[2])
-	_colors.append(color * ao[3])
-
-	# UV: V inversé pour que le haut de la texture soit en haut du quad
-	_uvs.append(Vector2(0, uv_h))
-	_uvs.append(Vector2(uv_w, uv_h))
-	_uvs.append(Vector2(uv_w, 0))
-	_uvs.append(Vector2(0, 0))
-
-	# CUSTOM0: layer index dans le Texture2DArray
-	_custom0.append(layer)
-	_custom0.append(layer)
-	_custom0.append(layer)
-	_custom0.append(layer)
-
-	_indices.append(base)
-	_indices.append(base + 1)
-	_indices.append(base + 2)
-	_indices.append(base + 2)
-	_indices.append(base + 3)
-	_indices.append(base)
-
-	# Faces de collision (2 triangles)
 	if not skip_collision:
-		_collision_faces.append(v0)
-		_collision_faces.append(v1)
-		_collision_faces.append(v2)
-		_collision_faces.append(v2)
-		_collision_faces.append(v3)
-		_collision_faces.append(v0)
+		_collision_faces.append_array([v0, v1, v2, v2, v3, v0])
 
 # ============================================================
 # FLORA MESH — cross billboards (2 quads en X par bloc)
@@ -773,73 +751,48 @@ func _build_flora_mesh():
 					_emit_cross_quad(x, y, z, bt)
 
 func _emit_cross_quad(x: int, y: int, z: int, bt: int):
-	var tex_name: String = BlockRegistry.get_face_texture(bt, "all")
-	var layer: float = float(TextureManager.get_layer_index(tex_name))
-	var tint: Color = BlockRegistry.get_block_tint(bt, "all")
+	var layer: float = _cached_tex_layer(bt, "all")
+	var tint: Color = _cached_tint(bt, "all")
 	var base: int = _flora_vertices.size()
-
-	# Quad 1 : diagonale (0,0) -> (1,1) dans le plan XZ
 	var fx: float = float(x)
 	var fy: float = float(y)
 	var fz: float = float(z)
 
-	_flora_vertices.append(Vector3(fx, fy, fz))
-	_flora_vertices.append(Vector3(fx + 1.0, fy, fz + 1.0))
-	_flora_vertices.append(Vector3(fx + 1.0, fy + 1.0, fz + 1.0))
-	_flora_vertices.append(Vector3(fx, fy + 1.0, fz))
+	# P6 — Batch appends
+	_flora_vertices.append_array([
+		Vector3(fx, fy, fz), Vector3(fx + 1.0, fy, fz + 1.0),
+		Vector3(fx + 1.0, fy + 1.0, fz + 1.0), Vector3(fx, fy + 1.0, fz),
+		Vector3(fx + 1.0, fy, fz), Vector3(fx, fy, fz + 1.0),
+		Vector3(fx, fy + 1.0, fz + 1.0), Vector3(fx + 1.0, fy + 1.0, fz)])
 
-	# Quad 2 : diagonale (1,0) -> (0,1) dans le plan XZ
-	_flora_vertices.append(Vector3(fx + 1.0, fy, fz))
-	_flora_vertices.append(Vector3(fx, fy, fz + 1.0))
-	_flora_vertices.append(Vector3(fx, fy + 1.0, fz + 1.0))
-	_flora_vertices.append(Vector3(fx + 1.0, fy + 1.0, fz))
+	_flora_normals.append_array([Vector3.UP, Vector3.UP, Vector3.UP, Vector3.UP,
+		Vector3.UP, Vector3.UP, Vector3.UP, Vector3.UP])
 
-	# Normales vers le haut pour un eclairage uniforme (style MC)
-	for i in range(8):
-		_flora_normals.append(Vector3.UP)
-
-	# Couleur / tint — layer index encode dans l'alpha du vertex color
-	# (contourne un probleme de CUSTOM0 non transmis au shader flora)
 	var tint_with_layer := Color(tint.r, tint.g, tint.b, layer / 255.0)
-	for i in range(8):
-		_flora_colors.append(tint_with_layer)
+	_flora_colors.append_array([tint_with_layer, tint_with_layer, tint_with_layer, tint_with_layer,
+		tint_with_layer, tint_with_layer, tint_with_layer, tint_with_layer])
 
-	# UVs (V inverse) — 2 quads identiques
-	for i in range(2):
-		_flora_uvs.append(Vector2(0, 1))
-		_flora_uvs.append(Vector2(1, 1))
-		_flora_uvs.append(Vector2(1, 0))
-		_flora_uvs.append(Vector2(0, 0))
+	_flora_uvs.append_array([Vector2(0, 1), Vector2(1, 1), Vector2(1, 0), Vector2(0, 0),
+		Vector2(0, 1), Vector2(1, 1), Vector2(1, 0), Vector2(0, 0)])
 
-	# Layer index (CUSTOM0 — conserve pour compatibilite)
-	for i in range(8):
-		_flora_custom0.append(layer)
+	_flora_custom0.append_array([layer, layer, layer, layer, layer, layer, layer, layer])
 
-	# Indices — 2 quads = 4 triangles
-	_flora_indices.append(base)
-	_flora_indices.append(base + 1)
-	_flora_indices.append(base + 2)
-	_flora_indices.append(base + 2)
-	_flora_indices.append(base + 3)
-	_flora_indices.append(base)
-
-	_flora_indices.append(base + 4)
-	_flora_indices.append(base + 5)
-	_flora_indices.append(base + 6)
-	_flora_indices.append(base + 6)
-	_flora_indices.append(base + 7)
-	_flora_indices.append(base + 4)
+	_flora_indices.append_array([base, base + 1, base + 2, base + 2, base + 3, base,
+		base + 4, base + 5, base + 6, base + 6, base + 7, base + 4])
 
 # ============================================================
 # WATER MESH — top faces only (greedy)
 # ============================================================
 
 func _build_water_mesh():
+	# P2 — Pre-allocate mask once
 	var mask: Array = []
 	mask.resize(CHUNK_SIZE)
 	for i in range(CHUNK_SIZE):
 		mask[i] = []
 		mask[i].resize(CHUNK_SIZE)
+		for j in range(CHUNK_SIZE):
+			mask[i][j] = -1
 
 	for y in range(y_min, y_max + 1):
 		var has_faces: bool = false
@@ -866,29 +819,12 @@ func _build_water_mesh():
 
 func _emit_water_quad(v0: Vector3, v1: Vector3, v2: Vector3, v3: Vector3, normal: Vector3, color: Color, tile_w: int = 1, tile_h: int = 1):
 	var base: int = _water_vertices.size()
-	_water_vertices.append(v0)
-	_water_vertices.append(v1)
-	_water_vertices.append(v2)
-	_water_vertices.append(v3)
-	_water_normals.append(normal)
-	_water_normals.append(normal)
-	_water_normals.append(normal)
-	_water_normals.append(normal)
-	_water_colors.append(color)
-	_water_colors.append(color)
-	_water_colors.append(color)
-	_water_colors.append(color)
-	# UVs qui tilent la texture par bloc
-	_water_uvs.append(Vector2(0, 0))
-	_water_uvs.append(Vector2(tile_w, 0))
-	_water_uvs.append(Vector2(tile_w, tile_h))
-	_water_uvs.append(Vector2(0, tile_h))
-	_water_indices.append(base)
-	_water_indices.append(base + 1)
-	_water_indices.append(base + 2)
-	_water_indices.append(base + 2)
-	_water_indices.append(base + 3)
-	_water_indices.append(base)
+	# P6 — Batch appends
+	_water_vertices.append_array([v0, v1, v2, v3])
+	_water_normals.append_array([normal, normal, normal, normal])
+	_water_colors.append_array([color, color, color, color])
+	_water_uvs.append_array([Vector2(0, 0), Vector2(tile_w, 0), Vector2(tile_w, tile_h), Vector2(0, tile_h)])
+	_water_indices.append_array([base, base + 1, base + 2, base + 2, base + 3, base])
 
 # ============================================================
 # TORCHES — rendu visuel + lumière
@@ -1083,113 +1019,68 @@ func _emit_slab(x: int, y: int, z: int, bt: int):
 	var fx: float = float(x)
 	var fy: float = float(y)
 	var fz: float = float(z)
-	var tex_name: String = BlockRegistry.get_face_texture(bt, "all")
-	var layer: float = float(TextureManager.get_layer_index(tex_name))
+	var layer: float = _cached_tex_layer(bt, "all")
 	var tint: Color = Color.WHITE
-	var ao_full: Array = [1.0, 1.0, 1.0, 1.0]
 
 	# Top face (y + 0.5)
 	_emit_quad(
 		Vector3(fx, fy + 0.5, fz), Vector3(fx + 1, fy + 0.5, fz),
 		Vector3(fx + 1, fy + 0.5, fz + 1), Vector3(fx, fy + 0.5, fz + 1),
-		Vector3.UP, tint, ao_full, 1.0, 1.0, layer)
+		Vector3.UP, tint, _AO_FULL, 1.0, 1.0, layer)
 	# Bottom face
 	_emit_quad(
 		Vector3(fx, fy, fz + 1), Vector3(fx + 1, fy, fz + 1),
 		Vector3(fx + 1, fy, fz), Vector3(fx, fy, fz),
-		Vector3.DOWN, tint * 0.6, ao_full, 1.0, 1.0, layer)
+		Vector3.DOWN, tint * 0.6, _AO_FULL, 1.0, 1.0, layer)
 	# Front (+Z)
 	_emit_quad(
 		Vector3(fx + 1, fy, fz + 1), Vector3(fx, fy, fz + 1),
 		Vector3(fx, fy + 0.5, fz + 1), Vector3(fx + 1, fy + 0.5, fz + 1),
-		Vector3.BACK, tint * 0.8, ao_full, 1.0, 0.5, layer)
+		Vector3.BACK, tint * 0.8, _AO_FULL, 1.0, 0.5, layer)
 	# Back (-Z)
 	_emit_quad(
 		Vector3(fx, fy, fz), Vector3(fx + 1, fy, fz),
 		Vector3(fx + 1, fy + 0.5, fz), Vector3(fx, fy + 0.5, fz),
-		Vector3.FORWARD, tint * 0.8, ao_full, 1.0, 0.5, layer)
+		Vector3.FORWARD, tint * 0.8, _AO_FULL, 1.0, 0.5, layer)
 	# Right (+X)
 	_emit_quad(
 		Vector3(fx + 1, fy, fz), Vector3(fx + 1, fy, fz + 1),
 		Vector3(fx + 1, fy + 0.5, fz + 1), Vector3(fx + 1, fy + 0.5, fz),
-		Vector3.RIGHT, tint * 0.7, ao_full, 1.0, 0.5, layer)
+		Vector3.RIGHT, tint * 0.7, _AO_FULL, 1.0, 0.5, layer)
 	# Left (-X)
 	_emit_quad(
 		Vector3(fx, fy, fz + 1), Vector3(fx, fy, fz),
 		Vector3(fx, fy + 0.5, fz), Vector3(fx, fy + 0.5, fz + 1),
-		Vector3.LEFT, tint * 0.7, ao_full, 1.0, 0.5, layer)
+		Vector3.LEFT, tint * 0.7, _AO_FULL, 1.0, 0.5, layer)
 
 func _emit_stair(x: int, y: int, z: int, bt: int):
 	# Escalier — partie basse pleine (0-0.5) + partie haute arrière (0.5-1.0 sur z=0-0.5)
 	var fx: float = float(x)
 	var fy: float = float(y)
 	var fz: float = float(z)
-	var tex_name: String = BlockRegistry.get_face_texture(bt, "all")
-	var layer: float = float(TextureManager.get_layer_index(tex_name))
+	var layer: float = _cached_tex_layer(bt, "all")
 	var tint: Color = Color.WHITE
-	var ao: Array = [1.0, 1.0, 1.0, 1.0]
 
 	# ---- Partie basse (dalle 0 à 0.5) ----
-	# Bottom
-	_emit_quad(
-		Vector3(fx, fy, fz + 1), Vector3(fx + 1, fy, fz + 1),
-		Vector3(fx + 1, fy, fz), Vector3(fx, fy, fz),
-		Vector3.DOWN, tint * 0.6, ao, 1.0, 1.0, layer)
-	# Top de la dalle (face visible devant la marche)
-	_emit_quad(
-		Vector3(fx, fy + 0.5, fz + 1), Vector3(fx + 1, fy + 0.5, fz + 1),
-		Vector3(fx + 1, fy + 0.5, fz + 0.5), Vector3(fx, fy + 0.5, fz + 0.5),
-		Vector3.UP, tint, ao, 1.0, 0.5, layer)
-	# Front (+Z) basse
-	_emit_quad(
-		Vector3(fx + 1, fy, fz + 1), Vector3(fx, fy, fz + 1),
-		Vector3(fx, fy + 0.5, fz + 1), Vector3(fx + 1, fy + 0.5, fz + 1),
-		Vector3.BACK, tint * 0.8, ao, 1.0, 0.5, layer)
-	# Sides basse
-	_emit_quad(
-		Vector3(fx + 1, fy, fz), Vector3(fx + 1, fy, fz + 1),
-		Vector3(fx + 1, fy + 0.5, fz + 1), Vector3(fx + 1, fy + 0.5, fz),
-		Vector3.RIGHT, tint * 0.7, ao, 1.0, 1.0, layer)
-	_emit_quad(
-		Vector3(fx, fy, fz + 1), Vector3(fx, fy, fz),
-		Vector3(fx, fy + 0.5, fz), Vector3(fx, fy + 0.5, fz + 1),
-		Vector3.LEFT, tint * 0.7, ao, 1.0, 1.0, layer)
-
-	# ---- Partie haute (marche 0.5 à 1.0, moitié arrière z=0 à 0.5) ----
-	# Top de la marche
-	_emit_quad(
-		Vector3(fx, fy + 1.0, fz), Vector3(fx + 1, fy + 1.0, fz),
-		Vector3(fx + 1, fy + 1.0, fz + 0.5), Vector3(fx, fy + 1.0, fz + 0.5),
-		Vector3.UP, tint, ao, 1.0, 0.5, layer)
-	# Front de la marche (face z=0.5)
-	_emit_quad(
-		Vector3(fx + 1, fy + 0.5, fz + 0.5), Vector3(fx, fy + 0.5, fz + 0.5),
-		Vector3(fx, fy + 1.0, fz + 0.5), Vector3(fx + 1, fy + 1.0, fz + 0.5),
-		Vector3.BACK, tint * 0.8, ao, 1.0, 0.5, layer)
-	# Back (-Z) pleine hauteur
-	_emit_quad(
-		Vector3(fx, fy, fz), Vector3(fx + 1, fy, fz),
-		Vector3(fx + 1, fy + 1.0, fz), Vector3(fx, fy + 1.0, fz),
-		Vector3.FORWARD, tint * 0.8, ao, 1.0, 1.0, layer)
-	# Sides hautes (moitié sup des côtés)
-	_emit_quad(
-		Vector3(fx + 1, fy + 0.5, fz), Vector3(fx + 1, fy + 0.5, fz + 0.5),
-		Vector3(fx + 1, fy + 1.0, fz + 0.5), Vector3(fx + 1, fy + 1.0, fz),
-		Vector3.RIGHT, tint * 0.7, ao, 0.5, 0.5, layer)
-	_emit_quad(
-		Vector3(fx, fy + 0.5, fz + 0.5), Vector3(fx, fy + 0.5, fz),
-		Vector3(fx, fy + 1.0, fz), Vector3(fx, fy + 1.0, fz + 0.5),
-		Vector3.LEFT, tint * 0.7, ao, 0.5, 0.5, layer)
+	_emit_quad(Vector3(fx, fy, fz + 1), Vector3(fx + 1, fy, fz + 1), Vector3(fx + 1, fy, fz), Vector3(fx, fy, fz), Vector3.DOWN, tint * 0.6, _AO_FULL, 1.0, 1.0, layer)
+	_emit_quad(Vector3(fx, fy + 0.5, fz + 1), Vector3(fx + 1, fy + 0.5, fz + 1), Vector3(fx + 1, fy + 0.5, fz + 0.5), Vector3(fx, fy + 0.5, fz + 0.5), Vector3.UP, tint, _AO_FULL, 1.0, 0.5, layer)
+	_emit_quad(Vector3(fx + 1, fy, fz + 1), Vector3(fx, fy, fz + 1), Vector3(fx, fy + 0.5, fz + 1), Vector3(fx + 1, fy + 0.5, fz + 1), Vector3.BACK, tint * 0.8, _AO_FULL, 1.0, 0.5, layer)
+	_emit_quad(Vector3(fx + 1, fy, fz), Vector3(fx + 1, fy, fz + 1), Vector3(fx + 1, fy + 0.5, fz + 1), Vector3(fx + 1, fy + 0.5, fz), Vector3.RIGHT, tint * 0.7, _AO_FULL, 1.0, 1.0, layer)
+	_emit_quad(Vector3(fx, fy, fz + 1), Vector3(fx, fy, fz), Vector3(fx, fy + 0.5, fz), Vector3(fx, fy + 0.5, fz + 1), Vector3.LEFT, tint * 0.7, _AO_FULL, 1.0, 1.0, layer)
+	# ---- Partie haute (marche 0.5 à 1.0) ----
+	_emit_quad(Vector3(fx, fy + 1.0, fz), Vector3(fx + 1, fy + 1.0, fz), Vector3(fx + 1, fy + 1.0, fz + 0.5), Vector3(fx, fy + 1.0, fz + 0.5), Vector3.UP, tint, _AO_FULL, 1.0, 0.5, layer)
+	_emit_quad(Vector3(fx + 1, fy + 0.5, fz + 0.5), Vector3(fx, fy + 0.5, fz + 0.5), Vector3(fx, fy + 1.0, fz + 0.5), Vector3(fx + 1, fy + 1.0, fz + 0.5), Vector3.BACK, tint * 0.8, _AO_FULL, 1.0, 0.5, layer)
+	_emit_quad(Vector3(fx, fy, fz), Vector3(fx + 1, fy, fz), Vector3(fx + 1, fy + 1.0, fz), Vector3(fx, fy + 1.0, fz), Vector3.FORWARD, tint * 0.8, _AO_FULL, 1.0, 1.0, layer)
+	_emit_quad(Vector3(fx + 1, fy + 0.5, fz), Vector3(fx + 1, fy + 0.5, fz + 0.5), Vector3(fx + 1, fy + 1.0, fz + 0.5), Vector3(fx + 1, fy + 1.0, fz), Vector3.RIGHT, tint * 0.7, _AO_FULL, 0.5, 0.5, layer)
+	_emit_quad(Vector3(fx, fy + 0.5, fz + 0.5), Vector3(fx, fy + 0.5, fz), Vector3(fx, fy + 1.0, fz), Vector3(fx, fy + 1.0, fz + 0.5), Vector3.LEFT, tint * 0.7, _AO_FULL, 0.5, 0.5, layer)
 
 func _emit_fence(x: int, y: int, z: int, bt: int):
 	# Poteau central 4/16 × 16/16 × 4/16
 	var fx: float = float(x)
 	var fy: float = float(y)
 	var fz: float = float(z)
-	var tex_name: String = BlockRegistry.get_face_texture(bt, "all")
-	var layer: float = float(TextureManager.get_layer_index(tex_name))
+	var layer: float = _cached_tex_layer(bt, "all")
 	var tint: Color = Color.WHITE
-	var ao: Array = [1.0, 1.0, 1.0, 1.0]
 
 	var pw: float = 0.25  # post width
 	var ph: float = pw / 2.0
@@ -1200,41 +1091,34 @@ func _emit_fence(x: int, y: int, z: int, bt: int):
 	_emit_quad(
 		Vector3(cx - ph, fy + 1.0, cz - ph), Vector3(cx + ph, fy + 1.0, cz - ph),
 		Vector3(cx + ph, fy + 1.0, cz + ph), Vector3(cx - ph, fy + 1.0, cz + ph),
-		Vector3.UP, tint, ao, pw, pw, layer)
-	# Bottom
+		Vector3.UP, tint, _AO_FULL, pw, pw, layer)
 	_emit_quad(
 		Vector3(cx - ph, fy, cz + ph), Vector3(cx + ph, fy, cz + ph),
 		Vector3(cx + ph, fy, cz - ph), Vector3(cx - ph, fy, cz - ph),
-		Vector3.DOWN, tint * 0.6, ao, pw, pw, layer)
-	# Front (+Z)
+		Vector3.DOWN, tint * 0.6, _AO_FULL, pw, pw, layer)
 	_emit_quad(
 		Vector3(cx + ph, fy, cz + ph), Vector3(cx - ph, fy, cz + ph),
 		Vector3(cx - ph, fy + 1.0, cz + ph), Vector3(cx + ph, fy + 1.0, cz + ph),
-		Vector3.BACK, tint * 0.8, ao, pw, 1.0, layer)
-	# Back (-Z)
+		Vector3.BACK, tint * 0.8, _AO_FULL, pw, 1.0, layer)
 	_emit_quad(
 		Vector3(cx - ph, fy, cz - ph), Vector3(cx + ph, fy, cz - ph),
 		Vector3(cx + ph, fy + 1.0, cz - ph), Vector3(cx - ph, fy + 1.0, cz - ph),
-		Vector3.FORWARD, tint * 0.8, ao, pw, 1.0, layer)
-	# Right (+X)
+		Vector3.FORWARD, tint * 0.8, _AO_FULL, pw, 1.0, layer)
 	_emit_quad(
 		Vector3(cx + ph, fy, cz - ph), Vector3(cx + ph, fy, cz + ph),
 		Vector3(cx + ph, fy + 1.0, cz + ph), Vector3(cx + ph, fy + 1.0, cz - ph),
-		Vector3.RIGHT, tint * 0.7, ao, pw, 1.0, layer)
-	# Left (-X)
+		Vector3.RIGHT, tint * 0.7, _AO_FULL, pw, 1.0, layer)
 	_emit_quad(
 		Vector3(cx - ph, fy, cz + ph), Vector3(cx - ph, fy, cz - ph),
 		Vector3(cx - ph, fy + 1.0, cz - ph), Vector3(cx - ph, fy + 1.0, cz + ph),
-		Vector3.LEFT, tint * 0.7, ao, pw, 1.0, layer)
+		Vector3.LEFT, tint * 0.7, _AO_FULL, pw, 1.0, layer)
 
 func _emit_door(x: int, y: int, z: int, bt: int):
 	var fx: float = float(x)
 	var fy: float = float(y)
 	var fz: float = float(z)
-	var tex_name: String = BlockRegistry.get_face_texture(bt, "all")
-	var layer: float = float(TextureManager.get_layer_index(tex_name))
+	var layer: float = _cached_tex_layer(bt, "all")
 	var tint: Color = Color.WHITE
-	var ao: Array = [1.0, 1.0, 1.0, 1.0]
 	var d: float = 3.0 / 16.0
 
 	# Coordonnées monde
@@ -1267,7 +1151,7 @@ func _emit_door(x: int, y: int, z: int, bt: int):
 			actual_facing = [2, 3, 1, 0][facing]  # N→E, S→W, E→S, W→N
 
 	# Émettre le panneau selon actual_facing
-	_emit_door_slab(fx, fy, fz, d, actual_facing, tint, ao, layer)
+	_emit_door_slab(fx, fy, fz, d, actual_facing, tint, _AO_FULL, layer)
 
 func _emit_door_slab(fx: float, fy: float, fz: float, d: float, facing: int, tint: Color, ao: Array, layer: float):
 	# facing: 0=N (slab at z=0), 1=S (slab at z=1-d), 2=E (slab at x=1-d), 3=W (slab at x=0)
@@ -1308,10 +1192,8 @@ func _emit_glass_pane(x: int, y: int, z: int, bt: int):
 	var fx: float = float(x)
 	var fy: float = float(y)
 	var fz: float = float(z)
-	var tex_name: String = BlockRegistry.get_face_texture(bt, "all")
-	var layer: float = float(TextureManager.get_layer_index(tex_name))
+	var layer: float = _cached_tex_layer(bt, "all")
 	var tint: Color = Color.WHITE
-	var ao: Array = [1.0, 1.0, 1.0, 1.0]
 	var half: float = 1.0 / 16.0
 	# Déterminer l'orientation depuis le cache
 	var wx: int = chunk_position.x * CHUNK_SIZE + x
@@ -1325,99 +1207,61 @@ func _emit_glass_pane(x: int, y: int, z: int, bt: int):
 		_emit_quad(
 			Vector3(fx + 1, fy, cz + half), Vector3(fx, fy, cz + half),
 			Vector3(fx, fy + 1.0, cz + half), Vector3(fx + 1, fy + 1.0, cz + half),
-			Vector3.BACK, tint, ao, 1.0, 1.0, layer)
+			Vector3.BACK, tint, _AO_FULL, 1.0, 1.0, layer)
 		_emit_quad(
 			Vector3(fx, fy, cz - half), Vector3(fx + 1, fy, cz - half),
 			Vector3(fx + 1, fy + 1.0, cz - half), Vector3(fx, fy + 1.0, cz - half),
-			Vector3.FORWARD, tint, ao, 1.0, 1.0, layer)
+			Vector3.FORWARD, tint, _AO_FULL, 1.0, 1.0, layer)
 		_emit_quad(
 			Vector3(fx, fy + 1.0, cz - half), Vector3(fx + 1, fy + 1.0, cz - half),
 			Vector3(fx + 1, fy + 1.0, cz + half), Vector3(fx, fy + 1.0, cz + half),
-			Vector3.UP, tint, ao, 1.0, half * 2, layer)
+			Vector3.UP, tint, _AO_FULL, 1.0, half * 2, layer)
 		_emit_quad(
 			Vector3(fx, fy, cz + half), Vector3(fx + 1, fy, cz + half),
 			Vector3(fx + 1, fy, cz - half), Vector3(fx, fy, cz - half),
-			Vector3.DOWN, tint * 0.6, ao, 1.0, half * 2, layer)
+			Vector3.DOWN, tint * 0.6, _AO_FULL, 1.0, half * 2, layer)
 	else:
-		# E-W : panneau perpendiculaire à X (centré sur X)
 		var cx: float = fx + 0.5
 		_emit_quad(
 			Vector3(cx + half, fy, fz), Vector3(cx + half, fy, fz + 1),
 			Vector3(cx + half, fy + 1.0, fz + 1), Vector3(cx + half, fy + 1.0, fz),
-			Vector3.RIGHT, tint, ao, 1.0, 1.0, layer)
+			Vector3.RIGHT, tint, _AO_FULL, 1.0, 1.0, layer)
 		_emit_quad(
 			Vector3(cx - half, fy, fz + 1), Vector3(cx - half, fy, fz),
 			Vector3(cx - half, fy + 1.0, fz), Vector3(cx - half, fy + 1.0, fz + 1),
-			Vector3.LEFT, tint, ao, 1.0, 1.0, layer)
+			Vector3.LEFT, tint, _AO_FULL, 1.0, 1.0, layer)
 		_emit_quad(
 			Vector3(cx - half, fy + 1.0, fz), Vector3(cx + half, fy + 1.0, fz),
 			Vector3(cx + half, fy + 1.0, fz + 1), Vector3(cx - half, fy + 1.0, fz + 1),
-			Vector3.UP, tint, ao, half * 2, 1.0, layer)
+			Vector3.UP, tint, _AO_FULL, half * 2, 1.0, layer)
 		_emit_quad(
 			Vector3(cx - half, fy, fz + 1), Vector3(cx + half, fy, fz + 1),
 			Vector3(cx + half, fy, fz), Vector3(cx - half, fy, fz),
-			Vector3.DOWN, tint * 0.6, ao, half * 2, 1.0, layer)
+			Vector3.DOWN, tint * 0.6, _AO_FULL, half * 2, 1.0, layer)
 
 func _emit_ladder(x: int, y: int, z: int, bt: int):
-	# Échelle — panneau plat collé au mur -Z (face +Z)
 	var fx: float = float(x)
 	var fy: float = float(y)
 	var fz: float = float(z)
-	var tex_name: String = BlockRegistry.get_face_texture(bt, "all")
-	var layer: float = float(TextureManager.get_layer_index(tex_name))
+	var layer: float = _cached_tex_layer(bt, "all")
 	var tint: Color = Color.WHITE
-	var ao: Array = [1.0, 1.0, 1.0, 1.0]
 	var offset: float = 1.0 / 16.0
-
-	# Face visible (plaquée contre le mur -Z) — pas de collision pour permettre l'escalade
-	_emit_quad(
-		Vector3(fx + 1, fy, fz + offset), Vector3(fx, fy, fz + offset),
-		Vector3(fx, fy + 1.0, fz + offset), Vector3(fx + 1, fy + 1.0, fz + offset),
-		Vector3.BACK, tint, ao, 1.0, 1.0, layer, true)
-	# Face arrière (contre le mur)
-	_emit_quad(
-		Vector3(fx, fy, fz), Vector3(fx + 1, fy, fz),
-		Vector3(fx + 1, fy + 1.0, fz), Vector3(fx, fy + 1.0, fz),
-		Vector3.FORWARD, tint, ao, 1.0, 1.0, layer, true)
+	_emit_quad(Vector3(fx + 1, fy, fz + offset), Vector3(fx, fy, fz + offset), Vector3(fx, fy + 1.0, fz + offset), Vector3(fx + 1, fy + 1.0, fz + offset), Vector3.BACK, tint, _AO_FULL, 1.0, 1.0, layer, true)
+	_emit_quad(Vector3(fx, fy, fz), Vector3(fx + 1, fy, fz), Vector3(fx + 1, fy + 1.0, fz), Vector3(fx, fy + 1.0, fz), Vector3.FORWARD, tint, _AO_FULL, 1.0, 1.0, layer, true)
 
 func _emit_trapdoor(x: int, y: int, z: int, bt: int):
-	# Trappe — panneau horizontal 1×3/16×1, au bas du bloc
 	var fx: float = float(x)
 	var fy: float = float(y)
 	var fz: float = float(z)
-	var tex_name: String = BlockRegistry.get_face_texture(bt, "all")
-	var layer: float = float(TextureManager.get_layer_index(tex_name))
+	var layer: float = _cached_tex_layer(bt, "all")
 	var tint: Color = Color.WHITE
-	var ao: Array = [1.0, 1.0, 1.0, 1.0]
 	var height: float = 3.0 / 16.0
-
-	# Top
-	_emit_quad(
-		Vector3(fx, fy + height, fz), Vector3(fx + 1, fy + height, fz),
-		Vector3(fx + 1, fy + height, fz + 1), Vector3(fx, fy + height, fz + 1),
-		Vector3.UP, tint, ao, 1.0, 1.0, layer)
-	# Bottom
-	_emit_quad(
-		Vector3(fx, fy, fz + 1), Vector3(fx + 1, fy, fz + 1),
-		Vector3(fx + 1, fy, fz), Vector3(fx, fy, fz),
-		Vector3.DOWN, tint * 0.6, ao, 1.0, 1.0, layer)
-	# Sides
-	_emit_quad(
-		Vector3(fx + 1, fy, fz + 1), Vector3(fx, fy, fz + 1),
-		Vector3(fx, fy + height, fz + 1), Vector3(fx + 1, fy + height, fz + 1),
-		Vector3.BACK, tint * 0.8, ao, 1.0, height, layer)
-	_emit_quad(
-		Vector3(fx, fy, fz), Vector3(fx + 1, fy, fz),
-		Vector3(fx + 1, fy + height, fz), Vector3(fx, fy + height, fz),
-		Vector3.FORWARD, tint * 0.8, ao, 1.0, height, layer)
-	_emit_quad(
-		Vector3(fx + 1, fy, fz), Vector3(fx + 1, fy, fz + 1),
-		Vector3(fx + 1, fy + height, fz + 1), Vector3(fx + 1, fy + height, fz),
-		Vector3.RIGHT, tint * 0.7, ao, 1.0, height, layer)
-	_emit_quad(
-		Vector3(fx, fy, fz + 1), Vector3(fx, fy, fz),
-		Vector3(fx, fy + height, fz), Vector3(fx, fy + height, fz + 1),
-		Vector3.LEFT, tint * 0.7, ao, 1.0, height, layer)
+	_emit_quad(Vector3(fx, fy + height, fz), Vector3(fx + 1, fy + height, fz), Vector3(fx + 1, fy + height, fz + 1), Vector3(fx, fy + height, fz + 1), Vector3.UP, tint, _AO_FULL, 1.0, 1.0, layer)
+	_emit_quad(Vector3(fx, fy, fz + 1), Vector3(fx + 1, fy, fz + 1), Vector3(fx + 1, fy, fz), Vector3(fx, fy, fz), Vector3.DOWN, tint * 0.6, _AO_FULL, 1.0, 1.0, layer)
+	_emit_quad(Vector3(fx + 1, fy, fz + 1), Vector3(fx, fy, fz + 1), Vector3(fx, fy + height, fz + 1), Vector3(fx + 1, fy + height, fz + 1), Vector3.BACK, tint * 0.8, _AO_FULL, 1.0, height, layer)
+	_emit_quad(Vector3(fx, fy, fz), Vector3(fx + 1, fy, fz), Vector3(fx + 1, fy + height, fz), Vector3(fx, fy + height, fz), Vector3.FORWARD, tint * 0.8, _AO_FULL, 1.0, height, layer)
+	_emit_quad(Vector3(fx + 1, fy, fz), Vector3(fx + 1, fy, fz + 1), Vector3(fx + 1, fy + height, fz + 1), Vector3(fx + 1, fy + height, fz), Vector3.RIGHT, tint * 0.7, _AO_FULL, 1.0, height, layer)
+	_emit_quad(Vector3(fx, fy, fz + 1), Vector3(fx, fy, fz), Vector3(fx, fy + height, fz), Vector3(fx, fy + height, fz + 1), Vector3.LEFT, tint * 0.7, _AO_FULL, 1.0, height, layer)
 
 # ============================================================
 # AMBIENT OCCLUSION

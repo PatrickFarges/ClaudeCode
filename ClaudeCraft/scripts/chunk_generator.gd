@@ -24,6 +24,9 @@ var should_exit: bool = false
 var world_seed: int = 0
 var _structure_placements: Array = []
 
+# P3 — Per-thread noise objects (created once, reused for every chunk)
+var _thread_noises: Array = []  # Array of Dictionaries, one per thread
+
 # Noises publiques (copies for main thread access: get_biome_at, get_height_at)
 var _biome_temp_noise: FastNoiseLite = null
 var _biome_humid_noise: FastNoiseLite = null
@@ -92,6 +95,86 @@ func set_world_seed(seed_value: int):
 	_pub_river.fractal_octaves = 3
 	_pub_river.fractal_gain = 0.5
 
+func _create_thread_noises(seed_base: int) -> Dictionary:
+	var terrain_noise = FastNoiseLite.new()
+	terrain_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	terrain_noise.seed = seed_base + 1234
+	terrain_noise.frequency = 0.005
+	terrain_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
+	terrain_noise.fractal_octaves = 5
+	terrain_noise.fractal_lacunarity = 2.0
+	terrain_noise.fractal_gain = 0.45
+	var warp_noise1 = FastNoiseLite.new()
+	warp_noise1.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	warp_noise1.seed = seed_base + 7777
+	warp_noise1.frequency = 0.003
+	var warp_noise2 = FastNoiseLite.new()
+	warp_noise2.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	warp_noise2.seed = seed_base + 8877
+	warp_noise2.frequency = 0.003
+	var continental_noise = FastNoiseLite.new()
+	continental_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	continental_noise.seed = seed_base + 1111
+	continental_noise.frequency = 0.0008
+	continental_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
+	continental_noise.fractal_octaves = 3
+	continental_noise.fractal_gain = 0.4
+	var erosion_noise = FastNoiseLite.new()
+	erosion_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	erosion_noise.seed = seed_base + 2222
+	erosion_noise.frequency = 0.0015
+	erosion_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
+	erosion_noise.fractal_octaves = 3
+	erosion_noise.fractal_gain = 0.4
+	var temp_noise = FastNoiseLite.new()
+	temp_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	temp_noise.seed = seed_base + 9012
+	temp_noise.frequency = 0.0015
+	temp_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
+	temp_noise.fractal_octaves = 2
+	temp_noise.fractal_gain = 0.4
+	var humid_noise = FastNoiseLite.new()
+	humid_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	humid_noise.seed = seed_base + 3456
+	humid_noise.frequency = 0.0015
+	humid_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
+	humid_noise.fractal_octaves = 2
+	humid_noise.fractal_gain = 0.4
+	var cave1 = FastNoiseLite.new()
+	cave1.noise_type = FastNoiseLite.TYPE_PERLIN
+	cave1.seed = seed_base + 7890
+	cave1.frequency = 0.08
+	var cave2 = FastNoiseLite.new()
+	cave2.noise_type = FastNoiseLite.TYPE_PERLIN
+	cave2.seed = seed_base + 2345
+	cave2.frequency = 0.06
+	var cave3 = FastNoiseLite.new()
+	cave3.noise_type = FastNoiseLite.TYPE_PERLIN
+	cave3.seed = seed_base + 6789
+	cave3.frequency = 0.04
+	var ore_noise = FastNoiseLite.new()
+	ore_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	ore_noise.seed = seed_base + 4444
+	ore_noise.frequency = 0.1
+	var river_noise = FastNoiseLite.new()
+	river_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	river_noise.seed = seed_base + 5555
+	river_noise.frequency = 0.002
+	river_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
+	river_noise.fractal_octaves = 3
+	river_noise.fractal_gain = 0.5
+	var stone_var_noise = FastNoiseLite.new()
+	stone_var_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	stone_var_noise.seed = seed_base + 8888
+	stone_var_noise.frequency = 0.06
+	return {
+		"terrain": terrain_noise, "warp1": warp_noise1, "warp2": warp_noise2,
+		"continental": continental_noise, "erosion": erosion_noise,
+		"temp": temp_noise, "humid": humid_noise,
+		"cave1": cave1, "cave2": cave2, "cave3": cave3,
+		"ore": ore_noise, "river": river_noise, "stone_var": stone_var_noise
+	}
+
 func set_structure_placements(data: Array):
 	_structure_placements = data
 
@@ -102,8 +185,12 @@ func _init():
 	for i in range(MAX_THREADS):
 		var thread = Thread.new()
 		thread_pool.append(thread)
+		_thread_noises.append({})  # Placeholder, filled in _ready after seed is set
 
 func _ready():
+	# P3 — Create per-thread noise objects (one set per thread, never recreated)
+	for i in range(MAX_THREADS):
+		_thread_noises[i] = _create_thread_noises(world_seed)
 	for i in range(MAX_THREADS):
 		thread_pool[i].start(_thread_worker.bind(i))
 
@@ -133,7 +220,7 @@ func _thread_worker(thread_id: int):
 		queue_mutex.unlock()
 
 		if chunk_data:
-			var generated = _generate_chunk_data(chunk_data["position"])
+			var generated = _generate_chunk_data(chunk_data["position"], _thread_noises[thread_id])
 			call_deferred("_on_chunk_generated", generated)
 
 			queue_mutex.lock()
@@ -146,103 +233,33 @@ func _smoothstep(edge0: float, edge1: float, x: float) -> float:
 	var t = clampf((x - edge0) / (edge1 - edge0), 0.0, 1.0)
 	return t * t * (3.0 - 2.0 * t)
 
-func _generate_chunk_data(chunk_pos: Vector3i) -> Dictionary:
+func _generate_chunk_data(chunk_pos: Vector3i, noises: Dictionary = {}) -> Dictionary:
 	var blocks = []
 	blocks.resize(CHUNK_SIZE)
 
-	# ============================================================
-	# NOISES
-	# ============================================================
-	var seed_base = world_seed
+	# P3 — Reuse per-thread noise objects (no allocation per chunk)
+	var terrain_noise: FastNoiseLite = noises.get("terrain", null)
+	var warp_noise1: FastNoiseLite = noises.get("warp1", null)
+	var warp_noise2: FastNoiseLite = noises.get("warp2", null)
+	var continental_noise: FastNoiseLite = noises.get("continental", null)
+	var erosion_noise: FastNoiseLite = noises.get("erosion", null)
+	var temp_noise: FastNoiseLite = noises.get("temp", null)
+	var humid_noise: FastNoiseLite = noises.get("humid", null)
+	var cave1: FastNoiseLite = noises.get("cave1", null)
+	var cave2: FastNoiseLite = noises.get("cave2", null)
+	var cave3: FastNoiseLite = noises.get("cave3", null)
+	var ore_noise: FastNoiseLite = noises.get("ore", null)
+	var river_noise: FastNoiseLite = noises.get("river", null)
+	var stone_var_noise: FastNoiseLite = noises.get("stone_var", null)
 
-	var terrain_noise = FastNoiseLite.new()
-	terrain_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
-	terrain_noise.seed = seed_base + 1234
-	terrain_noise.frequency = 0.005
-	terrain_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
-	terrain_noise.fractal_octaves = 5
-	terrain_noise.fractal_lacunarity = 2.0
-	terrain_noise.fractal_gain = 0.45
-
-	# Domain warping — deforme les coordonnees pour un terrain organique
-	var warp_noise1 = FastNoiseLite.new()
-	warp_noise1.noise_type = FastNoiseLite.TYPE_SIMPLEX
-	warp_noise1.seed = seed_base + 7777
-	warp_noise1.frequency = 0.003
-
-	var warp_noise2 = FastNoiseLite.new()
-	warp_noise2.noise_type = FastNoiseLite.TYPE_SIMPLEX
-	warp_noise2.seed = seed_base + 8877
-	warp_noise2.frequency = 0.003
-
-	# Continentalness — grande echelle, cotes vs interieur vs montagnes
-	var continental_noise = FastNoiseLite.new()
-	continental_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
-	continental_noise.seed = seed_base + 1111
-	continental_noise.frequency = 0.0008
-	continental_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
-	continental_noise.fractal_octaves = 3
-	continental_noise.fractal_gain = 0.4
-
-	# Erosion — vallees et passes dans les montagnes
-	var erosion_noise = FastNoiseLite.new()
-	erosion_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
-	erosion_noise.seed = seed_base + 2222
-	erosion_noise.frequency = 0.0015
-	erosion_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
-	erosion_noise.fractal_octaves = 3
-	erosion_noise.fractal_gain = 0.4
-
-	var temp_noise = FastNoiseLite.new()
-	temp_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
-	temp_noise.seed = seed_base + 9012
-	temp_noise.frequency = 0.0015
-	temp_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
-	temp_noise.fractal_octaves = 2
-	temp_noise.fractal_gain = 0.4
-
-	var humid_noise = FastNoiseLite.new()
-	humid_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
-	humid_noise.seed = seed_base + 3456
-	humid_noise.frequency = 0.0015
-	humid_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
-	humid_noise.fractal_octaves = 2
-	humid_noise.fractal_gain = 0.4
-
-	var cave1 = FastNoiseLite.new()
-	cave1.noise_type = FastNoiseLite.TYPE_PERLIN
-	cave1.seed = seed_base + 7890
-	cave1.frequency = 0.08
-
-	var cave2 = FastNoiseLite.new()
-	cave2.noise_type = FastNoiseLite.TYPE_PERLIN
-	cave2.seed = seed_base + 2345
-	cave2.frequency = 0.06
-
-	var cave3 = FastNoiseLite.new()
-	cave3.noise_type = FastNoiseLite.TYPE_PERLIN
-	cave3.seed = seed_base + 6789
-	cave3.frequency = 0.04
-
-	var ore_noise = FastNoiseLite.new()
-	ore_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
-	ore_noise.seed = seed_base + 4444
-	ore_noise.frequency = 0.1
-
-	# Noise pour les rivieres — bande etroite pres de zero = lit de riviere
-	var river_noise = FastNoiseLite.new()
-	river_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
-	river_noise.seed = seed_base + 5555
-	river_noise.frequency = 0.002
-	river_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
-	river_noise.fractal_octaves = 3
-	river_noise.fractal_gain = 0.5
-
-	# Noise pour les variantes de pierre souterraine
-	var stone_var_noise = FastNoiseLite.new()
-	stone_var_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
-	stone_var_noise.seed = seed_base + 8888
-	stone_var_noise.frequency = 0.06
+	# Fallback: create noises if not provided (e.g. called from main thread)
+	if terrain_noise == null:
+		var _n = _create_thread_noises(world_seed)
+		terrain_noise = _n["terrain"]; warp_noise1 = _n["warp1"]; warp_noise2 = _n["warp2"]
+		continental_noise = _n["continental"]; erosion_noise = _n["erosion"]
+		temp_noise = _n["temp"]; humid_noise = _n["humid"]
+		cave1 = _n["cave1"]; cave2 = _n["cave2"]; cave3 = _n["cave3"]
+		ore_noise = _n["ore"]; river_noise = _n["river"]; stone_var_noise = _n["stone_var"]
 
 	# ============================================================
 	# PASSE 1 : Generer le terrain + stocker heightmap et biome_map

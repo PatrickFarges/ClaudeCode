@@ -379,15 +379,34 @@ func _cleanup_orphan_leaves():
 	if leaf_positions.is_empty():
 		return
 
-	# Identifier les feuilles orphelines (aucun tronc à distance Manhattan ≤ 4)
+	# P7 — Spatial hash for trunk lookup (O(1) instead of O(n²))
+	var trunk_hash: Dictionary = {}
+	for trunk_pos in trunk_positions:
+		# Hash at chunk granularity (8-block cells) for fast nearby lookup
+		var hk = Vector3i(trunk_pos.x >> 3, trunk_pos.y >> 3, trunk_pos.z >> 3)
+		if not trunk_hash.has(hk):
+			trunk_hash[hk] = []
+		trunk_hash[hk].append(trunk_pos)
+
 	var orphan_leaves: Array = []
 	for leaf_pos in leaf_positions:
 		var has_trunk = false
-		for trunk_pos in trunk_positions:
-			var dist = abs(leaf_pos.x - trunk_pos.x) + abs(leaf_pos.y - trunk_pos.y) + abs(leaf_pos.z - trunk_pos.z)
-			if dist <= 4:
-				has_trunk = true
+		var lhk = Vector3i(leaf_pos.x >> 3, leaf_pos.y >> 3, leaf_pos.z >> 3)
+		# Check the cell and all 26 neighbors (distance 4 can span at most 1 cell)
+		for dx in range(-1, 2):
+			if has_trunk:
 				break
+			for dy in range(-1, 2):
+				if has_trunk:
+					break
+				for dz in range(-1, 2):
+					var nk = Vector3i(lhk.x + dx, lhk.y + dy, lhk.z + dz)
+					if trunk_hash.has(nk):
+						for trunk_pos in trunk_hash[nk]:
+							var dist = abs(leaf_pos.x - trunk_pos.x) + abs(leaf_pos.y - trunk_pos.y) + abs(leaf_pos.z - trunk_pos.z)
+							if dist <= 4:
+								has_trunk = true
+								break
 		if not has_trunk:
 			orphan_leaves.append(leaf_pos)
 
