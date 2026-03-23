@@ -59,10 +59,11 @@ var _underwater_player: AudioStreamPlayer = null
 var _swim_timer: float = 0.0
 const SWIM_SOUND_INTERVAL = 0.8
 var _drown_timer: float = 0.0
-const DROWN_TIME = 15.0  # secondes avant de commencer a se noyer
+const DROWN_TIME = 60.0  # secondes avant de commencer a se noyer (~1 minute humaine)
 const DROWN_DAMAGE_INTERVAL = 1.0
 var _drown_damage_timer: float = 0.0
-var _air_supply: float = 15.0  # secondes d'air restantes
+var _air_supply: float = 60.0  # secondes d'air restantes
+var is_head_underwater: bool = false  # expose pour le HUD
 
 # ============================================================
 # INVENTAIRE
@@ -780,6 +781,8 @@ func _update_underwater(delta: float):
 		var head_pos = (global_position + Vector3(0, 1.5, 0)).floor()
 		head_underwater = world_manager.get_block_at_position(head_pos) == BlockRegistry.BlockType.WATER
 
+	is_head_underwater = head_underwater
+
 	if head_underwater:
 		_water_overlay.visible = true
 		# Son ambiant
@@ -794,6 +797,7 @@ func _update_underwater(delta: float):
 		# Noyade — timer d'air
 		_air_supply -= delta
 		if _air_supply <= 0.0:
+			_air_supply = 0.0
 			_drown_damage_timer += delta
 			if _drown_damage_timer >= DROWN_DAMAGE_INTERVAL:
 				_drown_damage_timer = 0.0
@@ -809,6 +813,10 @@ func _update_underwater(delta: float):
 		if _underwater_player.playing:
 			_underwater_player.stop()
 	_was_in_water = head_underwater
+
+func get_air_ratio() -> float:
+	# Retourne le ratio d'air restant (0.0 = noyade, 1.0 = plein)
+	return clampf(_air_supply / DROWN_TIME, 0.0, 1.0)
 
 func _play_swim_sound():
 	var idx = randi_range(1, 18)

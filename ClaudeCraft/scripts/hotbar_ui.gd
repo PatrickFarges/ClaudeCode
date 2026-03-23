@@ -1,5 +1,5 @@
-# hotbar_ui.gd v2.0.0
-# HUD Minecraft complet : hotbar + coeurs + faim + armure + XP bar + crosshair
+# hotbar_ui.gd v2.1.0
+# HUD Minecraft complet : hotbar + coeurs + faim + armure + bulles d'air + XP bar + crosshair
 # Utilise les textures Faithful32 GUI (sprites/hud/*)
 
 extends CanvasLayer
@@ -22,6 +22,9 @@ const TEX_FOOD_EMPTY = GUI_DIR + "sprites/hud/food_empty_hunger.png"
 const TEX_ARMOR_FULL = GUI_DIR + "sprites/hud/armor_full.png"
 const TEX_ARMOR_HALF = GUI_DIR + "sprites/hud/armor_half.png"
 const TEX_ARMOR_EMPTY = GUI_DIR + "sprites/hud/armor_empty.png"
+const TEX_AIR_FULL = GUI_DIR + "sprites/hud/air.png"
+const TEX_AIR_BURST = GUI_DIR + "sprites/hud/air_bursting.png"
+const TEX_AIR_EMPTY = GUI_DIR + "sprites/hud/air_empty.png"
 const TEX_XP_BG = GUI_DIR + "sprites/hud/experience_bar_background.png"
 const TEX_XP_FILL = GUI_DIR + "sprites/hud/experience_bar_progress.png"
 
@@ -37,6 +40,9 @@ var _heart_icons: Array = []               # [TextureRect x 10]
 var _heart_bgs: Array = []                 # [TextureRect x 10]
 var _food_icons: Array = []                # [TextureRect x 10]
 var _armor_icons: Array = []               # [TextureRect x 10]
+var _air_icons: Array = []                 # [TextureRect x 10] — bulles d'oxygene
+var _air_visible: bool = false             # bulles visibles seulement sous l'eau
+var _burst_timers: Array = []              # timer animation burst par bulle
 var _xp_bg: TextureRect = null
 var _xp_fill: TextureRect = null
 var _crosshair: TextureRect = null
@@ -223,6 +229,27 @@ func _build_hud():
 		_armor_icons.append(armor)
 
 	# ============================================================
+	# BULLES D'AIR (au-dessus de la faim, cote droit — comme MC)
+	# Visibles uniquement quand la tete est sous l'eau
+	# ============================================================
+	var air_y = hearts_y - icon_s - 2  # meme ligne que l'armure mais cote droit
+	for i in range(10):
+		var air = TextureRect.new()
+		air.texture = _load_tex(TEX_AIR_FULL)
+		air.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		air.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		air.offset_right = food_x_start - i * icon_spacing
+		air.offset_left = air.offset_right - icon_s
+		air.offset_top = air_y
+		air.offset_bottom = air_y + icon_s
+		air.stretch_mode = TextureRect.STRETCH_SCALE
+		air.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		air.visible = false  # Cache par defaut
+		add_child(air)
+		_air_icons.append(air)
+		_burst_timers.append(0.0)
+
+	# ============================================================
 	# BARRE XP (juste au-dessus de la hotbar)
 	# ============================================================
 	_xp_bg = TextureRect.new()
@@ -240,11 +267,12 @@ func _build_hud():
 	_xp_bg.visible = false  # Pas de systeme XP encore
 	add_child(_xp_bg)
 
-func _process(_delta):
+func _process(delta):
 	if player:
 		_update_hotbar()
 		_update_hearts()
 		_update_food()
+		_update_air(delta)
 
 # ============================================================
 # HOTBAR UPDATE
@@ -329,6 +357,56 @@ func _update_food():
 			_food_icons[i].texture = _load_tex(TEX_FOOD_HALF)
 		else:
 			_food_icons[i].texture = _load_tex(TEX_FOOD_EMPTY)
+
+# ============================================================
+# AIR BUBBLES UPDATE
+# ============================================================
+func _update_air(delta: float):
+	var underwater = player.is_head_underwater if "is_head_underwater" in player else false
+
+	if underwater:
+		# Afficher les bulles
+		if not _air_visible:
+			_air_visible = true
+			for i in range(10):
+				_air_icons[i].visible = true
+				_burst_timers[i] = 0.0
+
+		# air_ratio = 1.0 (plein) a 0.0 (noyade)
+		var air_ratio = player.get_air_ratio() if player.has_method("get_air_ratio") else 1.0
+		# 10 bulles = 20 demi-bulles (comme les coeurs)
+		var air_val = int(air_ratio * 20.0)  # 0-20
+
+		for i in range(10):
+			var bubble_val = air_val - (9 - i) * 2  # bulles de droite a gauche (9=premiere a disparaitre)
+			if bubble_val >= 2:
+				_air_icons[i].texture = _load_tex(TEX_AIR_FULL)
+				_air_icons[i].modulate.a = 1.0
+				_burst_timers[i] = 0.0
+			elif bubble_val == 1:
+				# Bulle a moitie — montrer burst brievement puis empty
+				if _burst_timers[i] < 0.3:
+					_air_icons[i].texture = _load_tex(TEX_AIR_BURST)
+					_burst_timers[i] += delta
+				else:
+					_air_icons[i].texture = _load_tex(TEX_AIR_EMPTY)
+				_air_icons[i].modulate.a = 1.0
+			else:
+				# Bulle vide — commence a apparaitre en burst puis disparait
+				if _burst_timers[i] > 0.0 and _burst_timers[i] < 0.5:
+					_air_icons[i].texture = _load_tex(TEX_AIR_BURST)
+					_burst_timers[i] += delta
+					_air_icons[i].modulate.a = 1.0
+				else:
+					_air_icons[i].texture = _load_tex(TEX_AIR_EMPTY)
+					_air_icons[i].modulate.a = 0.3  # fantome discret
+	else:
+		# Cacher les bulles hors de l'eau
+		if _air_visible:
+			_air_visible = false
+			for i in range(10):
+				_air_icons[i].visible = false
+				_burst_timers[i] = 0.0
 
 # ============================================================
 # ICON LOADING (meme systeme que l'ancien hotbar)
