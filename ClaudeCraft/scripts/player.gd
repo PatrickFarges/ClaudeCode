@@ -866,9 +866,25 @@ func _physics_process(delta):
 
 	# Sécurité : si le joueur tombe sous le monde, le remonter en surface
 	if global_position.y < -20.0:
-		global_position.y = 100.0
+		var safe_y = 100.0
+		if world_manager:
+			# Scanner les blocs réels pour trouver le sol solide
+			var wx = int(floor(global_position.x))
+			var wz = int(floor(global_position.z))
+			for scan_y in range(200, 0, -1):
+				var bt = world_manager.get_block_at_position(Vector3(wx, scan_y, wz))
+				if bt > 0 and bt != BlockRegistry.BlockType.WATER and bt != BlockRegistry.BlockType.LEAVES and not BlockRegistry.is_cross_mesh(bt):
+					safe_y = scan_y + 2.0
+					break
+			# Forcer la collision du chunk sous les pieds
+			var chunk_pos = Vector3i(int(floor(float(wx) / 16.0)), 0, int(floor(float(wz) / 16.0)))
+			if world_manager.chunks.has(chunk_pos):
+				var chunk = world_manager.chunks[chunk_pos]
+				if chunk.is_mesh_built and not chunk.has_collision:
+					chunk.create_collision()
+		global_position.y = safe_y
 		velocity = Vector3.ZERO
-		print("Player: chute sous le monde — téléport de sécurité à Y=100")
+		print("Player: chute sous le monde — téléport de sécurité à Y=%d" % int(safe_y))
 
 	# Gravité (réduite dans l'eau et sur échelle)
 	if not is_on_floor():

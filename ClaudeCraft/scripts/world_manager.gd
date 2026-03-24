@@ -330,8 +330,9 @@ func _update_chunk_collisions():
 		if dist <= COLLISION_DISTANCE and not chunk.has_collision:
 			chunk.create_collision()
 			created_this_frame += 1
-			if created_this_frame >= 1:
-				return  # Max 1 collision créée par frame
+			# Le chunk du joueur + voisins immédiats : pas de throttle (prioritaire)
+			if dist > 1 and created_this_frame >= 1:
+				return  # Max 1 collision créée par frame pour les chunks lointains
 		elif dist > COLLISION_REMOVE_DISTANCE and chunk.has_collision:
 			chunk.remove_collision()
 
