@@ -969,7 +969,7 @@ func _handle_auto_step(direction: Vector3):
 
 func _handle_footsteps(delta: float, direction: Vector3):
 	"""Jouer des sons de pas quand on marche"""
-	if not audio_manager or not is_on_floor() or direction.length() == 0:
+	if not audio_manager or not is_on_floor() or direction.length() == 0 or in_water:
 		footstep_timer = 0.0
 		return
 	
