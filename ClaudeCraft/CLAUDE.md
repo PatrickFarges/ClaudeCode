@@ -100,7 +100,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 
 ## Direction du projet
 
-**Version actuelle : v19.5.2**
+**Version actuelle : v19.6.1**
 
 | Phase | Statut | Contenu |
 |-------|--------|---------|
@@ -157,7 +157,8 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 | 14 | Fait | v19.3.x — **Océans, plages, rivières**. 3 nouveaux biomes (OCEAN=4, BEACH=5, RIVER=6). Continentalness < 0.35 = océan (terrain 30 blocs sous SEA_LEVEL). River noise dédié (bande étroite). Fond marin sable/gravier. Spawner aquatique (needs_water en OCEAN). Effet sous-marin (overlay bleu + son water.mp3 + swim sounds + noyade 15s). Boussole HUD. Spawn robuste 2 phases (noise XZ + scan chunk réel). get_height_at() public |
 | 15 | Fait | v19.4.0 — **Fixes critiques audit**. Nourriture consommée après manger (B1), attaque bloquée pendant minage (B2), village_inv_open dans _is_any_ui_open (B3), floori() coords négatives (B4), _path_blocks clear (B5), is_instance_valid ajouté (B6). Cueillette herbes/fleurs (raywalk cross-mesh). Bridge assist placement blocs. Attaque continue clic maintenu |
 | 16 | Fait | v19.5.x — **GUI Minecraft Faithful32**. HUD : hotbar.png + hotbar_selection.png, 10 coeurs MC (full/half), barre de faim, armure, XP bar prête. Inventaire : inventory.png croppée 352×332 @ scale 2x, 36 slots MC, tooltips noms+quantités. Crafting : crafting_table.png, grille 3×3 ingrédients (have/need), recettes triées par craftabilité, tooltips partout. 1396 recettes MC extraites (minecraft_recipes.json, 706 shaped avec patterns 3×3) |
-| 16.1 | A venir | Optimisation P1-P8 (audit), drag & drop craft MC, pathfinding mobs, système skills joueur |
+| 16.1 | Fait | v19.6.1 — **Fix chute terrain + sons eau**. Téléport sécurité intelligent (scan blocs réels au lieu de Y=100 aveugle, force collision chunk). Collision prioritaire chunks distance ≤1 joueur (sans throttle). Fix sons de pas joués sous l'eau (in_water guard). Fix boucle infinie chute/téléport plages |
+| 16.2 | A venir | Pathfinding mobs (IA animaux/monstres), comportements spécifiques (creeper explosion, skeleton archer), mini-boss ×1.6, drag & drop craft MC, nouveaux biomes (marécage, forêt géante) |
 
 **Packs GLB utilisés** : Steve GLB (modèle Bedrock converti, 28 bones, 4 anims) pour tous les PNJ avec skins par profession. Kenney.nl (18 modèles BlockPNJ — conservés mais plus utilisés). **PNJ futurs** : KayKit Adventurers (161 anims travail)
 
