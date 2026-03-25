@@ -1,4 +1,4 @@
-# inventory_ui.gd v2.1.0
+# inventory_ui.gd v2.2.0
 # Inventaire style Minecraft avec texture Faithful32 (inventory.png)
 # Ouvert avec I — affiche tous les blocs disponibles dans une grille MC
 
@@ -17,7 +17,12 @@ var _title_label: Label = null
 var _slot_buttons: Array = []  # [{button, tex_rect, count_label, block_type}, ...]
 var _tab_buttons: Array = []
 var _current_tab: int = 0
+var _current_page: int = 0
+var _page_label: Label = null
+var _prev_btn: Button = null
+var _next_btn: Button = null
 var _tooltip_label: Label = null
+const SLOTS_PER_PAGE = 36  # 3x9 + 1x9 hotbar
 
 # Texture content area (Faithful32 = 2x vanilla MC 176x166)
 const TEX_W = 352  # pixels dans la texture
@@ -144,10 +149,9 @@ func _build_ui():
 		var sy = tex_offset_y + 282 * GUI_SCALE
 		all_slots_pos.append(Vector2(sx, sy))
 
-	# Creer un bouton invisible par slot
-	for i in range(min(all_slots_pos.size(), ALL_BLOCKS.size())):
+	# Creer un bouton invisible par slot (toujours 36 slots, contenu change avec la page)
+	for i in range(SLOTS_PER_PAGE):
 		var pos = all_slots_pos[i]
-		var block_type = ALL_BLOCKS[i]
 
 		var btn = Button.new()
 		btn.set_anchors_preset(Control.PRESET_CENTER)
@@ -157,7 +161,7 @@ func _build_ui():
 		btn.offset_bottom = pos.y + slot_px
 		btn.flat = true  # pas de fond de bouton (la texture MC fait le fond)
 		btn.mouse_filter = Control.MOUSE_FILTER_STOP
-		btn.pressed.connect(_on_slot_pressed.bind(block_type))
+		btn.pressed.connect(_on_slot_pressed_by_index.bind(i))
 		add_child(btn)
 
 		var tex_rect = TextureRect.new()
@@ -222,7 +226,6 @@ func _build_ui():
 			"name_bg": name_bg,
 			"name_label": name_label,
 			"count_label": count_label,
-			"block_type": block_type,
 		})
 
 	# Hover tooltip sur chaque slot
@@ -259,26 +262,96 @@ func _build_ui():
 	_tooltip_label.add_theme_stylebox_override("normal", tip_style)
 	add_child(_tooltip_label)
 
+	# Navigation pages (< Page X/Y >)
+	var nav_y = disp_h / 2 + 10
+	var btn_style = StyleBoxFlat.new()
+	btn_style.bg_color = Color(0.2, 0.15, 0.3, 0.85)
+	btn_style.border_color = Color(0.5, 0.3, 0.7, 0.9)
+	btn_style.set_border_width_all(2)
+	btn_style.set_corner_radius_all(4)
+
+	_prev_btn = Button.new()
+	_prev_btn.text = "< Préc."
+	_prev_btn.set_anchors_preset(Control.PRESET_CENTER)
+	_prev_btn.offset_left = -120
+	_prev_btn.offset_right = -30
+	_prev_btn.offset_top = nav_y
+	_prev_btn.offset_bottom = nav_y + 30
+	_prev_btn.add_theme_stylebox_override("normal", btn_style)
+	_prev_btn.add_theme_color_override("font_color", Color.WHITE)
+	_prev_btn.pressed.connect(_on_prev_page)
+	add_child(_prev_btn)
+
+	_page_label = Label.new()
+	_page_label.set_anchors_preset(Control.PRESET_CENTER)
+	_page_label.offset_left = -30
+	_page_label.offset_right = 30
+	_page_label.offset_top = nav_y + 4
+	_page_label.offset_bottom = nav_y + 30
+	_page_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_page_label.add_theme_font_size_override("font_size", 14)
+	_page_label.add_theme_color_override("font_color", Color(1, 1, 0.9, 1))
+	_page_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_page_label)
+
+	_next_btn = Button.new()
+	_next_btn.text = "Suiv. >"
+	_next_btn.set_anchors_preset(Control.PRESET_CENTER)
+	_next_btn.offset_left = 30
+	_next_btn.offset_right = 120
+	_next_btn.offset_top = nav_y
+	_next_btn.offset_bottom = nav_y + 30
+	_next_btn.add_theme_stylebox_override("normal", btn_style)
+	_next_btn.add_theme_color_override("font_color", Color.WHITE)
+	_next_btn.pressed.connect(_on_next_page)
+	add_child(_next_btn)
+
 	# Charger les icones
 	_refresh_slots()
 
+func _get_total_pages() -> int:
+	return ceili(float(ALL_BLOCKS.size()) / SLOTS_PER_PAGE)
+
 func _refresh_slots():
-	for slot in _slot_buttons:
-		var bt = slot["block_type"]
-		var count = player.get_inventory_count(bt) if player else 0
-		var tex = _load_block_icon(bt)
-		slot["tex_rect"].texture = tex
-		slot["tex_rect"].modulate = Color.WHITE if count > 0 else Color(0.4, 0.4, 0.4, 0.6)
-		slot["count_label"].text = str(count) if count > 0 else ""
-		# Nom de l'item sur le slot
-		var block_name = BlockRegistry.get_block_name(bt)
-		slot["name_label"].text = block_name
-		if count > 0:
-			slot["name_bg"].color = Color(0, 0, 0, 0.45)
-			slot["name_label"].add_theme_color_override("font_color", Color.WHITE)
+	var page_offset = _current_page * SLOTS_PER_PAGE
+	for i in range(_slot_buttons.size()):
+		var slot = _slot_buttons[i]
+		var block_index = page_offset + i
+		if block_index < ALL_BLOCKS.size():
+			var bt = ALL_BLOCKS[block_index]
+			var count = player.get_inventory_count(bt) if player else 0
+			var tex = _load_block_icon(bt)
+			slot["tex_rect"].texture = tex
+			slot["tex_rect"].modulate = Color.WHITE if count > 0 else Color(0.4, 0.4, 0.4, 0.6)
+			slot["count_label"].text = str(count) if count > 0 else ""
+			var block_name = BlockRegistry.get_block_name(bt)
+			slot["name_label"].text = block_name
+			slot["button"].visible = true
+			slot["name_bg"].visible = true
+			if count > 0:
+				slot["name_bg"].color = Color(0, 0, 0, 0.45)
+				slot["name_label"].add_theme_color_override("font_color", Color.WHITE)
+			else:
+				slot["name_bg"].color = Color(0, 0, 0, 0.3)
+				slot["name_label"].add_theme_color_override("font_color", Color(0.6, 0.6, 0.6, 0.6))
 		else:
-			slot["name_bg"].color = Color(0, 0, 0, 0.3)
-			slot["name_label"].add_theme_color_override("font_color", Color(0.6, 0.6, 0.6, 0.6))
+			# Empty slot (past the end of ALL_BLOCKS)
+			slot["tex_rect"].texture = null
+			slot["count_label"].text = ""
+			slot["name_label"].text = ""
+			slot["button"].visible = false
+			slot["name_bg"].visible = false
+
+	# Update page navigation
+	var total_pages = _get_total_pages()
+	if _page_label:
+		_page_label.text = "%d/%d" % [_current_page + 1, total_pages]
+	if _prev_btn:
+		_prev_btn.visible = total_pages > 1
+		_prev_btn.disabled = _current_page <= 0
+	if _next_btn:
+		_next_btn.visible = total_pages > 1
+		_next_btn.disabled = _current_page >= total_pages - 1
 
 func open_inventory():
 	is_open = true
@@ -297,21 +370,38 @@ func _process(_delta):
 		_tooltip_label.offset_right = mpos.x + 250
 		_tooltip_label.offset_bottom = mpos.y + 16
 
+func _get_block_for_slot(slot_index: int) -> int:
+	var block_index = _current_page * SLOTS_PER_PAGE + slot_index
+	if block_index < ALL_BLOCKS.size():
+		return ALL_BLOCKS[block_index]
+	return -1
+
 func _on_slot_hover(index: int):
-	if index < _slot_buttons.size():
-		var bt = _slot_buttons[index]["block_type"]
-		var name = BlockRegistry.get_block_name(bt)
+	var bt = _get_block_for_slot(index)
+	if bt >= 0:
+		var block_name = BlockRegistry.get_block_name(bt)
 		var count = player.get_inventory_count(bt) if player else 0
-		_tooltip_label.text = "%s (x%d)" % [name, count]
+		_tooltip_label.text = "%s (x%d)" % [block_name, count]
 		_tooltip_label.visible = true
 
 func _on_slot_unhover():
 	if _tooltip_label:
 		_tooltip_label.visible = false
 
-func _on_slot_pressed(block_type: BlockRegistry.BlockType):
-	if player and player.has_method("assign_hotbar_slot"):
-		player.assign_hotbar_slot(player.selected_slot, block_type)
+func _on_slot_pressed_by_index(slot_index: int):
+	var bt = _get_block_for_slot(slot_index)
+	if bt >= 0 and player and player.has_method("assign_hotbar_slot"):
+		player.assign_hotbar_slot(player.selected_slot, bt)
+		_refresh_slots()
+
+func _on_prev_page():
+	if _current_page > 0:
+		_current_page -= 1
+		_refresh_slots()
+
+func _on_next_page():
+	if _current_page < _get_total_pages() - 1:
+		_current_page += 1
 		_refresh_slots()
 
 func _load_block_icon(block_type: BlockRegistry.BlockType) -> ImageTexture:

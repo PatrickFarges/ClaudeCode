@@ -1,7 +1,7 @@
 extends CharacterBody3D
 class_name PassiveMob
 
-# === MOB SYSTEM v3.0.0 ===
+# === MOB SYSTEM v3.1.0 ===
 # Charge les donnees depuis data/mob_database.json
 # Comportements : passive (fuit), neutral (attaque si provoque), hostile (attaque)
 # Systemes : faim, brulure soleil, predation, pack behavior
@@ -73,6 +73,11 @@ var _hunt_timer: float = 0.0
 var _neutral_day: bool = false
 var _special_tags: Array = []
 
+# Wall detection / stuck prevention
+var _stuck_timer: float = 0.0
+var _last_xz_pos: Vector3 = Vector3.ZERO
+var _consecutive_wanders: int = 0  # how many wander cycles without a rest
+
 # Throttle
 var _nav_check_timer: float = 0.0
 const NAV_CHECK_INTERVAL = 0.2
@@ -87,6 +92,10 @@ const SUN_DAMAGE = 1
 const HUNT_CHECK_INTERVAL = 3.0
 const HUNT_RANGE = 16.0
 const EAT_DURATION = 2.0
+const STUCK_THRESHOLD = 0.15  # if moved less than this in 1s, we're stuck
+const REST_MIN_DURATION = 4.0  # minimum idle rest between movement
+const REST_MAX_DURATION = 12.0  # maximum idle rest between movement
+const WANDER_CYCLES_BEFORE_REST = 2  # rest every N wander cycles
 
 # ============================================================
 #  DATABASE LOADING
@@ -615,16 +624,52 @@ func _do_wander(delta):
 		_pick_new_wander()
 
 	if is_moving and is_on_floor():
+		# --- Stuck detection: if barely moved in ~1s, we're against a wall ---
+		_stuck_timer += delta
+		if _stuck_timer >= 1.0:
+			var moved_xz = Vector2(global_position.x - _last_xz_pos.x, global_position.z - _last_xz_pos.z).length()
+			_last_xz_pos = global_position
+			_stuck_timer = 0.0
+			if moved_xz < STUCK_THRESHOLD:
+				# Stuck! Turn around 180° and go idle briefly
+				_force_idle_rest(1.5, 3.0)
+				return
+
+		# --- Wall / cliff detection ahead ---
 		_nav_check_timer += delta
 		if _nav_check_timer >= NAV_CHECK_INTERVAL:
 			_nav_check_timer = 0.0
 			if world_manager:
 				var ahead_pos = global_position + wander_direction * 1.0
-				var ahead_block = world_manager.get_block_at_position(ahead_pos.floor())
-				var below_ahead = world_manager.get_block_at_position((ahead_pos - Vector3(0, 1, 0)).floor())
+				var feet_y = floori(global_position.y)
+				var ahead_floor = Vector3(ahead_pos.x, feet_y, ahead_pos.z).floor()
+				var ahead_block = world_manager.get_block_at_position(ahead_floor)
+				var below_ahead = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y - 1, ahead_pos.z).floor())
+				var above_ahead = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y + 1, ahead_pos.z).floor())
+
+				# Water or cliff ahead → stop
 				if ahead_block == BlockRegistry.BlockType.WATER or below_ahead == BlockRegistry.BlockType.AIR:
-					_pick_new_wander()
-					is_moving = false
+					_force_idle_rest(2.0, 5.0)
+					return
+
+				# Wall detection: solid block at feet level
+				if ahead_block != 0 and ahead_block != BlockRegistry.BlockType.WATER:
+					# Skip vegetation (cross-mesh blocks — not real walls)
+					if not _is_vegetation(ahead_block):
+						# Check if it's a 1-block wall we can jump over
+						if above_ahead == 0 or _is_vegetation(above_ahead):
+							# 1-block wall → auto-jump over it
+							var above2 = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y + 2, ahead_pos.z).floor())
+							if above2 == 0 or _is_vegetation(above2):
+								velocity.y = 6.5  # jump impulse
+							else:
+								# 2+ blocks high → turn around and idle
+								_force_idle_rest(2.0, 6.0)
+								return
+						else:
+							# 2+ blocks high wall → turn around and idle
+							_force_idle_rest(2.0, 6.0)
+							return
 
 		velocity.x = wander_direction.x * move_speed
 		velocity.z = wander_direction.z * move_speed
@@ -636,6 +681,36 @@ func _do_wander(delta):
 		velocity.x = move_toward(velocity.x, 0, move_speed * 2.0)
 		velocity.z = move_toward(velocity.z, 0, move_speed * 2.0)
 		_play_anim("idle")
+
+func _is_vegetation(block: int) -> bool:
+	"""Cross-mesh blocks that are not real walls."""
+	return block >= 98 and block <= 103  # SHORT_GRASS, FERN, DEAD_BUSH, DANDELION, POPPY, CORNFLOWER
+
+func _force_idle_rest(min_time: float, max_time: float):
+	"""Stop moving, turn around, and rest idle for a while."""
+	is_moving = false
+	velocity.x = 0
+	velocity.z = 0
+	# Turn around ~180° with some randomness
+	rotation.y += PI + randf_range(-0.5, 0.5)
+	wander_timer = randf_range(min_time, max_time)
+	wander_direction = Vector3.ZERO
+	_play_anim("idle")
+	_stuck_timer = 0.0
+	_last_xz_pos = global_position
+
+func _try_auto_jump(move_dir: Vector3):
+	"""Auto-jump over 1-block walls when chasing/fleeing. Must be on floor."""
+	if not is_on_floor() or not world_manager:
+		return
+	var ahead_pos = global_position + move_dir * 0.8
+	var feet_y = floori(global_position.y)
+	var block_at_feet = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y, ahead_pos.z).floor())
+	if block_at_feet != 0 and not _is_vegetation(block_at_feet) and block_at_feet != BlockRegistry.BlockType.WATER:
+		# Solid block at feet level — check if only 1 block high
+		var block_above = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y + 1, ahead_pos.z).floor())
+		if block_above == 0 or _is_vegetation(block_above):
+			velocity.y = 6.5  # jump
 
 func _chase_player(delta):
 	if not _target_player or not is_instance_valid(_target_player):
@@ -664,6 +739,7 @@ func _chase_player(delta):
 		velocity.x = dir.x * chase_speed
 		velocity.z = dir.z * chase_speed
 		rotation.y = atan2(-dir.x, -dir.z)
+		_try_auto_jump(dir)
 		_play_anim("walk")
 
 func _chase_prey(delta):
@@ -700,6 +776,7 @@ func _chase_prey(delta):
 		velocity.x = dir.x * chase_speed
 		velocity.z = dir.z * chase_speed
 		rotation.y = atan2(-dir.x, -dir.z)
+		_try_auto_jump(dir)
 		_play_anim("walk")
 
 func _flee_from_player(delta):
@@ -717,6 +794,7 @@ func _flee_from_player(delta):
 	velocity.z = dir.z * flee_speed
 	if dir.length_squared() > 0.01:
 		rotation.y = atan2(-dir.x, -dir.z)
+	_try_auto_jump(dir)
 	_play_anim("walk")
 
 func _is_daytime() -> bool:
@@ -848,8 +926,23 @@ func _apply_glb_tint(node: Node, color: Color):
 		_apply_glb_tint(child, color)
 
 func _pick_new_wander():
-	wander_timer = randf_range(2.0, 5.0)
-	is_moving = randf() > 0.4
+	_consecutive_wanders += 1
+	# Every few wander cycles, force a long rest (animals don't walk non-stop)
+	if _consecutive_wanders >= WANDER_CYCLES_BEFORE_REST:
+		_consecutive_wanders = 0
+		is_moving = false
+		wander_timer = randf_range(REST_MIN_DURATION, REST_MAX_DURATION)
+		wander_direction = Vector3.ZERO
+		_stuck_timer = 0.0
+		_last_xz_pos = global_position
+		return
+
+	wander_timer = randf_range(3.0, 7.0)
+	is_moving = randf() > 0.35
 	if is_moving:
 		var angle = randf() * TAU
 		wander_direction = Vector3(cos(angle), 0, sin(angle)).normalized()
+		_last_xz_pos = global_position
+		_stuck_timer = 0.0
+	else:
+		wander_direction = Vector3.ZERO

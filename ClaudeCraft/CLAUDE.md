@@ -39,7 +39,7 @@ Jeu voxel type Minecraft en GDScript avec Godot 4.6+, style pastel. Évolue vers
 
 ### Combat
 - **`arrow_entity.gd`** : flèche arc — gravité 20m/s², drag, dégâts 6.0, critique, knockback, particules, Label3D dégâts
-- **`passive_mob.gd`** v3.0.0 : systeme de mobs charge depuis `data/mob_database.json` (57 mobs documentes). 3 comportements (passive/neutral/hostile) + systemes : **brulure soleil** (zombie/skeleton brulent de jour si ciel ouvert), **faim animale** (drain progressif, recherche nourriture dans rayon 4, mange vegetation/herbe, cooldown 5s), **predation** (loup chasse mouton/lapin/renard/poulet, renard chasse poulet/lapin — quand faim <50%, range 16 blocs), **pack behavior** (loups alertent meute rayon 16 quand frappes), **when_hit configurable** (flee/attack/attack_pack/attack_spit/attack_ram/flee_ink). Tables de spawn precalculees `BIOME_DAY_MOBS` et `BIOME_NIGHT_MOBS` construites au chargement du JSON. Spawn en groupes fideles MC (spawn_group_min/max, max_per_chunk, spawn_below_y)
+- **`passive_mob.gd`** v3.1.0 : systeme de mobs charge depuis `data/mob_database.json` (57 mobs documentes). 3 comportements (passive/neutral/hostile) + systemes : **brulure soleil** (zombie/skeleton brulent de jour si ciel ouvert), **faim animale** (drain progressif, recherche nourriture dans rayon 4, mange vegetation/herbe, cooldown 5s), **predation** (loup chasse mouton/lapin/renard/poulet, renard chasse poulet/lapin — quand faim <50%, range 16 blocs), **pack behavior** (loups alertent meute rayon 16 quand frappes), **when_hit configurable** (flee/attack/attack_pack/attack_spit/attack_ram/flee_ink). Tables de spawn precalculees `BIOME_DAY_MOBS` et `BIOME_NIGHT_MOBS` construites au chargement du JSON. Spawn en groupes fideles MC (spawn_group_min/max, max_per_chunk, spawn_below_y). **IA pathfinding** : détection murs solides (saut auto 1 bloc, demi-tour+idle si 2+ blocs), stuck detection 1s, repos périodique (4-12s toutes les 2 phases wander), auto-jump en chase/flee/predation, végétation cross-mesh ignorée
 
 ### Joueur et UI
 - **`player.gd`** : FPS CharacterBody3D, minage progressif (`BASE_MINING_TIME=5.0` × dureté/outil), hotbar 9 slots + outils + nourriture, arc (charge MC), placement blocs. **Zoom FOV** : Alt+Molette 70°→110° (step 5°), sprint ajoute +10° delta
@@ -100,7 +100,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 
 ## Direction du projet
 
-**Version actuelle : v19.6.1**
+**Version actuelle : v19.7.0**
 
 | Phase | Statut | Contenu |
 |-------|--------|---------|
@@ -158,7 +158,8 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 | 15 | Fait | v19.4.0 — **Fixes critiques audit**. Nourriture consommée après manger (B1), attaque bloquée pendant minage (B2), village_inv_open dans _is_any_ui_open (B3), floori() coords négatives (B4), _path_blocks clear (B5), is_instance_valid ajouté (B6). Cueillette herbes/fleurs (raywalk cross-mesh). Bridge assist placement blocs. Attaque continue clic maintenu |
 | 16 | Fait | v19.5.x — **GUI Minecraft Faithful32**. HUD : hotbar.png + hotbar_selection.png, 10 coeurs MC (full/half), barre de faim, armure, XP bar prête. Inventaire : inventory.png croppée 352×332 @ scale 2x, 36 slots MC, tooltips noms+quantités. Crafting : crafting_table.png, grille 3×3 ingrédients (have/need), recettes triées par craftabilité, tooltips partout. 1396 recettes MC extraites (minecraft_recipes.json, 706 shaped avec patterns 3×3) |
 | 16.1 | Fait | v19.6.1 — **Fix chute terrain + sons eau**. Téléport sécurité intelligent (scan blocs réels au lieu de Y=100 aveugle, force collision chunk). Collision prioritaire chunks distance ≤1 joueur (sans throttle). Fix sons de pas joués sous l'eau (in_water guard). Fix boucle infinie chute/téléport plages |
-| 16.2 | A venir | Pathfinding mobs (IA animaux/monstres), comportements spécifiques (creeper explosion, skeleton archer), mini-boss ×1.6, drag & drop craft MC, nouveaux biomes (marécage, forêt géante) |
+| 17 | Fait | v19.7.0 — **IA mobs + fix inventaire pages**. `passive_mob.gd` v3.1.0 : détection murs (solide devant → saut auto 1 bloc ou demi-tour+idle si 2+ blocs), stuck detection (si déplacement <0.15 blocs/s → demi-tour 180°+idle), repos périodique (4-12s idle toutes les 2 phases de wander), auto-jump en chase/flee/predation, détection falaise/eau → idle, végétation ignorée dans les checks murs. `inventory_ui.gd` v2.2.0 : pagination inventaire (36 slots/page, boutons Préc./Suiv.), fix items invisibles au-delà du slot 36 (échelles, trappes, barreaux, fleurs etc. désormais accessibles page 2) |
+| 17.1 | A venir | Comportements spécifiques mobs (creeper explosion, skeleton archer), mini-boss ×1.6, drag & drop craft MC, nouveaux biomes (marécage, forêt géante) |
 
 **Packs GLB utilisés** : Steve GLB (modèle Bedrock converti, 28 bones, 4 anims) pour tous les PNJ avec skins par profession. Kenney.nl (18 modèles BlockPNJ — conservés mais plus utilisés). **PNJ futurs** : KayKit Adventurers (161 anims travail)
 
