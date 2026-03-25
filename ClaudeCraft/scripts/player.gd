@@ -864,11 +864,43 @@ func _physics_process(delta):
 	# Effet visuel + sonore sous l'eau + noyade
 	_update_underwater(delta)
 
+	# Sécurité : forcer la collision du chunk sous les pieds du joueur
+	# (empêche de traverser le sol quand la collision n'est pas encore créée)
+	if world_manager:
+		var wx = int(floor(global_position.x))
+		var wz = int(floor(global_position.z))
+		var chunk_pos = Vector3i(int(floor(float(wx) / 16.0)), 0, int(floor(float(wz) / 16.0)))
+		if world_manager.chunks.has(chunk_pos):
+			var chunk = world_manager.chunks[chunk_pos]
+			if chunk.is_mesh_built and not chunk.has_collision:
+				chunk.create_collision()
+		# Aussi les 4 chunks voisins immédiats (joueur peut être au bord)
+		for offset in [Vector3i(1,0,0), Vector3i(-1,0,0), Vector3i(0,0,1), Vector3i(0,0,-1)]:
+			var nb_pos = chunk_pos + offset
+			if world_manager.chunks.has(nb_pos):
+				var nb = world_manager.chunks[nb_pos]
+				if nb.is_mesh_built and not nb.has_collision:
+					nb.create_collision()
+
+	# Sécurité : détecter chute à travers le terrain (sol existe mais on tombe)
+	if world_manager and not in_water and velocity.y < -10.0:
+		var wx = int(floor(global_position.x))
+		var wz = int(floor(global_position.z))
+		var fy = int(floor(global_position.y))
+		# Vérifier s'il y a un bloc solide juste en dessous ou au-dessus de nous
+		for check_y in range(fy, fy + 10):
+			var bt = world_manager.get_block_at_position(Vector3(wx, check_y, wz))
+			if bt > 0 and bt != BlockRegistry.BlockType.WATER and bt != BlockRegistry.BlockType.LEAVES and not BlockRegistry.is_cross_mesh(bt):
+				# On est en train de traverser un bloc solide — remonter dessus
+				global_position.y = check_y + 1.5
+				velocity = Vector3.ZERO
+				print("Player: traverse le sol — repositionné à Y=%d" % int(global_position.y))
+				break
+
 	# Sécurité : si le joueur tombe sous le monde, le remonter en surface
 	if global_position.y < -20.0:
 		var safe_y = 100.0
 		if world_manager:
-			# Scanner les blocs réels pour trouver le sol solide
 			var wx = int(floor(global_position.x))
 			var wz = int(floor(global_position.z))
 			for scan_y in range(200, 0, -1):
@@ -876,12 +908,6 @@ func _physics_process(delta):
 				if bt > 0 and bt != BlockRegistry.BlockType.WATER and bt != BlockRegistry.BlockType.LEAVES and not BlockRegistry.is_cross_mesh(bt):
 					safe_y = scan_y + 2.0
 					break
-			# Forcer la collision du chunk sous les pieds
-			var chunk_pos = Vector3i(int(floor(float(wx) / 16.0)), 0, int(floor(float(wz) / 16.0)))
-			if world_manager.chunks.has(chunk_pos):
-				var chunk = world_manager.chunks[chunk_pos]
-				if chunk.is_mesh_built and not chunk.has_collision:
-					chunk.create_collision()
 		global_position.y = safe_y
 		velocity = Vector3.ZERO
 		print("Player: chute sous le monde — téléport de sécurité à Y=%d" % int(safe_y))

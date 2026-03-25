@@ -321,17 +321,24 @@ func _process(_delta):
 
 func _update_chunk_collisions():
 	var player_chunk = _world_to_chunk(player.global_position)
+	# Priorité absolue : chunk du joueur + 4 voisins directs (jamais throttlé)
+	for offset in [Vector3i(0,0,0), Vector3i(1,0,0), Vector3i(-1,0,0), Vector3i(0,0,1), Vector3i(0,0,-1)]:
+		var cp = player_chunk + offset
+		if chunks.has(cp):
+			var c = chunks[cp]
+			if c.is_mesh_built and not c.has_collision:
+				c.create_collision()
+	# Reste : 1 collision par frame max
 	var created_this_frame = 0
 	for chunk_pos in chunks:
 		var chunk = chunks[chunk_pos]
 		if not chunk.is_mesh_built:
 			continue
 		var dist = abs(chunk_pos.x - player_chunk.x) + abs(chunk_pos.z - player_chunk.z)
-		if dist <= COLLISION_DISTANCE and not chunk.has_collision:
+		if dist <= COLLISION_DISTANCE and dist > 1 and not chunk.has_collision:
 			chunk.create_collision()
 			created_this_frame += 1
-			# Le chunk du joueur + voisins immédiats : pas de throttle (prioritaire)
-			if dist > 1 and created_this_frame >= 1:
+			if created_this_frame >= 1:
 				return  # Max 1 collision créée par frame pour les chunks lointains
 		elif dist > COLLISION_REMOVE_DISTANCE and chunk.has_collision:
 			chunk.remove_collision()
