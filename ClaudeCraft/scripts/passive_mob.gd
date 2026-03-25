@@ -641,31 +641,29 @@ func _do_wander(delta):
 			_nav_check_timer = 0.0
 			if world_manager:
 				var ahead_pos = global_position + wander_direction * 1.0
-				var feet_y = floori(global_position.y)
-				var ahead_floor = Vector3(ahead_pos.x, feet_y, ahead_pos.z).floor()
-				var ahead_block = world_manager.get_block_at_position(ahead_floor)
-				var below_ahead = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y - 1, ahead_pos.z).floor())
-				var above_ahead = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y + 1, ahead_pos.z).floor())
+				# feet_y = bloc sous les pieds, body_y = niveau du torse (1 bloc au-dessus du sol)
+				var feet_y = floori(global_position.y - 0.1)
+				var body_y = feet_y + 1
+				var ahead_ground = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y, ahead_pos.z).floor())
+				var ahead_body = world_manager.get_block_at_position(Vector3(ahead_pos.x, body_y, ahead_pos.z).floor())
+				var ahead_head = world_manager.get_block_at_position(Vector3(ahead_pos.x, body_y + 1, ahead_pos.z).floor())
 
 				# Water or cliff ahead → stop
-				if ahead_block == BlockRegistry.BlockType.WATER or below_ahead == BlockRegistry.BlockType.AIR:
+				if ahead_ground == BlockRegistry.BlockType.WATER:
+					_force_idle_rest(2.0, 5.0)
+					return
+				# Cliff: no ground under the next step
+				var below_ground = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y - 1, ahead_pos.z).floor())
+				if ahead_ground == 0 and below_ground == 0:
 					_force_idle_rest(2.0, 5.0)
 					return
 
-				# Wall detection: solid block at feet level
-				if ahead_block != 0 and ahead_block != BlockRegistry.BlockType.WATER:
-					# Skip vegetation (cross-mesh blocks — not real walls)
-					if not _is_vegetation(ahead_block):
-						# Check if it's a 1-block wall we can jump over
-						if above_ahead == 0 or _is_vegetation(above_ahead):
-							# 1-block wall → auto-jump over it
-							var above2 = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y + 2, ahead_pos.z).floor())
-							if above2 == 0 or _is_vegetation(above2):
-								velocity.y = 6.5  # jump impulse
-							else:
-								# 2+ blocks high → turn around and idle
-								_force_idle_rest(2.0, 6.0)
-								return
+				# Wall detection: solid block at body level (not ground level)
+				if ahead_body != 0 and ahead_body != BlockRegistry.BlockType.WATER:
+					if not _is_vegetation(ahead_body):
+						# 1-block wall: body blocked but head free → jump
+						if ahead_head == 0 or _is_vegetation(ahead_head):
+							velocity.y = 6.5
 						else:
 							# 2+ blocks high wall → turn around and idle
 							_force_idle_rest(2.0, 6.0)
@@ -704,12 +702,12 @@ func _try_auto_jump(move_dir: Vector3):
 	if not is_on_floor() or not world_manager:
 		return
 	var ahead_pos = global_position + move_dir * 0.8
-	var feet_y = floori(global_position.y)
-	var block_at_feet = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y, ahead_pos.z).floor())
-	if block_at_feet != 0 and not _is_vegetation(block_at_feet) and block_at_feet != BlockRegistry.BlockType.WATER:
-		# Solid block at feet level — check if only 1 block high
-		var block_above = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y + 1, ahead_pos.z).floor())
-		if block_above == 0 or _is_vegetation(block_above):
+	var body_y = floori(global_position.y - 0.1) + 1  # 1 bloc au-dessus du sol
+	var block_at_body = world_manager.get_block_at_position(Vector3(ahead_pos.x, body_y, ahead_pos.z).floor())
+	if block_at_body != 0 and not _is_vegetation(block_at_body) and block_at_body != BlockRegistry.BlockType.WATER:
+		# Solid block at body level — check if head is free
+		var block_at_head = world_manager.get_block_at_position(Vector3(ahead_pos.x, body_y + 1, ahead_pos.z).floor())
+		if block_at_head == 0 or _is_vegetation(block_at_head):
 			velocity.y = 6.5  # jump
 
 func _chase_player(delta):
