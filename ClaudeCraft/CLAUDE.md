@@ -52,7 +52,7 @@ Jeu voxel type Minecraft en GDScript avec Godot 4.6+, style pastel. Évolue vers
 
 ### Utilitaires
 - **`world_manager.gd`** : chunks render_distance=6, village 9 PNJ (professions fixes : 1 bûcheron, 2 mineurs, 1 forgeron, 2 bâtisseurs, 1 menuisier, 1 fermier, 1 boulanger), POI manager, déchargement Dictionary-set O(1). Ancien flatten cosmétique remplacé par le système bâtisseur. *(Pas de spawn animaux — retiré v12.0.0)*
-- **`day_night_cycle.gd`** : cycle jour/nuit 600s, **vitesse du temps** 4 niveaux (Lent ×0.5 / Normal ×1 / Rapide ×2 / Très rapide ×10), Ctrl+Molette dans le HUD
+- **`day_night_cycle.gd`** : cycle jour/nuit 1200s (20 min), **vitesse du temps** 4 niveaux (Lent 35min / Normal 20min / Rapide 15min / Très rapide 1min), Ctrl+Molette dans le HUD
 - **`save_manager.gd`** / **`health_ui.gd`** : sauvegarde, UI santé
 
 ## Biomes
@@ -100,7 +100,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 
 ## Direction du projet
 
-**Version actuelle : v19.7.0**
+**Version actuelle : v19.7.1**
 
 | Phase | Statut | Contenu |
 |-------|--------|---------|
@@ -158,7 +158,8 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 | 15 | Fait | v19.4.0 — **Fixes critiques audit**. Nourriture consommée après manger (B1), attaque bloquée pendant minage (B2), village_inv_open dans _is_any_ui_open (B3), floori() coords négatives (B4), _path_blocks clear (B5), is_instance_valid ajouté (B6). Cueillette herbes/fleurs (raywalk cross-mesh). Bridge assist placement blocs. Attaque continue clic maintenu |
 | 16 | Fait | v19.5.x — **GUI Minecraft Faithful32**. HUD : hotbar.png + hotbar_selection.png, 10 coeurs MC (full/half), barre de faim, armure, XP bar prête. Inventaire : inventory.png croppée 352×332 @ scale 2x, 36 slots MC, tooltips noms+quantités. Crafting : crafting_table.png, grille 3×3 ingrédients (have/need), recettes triées par craftabilité, tooltips partout. 1396 recettes MC extraites (minecraft_recipes.json, 706 shaped avec patterns 3×3) |
 | 16.1 | Fait | v19.6.1 — **Fix chute terrain + sons eau**. Téléport sécurité intelligent (scan blocs réels au lieu de Y=100 aveugle, force collision chunk). Collision prioritaire chunks distance ≤1 joueur (sans throttle). Fix sons de pas joués sous l'eau (in_water guard). Fix boucle infinie chute/téléport plages |
-| 17 | Fait | v19.7.0 — **IA mobs + fix inventaire pages**. `passive_mob.gd` v3.1.0 : détection murs (solide devant → saut auto 1 bloc ou demi-tour+idle si 2+ blocs), stuck detection (si déplacement <0.15 blocs/s → demi-tour 180°+idle), repos périodique (4-12s idle toutes les 2 phases de wander), auto-jump en chase/flee/predation, détection falaise/eau → idle, végétation ignorée dans les checks murs. `inventory_ui.gd` v2.2.0 : pagination inventaire (36 slots/page, boutons Préc./Suiv.), fix items invisibles au-delà du slot 36 (échelles, trappes, barreaux, fleurs etc. désormais accessibles page 2) |
+| 17 | Fait | v19.7.0 — **IA mobs + fix inventaire pages**. `passive_mob.gd` v3.1.0 : détection murs (saut auto 1 bloc au niveau torse, demi-tour+idle si 2+ blocs), stuck detection (si déplacement <0.15 blocs/s → demi-tour 180°+idle), repos périodique (4-12s idle toutes les 2 phases de wander), auto-jump en chase/flee/predation, détection falaise/eau → idle, végétation ignorée dans les checks murs. `inventory_ui.gd` v2.2.0 : pagination inventaire (36 slots/page, boutons Préc./Suiv.), fix items invisibles au-delà du slot 36 (échelles, trappes, barreaux, fleurs etc. désormais accessibles page 2) |
+| 17.0.1 | Fait | v19.7.1 — **Fix mobs + traverse sable + durées journée**. Fix mobs sautent sur terrain plat (check mur au niveau torse au lieu de pieds). Fix chute à travers le sable (collision forcée chunk joueur+voisins à chaque frame + détection traverse-sol mi-chute). Durées journée ajustées (Lent 35min, Normal 20min, Rapide 15min, Très rapide 1min) |
 | 17.1 | A venir | Comportements spécifiques mobs (creeper explosion, skeleton archer), mini-boss ×1.6, drag & drop craft MC, nouveaux biomes (marécage, forêt géante) |
 
 **Packs GLB utilisés** : Steve GLB (modèle Bedrock converti, 28 bones, 4 anims) pour tous les PNJ avec skins par profession. Kenney.nl (18 modèles BlockPNJ — conservés mais plus utilisés). **PNJ futurs** : KayKit Adventurers (161 anims travail)
