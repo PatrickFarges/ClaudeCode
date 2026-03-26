@@ -283,11 +283,10 @@ func _build_owned_items():
 	_owned_items.sort_custom(func(a, b): return int(a) < int(b))
 
 func _refresh_slots():
-	_build_owned_items()
-	# Corriger la page si depassee
-	var total_pages = _get_total_pages()
-	if _current_page >= total_pages:
-		_current_page = max(0, total_pages - 1)
+	# Met a jour les counts sans changer l'ordre (positions stables)
+	var tp = _get_total_pages()
+	if _current_page >= tp:
+		_current_page = max(0, tp - 1)
 	var page_offset = _current_page * SLOTS_PER_PAGE
 	for i in range(_slot_buttons.size()):
 		var slot = _slot_buttons[i]
@@ -295,16 +294,23 @@ func _refresh_slots():
 		if item_index < _owned_items.size():
 			var bt = _owned_items[item_index]
 			var count = player.get_inventory_count(bt) if player else 0
-			var tex = _load_block_icon(bt)
-			slot["tex_rect"].texture = tex
-			slot["tex_rect"].modulate = Color.WHITE
-			slot["count_label"].text = str(count) if count > 1 else ""
-			var block_name = BlockRegistry.get_block_name(bt)
-			slot["name_label"].text = block_name
-			slot["button"].visible = true
-			slot["name_bg"].visible = true
-			slot["name_bg"].color = Color(0, 0, 0, 0.45)
-			slot["name_label"].add_theme_color_override("font_color", Color.WHITE)
+			if count > 0:
+				var tex = _load_block_icon(bt)
+				slot["tex_rect"].texture = tex
+				slot["tex_rect"].modulate = Color.WHITE
+				slot["count_label"].text = str(count) if count > 1 else ""
+				slot["name_label"].text = BlockRegistry.get_block_name(bt)
+				slot["button"].visible = true
+				slot["name_bg"].visible = true
+				slot["name_bg"].color = Color(0, 0, 0, 0.45)
+				slot["name_label"].add_theme_color_override("font_color", Color.WHITE)
+			else:
+				# Item avec count 0 — garder la place vide, ne pas decaler
+				slot["tex_rect"].texture = null
+				slot["count_label"].text = ""
+				slot["name_label"].text = ""
+				slot["button"].visible = true
+				slot["name_bg"].visible = false
 		else:
 			slot["tex_rect"].texture = null
 			slot["count_label"].text = ""
@@ -323,9 +329,16 @@ func _refresh_slots():
 		_next_btn.visible = total_pages > 1
 		_next_btn.disabled = _current_page >= total_pages - 1
 
+func sort_inventory():
+	# Tri explicite (touche T) — reconstruit la liste triee sans les vides
+	_build_owned_items()
+	_current_page = 0
+	_refresh_slots()
+
 func open_inventory():
 	is_open = true
 	visible = true
+	_build_owned_items()
 	_refresh_slots()
 
 func close_inventory():

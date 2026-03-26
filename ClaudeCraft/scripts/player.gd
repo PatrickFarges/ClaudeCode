@@ -618,6 +618,14 @@ func _input(event):
 		if event.physical_keycode == KEY_C:
 			_toggle_crafting()
 			return
+		# Touche T — trier inventaire/craft (uniquement si ouvert)
+		if event.physical_keycode == KEY_T:
+			if inventory_open and inventory_ui and inventory_ui.has_method("sort_inventory"):
+				inventory_ui.sort_inventory()
+				return
+			if crafting_open and crafting_ui and crafting_ui.has_method("sort_inventory"):
+				crafting_ui.sort_inventory()
+				return
 		# Touche F1 — inventaire du village
 		if event.physical_keycode == KEY_F1:
 			_toggle_village_inventory()

@@ -432,7 +432,7 @@ func _update_station_label():
 # REFRESH
 # ============================================================
 func _refresh_all():
-	_build_inv_items()
+	_sync_inv_counts()
 	_refresh_inv_slots()
 	_refresh_grid_visuals()
 	_check_recipe()
@@ -441,6 +441,7 @@ func _refresh_all():
 	_update_pagination()
 
 func _build_inv_items():
+	# Construit la liste initiale (a l'ouverture ou au tri) — triee par block_type
 	_inv_items.clear()
 	if not player:
 		return
@@ -450,6 +451,36 @@ func _build_inv_items():
 			_inv_items.append({"block_type": bt, "count": inv[bt]})
 	_inv_items.sort_custom(func(a, b): return int(a["block_type"]) < int(b["block_type"]))
 
+func _sync_inv_counts():
+	# Met a jour les counts sans changer l'ordre/positions
+	if not player:
+		return
+	var inv = player.get_all_inventory()
+	# Mettre a jour les counts existants
+	for item in _inv_items:
+		item["count"] = inv.get(item["block_type"], 0)
+	# Ajouter les nouveaux items (ex: output d'un craft) a la fin
+	var known: Dictionary = {}
+	for item in _inv_items:
+		known[item["block_type"]] = true
+	for bt in inv:
+		if inv[bt] > 0 and not known.has(bt):
+			_inv_items.append({"block_type": bt, "count": inv[bt]})
+
+func sort_inventory():
+	# Tri explicite (touche T) — supprime les vides et retrie
+	if not player:
+		return
+	_inv_items.clear()
+	var inv = player.get_all_inventory()
+	for bt in inv:
+		if inv[bt] > 0:
+			_inv_items.append({"block_type": bt, "count": inv[bt]})
+	_inv_items.sort_custom(func(a, b): return int(a["block_type"]) < int(b["block_type"]))
+	_inv_page = 0
+	_refresh_inv_slots()
+	_update_pagination()
+
 func _refresh_inv_slots():
 	var offset = _inv_page * SLOTS_PER_PAGE
 	for i in range(_inv_ui.size()):
@@ -457,12 +488,22 @@ func _refresh_inv_slots():
 		var idx = offset + i
 		if idx < _inv_items.size():
 			var item = _inv_items[idx]
-			slot["tex"].texture = _load_block_icon(item["block_type"])
-			slot["tex"].modulate = Color.WHITE
-			slot["count_lbl"].text = str(item["count"]) if item["count"] > 1 else ""
-			slot["name_lbl"].text = BlockRegistry.get_block_name(item["block_type"])
-			slot["name_bg"].visible = true
-			slot["name_lbl"].visible = true
+			var count = item["count"]
+			if count > 0:
+				slot["tex"].texture = _load_block_icon(item["block_type"])
+				slot["tex"].modulate = Color.WHITE
+				slot["count_lbl"].text = str(count) if count > 1 else ""
+				slot["name_lbl"].text = BlockRegistry.get_block_name(item["block_type"])
+				slot["name_bg"].visible = true
+				slot["name_lbl"].visible = true
+			else:
+				# Slot vide (item pris) — garder la place, ne pas decaler
+				slot["tex"].texture = null
+				slot["tex"].modulate = Color.WHITE
+				slot["count_lbl"].text = ""
+				slot["name_lbl"].text = ""
+				slot["name_bg"].visible = false
+				slot["name_lbl"].visible = false
 			slot["btn"].visible = true
 		else:
 			slot["tex"].texture = null
@@ -543,34 +584,33 @@ func _on_inv_input(event: InputEvent, index: int):
 	if event.button_index == MOUSE_BUTTON_LEFT:
 		if _held_item.is_empty():
 			# Prendre depuis l'inventaire
-			if item_idx < _inv_items.size():
+			if item_idx < _inv_items.size() and _inv_items[item_idx]["count"] > 0:
 				var item = _inv_items[item_idx]
 				var amount = mini(item["count"], MAX_STACK)
 				player._remove_from_inventory(item["block_type"], amount)
 				_held_item = {"block_type": item["block_type"], "count": amount}
 				_refresh_all()
 		else:
-			# Verifier si on clique sur le meme type — juste reposer
-			var same_type = false
-			if item_idx < _inv_items.size():
-				same_type = _inv_items[item_idx]["block_type"] == _held_item["block_type"]
+			# On tient un item — le reposer dans l'inventaire
 			player._add_to_inventory(_held_item["block_type"], _held_item["count"])
+			var old_held = _held_item.duplicate()
 			_held_item = {}
-			if not same_type:
-				# Prendre le nouveau (type different)
-				_build_inv_items()
-				item_idx = _inv_page * SLOTS_PER_PAGE + index
-				if item_idx < _inv_items.size():
-					var item = _inv_items[item_idx]
-					var amount = mini(item["count"], MAX_STACK)
-					player._remove_from_inventory(item["block_type"], amount)
-					_held_item = {"block_type": item["block_type"], "count": amount}
+			# Si on clique sur un slot d'un type DIFFERENT et non-vide, prendre ce nouveau
+			if item_idx < _inv_items.size() and _inv_items[item_idx]["count"] > 0:
+				var slot_bt = _inv_items[item_idx]["block_type"]
+				if slot_bt != old_held["block_type"]:
+					# Relire le count reel (on vient d'ajouter old_held)
+					var real_count = player.get_inventory_count(slot_bt)
+					var amount = mini(real_count, MAX_STACK)
+					if amount > 0:
+						player._remove_from_inventory(slot_bt, amount)
+						_held_item = {"block_type": slot_bt, "count": amount}
 			_refresh_all()
 
 	elif event.button_index == MOUSE_BUTTON_RIGHT:
 		if _held_item.is_empty():
 			# Prendre 1 seul depuis l'inventaire
-			if item_idx < _inv_items.size():
+			if item_idx < _inv_items.size() and _inv_items[item_idx]["count"] > 0:
 				var item = _inv_items[item_idx]
 				player._remove_from_inventory(item["block_type"], 1)
 				_held_item = {"block_type": item["block_type"], "count": 1}
