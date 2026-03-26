@@ -48,8 +48,8 @@ const TEX_H = 332
 const CRAFT_2X2_X = 196   # Grille craft 2x2 (haut droite dans inventory.png)
 const CRAFT_2X2_Y = 36
 const CRAFT_STEP = 36
-const OUT_X = 308          # Slot output
-const OUT_Y = 48
+const OUT_X = 306          # Slot output (centre entre les 2 rangees de la grille 2x2)
+const OUT_Y = 56
 const INV_X = 14           # Slots inventaire
 const INV_Y = 166
 const HOTBAR_Y = 282
@@ -387,7 +387,23 @@ func _add_to_inv_slot_and_dict(bt, count: int):
 func sort_inventory():
 	_build_inv_slots()
 	_inv_page = 0
+	_sync_hotbar_row()
 	_refresh_all()
+
+func _sync_hotbar_slot(slot_idx: int):
+	if not player or slot_idx < 27 or slot_idx > 35:
+		return
+	var col = slot_idx - 27
+	if not _inv_slots_data[slot_idx].is_empty():
+		player.assign_hotbar_slot(col, _inv_slots_data[slot_idx]["block_type"])
+
+func _sync_hotbar_row():
+	if not player:
+		return
+	for i in range(9):
+		var idx = 27 + i
+		if idx < _inv_slots_data.size() and not _inv_slots_data[idx].is_empty():
+			player.assign_hotbar_slot(i, _inv_slots_data[idx]["block_type"])
 
 # ============================================================
 # REFRESH
@@ -399,6 +415,7 @@ func _refresh_all():
 	_update_output()
 	_update_cursor()
 	_update_pagination()
+	_sync_hotbar_row()
 
 func _refresh_inv_slots():
 	var offset = _inv_page * SLOTS_PER_PAGE

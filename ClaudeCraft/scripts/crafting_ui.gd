@@ -420,7 +420,25 @@ func sort_inventory():
 	# Tri explicite (touche T)
 	_build_inv_slots()
 	_inv_page = 0
+	_sync_hotbar_row()
 	_refresh_all()
+
+func _sync_hotbar_slot(slot_idx: int):
+	# Si le slot est dans la rangee hotbar (page 0, indices 27-35), synchro avec player
+	if not player or slot_idx < 27 or slot_idx > 35:
+		return
+	var col = slot_idx - 27
+	if not _inv_slots_data[slot_idx].is_empty():
+		player.assign_hotbar_slot(col, _inv_slots_data[slot_idx]["block_type"])
+
+func _sync_hotbar_row():
+	# Synchro toute la rangee hotbar
+	if not player:
+		return
+	for i in range(9):
+		var idx = 27 + i
+		if idx < _inv_slots_data.size() and not _inv_slots_data[idx].is_empty():
+			player.assign_hotbar_slot(i, _inv_slots_data[idx]["block_type"])
 
 # ============================================================
 # REFRESH (ne reconstruit PAS les slots — juste le rendu)
@@ -432,6 +450,7 @@ func _refresh_all():
 	_update_output()
 	_update_cursor()
 	_update_pagination()
+	_sync_hotbar_row()
 
 func _refresh_inv_slots():
 	var offset = _inv_page * SLOTS_PER_PAGE
