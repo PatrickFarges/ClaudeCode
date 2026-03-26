@@ -527,6 +527,31 @@ func assign_hotbar_slot(slot_index: int, block_type: BlockRegistry.BlockType):
 		if slot_index == selected_slot:
 			_update_selected_block()
 
+func assign_hotbar_tool(slot_index: int, tool_type):
+	if slot_index >= 0 and slot_index < hotbar_tool_slots.size():
+		hotbar_tool_slots[slot_index] = tool_type
+		if slot_index == selected_slot:
+			_update_selected_block()
+
+func _clear_hotbar_slot(slot_index: int):
+	if slot_index >= 0 and slot_index < hotbar_slots.size():
+		hotbar_slots[slot_index] = BlockRegistry.BlockType.AIR
+		if slot_index < hotbar_tool_slots.size():
+			hotbar_tool_slots[slot_index] = ToolRegistry.ToolType.NONE
+		if slot_index < hotbar_food_slots.size():
+			hotbar_food_slots[slot_index] = false
+		if slot_index == selected_slot:
+			_update_selected_block()
+
+func is_hotbar_slot_empty(slot_index: int) -> bool:
+	if slot_index < 0 or slot_index >= hotbar_slots.size():
+		return true
+	var has_tool = slot_index < hotbar_tool_slots.size() and hotbar_tool_slots[slot_index] != ToolRegistry.ToolType.NONE
+	if has_tool:
+		return false
+	var bt = hotbar_slots[slot_index]
+	return bt == BlockRegistry.BlockType.AIR or get_inventory_count(bt) <= 0
+
 func _is_any_ui_open() -> bool:
 	return inventory_open or crafting_open or village_inv_open or (pause_menu and pause_menu.is_open)
 
@@ -626,6 +651,10 @@ func _input(event):
 			if crafting_open and crafting_ui and crafting_ui.has_method("sort_inventory"):
 				crafting_ui.sort_inventory()
 				return
+		# Touche SUPPR — vider le slot hotbar selectionne (uniquement si aucune UI ouverte)
+		if event.physical_keycode == KEY_DELETE and not _is_any_ui_open():
+			_clear_hotbar_slot(selected_slot)
+			return
 		# Touche F1 — inventaire du village
 		if event.physical_keycode == KEY_F1:
 			_toggle_village_inventory()
