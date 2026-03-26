@@ -1,6 +1,6 @@
-# inventory_ui.gd v2.2.0
+# inventory_ui.gd v2.3.0
 # Inventaire style Minecraft avec texture Faithful32 (inventory.png)
-# Ouvert avec I — affiche tous les blocs disponibles dans une grille MC
+# Ouvert avec I — affiche uniquement les items possedes (count > 0)
 
 extends CanvasLayer
 
@@ -28,48 +28,8 @@ const SLOTS_PER_PAGE = 36  # 3x9 + 1x9 hotbar
 const TEX_W = 352  # pixels dans la texture
 const TEX_H = 332
 
-# Tous les blocs disponibles (meme liste que l'ancienne version)
-const ALL_BLOCKS = [
-	BlockRegistry.BlockType.DIRT, BlockRegistry.BlockType.GRASS,
-	BlockRegistry.BlockType.DARK_GRASS, BlockRegistry.BlockType.STONE,
-	BlockRegistry.BlockType.SAND, BlockRegistry.BlockType.GRAVEL,
-	BlockRegistry.BlockType.WOOD, BlockRegistry.BlockType.LEAVES,
-	BlockRegistry.BlockType.SNOW, BlockRegistry.BlockType.CACTUS,
-	BlockRegistry.BlockType.PLANKS, BlockRegistry.BlockType.CRAFTING_TABLE,
-	BlockRegistry.BlockType.BRICK, BlockRegistry.BlockType.SANDSTONE,
-	BlockRegistry.BlockType.COAL_ORE, BlockRegistry.BlockType.IRON_ORE,
-	BlockRegistry.BlockType.GOLD_ORE, BlockRegistry.BlockType.IRON_INGOT,
-	BlockRegistry.BlockType.GOLD_INGOT, BlockRegistry.BlockType.FURNACE,
-	BlockRegistry.BlockType.STONE_TABLE, BlockRegistry.BlockType.IRON_TABLE,
-	BlockRegistry.BlockType.GOLD_TABLE, BlockRegistry.BlockType.COBBLESTONE,
-	BlockRegistry.BlockType.DIAMOND_ORE, BlockRegistry.BlockType.COPPER_ORE,
-	BlockRegistry.BlockType.SPRUCE_LOG, BlockRegistry.BlockType.BIRCH_LOG,
-	BlockRegistry.BlockType.JUNGLE_LOG, BlockRegistry.BlockType.ACACIA_LOG,
-	BlockRegistry.BlockType.DARK_OAK_LOG, BlockRegistry.BlockType.CHERRY_LOG,
-	BlockRegistry.BlockType.SPRUCE_LEAVES, BlockRegistry.BlockType.BIRCH_LEAVES,
-	BlockRegistry.BlockType.JUNGLE_LEAVES, BlockRegistry.BlockType.ACACIA_LEAVES,
-	BlockRegistry.BlockType.DARK_OAK_LEAVES, BlockRegistry.BlockType.CHERRY_LEAVES,
-	BlockRegistry.BlockType.ANDESITE, BlockRegistry.BlockType.GRANITE,
-	BlockRegistry.BlockType.DIORITE, BlockRegistry.BlockType.DEEPSLATE,
-	BlockRegistry.BlockType.CLAY, BlockRegistry.BlockType.PODZOL,
-	BlockRegistry.BlockType.MOSS_BLOCK, BlockRegistry.BlockType.ICE,
-	BlockRegistry.BlockType.GLASS, BlockRegistry.BlockType.TORCH,
-	BlockRegistry.BlockType.LANTERN, BlockRegistry.BlockType.CHEST,
-	BlockRegistry.BlockType.FARMLAND, BlockRegistry.BlockType.WHEAT_ITEM,
-	BlockRegistry.BlockType.BREAD,
-	BlockRegistry.BlockType.STONE_BRICKS,
-	BlockRegistry.BlockType.OAK_STAIRS, BlockRegistry.BlockType.COBBLESTONE_STAIRS,
-	BlockRegistry.BlockType.STONE_BRICK_STAIRS,
-	BlockRegistry.BlockType.OAK_SLAB, BlockRegistry.BlockType.COBBLESTONE_SLAB,
-	BlockRegistry.BlockType.STONE_SLAB,
-	BlockRegistry.BlockType.OAK_DOOR, BlockRegistry.BlockType.IRON_DOOR,
-	BlockRegistry.BlockType.OAK_FENCE, BlockRegistry.BlockType.GLASS_PANE,
-	BlockRegistry.BlockType.LADDER, BlockRegistry.BlockType.OAK_TRAPDOOR,
-	BlockRegistry.BlockType.IRON_BARS,
-	BlockRegistry.BlockType.SHORT_GRASS, BlockRegistry.BlockType.FERN,
-	BlockRegistry.BlockType.DANDELION, BlockRegistry.BlockType.POPPY,
-	BlockRegistry.BlockType.CORNFLOWER,
-]
+# Liste dynamique des items possedes (rebuilt a chaque ouverture/refresh)
+var _owned_items: Array = []
 
 func _ready():
 	layer = 10
@@ -310,32 +270,42 @@ func _build_ui():
 	_refresh_slots()
 
 func _get_total_pages() -> int:
-	return ceili(float(ALL_BLOCKS.size()) / SLOTS_PER_PAGE)
+	return max(1, ceili(float(_owned_items.size()) / SLOTS_PER_PAGE))
+
+func _build_owned_items():
+	_owned_items.clear()
+	if not player:
+		return
+	var inv = player.get_all_inventory()
+	for bt in inv:
+		if inv[bt] > 0:
+			_owned_items.append(bt)
+	_owned_items.sort_custom(func(a, b): return int(a) < int(b))
 
 func _refresh_slots():
+	_build_owned_items()
+	# Corriger la page si depassee
+	var total_pages = _get_total_pages()
+	if _current_page >= total_pages:
+		_current_page = max(0, total_pages - 1)
 	var page_offset = _current_page * SLOTS_PER_PAGE
 	for i in range(_slot_buttons.size()):
 		var slot = _slot_buttons[i]
-		var block_index = page_offset + i
-		if block_index < ALL_BLOCKS.size():
-			var bt = ALL_BLOCKS[block_index]
+		var item_index = page_offset + i
+		if item_index < _owned_items.size():
+			var bt = _owned_items[item_index]
 			var count = player.get_inventory_count(bt) if player else 0
 			var tex = _load_block_icon(bt)
 			slot["tex_rect"].texture = tex
-			slot["tex_rect"].modulate = Color.WHITE if count > 0 else Color(0.4, 0.4, 0.4, 0.6)
-			slot["count_label"].text = str(count) if count > 0 else ""
+			slot["tex_rect"].modulate = Color.WHITE
+			slot["count_label"].text = str(count) if count > 1 else ""
 			var block_name = BlockRegistry.get_block_name(bt)
 			slot["name_label"].text = block_name
 			slot["button"].visible = true
 			slot["name_bg"].visible = true
-			if count > 0:
-				slot["name_bg"].color = Color(0, 0, 0, 0.45)
-				slot["name_label"].add_theme_color_override("font_color", Color.WHITE)
-			else:
-				slot["name_bg"].color = Color(0, 0, 0, 0.3)
-				slot["name_label"].add_theme_color_override("font_color", Color(0.6, 0.6, 0.6, 0.6))
+			slot["name_bg"].color = Color(0, 0, 0, 0.45)
+			slot["name_label"].add_theme_color_override("font_color", Color.WHITE)
 		else:
-			# Empty slot (past the end of ALL_BLOCKS)
 			slot["tex_rect"].texture = null
 			slot["count_label"].text = ""
 			slot["name_label"].text = ""
@@ -371,9 +341,9 @@ func _process(_delta):
 		_tooltip_label.offset_bottom = mpos.y + 16
 
 func _get_block_for_slot(slot_index: int) -> int:
-	var block_index = _current_page * SLOTS_PER_PAGE + slot_index
-	if block_index < ALL_BLOCKS.size():
-		return ALL_BLOCKS[block_index]
+	var item_index = _current_page * SLOTS_PER_PAGE + slot_index
+	if item_index < _owned_items.size():
+		return _owned_items[item_index]
 	return -1
 
 func _on_slot_hover(index: int):

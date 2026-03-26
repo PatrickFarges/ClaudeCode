@@ -46,7 +46,7 @@ Jeu voxel type Minecraft en GDScript avec Godot 4.6+, style pastel. Évolue vers
 - **`hand_item_renderer.gd`** : bras FPS — 3 rendus (bloc texturé, outil extrudé 3D pixel par pixel, modèle GLB). Swing sinusoïdal MC, bobbing, rendu arc
 - **`tool_registry.gd`** : 18 outils, 5 tiers (bois→netherite), PICK_BOOST=2.0, CROSS_TOOL_MULT=1.3, listes blocs par type
 - **`craft_registry.gd`** : ~85 recettes, 6 catégories (Hand, Furnace, Wood/Stone/Iron/Gold Table). **Forge** : 3 recettes `_tool_tier`. **Torche/Coffre/Sable**. **Armes** : Épée fer/or, Bouclier. **Blocs architecturaux** (wood_table) : briques de pierre (4 pierre → 4), escaliers (6 mat → 4), dalles (3 mat → 6), portes (6 mat → 3), clôtures (4 planches + 2 bois → 3), vitres (6 verre → 16), échelles (7 bois → 3), trappes (6 planches → 2). **Blocs fer** (stone_table) : porte fer (6 lingots → 3), lanterne (8 lingots + 1 torche → 1), barreaux (6 lingots → 16)
-- **`hotbar_ui.gd`** / **`inventory_ui.gd`** : hotbar 9 slots + inventaire 7 onglets, textures réelles
+- **`hotbar_ui.gd`** / **`inventory_ui.gd`** : hotbar 9 slots + inventaire (items possédés uniquement, paginé), textures réelles. **`crafting_ui.gd`** v3.0.0 : drag & drop MC — glisser items depuis inventaire vers grille 3×3, détection auto recette shapeless, clic gauche/droit, icône curseur, items retournés à la fermeture
 - **`audio_manager.gd`** : pool audio, sons 65 blocs, ambiance forêt par heure, chargement null-safe
 - **`locale.gd`** : traductions FR/EN
 
@@ -100,7 +100,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 
 ## Direction du projet
 
-**Version actuelle : v19.7.1**
+**Version actuelle : v20.0.0**
 
 | Phase | Statut | Contenu |
 |-------|--------|---------|
@@ -160,7 +160,8 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 | 16.1 | Fait | v19.6.1 — **Fix chute terrain + sons eau**. Téléport sécurité intelligent (scan blocs réels au lieu de Y=100 aveugle, force collision chunk). Collision prioritaire chunks distance ≤1 joueur (sans throttle). Fix sons de pas joués sous l'eau (in_water guard). Fix boucle infinie chute/téléport plages |
 | 17 | Fait | v19.7.0 — **IA mobs + fix inventaire pages**. `passive_mob.gd` v3.1.0 : détection murs (saut auto 1 bloc au niveau torse, demi-tour+idle si 2+ blocs), stuck detection (si déplacement <0.15 blocs/s → demi-tour 180°+idle), repos périodique (4-12s idle toutes les 2 phases de wander), auto-jump en chase/flee/predation, détection falaise/eau → idle, végétation ignorée dans les checks murs. `inventory_ui.gd` v2.2.0 : pagination inventaire (36 slots/page, boutons Préc./Suiv.), fix items invisibles au-delà du slot 36 (échelles, trappes, barreaux, fleurs etc. désormais accessibles page 2) |
 | 17.0.1 | Fait | v19.7.1 — **Fix mobs + traverse sable + durées journée**. Fix mobs sautent sur terrain plat (check mur au niveau torse au lieu de pieds). Fix chute à travers le sable (collision forcée chunk joueur+voisins à chaque frame + détection traverse-sol mi-chute). Durées journée ajustées (Lent 35min, Normal 20min, Rapide 15min, Très rapide 1min) |
-| 17.1 | A venir | Comportements spécifiques mobs (creeper explosion, skeleton archer), mini-boss ×1.6, drag & drop craft MC, nouveaux biomes (marécage, forêt géante) |
+| 18 | Fait | v20.0.0 — **Craft MC drag & drop + inventaire épuré**. `crafting_ui.gd` v3.0.0 : refonte complète — glisser-déposer items depuis l'inventaire vers la grille 3×3, détection automatique de recette (shapeless, "au moins" avec priorité plus spécifique), clic gauche prendre/poser tout, clic droit poser 1/prendre moitié, échange si types différents, items retournés à l'inventaire à la fermeture, icône curseur suit la souris, hints contextuels (vert recette trouvée, rouge aucune correspondance). `inventory_ui.gd` v2.3.0 : n'affiche plus que les items possédés (count > 0), fini les icônes grisées avec "0" — inventaire propre et lisible. Pagination auto-ajustée |
+| 18.1 | A venir | Livre de recettes (guide craftable), comportements spécifiques mobs (creeper explosion, skeleton archer), mini-boss ×1.6, nouveaux biomes (marécage, forêt géante) |
 
 **Packs GLB utilisés** : Steve GLB (modèle Bedrock converti, 28 bones, 4 anims) pour tous les PNJ avec skins par profession. Kenney.nl (18 modèles BlockPNJ — conservés mais plus utilisés). **PNJ futurs** : KayKit Adventurers (161 anims travail)
 
