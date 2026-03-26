@@ -288,12 +288,29 @@ func _build_inv_slots():
 func _add_to_inv_slot_and_dict(bt, count):
 	player._add_to_inventory(bt, count)
 	for i in range(_inv_slots_data.size()):
-		if not _inv_slots_data[i].is_empty() and _inv_slots_data[i]["block_type"] == bt:
+		if not _inv_slots_data[i].is_empty() and not _inv_slots_data[i].get("is_tool", false) and _inv_slots_data[i].get("block_type") == bt:
 			_inv_slots_data[i]["count"] += count; return
 	for i in range(_inv_slots_data.size()):
 		if _inv_slots_data[i].is_empty():
 			_inv_slots_data[i] = {"block_type": bt, "count": count}; return
 	_inv_slots_data.append({"block_type": bt, "count": count})
+
+func _same_inv_type(a: Dictionary, b: Dictionary) -> bool:
+	if a.get("is_tool", false) != b.get("is_tool", false): return false
+	if a.get("is_tool", false): return a.get("tool_type") == b.get("tool_type")
+	return a.get("block_type") == b.get("block_type")
+
+func _dict_add_held():
+	if _held_item.get("is_tool", false):
+		player.tool_inventory[_held_item["tool_type"]] = player.tool_inventory.get(_held_item["tool_type"], 0) + _held_item.get("count", 1)
+	else:
+		player._add_to_inventory(_held_item["block_type"], _held_item["count"])
+
+func _dict_remove_slot(slot: Dictionary):
+	if slot.get("is_tool", false):
+		player.tool_inventory[slot["tool_type"]] = maxi(0, player.tool_inventory.get(slot["tool_type"], 0) - slot.get("count", 1))
+	else:
+		player._remove_from_inventory(slot["block_type"], slot["count"])
 
 func sort_inventory(): _build_inv_slots(); _inv_page = 0; _refresh_all()
 
@@ -399,28 +416,30 @@ func _on_inv_input(event: InputEvent, index: int):
 	var slot_idx = _inv_page * INV_SLOTS_PER_PAGE + index
 	while slot_idx >= _inv_slots_data.size(): _inv_slots_data.append({})
 	var slot = _inv_slots_data[slot_idx]
+
 	if event.button_index == MOUSE_BUTTON_LEFT:
 		if _held_item.is_empty():
 			if not slot.is_empty():
-				_held_item = slot.duplicate(); _held_item["is_tool"] = false; _held_source = "inv"
-				player._remove_from_inventory(slot["block_type"], slot["count"])
+				_held_item = slot.duplicate(); _held_source = "inv"
+				_dict_remove_slot(slot)
 				_inv_slots_data[slot_idx] = {}; _refresh_all()
 		else:
 			if _held_source == "hotbar": _restore_hotbar_held(); _refresh_all(); return
 			if slot.is_empty():
-				_inv_slots_data[slot_idx] = {"block_type": _held_item["block_type"], "count": _held_item["count"]}
-				player._add_to_inventory(_held_item["block_type"], _held_item["count"])
+				_inv_slots_data[slot_idx] = _held_item.duplicate()
+				_dict_add_held()
 				_held_item = {}; _held_source = ""; _refresh_all()
-			elif slot["block_type"] == _held_item["block_type"]:
-				slot["count"] += _held_item["count"]
-				player._add_to_inventory(_held_item["block_type"], _held_item["count"])
+			elif _same_inv_type(slot, _held_item):
+				slot["count"] = slot.get("count", 1) + _held_item.get("count", 1)
+				_dict_add_held()
 				_held_item = {}; _held_source = ""; _refresh_all()
 			else:
 				var temp = slot.duplicate()
-				_inv_slots_data[slot_idx] = {"block_type": _held_item["block_type"], "count": _held_item["count"]}
-				player._add_to_inventory(_held_item["block_type"], _held_item["count"])
-				player._remove_from_inventory(temp["block_type"], temp["count"])
-				_held_item = temp; _held_item["is_tool"] = false; _held_source = "inv"; _refresh_all()
+				_inv_slots_data[slot_idx] = _held_item.duplicate()
+				_dict_add_held()
+				_dict_remove_slot(temp)
+				_held_item = temp; _held_source = "inv"; _refresh_all()
+
 	elif event.button_index == MOUSE_BUTTON_RIGHT:
 		if not _held_item.is_empty() and not _held_item.get("is_tool", false) and _held_source != "hotbar":
 			if slot.is_empty():
@@ -429,14 +448,13 @@ func _on_inv_input(event: InputEvent, index: int):
 				_held_item["count"] -= 1
 				if _held_item["count"] <= 0: _held_item = {}; _held_source = ""
 				_refresh_all()
-			elif slot["block_type"] == _held_item["block_type"]:
+			elif not slot.get("is_tool", false) and slot.get("block_type") == _held_item.get("block_type"):
 				slot["count"] += 1; player._add_to_inventory(_held_item["block_type"], 1)
 				_held_item["count"] -= 1
 				if _held_item["count"] <= 0: _held_item = {}; _held_source = ""
 				_refresh_all()
-		elif _held_item.is_empty():
-			if not slot.is_empty():
-				var take = ceili(slot["count"] / 2.0)
+		elif _held_item.is_empty() and not slot.is_empty() and not slot.get("is_tool", false):
+			var take = ceili(slot["count"] / 2.0)
 				_held_item = {"is_tool": false, "block_type": slot["block_type"], "count": take}
 				_held_source = "inv"; player._remove_from_inventory(slot["block_type"], take)
 				slot["count"] -= take
