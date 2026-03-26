@@ -15,9 +15,13 @@ V7.2 :
 V7.3 :
 - Lancement automatique au démarrage de Windows (tâche planifiée avec élévation)
 - Lancement en mode administrateur (auto-élévation UAC)
+V7.4 :
+- Mode grille : affichage en grille configurable (5 colonnes par défaut) avec miniatures
+- Bouton toggle Liste/Grille dans la barre d'outils
+- Clic droit sur le bouton grille pour changer le nombre de colonnes
 """
 
-APP_VERSION = "7.3.1"
+APP_VERSION = "7.4"
 
 import sys
 import os
@@ -46,7 +50,8 @@ from PyQt6.QtWidgets import (
     QListWidget, QLabel, QTabWidget, QPushButton, QSplitter,
     QListWidgetItem, QTextEdit, QMessageBox, QMenu, QFileDialog,
     QInputDialog, QLineEdit, QSpinBox, QDialog, QDialogButtonBox,
-    QGridLayout, QScrollArea, QCheckBox, QProgressBar
+    QGridLayout, QScrollArea, QCheckBox, QProgressBar,
+    QStackedWidget, QFrame, QTabBar
 )
 from PyQt6.QtCore import Qt, QSize, QThread, pyqtSignal, QTimer
 from PyQt6.QtGui import QPixmap, QIcon, QFont, QAction, QCursor
@@ -851,6 +856,91 @@ class ProgramScanner(QThread):
         return unique
 
 
+class GridCard(QFrame):
+    """Carte cliquable pour le mode grille"""
+    clicked = pyqtSignal(dict)
+    double_clicked = pyqtSignal(dict)
+    context_menu_requested = pyqtSignal(object, dict)
+
+    def __init__(self, prog: dict, display_name: str, pixmap: QPixmap = None, card_size: int = 170, parent=None):
+        super().__init__(parent)
+        self.prog = prog
+        self.selected = False
+        # Le carré fait card_size x card_size (image + nom en-dessous à l'intérieur)
+        name_height = 28
+        self.setFixedSize(card_size, card_size)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._apply_style(False)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(3, 3, 3, 3)
+        layout.setSpacing(1)
+
+        img_size = card_size - 6  # 3px marge de chaque côté
+        img_height = card_size - 6 - name_height - 1  # place pour le nom
+        img_label = QLabel()
+        img_label.setFixedSize(img_size, img_height)
+        img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        img_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        img_label.setStyleSheet("background-color: #1a1a1a; border-radius: 4px;")
+
+        if pixmap and not pixmap.isNull():
+            scaled = pixmap.scaled(img_size, img_height,
+                                   Qt.AspectRatioMode.KeepAspectRatio,
+                                   Qt.TransformationMode.SmoothTransformation)
+            img_label.setPixmap(scaled)
+        else:
+            initials = display_name[:2].upper() if display_name else "?"
+            # Adapter la taille de la police à la taille de la carte
+            font_pt = max(12, card_size // 8)
+            img_label.setText(initials)
+            img_label.setStyleSheet(
+                f"background-color: #1a1a1a; border-radius: 4px; "
+                f"font-size: {font_pt}pt; color: #555;")
+
+        layout.addWidget(img_label)
+
+        name_label = QLabel(display_name)
+        name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        name_label.setWordWrap(True)
+        name_label.setFixedHeight(name_height)
+        name_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        # Adapter la police au card_size
+        font_pt = max(7, min(10, card_size // 20))
+        name_label.setStyleSheet(f"color: #ddd; font-size: {font_pt}pt; background: transparent;")
+        layout.addWidget(name_label)
+
+    def _apply_style(self, selected: bool):
+        border = "#0078d4" if selected else "transparent"
+        bg = "#333" if selected else "#2a2a2a"
+        self.setStyleSheet(f"""
+            GridCard {{
+                background-color: {bg};
+                border-radius: 8px;
+                border: 2px solid {border};
+            }}
+            GridCard:hover {{
+                border: 2px solid #0078d4;
+                background-color: #383838;
+            }}
+        """)
+
+    def set_selected(self, sel: bool):
+        self.selected = sel
+        self._apply_style(sel)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit(self.prog)
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.double_clicked.emit(self.prog)
+
+    def contextMenuEvent(self, event):
+        self.context_menu_requested.emit(event.globalPos(), self.prog)
+
+
 class ClaudeLauncher(QMainWindow):
     """Fenêtre principale"""
     
@@ -880,6 +970,10 @@ class ClaudeLauncher(QMainWindow):
         self.carousel_pixmaps = []
         self.carousel_active = False
         self.active_custom_downloaders = []
+        self.view_mode = "list"  # "list" ou "grid"
+        self.grid_columns = self._load_grid_columns()
+        self.grid_cards = []  # références aux cartes actuelles
+        self.selected_grid_card = None
         self.init_ui()
         self.scan_programs()
     
@@ -1272,8 +1366,17 @@ class ClaudeLauncher(QMainWindow):
         api_btn.setMaximumWidth(200)
         buttons_layout.addWidget(api_btn)
         
+        # V7.4: Bouton toggle Liste/Grille
+        self.view_toggle_btn = QPushButton("⊞ Grille")
+        self.view_toggle_btn.setMaximumWidth(120)
+        self.view_toggle_btn.clicked.connect(self._toggle_view_mode)
+        self.view_toggle_btn.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.view_toggle_btn.customContextMenuRequested.connect(self._show_grid_columns_menu)
+        self.view_toggle_btn.setToolTip("Clic: changer de vue | Clic droit: nombre de colonnes")
+        buttons_layout.addWidget(self.view_toggle_btn)
+
         buttons_layout.addStretch()
-        
+
         # Afficher si clé API présente
         self.api_status_label = QLabel()
         self._update_api_status()
@@ -1426,8 +1529,72 @@ class ClaudeLauncher(QMainWindow):
         splitter.addWidget(left_widget)
         splitter.addWidget(right_widget)
         splitter.setStretchFactor(1, 3)
-        
-        main_layout.addWidget(splitter)
+
+        # V7.4: Content stack (liste vs grille)
+        self.content_stack = QStackedWidget()
+        self.content_stack.addWidget(splitter)  # page 0: mode liste
+
+        # --- Mode grille ---
+        grid_container = QWidget()
+        grid_container_layout = QVBoxLayout(grid_container)
+        grid_container_layout.setContentsMargins(5, 0, 5, 5)
+        grid_container_layout.setSpacing(5)
+
+        # Barre de recherche grille
+        self.grid_search_bar = QLineEdit()
+        self.grid_search_bar.setPlaceholderText("🔍 Rechercher par nom ou tag...")
+        self.grid_search_bar.setClearButtonEnabled(True)
+        self.grid_search_bar.textChanged.connect(self._filter_grid)
+        self.grid_search_bar.setStyleSheet("""
+            QLineEdit {
+                background-color: #2a2a2a; color: #ffffff;
+                border: 1px solid #444; border-radius: 5px;
+                padding: 6px 10px; font-size: 11pt;
+            }
+            QLineEdit:focus { border: 1px solid #0078d4; }
+        """)
+        grid_container_layout.addWidget(self.grid_search_bar)
+
+        # Onglets filtre grille
+        self.grid_tab_bar = QTabBar()
+        self.grid_tab_bar.addTab(self.custom_tab_names.get('games', "🎮 Jeux"))
+        self.grid_tab_bar.addTab(self.custom_tab_names.get('apps', "📦 Applications"))
+        self.grid_tab_bar.addTab(self.custom_tab_names.get('favorites', "⭐ Favoris"))
+        self.grid_tab_bar.addTab(self.custom_tab_names.get('most_used', "🔥 Plus utilisés"))
+        self.grid_tab_bar.setStyleSheet("""
+            QTabBar::tab {
+                background-color: #2a2a2a; color: #ffffff;
+                padding: 8px 18px; margin-right: 2px;
+            }
+            QTabBar::tab:selected { background-color: #0078d4; }
+        """)
+        self.grid_tab_bar.currentChanged.connect(self._on_grid_tab_changed)
+        grid_container_layout.addWidget(self.grid_tab_bar)
+
+        # Zone scrollable pour la grille
+        self.grid_scroll = QScrollArea()
+        self.grid_scroll.setWidgetResizable(True)
+        self.grid_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.grid_scroll.setStyleSheet("""
+            QScrollArea { background-color: #1a1a1a; border: none; }
+            QScrollBar:vertical {
+                background: #1a1a1a; width: 10px;
+            }
+            QScrollBar::handle:vertical {
+                background: #555; border-radius: 5px; min-height: 20px;
+            }
+        """)
+        self.grid_inner_widget = QWidget()
+        self.grid_inner_widget.setStyleSheet("background-color: #1a1a1a;")
+        self.grid_layout = QGridLayout(self.grid_inner_widget)
+        self.grid_layout.setSpacing(3)
+        self.grid_layout.setContentsMargins(0, 0, 0, 0)
+        self.grid_scroll.setWidget(self.grid_inner_widget)
+        grid_container_layout.addWidget(self.grid_scroll)
+
+        self.content_stack.addWidget(grid_container)  # page 1: mode grille
+
+        main_layout.addWidget(self.content_stack)
         
         # Style
         self.setStyleSheet("""
@@ -1935,7 +2102,10 @@ class ClaudeLauncher(QMainWindow):
 
         self.populate_favorites()
         self.populate_most_used()
-    
+        # V7.4: Rafraîchir la grille si en mode grille
+        if self.view_mode == "grid":
+            self._populate_grid()
+
     def populate_favorites(self):
         """Remplit l'onglet Favoris"""
         self.favorites_list.clear()
@@ -2166,6 +2336,11 @@ class ClaudeLauncher(QMainWindow):
         self.last_tab_index = index
         self._save_last_tab()
         self._auto_select_first_item()
+        # V7.4: Synchroniser l'onglet grille
+        if hasattr(self, 'grid_tab_bar'):
+            self.grid_tab_bar.blockSignals(True)
+            self.grid_tab_bar.setCurrentIndex(index)
+            self.grid_tab_bar.blockSignals(False)
 
     def _auto_select_first_item(self):
         """Sélectionne le 1er item de la liste active"""
@@ -2185,6 +2360,310 @@ class ClaudeLauncher(QMainWindow):
         if 0 <= index < len(lists):
             return lists[index]
         return None
+
+    # ===== V7.4: Grid view =====
+
+    def _load_grid_columns(self) -> int:
+        cfg_file = Path.home() / ".claudelauncher" / "view_config.json"
+        if cfg_file.exists():
+            try:
+                with open(cfg_file, 'r', encoding='utf-8') as f:
+                    return json.load(f).get('grid_columns', 5)
+            except Exception:
+                pass
+        return 5
+
+    def _save_grid_columns(self):
+        cfg_file = Path.home() / ".claudelauncher" / "view_config.json"
+        cfg_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(cfg_file, 'w', encoding='utf-8') as f:
+            json.dump({'grid_columns': self.grid_columns}, f, indent=2)
+
+    def _toggle_view_mode(self):
+        """Bascule entre mode liste et mode grille"""
+        if self.view_mode == "list":
+            self.view_mode = "grid"
+            self.view_toggle_btn.setText("📋 Liste")
+            # Synchroniser l'onglet grille avec l'onglet liste
+            self.grid_tab_bar.setCurrentIndex(self.tabs.currentIndex())
+            # D'abord afficher la page pour que le viewport ait sa taille réelle
+            self.content_stack.setCurrentIndex(1)
+            # Différer le peuplement après que le layout soit calculé
+            QTimer.singleShot(0, self._populate_grid)
+        else:
+            self.view_mode = "list"
+            self.view_toggle_btn.setText("⊞ Grille")
+            self.content_stack.setCurrentIndex(0)
+            # Synchroniser la recherche
+            self.search_bar.setText(self.grid_search_bar.text())
+
+    def _show_grid_columns_menu(self, position):
+        """Menu clic droit pour changer le nombre de colonnes"""
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu { background-color: #2a2a2a; color: #fff; border: 1px solid #444; }
+            QMenu::item { padding: 6px 20px; }
+            QMenu::item:selected { background-color: #0078d4; }
+        """)
+        for n in range(3, 9):
+            check = " ✓" if n == self.grid_columns else ""
+            action = QAction(f"{n} colonnes{check}", self)
+            action.triggered.connect(lambda checked, cols=n: self._set_grid_columns(cols))
+            menu.addAction(action)
+        menu.exec(self.view_toggle_btn.mapToGlobal(position))
+
+    def _set_grid_columns(self, cols: int):
+        self.grid_columns = cols
+        self._save_grid_columns()
+        if self.view_mode == "grid":
+            self._populate_grid()
+
+    def _on_grid_tab_changed(self, index: int):
+        """Changement d'onglet en mode grille"""
+        # Synchroniser les onglets liste
+        self.tabs.blockSignals(True)
+        self.tabs.setCurrentIndex(index)
+        self.tabs.blockSignals(False)
+        self.last_tab_index = index
+        self._save_last_tab()
+        if self.view_mode == "grid":
+            self._populate_grid()
+
+    def _get_grid_programs(self) -> list:
+        """Retourne les programmes à afficher dans la grille selon l'onglet actif"""
+        tab_index = self.grid_tab_bar.currentIndex()
+        search_text = self.grid_search_bar.text().lower().strip()
+        programs = []
+
+        if tab_index == 0:  # Jeux
+            programs = [p for p in self.programs
+                        if p['type'] == 'game' and p['name'].lower() not in self.hidden_programs]
+        elif tab_index == 1:  # Applications
+            programs = [p for p in self.programs
+                        if p['type'] == 'app' and p['name'].lower() not in self.hidden_programs]
+        elif tab_index == 2:  # Favoris
+            programs = [p for p in self.programs
+                        if p['name'].lower() in self.favorites
+                        and p['name'].lower() not in self.hidden_programs]
+        elif tab_index == 3:  # Plus utilisés
+            sorted_stats = sorted(self.launch_stats.items(), key=lambda x: x[1], reverse=True)[:7]
+            stat_keys = [k for k, v in sorted_stats if k not in self.hidden_programs]
+            prog_map = {p['name'].lower(): p for p in self.programs}
+            programs = [prog_map[k] for k in stat_keys if k in prog_map]
+
+        programs = sorted(programs, key=lambda x: x['name'])
+
+        if search_text:
+            filtered = []
+            for prog in programs:
+                prog_key = prog['name'].lower()
+                display = self.get_display_name(prog).lower()
+                tags = " ".join(t.lower() for t in self.custom_tags.get(prog_key, []))
+                if search_text in display or search_text in tags:
+                    filtered.append(prog)
+            programs = filtered
+
+        return programs
+
+    def _get_program_thumbnail(self, prog: dict) -> QPixmap:
+        """Récupère une miniature pour un programme (cache ou bundled)"""
+        prog_key = prog['name'].lower()
+        display_name = self.get_display_name(prog)
+
+        # 1. Images bundled (dossier images/)
+        bundled = self._find_bundled_images(prog_key)
+        if bundled:
+            pix = QPixmap(bundled[0])
+            if not pix.isNull():
+                return pix
+
+        # 2. Cache SteamGridDB
+        cache_dir = Path.home() / ".claudelauncher" / "images"
+        if cache_dir.exists():
+            safe_name = "".join(c if c.isalnum() or c in ' -_' else '_' for c in display_name)
+            name_hash = hashlib.md5(display_name.lower().encode()).hexdigest()[:16]
+            cache_file = cache_dir / f"{safe_name}_{name_hash}.jpg"
+            if cache_file.exists():
+                pix = QPixmap(str(cache_file))
+                if not pix.isNull():
+                    return pix
+
+        # 3. Images personnalisées
+        custom_data = self.custom_images.get(prog_key, {})
+        custom_imgs = custom_data.get("images", [])
+        for img_path in custom_imgs:
+            if os.path.exists(img_path):
+                pix = QPixmap(img_path)
+                if not pix.isNull():
+                    return pix
+
+        return QPixmap()  # vide
+
+    def _populate_grid(self):
+        """Remplit la grille avec les programmes"""
+        # Nettoyer la grille existante
+        self.grid_cards.clear()
+        self.selected_grid_card = None
+        while self.grid_layout.count():
+            item = self.grid_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        # Reset stretches
+        for r in range(self.grid_layout.rowCount()):
+            self.grid_layout.setRowStretch(r, 0)
+        for c in range(self.grid_layout.columnCount()):
+            self.grid_layout.setColumnStretch(c, 0)
+
+        programs = self._get_grid_programs()
+        cols = self.grid_columns
+
+        # Utiliser la largeur du content_stack (= pleine largeur de la fenêtre)
+        # car c'est le conteneur parent réel du mode grille
+        available_width = self.content_stack.width() - 16  # petite marge scrollbar
+        if available_width < 200:
+            available_width = self.width() - 30
+        # card_size = (largeur - espaces entre colonnes) / nb colonnes
+        spacing = 3
+        card_size = max(100, (available_width - (cols - 1) * spacing) // cols)
+
+        for i, prog in enumerate(programs):
+            display_name = self.get_display_name(prog)
+            pixmap = self._get_program_thumbnail(prog)
+            card = GridCard(prog, display_name, pixmap, card_size)
+            card.clicked.connect(self._on_grid_card_clicked)
+            card.double_clicked.connect(self._on_grid_card_double_clicked)
+            card.context_menu_requested.connect(self._on_grid_context_menu)
+            row, col = i // cols, i % cols
+            self.grid_layout.addWidget(card, row, col)
+            self.grid_cards.append(card)
+
+        # Étirer toutes les colonnes uniformément
+        for c in range(cols):
+            self.grid_layout.setColumnStretch(c, 1)
+
+        # Spacer vertical pour pousser les cartes vers le haut
+        total_rows = (len(programs) + cols - 1) // cols if programs else 0
+        self.grid_layout.setRowStretch(total_rows, 1)
+
+    def _on_grid_card_clicked(self, prog: dict):
+        """Sélection d'une carte dans la grille"""
+        # Désélectionner l'ancienne
+        if self.selected_grid_card:
+            self.selected_grid_card.set_selected(False)
+        # Trouver et sélectionner la nouvelle
+        for card in self.grid_cards:
+            if card.prog is prog:
+                card.set_selected(True)
+                self.selected_grid_card = card
+                break
+        self.show_program_info_direct(prog)
+
+    def _on_grid_card_double_clicked(self, prog: dict):
+        """Double-clic = lancer le programme"""
+        # Créer un item temporaire pour réutiliser launch_program
+        item = QListWidgetItem()
+        item.setData(Qt.ItemDataRole.UserRole, prog)
+        self.launch_program(item)
+
+    def _on_grid_context_menu(self, position, prog: dict):
+        """Menu contextuel sur une carte de la grille"""
+        menu = QMenu()
+
+        # Renommer
+        rename_action = QAction("✏️ Renommer", self)
+        rename_action.triggered.connect(lambda: self._rename_grid_prog(prog))
+        menu.addAction(rename_action)
+        menu.addSeparator()
+
+        # Favoris
+        prog_key = prog['name'].lower()
+        if prog_key in self.favorites:
+            fav_action = QAction("⭐ Retirer des favoris", self)
+        else:
+            fav_action = QAction("⭐ Ajouter aux favoris", self)
+        fav_action.triggered.connect(lambda: self._grid_toggle_favorite(prog))
+        menu.addAction(fav_action)
+        menu.addSeparator()
+
+        # Catégorie
+        if prog['type'] == 'game':
+            cat_action = QAction("📦 Forcer en Application", self)
+            cat_action.triggered.connect(lambda: self._grid_force_category(prog, 'app'))
+        else:
+            cat_action = QAction("🎮 Forcer en Jeu", self)
+            cat_action.triggered.connect(lambda: self._grid_force_category(prog, 'game'))
+        menu.addAction(cat_action)
+        menu.addSeparator()
+
+        edit_exe = QAction("✏️ Modifier l'exécutable", self)
+        edit_exe.triggered.connect(lambda: self.edit_executable_for_prog(prog))
+        menu.addAction(edit_exe)
+
+        edit_args = QAction("⚙️ Modifier les arguments", self)
+        edit_args.triggered.connect(lambda: self.edit_arguments_for_prog(prog))
+        menu.addAction(edit_args)
+        menu.addSeparator()
+
+        tags_action = QAction("🏷️ Gérer les tags", self)
+        tags_action.triggered.connect(lambda: self.manage_tags(prog))
+        menu.addAction(tags_action)
+
+        images_action = QAction("🖼️ Gérer les images", self)
+        images_action.triggered.connect(lambda: self.manage_custom_images(prog))
+        menu.addAction(images_action)
+        menu.addSeparator()
+
+        hide_action = QAction("🗑️ Effacer", self)
+        hide_action.triggered.connect(lambda: self._grid_hide_program(prog))
+        menu.addAction(hide_action)
+
+        menu.exec(position)
+
+    def _rename_grid_prog(self, prog: dict):
+        """Renommer depuis la grille"""
+        current_name = self.get_display_name(prog)
+        text, ok = QInputDialog.getText(
+            self, "Renommer le programme",
+            f"Nouveau nom pour '{current_name}' :",
+            QLineEdit.EchoMode.Normal, current_name)
+        if ok and text.strip():
+            prog_key = prog['name'].lower()
+            if text.strip() != prog['name']:
+                self.custom_program_names[prog_key] = text.strip()
+            elif prog_key in self.custom_program_names:
+                del self.custom_program_names[prog_key]
+            self._save_custom_program_names()
+            self._populate_grid()
+
+    def _grid_toggle_favorite(self, prog: dict):
+        self.toggle_favorite(prog)
+        if self.view_mode == "grid":
+            self._populate_grid()
+
+    def _grid_force_category(self, prog: dict, new_type: str):
+        self.force_category(prog, new_type)
+        if self.view_mode == "grid":
+            self._populate_grid()
+
+    def _grid_hide_program(self, prog: dict):
+        self.hide_program(prog)
+        if self.view_mode == "grid":
+            self._populate_grid()
+
+    def _filter_grid(self, search_text: str):
+        """Filtre la grille par recherche"""
+        self._populate_grid()
+
+    def resizeEvent(self, event):
+        """Recalcule la grille quand la fenêtre est redimensionnée"""
+        super().resizeEvent(event)
+        if self.view_mode == "grid" and self.grid_cards:
+            # Utiliser un timer pour éviter de recalculer à chaque pixel
+            if not hasattr(self, '_resize_timer'):
+                self._resize_timer = QTimer()
+                self._resize_timer.setSingleShot(True)
+                self._resize_timer.timeout.connect(self._populate_grid)
+            self._resize_timer.start(150)
 
     # ===== V7.0: Tags management =====
 
