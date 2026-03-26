@@ -550,17 +550,21 @@ func _on_inv_input(event: InputEvent, index: int):
 				_held_item = {"block_type": item["block_type"], "count": amount}
 				_refresh_all()
 		else:
-			# Deposer l'item tenu dans l'inventaire, puis prendre le nouveau
+			# Verifier si on clique sur le meme type — juste reposer
+			var same_type = false
+			if item_idx < _inv_items.size():
+				same_type = _inv_items[item_idx]["block_type"] == _held_item["block_type"]
 			player._add_to_inventory(_held_item["block_type"], _held_item["count"])
 			_held_item = {}
-			# Rebuild pour recuperer les index corrects
-			_build_inv_items()
-			item_idx = _inv_page * SLOTS_PER_PAGE + index
-			if item_idx < _inv_items.size():
-				var item = _inv_items[item_idx]
-				var amount = mini(item["count"], MAX_STACK)
-				player._remove_from_inventory(item["block_type"], amount)
-				_held_item = {"block_type": item["block_type"], "count": amount}
+			if not same_type:
+				# Prendre le nouveau (type different)
+				_build_inv_items()
+				item_idx = _inv_page * SLOTS_PER_PAGE + index
+				if item_idx < _inv_items.size():
+					var item = _inv_items[item_idx]
+					var amount = mini(item["count"], MAX_STACK)
+					player._remove_from_inventory(item["block_type"], amount)
+					_held_item = {"block_type": item["block_type"], "count": amount}
 			_refresh_all()
 
 	elif event.button_index == MOUSE_BUTTON_RIGHT:
