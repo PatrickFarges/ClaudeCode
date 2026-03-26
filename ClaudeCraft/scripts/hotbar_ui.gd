@@ -112,9 +112,9 @@ func _build_hud():
 
 		var tex_rect = TextureRect.new()
 		tex_rect.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-		tex_rect.offset_left = slot_x + (slot_size - icon_size) / 2.0
+		tex_rect.offset_left = slot_x + (slot_size - icon_size) / 2.0 - 2
 		tex_rect.offset_right = tex_rect.offset_left + icon_size
-		tex_rect.offset_top = slot_y + (slot_size - icon_size) / 2.0 - 4
+		tex_rect.offset_top = slot_y + (slot_size - icon_size) / 2.0 - 6
 		tex_rect.offset_bottom = tex_rect.offset_top + icon_size
 		tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -294,16 +294,26 @@ func _update_hotbar():
 
 	# Item name
 	if _name_label:
-		var tool_type = player._get_selected_tool()
-		if tool_type != ToolRegistry.ToolType.NONE:
-			_name_label.text = ToolRegistry.get_tool_name(tool_type)
+		if player.is_hotbar_slot_empty(player.selected_slot):
+			_name_label.text = ""
 		else:
-			var block_type = player.hotbar_slots[player.selected_slot]
-			_name_label.text = BlockRegistry.get_block_name(block_type)
+			var tool_type = player._get_selected_tool()
+			if tool_type != ToolRegistry.ToolType.NONE:
+				_name_label.text = ToolRegistry.get_tool_name(tool_type)
+			else:
+				var block_type = player.hotbar_slots[player.selected_slot]
+				_name_label.text = BlockRegistry.get_block_name(block_type)
 
 	# Slot icons + counts
 	for i in range(min(_slot_icons.size(), player.hotbar_slots.size())):
 		var slot = _slot_icons[i]
+
+		# Verifier si le slot est vide (SUPPR ou jamais assigne)
+		if player.is_hotbar_slot_empty(i):
+			slot["tex_rect"].texture = null
+			slot["count_label"].text = ""
+			continue
+
 		var tool_type = ToolRegistry.ToolType.NONE
 		if i < player.hotbar_tool_slots.size():
 			tool_type = player.hotbar_tool_slots[i]
@@ -318,12 +328,9 @@ func _update_hotbar():
 			var count = player.get_inventory_count(block_type)
 			var block_tex = _load_block_icon(block_type)
 			slot["tex_rect"].texture = block_tex
-			slot["tex_rect"].modulate = Color.WHITE if count > 0 else Color(0.4, 0.4, 0.4, 0.6)
+			slot["tex_rect"].modulate = Color.WHITE
 			slot["count_label"].text = str(count) if count > 1 else ""
-			if count == 0:
-				slot["count_label"].add_theme_color_override("font_color", Color(0.5, 0.5, 0.5, 0.6))
-			else:
-				slot["count_label"].add_theme_color_override("font_color", Color.WHITE)
+			slot["count_label"].add_theme_color_override("font_color", Color.WHITE)
 
 # ============================================================
 # HEARTS UPDATE

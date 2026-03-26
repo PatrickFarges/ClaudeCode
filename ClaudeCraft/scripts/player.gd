@@ -148,6 +148,9 @@ const HandItemRendererScript = preload("res://scripts/hand_item_renderer.gd")
 # Outils — slots parallèles à la hotbar (NONE = bloc, sinon outil)
 var hotbar_tool_slots: Array = []
 
+# Inventaire des outils (possedes par le joueur, independant de la hotbar)
+var tool_inventory: Dictionary = {}  # {ToolType: count}
+
 # Nourriture — slots parallèles (true = ce slot contient de la nourriture)
 var hotbar_food_slots: Array = []
 const APPLE_MODEL_PATH = "res://assets/Deco/apple.glb"
@@ -303,13 +306,17 @@ func _init_tool_slots():
 		hotbar_tool_slots.append(ToolRegistry.ToolType.NONE)
 		hotbar_food_slots.append(false)
 	# Outils sur les slots du milieu — 4 tiers de haches pour tester le minage
-	hotbar_tool_slots[3] = ToolRegistry.ToolType.WOOD_AXE       # 6s sur tronc
-	hotbar_tool_slots[4] = ToolRegistry.ToolType.STONE_AXE      # 5s sur tronc
-	hotbar_tool_slots[5] = ToolRegistry.ToolType.IRON_AXE       # 4s sur tronc
-	hotbar_tool_slots[6] = ToolRegistry.ToolType.DIAMOND_AXE    # 3s sur tronc
+	hotbar_tool_slots[3] = ToolRegistry.ToolType.WOOD_AXE
+	hotbar_tool_slots[4] = ToolRegistry.ToolType.STONE_AXE
+	hotbar_tool_slots[5] = ToolRegistry.ToolType.IRON_AXE
+	hotbar_tool_slots[6] = ToolRegistry.ToolType.DIAMOND_AXE
 	hotbar_tool_slots[7] = ToolRegistry.ToolType.DIAMOND_PICKAXE
 	hotbar_tool_slots[8] = ToolRegistry.ToolType.BOW
-	# Pas de slot nourriture dans la hotbar actuelle
+	# Ajouter ces outils a l'inventaire outils
+	for i in range(hotbar_tool_slots.size()):
+		var tt = hotbar_tool_slots[i]
+		if tt != ToolRegistry.ToolType.NONE:
+			tool_inventory[tt] = tool_inventory.get(tt, 0) + 1
 
 func _create_hand_renderer():
 	hand_renderer = HandItemRendererScript.new()
@@ -542,6 +549,12 @@ func _clear_hotbar_slot(slot_index: int):
 			hotbar_food_slots[slot_index] = false
 		if slot_index == selected_slot:
 			_update_selected_block()
+
+func get_tool_count(tool_type) -> int:
+	return tool_inventory.get(tool_type, 0)
+
+func get_all_tools() -> Dictionary:
+	return tool_inventory
 
 func is_hotbar_slot_empty(slot_index: int) -> bool:
 	if slot_index < 0 or slot_index >= hotbar_slots.size():

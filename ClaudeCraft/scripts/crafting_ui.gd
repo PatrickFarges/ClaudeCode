@@ -340,14 +340,20 @@ func _update_station_label():
 func _build_inv_slots():
 	_inv_slots_data.clear()
 	if not player: return
+	# Blocs
 	var inv = player.get_all_inventory()
 	var sorted_types: Array = []
 	for bt in inv:
-		if inv[bt] > 0:
-			sorted_types.append(bt)
+		if inv[bt] > 0: sorted_types.append(bt)
 	sorted_types.sort_custom(func(a, b): return int(a) < int(b))
 	for bt in sorted_types:
 		_inv_slots_data.append({"block_type": bt, "count": inv[bt]})
+	# Outils
+	var tools = player.get_all_tools()
+	for tt in tools:
+		if tools[tt] > 0:
+			_inv_slots_data.append({"is_tool": true, "tool_type": tt, "count": tools[tt]})
+	# Padding
 	var min_size = maxi(INV_SLOTS_PER_PAGE, _inv_slots_data.size() + INV_SLOTS_PER_PAGE)
 	while _inv_slots_data.size() < min_size:
 		_inv_slots_data.append({})
@@ -380,14 +386,17 @@ func _refresh_all():
 func _refresh_inv_slots():
 	var offset = _inv_page * INV_SLOTS_PER_PAGE
 	for i in range(_inv_ui.size()):
-		var ui = _inv_ui[i]
-		var idx = offset + i
+		var ui = _inv_ui[i]; var idx = offset + i
 		if idx < _inv_slots_data.size() and not _inv_slots_data[idx].is_empty():
 			var item = _inv_slots_data[idx]
-			ui["tex"].texture = _load_block_icon(item["block_type"])
+			if item.get("is_tool", false):
+				ui["tex"].texture = _load_tool_icon(item["tool_type"])
+				ui["name_lbl"].text = ToolRegistry.get_tool_name(item["tool_type"])
+			else:
+				ui["tex"].texture = _load_block_icon(item["block_type"])
+				ui["name_lbl"].text = BlockRegistry.get_block_name(item["block_type"])
 			ui["tex"].modulate = Color.WHITE
 			ui["count_lbl"].text = str(item["count"]) if item["count"] > 1 else ""
-			ui["name_lbl"].text = BlockRegistry.get_block_name(item["block_type"])
 			ui["name_bg"].visible = true; ui["name_lbl"].visible = true
 		else:
 			ui["tex"].texture = null; ui["count_lbl"].text = ""
