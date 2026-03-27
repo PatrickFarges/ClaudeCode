@@ -111,6 +111,7 @@ var look_block_type: BlockRegistry.BlockType = BlockRegistry.BlockType.AIR
 var max_health: int = 20
 var current_health: int = 20
 var _fall_start_y: float = 0.0
+var _traverse_cooldown: float = 0.0
 var _was_on_floor: bool = true
 var damage_cooldown: float = 0.0
 const DAMAGE_COOLDOWN_TIME = 0.5
@@ -933,7 +934,7 @@ func _physics_process(delta):
 					nb.create_collision()
 
 	# Sécurité : détecter chute à travers le terrain (sol existe mais on tombe)
-	if world_manager and not in_water and velocity.y < -10.0:
+	if world_manager and not in_water and velocity.y < -10.0 and _traverse_cooldown <= 0:
 		var wx = int(floor(global_position.x))
 		var wz = int(floor(global_position.z))
 		var fy = int(floor(global_position.y))
@@ -944,8 +945,17 @@ func _physics_process(delta):
 				# On est en train de traverser un bloc solide — remonter dessus
 				global_position.y = check_y + 1.5
 				velocity = Vector3.ZERO
+				# Forcer la collision du chunk à cette position
+				var cp = Vector3i(int(floor(float(wx) / 16.0)), 0, int(floor(float(wz) / 16.0)))
+				if world_manager.chunks.has(cp):
+					var c = world_manager.chunks[cp]
+					if c.is_mesh_built:
+						c.create_collision()
+				_traverse_cooldown = 1.0  # anti-boucle : 1s de cooldown
 				print("Player: traverse le sol — repositionné à Y=%d" % int(global_position.y))
 				break
+	if _traverse_cooldown > 0:
+		_traverse_cooldown -= delta
 
 	# Sécurité : si le joueur tombe sous le monde, le remonter en surface
 	if global_position.y < -20.0:
@@ -1210,33 +1220,27 @@ func _handle_block_interaction(delta: float):
 		var player_feet = global_position.floor()
 		var player_head = (global_position + Vector3(0, 1, 0)).floor()
 
-		# Bridge assist : si place_pos est bloque par les pieds du joueur,
-		# essayer les 4 faces laterales du bloc en dessous et prendre
-		# celle la plus proche de la direction du regard
+		# Placement bloqué par le joueur ?
 		var is_blocked_by_player = place_pos == player_feet or place_pos == player_head
-		if is_blocked_by_player and is_on_floor() and camera.rotation.x < deg_to_rad(-30.0):
+		if is_blocked_by_player and is_on_floor():
+			# On regarde le bloc sous nos pieds → rediriger vers la face verticale
+			# dans la direction horizontale du regard
 			var cam_forward = -camera.global_basis.z
 			var cam_h = Vector3(cam_forward.x, 0, cam_forward.z).normalized()
-			# Tester les 4 directions, scorer par alignement avec le regard
-			var candidates: Array = [
-				Vector3(1, 0, 0), Vector3(-1, 0, 0),
-				Vector3(0, 0, 1), Vector3(0, 0, -1),
-			]
-			var best_score = -2.0
-			var best_pos = Vector3(-9999, -9999, -9999)
-			for dir in candidates:
-				var test_pos = Vector3(break_pos) + dir
-				var test_type = world_manager.get_block_at_position(test_pos)
-				if test_pos == player_feet or test_pos == player_head:
-					continue
-				if test_type != BlockRegistry.BlockType.AIR and test_type != BlockRegistry.BlockType.WATER and not BlockRegistry.is_cross_mesh(test_type):
-					continue
-				var score = cam_h.dot(dir)
-				if score > best_score:
-					best_score = score
-					best_pos = test_pos
-			if best_pos.x > -9000:
-				place_pos = best_pos
+			# Direction cardinale la plus proche du regard
+			var best_dir = Vector3.ZERO
+			var best_dot = -2.0
+			for dir in [Vector3(1,0,0), Vector3(-1,0,0), Vector3(0,0,1), Vector3(0,0,-1)]:
+				var d = cam_h.dot(dir)
+				if d > best_dot:
+					best_dot = d
+					best_dir = dir
+			# Placer sur la face verticale du bloc sous les pieds (même Y que break_pos)
+			var side_pos = Vector3(break_pos) + best_dir
+			var side_type = world_manager.get_block_at_position(side_pos)
+			var side_blocked = side_pos == player_feet or side_pos == player_head
+			if not side_blocked and (side_type == BlockRegistry.BlockType.AIR or side_type == BlockRegistry.BlockType.WATER or BlockRegistry.is_cross_mesh(side_type)):
+				place_pos = side_pos
 
 		var place_block_type = world_manager.get_block_at_position(place_pos)
 		var is_flora = BlockRegistry.is_cross_mesh(place_block_type)

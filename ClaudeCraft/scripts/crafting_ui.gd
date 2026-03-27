@@ -1,4 +1,4 @@
-# crafting_ui.gd v3.2.0
+# crafting_ui.gd v3.3.0
 # Craft MC drag & drop — slots fixes, placement libre
 # Rangee du bas = hotbar (reference, pas de stockage)
 # Rangees du haut = inventaire reel (27 slots, pagine)
@@ -39,12 +39,11 @@ var _grid_ui: Array = []
 var _output_btn: Button = null
 var _output_tex: TextureRect = null
 var _output_count_lbl: Label = null
-var _output_name_lbl: Label = null
 var _inv_ui: Array = []       # 27 slots inventaire
 var _hotbar_ui: Array = []    # 9 slots hotbar
 var _cursor_tex: TextureRect = null
 var _cursor_count: Label = null
-var _tooltip_label: Label = null
+var _hover_name_label: Label = null
 var _hint_label: Label = null
 var _page_label: Label = null
 var _prev_btn: Button = null
@@ -147,13 +146,6 @@ func _build_ui():
 	add_child(_output_tex)
 	_output_count_lbl = _make_count_label(ox, oy, slot_px)
 	add_child(_output_count_lbl)
-	_output_name_lbl = _make_label("", 12, Color(1, 1, 0.8), true)
-	_output_name_lbl.set_anchors_preset(Control.PRESET_CENTER)
-	var out_cx = tex_left + (OUT_X + SLOT_SZ / 2) * GUI_SCALE
-	_output_name_lbl.offset_left = out_cx - 80; _output_name_lbl.offset_right = out_cx + 80
-	_output_name_lbl.offset_top = oy - 18; _output_name_lbl.offset_bottom = oy - 2
-	_output_name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	add_child(_output_name_lbl)
 
 	# --- 27 slots inventaire (3x9) ---
 	for row in range(3):
@@ -202,22 +194,18 @@ func _build_ui():
 	_next_btn.add_theme_color_override("font_color", Color.WHITE)
 	_next_btn.pressed.connect(_on_next_page); add_child(_next_btn)
 
-	# --- Tooltip ---
-	_tooltip_label = Label.new()
-	_tooltip_label.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	_tooltip_label.add_theme_font_size_override("font_size", 14)
-	_tooltip_label.add_theme_color_override("font_color", Color.WHITE)
-	_tooltip_label.add_theme_color_override("font_shadow_color", Color(0.1, 0.1, 0.1, 1))
-	_tooltip_label.add_theme_constant_override("shadow_offset_x", 2)
-	_tooltip_label.add_theme_constant_override("shadow_offset_y", 2)
-	_tooltip_label.mouse_filter = Control.MOUSE_FILTER_IGNORE; _tooltip_label.visible = false
-	var tip_style = StyleBoxFlat.new()
-	tip_style.bg_color = Color(0.1, 0.05, 0.15, 0.9)
-	tip_style.border_color = Color(0.4, 0.2, 0.6, 0.8)
-	tip_style.set_border_width_all(2); tip_style.set_corner_radius_all(4)
-	tip_style.content_margin_left = 6; tip_style.content_margin_right = 6
-	tip_style.content_margin_top = 3; tip_style.content_margin_bottom = 3
-	_tooltip_label.add_theme_stylebox_override("normal", tip_style); add_child(_tooltip_label)
+	# --- Label nom de l'objet survolé (fixe, centré entre grille et inventaire) ---
+	_hover_name_label = Label.new(); _hover_name_label.set_anchors_preset(Control.PRESET_CENTER)
+	_hover_name_label.add_theme_font_size_override("font_size", 15)
+	_hover_name_label.add_theme_color_override("font_color", Color.WHITE)
+	_hover_name_label.add_theme_color_override("font_shadow_color", Color(0.1, 0.1, 0.1, 1))
+	_hover_name_label.add_theme_constant_override("shadow_offset_x", 2)
+	_hover_name_label.add_theme_constant_override("shadow_offset_y", 2)
+	_hover_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hover_name_label.offset_left = tex_left; _hover_name_label.offset_right = -tex_left
+	_hover_name_label.offset_top = tex_top + 148 * GUI_SCALE; _hover_name_label.offset_bottom = tex_top + 165 * GUI_SCALE
+	_hover_name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE; _hover_name_label.visible = false
+	add_child(_hover_name_label)
 
 	_hint_label = _make_label("Glissez les ingredients sur la grille pour crafter", 13, Color(0.8, 0.8, 0.7, 0.8), true)
 	_hint_label.set_anchors_preset(Control.PRESET_CENTER)
@@ -285,22 +273,7 @@ func _make_slot(sx: float, sy: float, slot_px: float, icon_sz: float, pad: float
 	return {"btn": btn, "tex": tex, "count_lbl": cnt}
 
 func _make_inv_slot(sx: float, sy: float, slot_px: float, icon_sz: float, pad: float) -> Dictionary:
-	var d = _make_slot(sx, sy, slot_px, icon_sz, pad)
-	var bg = ColorRect.new(); bg.set_anchors_preset(Control.PRESET_CENTER)
-	bg.offset_left = sx + 1; bg.offset_right = sx + slot_px - 1
-	bg.offset_top = sy + 1; bg.offset_bottom = sy + slot_px - 1
-	bg.color = Color(0, 0, 0, 0.45); bg.mouse_filter = Control.MOUSE_FILTER_IGNORE; add_child(bg)
-	var lbl = Label.new(); lbl.set_anchors_preset(Control.PRESET_CENTER)
-	lbl.offset_left = sx + 2; lbl.offset_right = sx + slot_px - 2
-	lbl.offset_top = sy + 2; lbl.offset_bottom = sy + slot_px - 2
-	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	lbl.add_theme_font_size_override("font_size", 9)
-	lbl.add_theme_color_override("font_color", Color.WHITE)
-	lbl.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 1))
-	lbl.add_theme_constant_override("shadow_offset_x", 1); lbl.add_theme_constant_override("shadow_offset_y", 1)
-	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE; add_child(lbl)
-	d["name_bg"] = bg; d["name_lbl"] = lbl; return d
+	return _make_slot(sx, sy, slot_px, icon_sz, pad)
 
 # ============================================================
 # OPEN / CLOSE
@@ -411,16 +384,12 @@ func _refresh_inv_slots():
 			var item = _inv_slots_data[idx]
 			if item.get("is_tool", false):
 				ui["tex"].texture = _load_tool_icon(item["tool_type"])
-				ui["name_lbl"].text = ToolRegistry.get_tool_name(item["tool_type"])
 			else:
 				ui["tex"].texture = _load_block_icon(item["block_type"])
-				ui["name_lbl"].text = BlockRegistry.get_block_name(item["block_type"])
 			ui["tex"].modulate = Color.WHITE
 			ui["count_lbl"].text = str(item["count"]) if item["count"] > 1 else ""
-			ui["name_bg"].visible = true; ui["name_lbl"].visible = true
 		else:
 			ui["tex"].texture = null; ui["count_lbl"].text = ""
-			ui["name_lbl"].text = ""; ui["name_bg"].visible = false; ui["name_lbl"].visible = false
 		ui["btn"].visible = true
 
 func _refresh_hotbar_slots():
@@ -432,8 +401,6 @@ func _refresh_hotbar_slots():
 			ui["tex"].texture = _load_tool_icon(tool_type)
 			ui["tex"].modulate = Color.WHITE
 			ui["count_lbl"].text = ""
-			ui["name_lbl"].text = ToolRegistry.get_tool_name(tool_type)
-			ui["name_bg"].visible = true; ui["name_lbl"].visible = true
 		else:
 			var bt = player.hotbar_slots[i] if i < player.hotbar_slots.size() else 0
 			var count = player.get_inventory_count(bt)
@@ -441,11 +408,8 @@ func _refresh_hotbar_slots():
 				ui["tex"].texture = _load_block_icon(bt)
 				ui["tex"].modulate = Color.WHITE
 				ui["count_lbl"].text = str(count) if count > 1 else ""
-				ui["name_lbl"].text = BlockRegistry.get_block_name(bt)
-				ui["name_bg"].visible = true; ui["name_lbl"].visible = true
 			else:
 				ui["tex"].texture = null; ui["count_lbl"].text = ""
-				ui["name_lbl"].text = ""; ui["name_bg"].visible = false; ui["name_lbl"].visible = false
 		ui["btn"].visible = true
 
 func _refresh_grid_visuals():
@@ -464,11 +428,10 @@ func _update_output():
 		_output_tex.modulate = Color.WHITE
 		var oc = _matched_recipe.get("output_count", 1)
 		_output_count_lbl.text = "x%d" % oc if oc > 1 else ""
-		_output_name_lbl.text = BlockRegistry.get_block_name(_matched_recipe["output_type"])
 		_hint_label.text = _matched_recipe.get("name", "")
 		_hint_label.add_theme_color_override("font_color", Color(0.5, 1.0, 0.5, 0.9))
 	else:
-		_output_tex.texture = null; _output_count_lbl.text = ""; _output_name_lbl.text = ""
+		_output_tex.texture = null; _output_count_lbl.text = ""
 		var has_items = false
 		for cell in _grid_contents:
 			if not cell.is_empty(): has_items = true; break
@@ -519,6 +482,17 @@ func _dict_remove_slot(slot: Dictionary):
 		player.tool_inventory[slot["tool_type"]] = maxi(0, player.tool_inventory.get(slot["tool_type"], 0) - slot.get("count", 1))
 	else:
 		player._remove_from_inventory(slot["block_type"], slot["count"])
+
+func _readd_to_inv_slots(item: Dictionary):
+	# Remettre un item dans _inv_slots_data (fusionner si même type existe)
+	for i in range(_inv_slots_data.size()):
+		if _same_inv_type(_inv_slots_data[i], item):
+			_inv_slots_data[i]["count"] = _inv_slots_data[i].get("count", 1) + item.get("count", 1)
+			return
+	for i in range(_inv_slots_data.size()):
+		if _inv_slots_data[i].is_empty():
+			_inv_slots_data[i] = item.duplicate(); return
+	_inv_slots_data.append(item.duplicate())
 
 func _on_inv_input(event: InputEvent, index: int):
 	if not (event is InputEventMouseButton and event.pressed): return
@@ -609,10 +583,13 @@ func _on_hotbar_input(event: InputEvent, col: int):
 					player.assign_hotbar_slot(col, _held_item["block_type"])
 				_held_item = {}; _held_source = ""; _refresh_all()
 			elif _held_source == "inv":
-				# Assigner un bloc inventaire a la hotbar (l'item retourne en inventaire)
-				if not _held_item.get("is_tool", false):
+				# Assigner depuis inventaire vers hotbar = créer pointeur + remettre dans inventaire
+				if _held_item.get("is_tool", false):
+					player.assign_hotbar_tool(col, _held_item["tool_type"])
+				else:
 					player.assign_hotbar_slot(col, _held_item["block_type"])
-					_add_to_inv_slot_and_dict(_held_item["block_type"], _held_item["count"])
+				_dict_add_held()
+				_readd_to_inv_slots(_held_item)
 				_held_item = {}; _held_source = ""; _refresh_all()
 			elif _held_source == "grid":
 				# Depuis la grille → assigner a hotbar + retourner en inv
@@ -693,11 +670,13 @@ func _on_bg_input(event: InputEvent):
 	if not (event is InputEventMouseButton and event.pressed): return
 	if event.button_index != MOUSE_BUTTON_LEFT or _held_item.is_empty(): return
 	if _held_source == "hotbar":
-		# Lacher sur le fond = supprimer du hotbar (deja fait au pickup)
-		_held_item = {}; _held_source = ""; _refresh_all()
+		# Lacher sur le fond = supprimer le pointeur hotbar (l'item reste dans l'inventaire)
+		_held_item = {}; _held_source = ""; _held_hotbar_idx = -1; _refresh_all()
 	else:
 		# Retourner item reel en inventaire
-		if not _held_item.get("is_tool", false):
+		if _held_item.get("is_tool", false):
+			_dict_add_held()
+		else:
 			_add_to_inv_slot_and_dict(_held_item["block_type"], _held_item["count"])
 		_held_item = {}; _held_source = ""; _refresh_all()
 
@@ -753,37 +732,43 @@ func _return_items_to_inventory():
 # ============================================================
 # HOVER
 # ============================================================
+func _set_hover_name(text: String):
+	if _hover_name_label:
+		_hover_name_label.text = text; _hover_name_label.visible = not text.is_empty()
+
 func _on_inv_hover(index: int):
 	var slot_idx = _inv_page * INV_SLOTS_PER_PAGE + index
 	if slot_idx < _inv_slots_data.size() and not _inv_slots_data[slot_idx].is_empty():
 		var item = _inv_slots_data[slot_idx]
-		_tooltip_label.text = "%s (x%d)" % [BlockRegistry.get_block_name(item["block_type"]), item["count"]]
-		_tooltip_label.visible = true
+		if item.get("is_tool", false):
+			_set_hover_name(ToolRegistry.get_tool_name(item["tool_type"]))
+		else:
+			_set_hover_name(BlockRegistry.get_block_name(item["block_type"]))
+	else: _set_hover_name("")
 
 func _on_hotbar_hover(col: int):
 	if not player: return
 	var tool_type = player.hotbar_tool_slots[col] if col < player.hotbar_tool_slots.size() else ToolRegistry.ToolType.NONE
 	if tool_type != ToolRegistry.ToolType.NONE:
-		_tooltip_label.text = ToolRegistry.get_tool_name(tool_type)
-		_tooltip_label.visible = true
+		_set_hover_name(ToolRegistry.get_tool_name(tool_type))
 	elif not player.is_hotbar_slot_empty(col):
-		var bt = player.hotbar_slots[col]; var count = player.get_inventory_count(bt)
-		_tooltip_label.text = "%s (x%d)" % [BlockRegistry.get_block_name(bt), count]
-		_tooltip_label.visible = true
+		var bt = player.hotbar_slots[col]
+		_set_hover_name(BlockRegistry.get_block_name(bt))
+	else: _set_hover_name("")
 
 func _on_grid_hover(index: int):
 	if not _grid_contents[index].is_empty():
 		var cell = _grid_contents[index]
-		_tooltip_label.text = "%s (x%d)" % [BlockRegistry.get_block_name(cell["block_type"]), cell["count"]]
-		_tooltip_label.visible = true
+		_set_hover_name(BlockRegistry.get_block_name(cell["block_type"]))
+	else: _set_hover_name("")
 
 func _on_output_hover():
 	if not _matched_recipe.is_empty():
-		_tooltip_label.text = "Cliquer pour crafter : %s" % BlockRegistry.get_block_name(_matched_recipe["output_type"])
-		_tooltip_label.visible = true
+		_set_hover_name(BlockRegistry.get_block_name(_matched_recipe["output_type"]))
+	else: _set_hover_name("")
 
 func _on_hover_exit():
-	if _tooltip_label: _tooltip_label.visible = false
+	_set_hover_name("")
 
 # ============================================================
 # PROCESS
@@ -798,9 +783,6 @@ func _process(_delta):
 		if _cursor_count and _cursor_count.visible:
 			_cursor_count.offset_left = mpos.x + sz / 2 - 24; _cursor_count.offset_top = mpos.y + sz / 2 - 16
 			_cursor_count.offset_right = mpos.x + sz / 2 + 12; _cursor_count.offset_bottom = mpos.y + sz / 2 + 4
-	if _tooltip_label and _tooltip_label.visible:
-		_tooltip_label.offset_left = mpos.x + 16; _tooltip_label.offset_top = mpos.y - 10
-		_tooltip_label.offset_right = mpos.x + 250; _tooltip_label.offset_bottom = mpos.y + 16
 
 # ============================================================
 # ICON LOADING

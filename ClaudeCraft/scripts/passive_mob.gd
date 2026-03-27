@@ -1,10 +1,12 @@
 extends CharacterBody3D
 class_name PassiveMob
 
-# === MOB SYSTEM v3.1.0 ===
+# === MOB SYSTEM v3.2.0 ===
 # Charge les donnees depuis data/mob_database.json
 # Comportements : passive (fuit), neutral (attaque si provoque), hostile (attaque)
 # Systemes : faim, brulure soleil, predation, pack behavior
+
+const GC = preload("res://scripts/game_config.gd")
 
 enum Behavior { PASSIVE, NEUTRAL, HOSTILE }
 
@@ -73,8 +75,29 @@ var _hunt_timer: float = 0.0
 var _neutral_day: bool = false
 var _special_tags: Array = []
 
+# Creeper explosion
+var _is_creeper: bool = false
+var _creeper_fuse_timer: float = -1.0  # -1 = not fusing
+var _creeper_fuse_started: bool = false
+var _creeper_flash_timer: float = 0.0
+const CREEPER_FUSE_TIME = 1.5       # seconds before explosion
+const CREEPER_FUSE_RANGE = 2.5      # start fuse at this distance
+const CREEPER_CANCEL_RANGE = 5.0    # cancel fuse if player escapes
+const CREEPER_BLAST_RADIUS = 3      # blocks in each direction (7x7x7)
+const CREEPER_DAMAGE_RADIUS = 4.0   # damage range in blocks
+const CREEPER_DAMAGE = 16           # max damage at center
+
+# Skeleton archer
+var _is_skeleton: bool = false
+var _skeleton_shoot_timer: float = 0.0
+var _skeleton_bow_node: Node3D = null
+const SKELETON_SHOOT_INTERVAL = 2.5  # seconds between shots
+const SKELETON_SHOOT_RANGE = 16.0    # max range
+const SKELETON_MIN_RANGE = 4.0       # backs off if player too close
+
 # Wall detection / stuck prevention
 var _stuck_timer: float = 0.0
+var _wall_jump_count: int = 0
 var _last_xz_pos: Vector3 = Vector3.ZERO
 var _consecutive_wanders: int = 0  # how many wander cycles without a rest
 
@@ -227,6 +250,10 @@ func setup_from_id(id: String, pos: Vector3, chunk_pos: Vector3i):
 	var hunger_prey = hunger_data.get("prey_mobs", [])
 	_prey_mobs = hunger_prey if hunger_prey is Array else []
 
+	# Creeper / Skeleton detection
+	_is_creeper = (mob_id == "creeper")
+	_is_skeleton = (mob_id == "skeleton" or mob_id == "stray" or mob_id == "bogged")
+
 func _ready():
 	position = _spawn_pos
 	_create_model()
@@ -235,6 +262,8 @@ func _ready():
 	rotation.y = randf() * TAU
 	world_manager = get_tree().get_first_node_in_group("world_manager")
 	add_to_group("passive_mobs")
+	if _is_skeleton:
+		_attach_skeleton_bow()
 
 # ============================================================
 #  MODEL CREATION
@@ -350,6 +379,10 @@ func _physics_process(delta):
 		_process_eating(delta)
 		move_and_slide()
 		return
+
+	# Creeper fuse countdown (must tick even outside AI)
+	if _is_creeper and _creeper_fuse_timer >= 0:
+		_process_creeper_fuse(delta)
 
 	# Behavior-specific AI
 	match _behavior:
@@ -606,12 +639,23 @@ func _ai_hostile(delta):
 		_do_wander(delta)
 		return
 
-	# Find and chase player
+	# Find player
 	if not _target_player or not is_instance_valid(_target_player):
 		_target_player = get_tree().get_first_node_in_group("player")
 
 	if _target_player and is_instance_valid(_target_player):
 		var dist = global_position.distance_to(_target_player.global_position)
+
+		# Creeper: approach then explode
+		if _is_creeper:
+			_ai_creeper(delta, dist)
+			return
+
+		# Skeleton: ranged archer
+		if _is_skeleton:
+			_ai_skeleton(delta, dist)
+			return
+
 		if dist < _aggro_range:
 			_chase_player(delta)
 			return
@@ -624,14 +668,14 @@ func _do_wander(delta):
 		_pick_new_wander()
 
 	if is_moving and is_on_floor():
-		# --- Stuck detection: if barely moved in ~1s, we're against a wall ---
+		# --- Stuck detection: if barely moved in 0.5s, we're against something ---
 		_stuck_timer += delta
-		if _stuck_timer >= 1.0:
+		if _stuck_timer >= 0.5:
 			var moved_xz = Vector2(global_position.x - _last_xz_pos.x, global_position.z - _last_xz_pos.z).length()
 			_last_xz_pos = global_position
 			_stuck_timer = 0.0
 			if moved_xz < STUCK_THRESHOLD:
-				# Stuck! Turn around 180° and go idle briefly
+				# Stuck! Turn around and rest
 				_force_idle_rest(1.5, 3.0)
 				return
 
@@ -639,35 +683,35 @@ func _do_wander(delta):
 		_nav_check_timer += delta
 		if _nav_check_timer >= NAV_CHECK_INTERVAL:
 			_nav_check_timer = 0.0
-			if world_manager:
+			if world_manager and is_on_floor():
 				var ahead_pos = global_position + wander_direction * 1.0
-				# feet_y = bloc sous les pieds, body_y = niveau du torse (1 bloc au-dessus du sol)
 				var feet_y = floori(global_position.y - 0.1)
-				var body_y = feet_y + 1
-				var ahead_ground = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y, ahead_pos.z).floor())
-				var ahead_body = world_manager.get_block_at_position(Vector3(ahead_pos.x, body_y, ahead_pos.z).floor())
-				var ahead_head = world_manager.get_block_at_position(Vector3(ahead_pos.x, body_y + 1, ahead_pos.z).floor())
+				# Blocs devant à différentes hauteurs
+				var b_at_feet = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y, ahead_pos.z).floor())
+				var b_plus1 = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y + 1, ahead_pos.z).floor())
+				var b_plus2 = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y + 2, ahead_pos.z).floor())
+				var b_below = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y - 1, ahead_pos.z).floor())
 
-				# Water or cliff ahead → stop
-				if ahead_ground == BlockRegistry.BlockType.WATER:
-					_force_idle_rest(2.0, 5.0)
-					return
-				# Cliff: no ground under the next step
-				var below_ground = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y - 1, ahead_pos.z).floor())
-				if ahead_ground == 0 and below_ground == 0:
+				# Eau devant → stop
+				if b_at_feet == BlockRegistry.BlockType.WATER:
 					_force_idle_rest(2.0, 5.0)
 					return
 
-				# Wall detection: solid block at body level (not ground level)
-				if ahead_body != 0 and ahead_body != BlockRegistry.BlockType.WATER:
-					if not _is_vegetation(ahead_body):
-						# 1-block wall: body blocked but head free → jump
-						if ahead_head == 0 or _is_vegetation(ahead_head):
-							velocity.y = 6.5
-						else:
-							# 2+ blocks high wall → turn around and idle
-							_force_idle_rest(2.0, 6.0)
-							return
+				# Falaise : pas de sol devant ni en dessous → stop
+				if _is_passable(b_at_feet) and _is_passable(b_below):
+					_force_idle_rest(2.0, 5.0)
+					return
+
+				# Marche d'1 bloc : bloc solide à feet+1, espace libre au-dessus
+				# → step-up instantané (comme MC, pas de saut)
+				if _is_real_wall(b_plus1) and _is_passable(b_plus2):
+					global_position.y = feet_y + 1 + 1.05  # monter au-dessus de la marche
+					_wall_jump_count = 0
+				elif _is_real_wall(b_plus1):
+					# Mur de 2+ blocs (tronc d'arbre, falaise) → demi-tour
+					_wall_jump_count = 0
+					_force_idle_rest(2.0, 6.0)
+					return
 
 		velocity.x = wander_direction.x * move_speed
 		velocity.z = wander_direction.z * move_speed
@@ -682,7 +726,23 @@ func _do_wander(delta):
 
 func _is_vegetation(block: int) -> bool:
 	"""Cross-mesh blocks that are not real walls."""
-	return block >= 98 and block <= 103  # SHORT_GRASS, FERN, DEAD_BUSH, DANDELION, POPPY, CORNFLOWER
+	return BlockRegistry.is_cross_mesh(block)
+
+func _is_passable(block: int) -> bool:
+	"""Blocks a mob can walk through (not real obstacles)."""
+	if block == 0: return true  # AIR
+	if block == BlockRegistry.BlockType.WATER: return true
+	if BlockRegistry.is_cross_mesh(block): return true
+	# Feuilles = traversables pour l'IA (pas de collision physique réelle pour les mobs)
+	if block == BlockRegistry.BlockType.LEAVES: return true
+	if block >= BlockRegistry.BlockType.SPRUCE_LEAVES and block <= BlockRegistry.BlockType.CHERRY_LEAVES: return true
+	if block == BlockRegistry.BlockType.TORCH: return true
+	if block == BlockRegistry.BlockType.LANTERN: return true
+	return false
+
+func _is_real_wall(block: int) -> bool:
+	"""Block that is a real physical wall (not passable)."""
+	return block != 0 and not _is_passable(block)
 
 func _force_idle_rest(min_time: float, max_time: float):
 	"""Stop moving, turn around, and rest idle for a while."""
@@ -698,17 +758,16 @@ func _force_idle_rest(min_time: float, max_time: float):
 	_last_xz_pos = global_position
 
 func _try_auto_jump(move_dir: Vector3):
-	"""Auto-jump over 1-block walls when chasing/fleeing. Must be on floor."""
+	"""Step-up over 1-block walls when chasing/fleeing. Instant like MC."""
 	if not is_on_floor() or not world_manager:
 		return
 	var ahead_pos = global_position + move_dir * 0.8
-	var body_y = floori(global_position.y - 0.1) + 1  # 1 bloc au-dessus du sol
-	var block_at_body = world_manager.get_block_at_position(Vector3(ahead_pos.x, body_y, ahead_pos.z).floor())
-	if block_at_body != 0 and not _is_vegetation(block_at_body) and block_at_body != BlockRegistry.BlockType.WATER:
-		# Solid block at body level — check if head is free
-		var block_at_head = world_manager.get_block_at_position(Vector3(ahead_pos.x, body_y + 1, ahead_pos.z).floor())
-		if block_at_head == 0 or _is_vegetation(block_at_head):
-			velocity.y = 6.5  # jump
+	var feet_y = floori(global_position.y - 0.1)
+	var b_plus1 = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y + 1, ahead_pos.z).floor())
+	var b_plus2 = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y + 2, ahead_pos.z).floor())
+	# Step-up instantané si mur d'1 bloc avec espace au-dessus
+	if _is_real_wall(b_plus1) and _is_passable(b_plus2):
+		global_position.y = feet_y + 1 + 1.05
 
 func _chase_player(delta):
 	if not _target_player or not is_instance_valid(_target_player):
@@ -776,6 +835,317 @@ func _chase_prey(delta):
 		rotation.y = atan2(-dir.x, -dir.z)
 		_try_auto_jump(dir)
 		_play_anim("walk")
+
+# ============================================================
+#  CREEPER — Fuse + Explosion
+# ============================================================
+func _ai_creeper(delta, dist_to_player: float):
+	if _creeper_fuse_timer >= 0:
+		# Fusing: stop moving, face player
+		velocity.x = 0; velocity.z = 0
+		var to_p = _target_player.global_position - global_position
+		rotation.y = atan2(-to_p.x, -to_p.z)
+		# Cancel if player escaped
+		if dist_to_player > CREEPER_CANCEL_RANGE:
+			_creeper_fuse_timer = -1.0
+			_creeper_fuse_started = false
+			_reset_model_color()
+		return
+
+	# Approach player silently
+	if dist_to_player < CREEPER_FUSE_RANGE:
+		# Start fuse!
+		_creeper_fuse_timer = 0.0
+		_creeper_fuse_started = true
+		velocity.x = 0; velocity.z = 0
+		_play_fuse_sound()
+	elif dist_to_player < _aggro_range:
+		_chase_player(delta)
+	else:
+		_do_wander(delta)
+
+func _process_creeper_fuse(delta):
+	_creeper_fuse_timer += delta
+	# Flash white increasingly fast
+	_creeper_flash_timer += delta
+	var flash_rate = lerpf(0.5, 0.1, _creeper_fuse_timer / CREEPER_FUSE_TIME)
+	if _creeper_flash_timer >= flash_rate:
+		_creeper_flash_timer = 0.0
+		_flash_model_white()
+		get_tree().create_timer(flash_rate * 0.5).timeout.connect(_reset_model_color)
+	# Swell: scale up slightly
+	if _model_root:
+		var swell = lerpf(1.0, 1.3, _creeper_fuse_timer / CREEPER_FUSE_TIME)
+		_model_root.scale = Vector3(swell, swell, swell)
+	# BOOM
+	if _creeper_fuse_timer >= CREEPER_FUSE_TIME:
+		_creeper_explode()
+
+func _creeper_explode():
+	var center = global_position + Vector3(0, 1, 0)
+	var wm = world_manager
+	# Destroy blocks in 7x7x7 sphere
+	if wm:
+		var cx = floori(center.x); var cy = floori(center.y); var cz = floori(center.z)
+		for bx in range(cx - CREEPER_BLAST_RADIUS, cx + CREEPER_BLAST_RADIUS + 1):
+			for by in range(cy - CREEPER_BLAST_RADIUS, cy + CREEPER_BLAST_RADIUS + 1):
+				for bz in range(cz - CREEPER_BLAST_RADIUS, cz + CREEPER_BLAST_RADIUS + 1):
+					var dist_sq = (bx - cx) ** 2 + (by - cy) ** 2 + (bz - cz) ** 2
+					if dist_sq > (CREEPER_BLAST_RADIUS + 0.5) ** 2:
+						continue  # sphérique, pas cubique
+					var pos = Vector3(bx, by, bz)
+					var bt = wm.get_block_at_position(pos)
+					if bt != BlockRegistry.BlockType.AIR and bt != BlockRegistry.BlockType.WATER and by > 1:
+						wm.break_block_at_position(pos)
+	# Damage entities
+	_creeper_damage_entities(center)
+	# Sound + particles
+	_play_explosion_sound(center)
+	_spawn_explosion_particles(center)
+	# Die
+	queue_free()
+
+func _creeper_damage_entities(center: Vector3):
+	# Damage player
+	var player = get_tree().get_first_node_in_group("player")
+	if player and is_instance_valid(player):
+		var dist = player.global_position.distance_to(center)
+		if dist < CREEPER_DAMAGE_RADIUS and player.has_method("take_damage"):
+			var dmg_factor = 1.0 - (dist / CREEPER_DAMAGE_RADIUS)
+			var dmg = ceili(CREEPER_DAMAGE * dmg_factor)
+			var kb = (player.global_position - center).normalized() * 10.0
+			kb.y = 5.0
+			player.take_damage(dmg, kb)
+	# Damage NPCs
+	for npc in get_tree().get_nodes_in_group("npc_villagers"):
+		if not is_instance_valid(npc): continue
+		var dist = npc.global_position.distance_to(center)
+		if dist < CREEPER_DAMAGE_RADIUS and npc.has_method("take_hit"):
+			var dmg_factor = 1.0 - (dist / CREEPER_DAMAGE_RADIUS)
+			npc.take_hit(ceili(CREEPER_DAMAGE * dmg_factor), (npc.global_position - center).normalized() * 8.0)
+	# Damage other mobs
+	for mob in get_tree().get_nodes_in_group("passive_mobs"):
+		if mob == self or not is_instance_valid(mob): continue
+		var dist = mob.global_position.distance_to(center)
+		if dist < CREEPER_DAMAGE_RADIUS and mob.has_method("take_hit"):
+			var dmg_factor = 1.0 - (dist / CREEPER_DAMAGE_RADIUS)
+			mob.take_hit(ceili(CREEPER_DAMAGE * dmg_factor), (mob.global_position - center).normalized() * 8.0)
+
+func _flash_model_white():
+	if not _model_root: return
+	for child in _model_root.get_children():
+		if child is MeshInstance3D:
+			var mi = child as MeshInstance3D
+			for i in range(mi.get_surface_override_material_count()):
+				var mat = mi.get_surface_override_material(i)
+				if mat is StandardMaterial3D:
+					mat.albedo_color = Color(2, 2, 2, 1)
+
+func _play_fuse_sound():
+	var audio = get_tree().get_first_node_in_group("audio_manager")
+	if not audio: return
+	var path = "res://assets/Audio/Minecraft/random/fuse.mp3"
+	if FileAccess.file_exists(path):
+		var stream = AudioStreamMP3.new()
+		stream.data = FileAccess.get_file_as_bytes(path)
+		var asp = AudioStreamPlayer3D.new()
+		asp.stream = stream; asp.max_distance = 32.0; asp.bus = "Master"
+		add_child(asp); asp.play()
+		asp.finished.connect(asp.queue_free)
+
+func _play_explosion_sound(pos: Vector3):
+	var audio = get_tree().get_first_node_in_group("audio_manager")
+	if not audio: return
+	var idx = randi_range(1, 4)
+	var path = "res://assets/Audio/Minecraft/random/explode%d.mp3" % idx
+	if FileAccess.file_exists(path):
+		var stream = AudioStreamMP3.new()
+		stream.data = FileAccess.get_file_as_bytes(path)
+		var asp = AudioStreamPlayer3D.new()
+		asp.stream = stream; asp.max_distance = 64.0; asp.bus = "Master"
+		asp.position = pos
+		get_tree().root.add_child(asp); asp.play()
+		asp.finished.connect(asp.queue_free)
+
+func _spawn_explosion_particles(pos: Vector3):
+	var particles = GPUParticles3D.new()
+	particles.amount = 60; particles.lifetime = 1.2; particles.one_shot = true
+	particles.emitting = true
+	var mat = ParticleProcessMaterial.new()
+	mat.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+	mat.emission_sphere_radius = 2.0
+	mat.direction = Vector3(0, 1, 0); mat.spread = 180.0
+	mat.initial_velocity_min = 4.0; mat.initial_velocity_max = 10.0
+	mat.gravity = Vector3(0, -8, 0)
+	mat.scale_min = 0.3; mat.scale_max = 0.8
+	mat.color = Color(1.0, 0.6, 0.2)
+	particles.process_material = mat
+	var mesh = SphereMesh.new(); mesh.radius = 0.15; mesh.height = 0.3
+	particles.draw_pass_1 = mesh
+	particles.position = pos
+	get_tree().root.add_child(particles)
+	get_tree().create_timer(2.0).timeout.connect(particles.queue_free)
+
+# ============================================================
+#  SKELETON — Ranged Bow Attack
+# ============================================================
+func _ai_skeleton(delta, dist_to_player: float):
+	_skeleton_shoot_timer += delta
+
+	if dist_to_player > _aggro_range:
+		_do_wander(delta)
+		return
+
+	# Face the player
+	var to_player = _target_player.global_position - global_position
+	rotation.y = atan2(-to_player.x, -to_player.z)
+
+	# Too close: back away while shooting
+	if dist_to_player < SKELETON_MIN_RANGE:
+		var away = -Vector3(to_player.x, 0, to_player.z).normalized()
+		velocity.x = away.x * move_speed
+		velocity.z = away.z * move_speed
+		_play_anim("walk")
+	elif dist_to_player <= SKELETON_SHOOT_RANGE:
+		# In range: stop and shoot
+		velocity.x = 0; velocity.z = 0
+		_play_anim("attack")
+	else:
+		# Approach to get in range
+		var dir = Vector3(to_player.x, 0, to_player.z).normalized()
+		velocity.x = dir.x * move_speed * 1.2
+		velocity.z = dir.z * move_speed * 1.2
+		_try_auto_jump(dir)
+		_play_anim("walk")
+		return
+
+	# Shoot if ready and in range
+	if dist_to_player <= SKELETON_SHOOT_RANGE and _skeleton_shoot_timer >= SKELETON_SHOOT_INTERVAL:
+		if _has_line_of_sight():
+			_skeleton_shoot()
+			_skeleton_shoot_timer = 0.0
+
+func _has_line_of_sight() -> bool:
+	if not world_manager or not _target_player: return false
+	var from = global_position + Vector3(0, 1.5, 0)  # eye level
+	var to = _target_player.global_position + Vector3(0, 1.0, 0)
+	var dir = (to - from).normalized()
+	var dist = from.distance_to(to)
+	# Raywalk through blocks
+	for i in range(int(dist * 2)):
+		var t = i * 0.5
+		if t > dist: break
+		var check = from + dir * t
+		var bt = world_manager.get_block_at_position(check)
+		if bt != BlockRegistry.BlockType.AIR and bt != BlockRegistry.BlockType.WATER and not BlockRegistry.is_cross_mesh(bt):
+			return false
+	return true
+
+func _skeleton_shoot():
+	var ArrowScript = load("res://scripts/arrow_entity.gd")
+	if not ArrowScript: return
+	var arrow = ArrowScript.new()
+	var from = global_position + Vector3(0, 1.4, 0)
+	var target = _target_player.global_position + Vector3(0, 0.8, 0)  # chest height
+	var to_target = target - from
+	var dist = to_target.length()
+	# Simple gravity compensation: slight upward aim proportional to distance
+	var gravity_comp = dist * 0.04  # léger, pas excessif
+	var aim_dir = (to_target + Vector3(0, gravity_comp, 0)).normalized()
+	# Add slight inaccuracy
+	aim_dir += Vector3(randf_range(-0.04, 0.04), randf_range(-0.02, 0.02), randf_range(-0.04, 0.04))
+	aim_dir = aim_dir.normalized()
+	get_tree().root.add_child(arrow)
+	arrow.initialize(from, aim_dir, 0.8, self)  # 80% charge
+	# Bow sound
+	_play_bow_sound()
+	# Animate bow pull
+	if _skeleton_bow_node:
+		var tween = create_tween()
+		tween.tween_property(_skeleton_bow_node, "rotation:x", -0.4, 0.1)
+		tween.tween_property(_skeleton_bow_node, "rotation:x", 0.0, 0.3)
+
+func _play_bow_sound():
+	var path = "res://assets/Audio/Minecraft/random/bow.mp3"
+	if FileAccess.file_exists(path):
+		var stream = AudioStreamMP3.new()
+		stream.data = FileAccess.get_file_as_bytes(path)
+		var asp = AudioStreamPlayer3D.new()
+		asp.stream = stream; asp.max_distance = 24.0; asp.bus = "Master"
+		add_child(asp); asp.play()
+		asp.finished.connect(asp.queue_free)
+
+func _attach_skeleton_bow():
+	if not _model_root: return
+	# Find skeleton to attach bow to left hand
+	var skeleton = _find_skeleton_in_model(_model_root)
+	if not skeleton: return
+	# Find leftItem bone
+	var bone_idx = skeleton.find_bone("leftItem")
+	if bone_idx < 0:
+		bone_idx = skeleton.find_bone("leftArm")
+	if bone_idx < 0: return
+	var attachment = BoneAttachment3D.new()
+	attachment.bone_name = skeleton.get_bone_name(bone_idx)
+	skeleton.add_child(attachment)
+	# Build a simple bow mesh (flat quad with bow texture)
+	_skeleton_bow_node = Node3D.new()
+	var bow_mesh = _build_bow_mesh()
+	if bow_mesh:
+		_skeleton_bow_node.add_child(bow_mesh)
+		_skeleton_bow_node.scale = Vector3(0.035, 0.035, 0.035)
+		_skeleton_bow_node.position = Vector3(1, 0, -1)
+		_skeleton_bow_node.rotation_degrees = Vector3(0, 0, -45)
+	attachment.add_child(_skeleton_bow_node)
+
+func _build_bow_mesh() -> MeshInstance3D:
+	# Load bow texture and build extruded 3D mesh (same technique as hand_item_renderer)
+	var tex_path = GC.get_item_texture_path() + "bow_pulling_2.png"
+	if not FileAccess.file_exists(tex_path):
+		tex_path = GC.get_item_texture_path() + "bow.png"
+	var img = Image.new()
+	if img.load(tex_path) != OK: return null
+	img.convert(Image.FORMAT_RGBA8)
+	var w = img.get_width(); var h = img.get_height()
+	var st = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var mat = StandardMaterial3D.new()
+	mat.albedo_texture = ImageTexture.create_from_image(img)
+	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	st.set_material(mat)
+	# Flat quad per opaque pixel (extruded 1 pixel depth)
+	for py in range(h):
+		for px in range(w):
+			var c = img.get_pixel(px, py)
+			if c.a < 0.5: continue
+			var x0 = float(px) - w / 2.0; var y0 = float(h - 1 - py) - h / 2.0
+			st.set_color(c)
+			# Front face
+			st.set_uv(Vector2(0, 0)); st.add_vertex(Vector3(x0, y0, 0.5))
+			st.set_uv(Vector2(1, 0)); st.add_vertex(Vector3(x0 + 1, y0, 0.5))
+			st.set_uv(Vector2(1, 1)); st.add_vertex(Vector3(x0 + 1, y0 + 1, 0.5))
+			st.set_uv(Vector2(0, 0)); st.add_vertex(Vector3(x0, y0, 0.5))
+			st.set_uv(Vector2(1, 1)); st.add_vertex(Vector3(x0 + 1, y0 + 1, 0.5))
+			st.set_uv(Vector2(0, 1)); st.add_vertex(Vector3(x0, y0 + 1, 0.5))
+			# Back face
+			st.set_uv(Vector2(0, 0)); st.add_vertex(Vector3(x0 + 1, y0, -0.5))
+			st.set_uv(Vector2(1, 0)); st.add_vertex(Vector3(x0, y0, -0.5))
+			st.set_uv(Vector2(1, 1)); st.add_vertex(Vector3(x0, y0 + 1, -0.5))
+			st.set_uv(Vector2(0, 0)); st.add_vertex(Vector3(x0 + 1, y0, -0.5))
+			st.set_uv(Vector2(1, 1)); st.add_vertex(Vector3(x0, y0 + 1, -0.5))
+			st.set_uv(Vector2(0, 1)); st.add_vertex(Vector3(x0 + 1, y0 + 1, -0.5))
+	var mi = MeshInstance3D.new()
+	mi.mesh = st.commit()
+	return mi
+
+func _find_skeleton_in_model(node: Node) -> Skeleton3D:
+	if node is Skeleton3D: return node
+	for child in node.get_children():
+		var found = _find_skeleton_in_model(child)
+		if found: return found
+	return null
 
 func _flee_from_player(delta):
 	if not _target_player or not is_instance_valid(_target_player):
@@ -924,6 +1294,7 @@ func _apply_glb_tint(node: Node, color: Color):
 		_apply_glb_tint(child, color)
 
 func _pick_new_wander():
+	_wall_jump_count = 0
 	_consecutive_wanders += 1
 	# Every few wander cycles, force a long rest (animals don't walk non-stop)
 	if _consecutive_wanders >= WANDER_CYCLES_BEFORE_REST:

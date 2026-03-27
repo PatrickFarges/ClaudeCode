@@ -61,8 +61,8 @@ func _update_sun_light(sun_height: float):
 		sun.light_color = SUN_DAWN.lerp(SUN_DAY, t)
 		sun.shadow_enabled = true
 	else:
-		# Nuit
-		sun.light_energy = 0.05
+		# Nuit — soleil éteint
+		sun.light_energy = 0.0
 		sun.light_color = SUN_NIGHT
 		sun.shadow_enabled = false
 
@@ -78,21 +78,41 @@ func _update_sky(sun_height: float):
 		sky_color = SKY_NIGHT
 	env.background_color = sky_color
 	env.fog_light_color = sky_color
+	# Réduire le fog la nuit
+	if sun_height < -0.1:
+		env.fog_light_energy = 0.02
+		env.fog_density = 0.003
+	elif sun_height < 0.1:
+		var t = (sun_height + 0.1) / 0.2
+		env.fog_light_energy = lerpf(0.02, 1.0, t)
+		env.fog_density = lerpf(0.003, 0.012, t)
+	else:
+		env.fog_light_energy = 1.0
+		env.fog_density = 0.012
 
 func _update_ambient(sun_height: float):
+	# Forcer source COLOR (pas Sky qui injecte de la lumière parasite)
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	# Désactiver SDFGI la nuit (il éclaire tout uniformément)
+	if env.sdfgi_enabled:
+		env.sdfgi_energy = lerpf(0.0, 1.0, clampf((sun_height + 0.1) / 0.3, 0.0, 1.0))
+
 	if sun_height > 0.1:
-		# Jour — ambient modéré pour éviter la surexposition
+		# Jour
 		env.ambient_light_energy = 0.5
 		env.ambient_light_color = Color(0.9, 0.92, 0.95)
+		env.tonemap_exposure = 1.0
 	elif sun_height > -0.1:
-		# Transition
+		# Transition aube/crépuscule
 		var t: float = (sun_height + 0.1) / 0.2
-		env.ambient_light_energy = lerpf(0.15, 0.5, t)
-		env.ambient_light_color = Color(0.4, 0.45, 0.7).lerp(Color(0.9, 0.92, 0.95), t)
+		env.ambient_light_energy = lerpf(0.002, 0.5, t)
+		env.ambient_light_color = Color(0.04, 0.05, 0.12).lerp(Color(0.9, 0.92, 0.95), t)
+		env.tonemap_exposure = lerpf(0.1, 1.0, t)
 	else:
-		# Nuit — lumière bleutée type clair de lune
-		env.ambient_light_energy = 0.15
-		env.ambient_light_color = Color(0.4, 0.45, 0.7)
+		# Nuit — quasi noir, torche indispensable
+		env.ambient_light_energy = 0.002
+		env.ambient_light_color = Color(0.04, 0.05, 0.12)
+		env.tonemap_exposure = 0.1
 
 func get_time_string() -> String:
 	var hours: int = int(current_time * 24.0) % 24
