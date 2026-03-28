@@ -17,6 +17,7 @@ var footstep_player: AudioStreamPlayer = null
 var master_volume: float = 1.0
 var sfx_volume: float = 0.8
 var ambient_volume: float = 0.7
+var music_volume: float = 0.35
 
 # Pool sizes
 const SFX_POOL_SIZE = 8
@@ -122,6 +123,39 @@ var forest_ambient_by_hour: Array = []  # Array de [heure_debut, heure_fin, Arra
 var forest_current_hour_range: int = -1  # Index dans forest_ambient_by_hour
 var day_night_cycle_node: Node = null
 
+# Cave ambient mood system (MC-like)
+var snd_cave_ambient: Array = []
+var cave_mood: float = 0.0           # 0.0 à 1.0 (= 0% à 100%)
+var cave_mood_timer: float = 0.0
+const CAVE_MOOD_CHECK_INTERVAL = 0.5  # Vérifie toutes les 0.5s
+const CAVE_MOOD_TICKS_PER_CHECK = 10  # Simule 10 ticks MC par check
+const CAVE_MOOD_INCREMENT = 1.0 / 6000.0  # MC : 1/6000 par tick en obscurité totale
+const CAVE_MOOD_LIGHT_DECREMENT = 1.0 / 1000.0  # Diminution par source lumineuse proche
+var cave_ambient_player: AudioStreamPlayer = null
+
+# ============================================================
+# MUSIQUE D'AMBIANCE MC — Tracks aléatoires avec pauses
+# ============================================================
+const MUSIC_PATH = "res://assets/Audio/Minecraft/music/"
+
+# Pools de musique par contexte
+var music_day: Array = []       # Tracks overworld (jour)
+var music_night: Array = []     # Subset calme (nuit)
+var music_water: Array = []     # Tracks sous-marines
+
+# État du système musique
+var music_player_a: AudioStreamPlayer = null
+var music_player_b: AudioStreamPlayer = null  # Pour crossfade
+var music_active: String = "a"
+var music_is_crossfading: bool = false
+var music_crossfade_time: float = 0.0
+const MUSIC_CROSSFADE_DURATION = 3.0
+
+var music_pause_timer: float = 5.0  # Délai initial avant première musique
+var music_is_paused: bool = true
+var music_current_pool: String = "day"
+var music_last_track: AudioStream = null  # Éviter de répéter le même morceau
+
 func _ready():
 	add_to_group("audio_manager")
 	_load_sound_banks()
@@ -217,6 +251,12 @@ func _load_sound_banks():
 	snd_ui_click = _safe_load(MC + "random/click.mp3")
 	snd_craft_success = _safe_load(MC + "random/levelup.mp3")
 
+	# === Cave ambient (23 sons MC) ===
+	snd_cave_ambient = _mc.call("ambient/cave", "cave", 1, 23)
+
+	# === Musique MC ===
+	_load_music_pools()
+
 	# === Forest ambient par heure ===
 	forest_ambient_by_hour = [
 		[5.0, 10.0, _safe_load_bank(["res://Audio/Forest/5-10 matiné.mp3"])],
@@ -264,6 +304,21 @@ func _create_audio_pools():
 	footstep_player = AudioStreamPlayer.new()
 	footstep_player.bus = "Master"
 	add_child(footstep_player)
+
+	cave_ambient_player = AudioStreamPlayer.new()
+	cave_ambient_player.bus = "Master"
+	add_child(cave_ambient_player)
+
+	music_player_a = AudioStreamPlayer.new()
+	music_player_a.bus = "Master"
+	music_player_a.finished.connect(_on_music_finished)
+	add_child(music_player_a)
+
+	music_player_b = AudioStreamPlayer.new()
+	music_player_b.bus = "Master"
+	music_player_b.volume_db = linear_to_db(0.001)
+	music_player_b.finished.connect(_on_music_finished)
+	add_child(music_player_b)
 
 	temp_noise = FastNoiseLite.new()
 	temp_noise.noise_type = FastNoiseLite.TYPE_PERLIN
@@ -574,6 +629,9 @@ func _start_ambient():
 func _process(delta):
 	_update_biome_ambient(delta)
 	_handle_crossfade(delta)
+	_update_cave_mood(delta)
+	_update_music(delta)
+	_handle_music_crossfade(delta)
 
 func _update_biome_ambient(delta: float):
 	biome_check_timer += delta
@@ -888,6 +946,227 @@ func _generate_ambient_plains() -> AudioStreamWAV:
 		data[i * 2 + 1] = (sample_int >> 8) & 0xFF
 
 	return _make_wav(data)
+
+# ============================================================
+# CAVE AMBIENT MOOD SYSTEM
+# ============================================================
+# Inspiré de Minecraft : le "mood" augmente dans l'obscurité,
+# quand il atteint 100% un son de grotte aléatoire est joué.
+# Pas de système de lumière par bloc dans ClaudeCraft, donc on
+# approxime : sous terre (blocs solides au-dessus) = sombre,
+# torches/lanternes proches = lumière qui réduit le mood.
+
+func _update_cave_mood(delta: float):
+	if snd_cave_ambient.is_empty():
+		return
+
+	cave_mood_timer += delta
+	if cave_mood_timer < CAVE_MOOD_CHECK_INTERVAL:
+		return
+	cave_mood_timer = 0.0
+
+	var player = get_tree().get_first_node_in_group("player")
+	if not player:
+		return
+
+	var world_mgr = get_tree().get_first_node_in_group("world_manager")
+	if not world_mgr:
+		return
+
+	var pos = player.global_position
+	var player_y = int(floor(pos.y))
+
+	# 1) Vérifier si le joueur est sous terre : chercher un bloc solide au-dessus
+	var sky_blocked = false
+	for check_y in range(player_y + 2, min(player_y + 40, 256)):
+		var check_pos = Vector3(floor(pos.x), check_y, floor(pos.z))
+		var bt = world_mgr.get_block_at_position(check_pos)
+		if bt != BlockRegistry.BlockType.AIR and bt != BlockRegistry.BlockType.WATER and bt != BlockRegistry.BlockType.TORCH and bt != BlockRegistry.BlockType.LANTERN and not BlockRegistry.is_cross_mesh(bt):
+			sky_blocked = true
+			break
+
+	if not sky_blocked:
+		# En surface : mood diminue rapidement
+		cave_mood = max(0.0, cave_mood - 0.05)
+		return
+
+	# 2) Sous terre : compter les sources de lumière proches (rayon 7 blocs)
+	var light_sources = 0
+	for dx in range(-7, 8, 2):  # Pas de 2 pour performance
+		for dy in range(-4, 5, 2):
+			for dz in range(-7, 8, 2):
+				var check_pos = Vector3(floor(pos.x) + dx, player_y + dy, floor(pos.z) + dz)
+				var bt = world_mgr.get_block_at_position(check_pos)
+				if bt == BlockRegistry.BlockType.TORCH or bt == BlockRegistry.BlockType.LANTERN:
+					light_sources += 1
+
+	# 3) Calculer le changement de mood (simule CAVE_MOOD_TICKS_PER_CHECK ticks MC)
+	var mood_change = 0.0
+	if light_sources == 0:
+		# Obscurité totale : mood augmente au rythme MC
+		mood_change = CAVE_MOOD_INCREMENT * CAVE_MOOD_TICKS_PER_CHECK
+	elif light_sources <= 2:
+		# Faiblement éclairé : augmente lentement
+		mood_change = CAVE_MOOD_INCREMENT * CAVE_MOOD_TICKS_PER_CHECK * 0.3
+	else:
+		# Bien éclairé : mood diminue
+		mood_change = -CAVE_MOOD_LIGHT_DECREMENT * light_sources
+
+	cave_mood = clampf(cave_mood + mood_change, 0.0, 1.0)
+
+	# 4) Mood à 100% → jouer un son de grotte aléatoire
+	if cave_mood >= 1.0:
+		_play_cave_ambient()
+		cave_mood = 0.0
+
+func _play_cave_ambient():
+	if cave_ambient_player.playing:
+		return
+	var stream = _pick_random(snd_cave_ambient)
+	if not stream:
+		return
+	cave_ambient_player.stream = stream
+	cave_ambient_player.volume_db = linear_to_db(ambient_volume * master_volume * 0.6)
+	cave_ambient_player.pitch_scale = randf_range(0.9, 1.1)
+	cave_ambient_player.play()
+
+# ============================================================
+# MUSIQUE D'AMBIANCE MC
+# ============================================================
+# Système inspiré de Minecraft : musique aléatoire avec pauses
+# de 1-5 minutes entre les morceaux. Pool jour (calme, lumineux)
+# vs pool nuit (lent, atmosphérique). Crossfade doux.
+
+func _load_music_pools():
+	# Pool JOUR : tracks lumineux, calmes, joyeux — journée ensoleillée
+	var day_only = [
+		"a_familiar_room", "an_ordinary_day", "ancestry", "bromeliad",
+		"clark", "comforting_memories", "crescent_dunes", "danny",
+		"dry_hands", "haggstrom", "infinite_amethyst", "key",
+		"komorebi", "left_to_bloom", "living_mice", "minecraft",
+		"one_more_day", "oxygene", "pokopoko", "puzzlebox",
+		"stand_tall", "subwoofer_lullaby", "sweden", "wet_hands",
+		"yakusoku"
+	]
+	# Pool NUIT : tracks sombres, atmosphériques, inquiétants
+	var night_only = [
+		"deeper", "echo_in_the_wind", "eld_unknown", "endless",
+		"featherfall", "floating_dream", "mice_on_venus", "watcher",
+		"wending",
+		# + quelques calmes qui marchent aussi la nuit
+		"clark", "danny", "key", "komorebi", "living_mice",
+		"subwoofer_lullaby", "sweden", "wet_hands"
+	]
+
+	for track_name in day_only:
+		var stream = _safe_load(MUSIC_PATH + "game/" + track_name + ".mp3")
+		if stream:
+			music_day.append(stream)
+
+	for track_name in night_only:
+		var stream = _safe_load(MUSIC_PATH + "game/" + track_name + ".mp3")
+		if stream:
+			music_night.append(stream)
+
+	# Tracks sous-marines
+	for track_name in ["axolotl", "dragon_fish", "shuniji"]:
+		var stream = _safe_load(MUSIC_PATH + "game/water/" + track_name + ".mp3")
+		if stream:
+			music_water.append(stream)
+
+	# Fallback si pas assez de tracks
+	if music_night.size() < 3:
+		music_night = music_day.duplicate()
+	if music_day.size() < 3:
+		music_day = music_night.duplicate()
+
+	print("[MUSIC] Loaded ", music_day.size(), " day tracks, ", music_night.size(), " night tracks, ", music_water.size(), " water tracks")
+
+func _update_music(delta: float):
+	# Pendant une pause entre morceaux
+	if music_is_paused:
+		music_pause_timer -= delta
+		if music_pause_timer <= 0:
+			_play_next_music()
+		return
+
+	# Vérifier si le contexte a changé (jour/nuit)
+	_check_music_context()
+
+func _check_music_context():
+	if not day_night_cycle_node:
+		day_night_cycle_node = get_tree().get_first_node_in_group("day_night_cycle")
+	if not day_night_cycle_node:
+		return
+
+	var hour = day_night_cycle_node.get_hour()
+	var new_pool = "day"
+	if hour >= 19.0 or hour < 5.0:
+		new_pool = "night"
+
+	# TODO: ajouter détection sous-marine quand le système sera en place
+
+	if new_pool != music_current_pool:
+		music_current_pool = new_pool
+		# On ne coupe pas le morceau en cours — on changera au prochain
+
+func _get_music_pool() -> Array:
+	match music_current_pool:
+		"night":
+			return music_night
+		"water":
+			return music_water if not music_water.is_empty() else music_day
+		_:
+			return music_day
+
+func _play_next_music():
+	var pool = _get_music_pool()
+	if pool.is_empty():
+		music_pause_timer = 30.0  # Réessayer dans 30s
+		return
+
+	# Choisir un morceau aléatoire (différent du précédent)
+	var stream: AudioStream = null
+	if pool.size() == 1:
+		stream = pool[0]
+	else:
+		for _attempt in range(5):
+			stream = pool[randi() % pool.size()]
+			if stream != music_last_track:
+				break
+
+	music_last_track = stream
+	music_is_paused = false
+
+	# Jouer avec fade in
+	var active_p = music_player_a if music_active == "a" else music_player_b
+	active_p.stream = stream
+	active_p.volume_db = linear_to_db(0.001)
+	active_p.play()
+	print("[MUSIC] Now playing: ", stream.resource_path.get_file(), " (pool: ", music_current_pool, ")")
+
+	# Fade in progressif via crossfade
+	music_is_crossfading = true
+	music_crossfade_time = 0.0
+
+func _on_music_finished():
+	# Morceau terminé → pause aléatoire MC (60-300 secondes = 1-5 minutes)
+	music_is_paused = true
+	music_pause_timer = randf_range(60.0, 300.0)
+
+func _handle_music_crossfade(delta: float):
+	if not music_is_crossfading:
+		return
+
+	music_crossfade_time += delta
+	var progress = min(music_crossfade_time / MUSIC_CROSSFADE_DURATION, 1.0)
+	var vol_target = music_volume * master_volume
+
+	var active_player = music_player_a if music_active == "a" else music_player_b
+	active_player.volume_db = linear_to_db(max(progress * vol_target, 0.001))
+
+	if progress >= 1.0:
+		music_is_crossfading = false
 
 # ============================================================
 # UTILITAIRES

@@ -1,8 +1,11 @@
 extends CanvasLayer
 
-# Menu Settings — ouvert avec F3
-# Permet de changer : vitesse du temps, style d'éclairage, seed du monde
+# Menu Settings v1.1.0 — ouvert avec F3
+# Permet de changer : vitesse du temps, style d'éclairage, seed du monde, volumes audio
 # Affiche un récap des contrôles
+#
+# v1.1.0 — Ajout section Audio (4 sliders volume)
+# v1.0.0 — Version initiale
 
 var is_open: bool = false
 var background: ColorRect
@@ -11,6 +14,7 @@ var _speed_buttons: Array = []
 var _render_buttons: Array = []
 var _seed_input: LineEdit
 var _saved_mouse_mode: int = 0
+var _volume_labels: Dictionary = {}  # key -> Label showing percentage
 
 func _ready():
 	visible = false
@@ -74,9 +78,9 @@ func _build_ui():
 	panel.anchor_right = 0.5
 	panel.anchor_bottom = 0.5
 	panel.offset_left = -420
-	panel.offset_top = -380
+	panel.offset_top = -440
 	panel.offset_right = 420
-	panel.offset_bottom = 380
+	panel.offset_bottom = 440
 	panel.add_theme_stylebox_override("panel", _make_panel_style())
 	add_child(panel)
 
@@ -180,6 +184,12 @@ func _build_ui():
 
 	vbox.add_child(_make_separator())
 
+	# === Audio ===
+	_add_section_label(vbox, "Audio")
+	_build_audio_sliders(vbox)
+
+	vbox.add_child(_make_separator())
+
 	# === Contrôles ===
 	_add_section_label(vbox, "Contrôles")
 
@@ -276,6 +286,84 @@ func _make_btn_style_active() -> StyleBoxFlat:
 	s.border_color = Color(0.5, 0.6, 1.0, 0.9)
 	return s
 
+func _build_audio_sliders(parent: VBoxContainer):
+	var audio = get_tree().get_first_node_in_group("audio_manager")
+	var sliders_config = [
+		["master_volume", "Volume Principal", 1.0],
+		["music_volume", "Musique", 0.35],
+		["ambient_volume", "Ambiance", 0.7],
+		["sfx_volume", "Effets sonores", 0.8],
+	]
+	_volume_labels = {}
+	for cfg in sliders_config:
+		var key: String = cfg[0]
+		var label_text: String = cfg[1]
+		var default_val: float = cfg[2]
+		var current_val: float = default_val
+		if audio and key in audio:
+			current_val = audio.get(key)
+
+		var row = HBoxContainer.new()
+		row.add_theme_constant_override("separation", 12)
+
+		var lbl = Label.new()
+		lbl.text = label_text
+		lbl.add_theme_font_size_override("font_size", 14)
+		lbl.add_theme_color_override("font_color", Color(0.8, 0.85, 1.0))
+		lbl.custom_minimum_size = Vector2(160, 0)
+		row.add_child(lbl)
+
+		var slider = HSlider.new()
+		slider.min_value = 0.0
+		slider.max_value = 1.0
+		slider.step = 0.01
+		slider.value = current_val
+		slider.custom_minimum_size = Vector2(300, 24)
+		slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		# Style the slider track
+		var track_style = StyleBoxFlat.new()
+		track_style.bg_color = Color(0.18, 0.18, 0.25, 0.8)
+		track_style.corner_radius_top_left = 3
+		track_style.corner_radius_top_right = 3
+		track_style.corner_radius_bottom_left = 3
+		track_style.corner_radius_bottom_right = 3
+		track_style.content_margin_top = 4
+		track_style.content_margin_bottom = 4
+		slider.add_theme_stylebox_override("slider", track_style)
+		# Style the grabber area (filled part)
+		var fill_style = StyleBoxFlat.new()
+		fill_style.bg_color = Color(0.4, 0.5, 0.9, 0.8)
+		fill_style.corner_radius_top_left = 3
+		fill_style.corner_radius_top_right = 3
+		fill_style.corner_radius_bottom_left = 3
+		fill_style.corner_radius_bottom_right = 3
+		fill_style.content_margin_top = 4
+		fill_style.content_margin_bottom = 4
+		slider.add_theme_stylebox_override("grabber_area", fill_style)
+		slider.add_theme_stylebox_override("grabber_area_highlight", fill_style)
+		var vol_key = key
+		slider.value_changed.connect(func(val: float): _on_volume_changed(vol_key, val))
+		row.add_child(slider)
+
+		var pct_label = Label.new()
+		pct_label.text = "%d%%" % int(current_val * 100)
+		pct_label.add_theme_font_size_override("font_size", 14)
+		pct_label.add_theme_color_override("font_color", Color(1.0, 0.95, 0.7))
+		pct_label.custom_minimum_size = Vector2(50, 0)
+		pct_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		row.add_child(pct_label)
+		_volume_labels[key] = pct_label
+
+		parent.add_child(row)
+
+func _on_volume_changed(key: String, value: float):
+	var audio = get_tree().get_first_node_in_group("audio_manager")
+	if audio:
+		audio.set(key, value)
+	if _volume_labels.has(key):
+		_volume_labels[key].text = "%d%%" % int(value * 100)
+	save_settings()
+
 func _set_speed(idx: int):
 	var day_night = get_tree().get_first_node_in_group("day_night_cycle")
 	if day_night:
@@ -331,12 +419,21 @@ const SETTINGS_PATH = "user://settings.cfg"
 
 func save_settings():
 	var cfg = ConfigFile.new()
+	# Load existing first to preserve other sections
+	cfg.load(SETTINGS_PATH)
 	var day_night = get_tree().get_first_node_in_group("day_night_cycle")
 	if day_night:
 		cfg.set_value("game", "speed_index", day_night.speed_index)
 	var hud = get_tree().current_scene.get_node_or_null("VersionHUD")
 	if hud:
 		cfg.set_value("game", "render_preset", hud._render_preset)
+	# Audio volumes
+	var audio = get_tree().get_first_node_in_group("audio_manager")
+	if audio:
+		cfg.set_value("audio", "master_volume", audio.master_volume)
+		cfg.set_value("audio", "sfx_volume", audio.sfx_volume)
+		cfg.set_value("audio", "ambient_volume", audio.ambient_volume)
+		cfg.set_value("audio", "music_volume", audio.music_volume)
 	cfg.save(SETTINGS_PATH)
 
 func load_settings():
@@ -366,3 +463,14 @@ func load_settings():
 				4: hud._apply_reshade_epique()
 			hud.render_label.text = "Rendu : %s (F2)" % hud.RENDER_NAMES[idx]
 			hud.render_label.add_theme_color_override("font_color", hud.RENDER_COLORS[idx])
+	# Audio volumes
+	var audio = get_tree().get_first_node_in_group("audio_manager")
+	if audio:
+		if cfg.has_section_key("audio", "master_volume"):
+			audio.master_volume = float(cfg.get_value("audio", "master_volume"))
+		if cfg.has_section_key("audio", "sfx_volume"):
+			audio.sfx_volume = float(cfg.get_value("audio", "sfx_volume"))
+		if cfg.has_section_key("audio", "ambient_volume"):
+			audio.ambient_volume = float(cfg.get_value("audio", "ambient_volume"))
+		if cfg.has_section_key("audio", "music_volume"):
+			audio.music_volume = float(cfg.get_value("audio", "music_volume"))

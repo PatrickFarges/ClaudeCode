@@ -8,7 +8,7 @@ var speed_label: Label
 var render_label: Label
 var target_label: Label
 
-const VERSION = "v19.6.1"
+const VERSION = "v19.7.0"
 
 var audio_manager = null
 var player = null

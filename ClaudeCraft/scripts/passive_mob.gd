@@ -1,7 +1,7 @@
 extends CharacterBody3D
 class_name PassiveMob
 
-# === MOB SYSTEM v3.2.0 ===
+# === MOB SYSTEM v3.3.0 ===
 # Charge les donnees depuis data/mob_database.json
 # Comportements : passive (fuit), neutral (attaque si provoque), hostile (attaque)
 # Systemes : faim, brulure soleil, predation, pack behavior
@@ -50,6 +50,14 @@ var _attack_cooldown: float = 0.0
 var _aggro_range: float = 16.0
 var _flee_speed_mult: float = 1.5
 var _despawn_timer: float = 0.0
+var _chase_persistence: float = 0.0  # Timer pour ne pas lâcher le joueur
+
+# Head tracking
+var _head_bone_idx: int = -1
+var _head_base_transform: Transform3D = Transform3D.IDENTITY
+var _head_track_angle: float = 0.0
+var _head_random_target: float = 0.0   # Angle aléatoire quand pas de joueur
+var _head_random_timer: float = 0.0    # Timer pour changer d'angle aléatoire
 
 # Hunger system
 var _hunger: float = 100.0
@@ -66,6 +74,7 @@ var _sun_damage_timer: float = 0.0
 
 # Pack attack — nearby same-type mobs also aggro
 var _pack_behavior: bool = false
+var _needs_water: bool = false
 
 # Predator
 var _prey_mobs: Array = []
@@ -100,6 +109,8 @@ var _stuck_timer: float = 0.0
 var _wall_jump_count: int = 0
 var _last_xz_pos: Vector3 = Vector3.ZERO
 var _consecutive_wanders: int = 0  # how many wander cycles without a rest
+var _consecutive_stuck: int = 0    # compteur de stuck consécutifs → IDLE total après 3
+var _truly_stuck: bool = false     # mob coincé sans issue → idle total jusqu'à despawn
 
 # Throttle
 var _nav_check_timer: float = 0.0
@@ -107,7 +118,7 @@ const NAV_CHECK_INTERVAL = 0.2
 const ATTACK_RANGE = 2.0
 const ATTACK_COOLDOWN_TIME = 1.0
 const FLEE_DURATION = 5.0
-const DESPAWN_DISTANCE = 80.0
+const DESPAWN_DISTANCE = 64.0  # Despawn plus tôt pour libérer le cap
 const DESPAWN_CHECK_INTERVAL = 5.0
 const HUNGER_CHECK_INTERVAL = 2.0
 const SUN_DAMAGE_INTERVAL = 1.0
@@ -232,6 +243,12 @@ func setup_from_id(id: String, pos: Vector3, chunk_pos: Vector3i):
 		"neutral": _behavior = Behavior.NEUTRAL
 		"hostile", "boss": _behavior = Behavior.HOSTILE
 
+	# Hostile mobs detect player from farther away
+	if _behavior == Behavior.HOSTILE:
+		_aggro_range = 24.0
+	elif _behavior == Behavior.NEUTRAL:
+		_aggro_range = 16.0
+
 	# Hunger
 	var hunger_data: Dictionary = _data.get("hunger", {})
 	_hunger_max = float(hunger_data.get("max", 0))
@@ -245,6 +262,7 @@ func setup_from_id(id: String, pos: Vector3, chunk_pos: Vector3i):
 	_special_tags = _data.get("special", [])
 	_neutral_day = "neutral_day" in _special_tags or "hostile_night" in _special_tags
 	_pack_behavior = "pack_behavior" in _special_tags or "attack_pack" == _data.get("when_hit", "")
+	_needs_water = "needs_water" in _special_tags
 
 	# Predator prey
 	var hunger_prey = hunger_data.get("prey_mobs", [])
@@ -264,6 +282,9 @@ func _ready():
 	add_to_group("passive_mobs")
 	if _is_skeleton:
 		_attach_skeleton_bow()
+	_init_head_tracking()
+	# S'assurer que _process tourne APRÈS l'AnimationPlayer (priorité haute = plus tard)
+	process_priority = 100
 
 # ============================================================
 #  MODEL CREATION
@@ -395,6 +416,10 @@ func _physics_process(delta):
 
 	move_and_slide()
 
+# Head tracking dans _process (s'exécute APRÈS les animations, sinon AnimationPlayer écrase la rotation)
+func _process(delta):
+	_update_head_tracking(delta)
+
 # ── Sunburn ──
 
 func _process_sunburn(delta):
@@ -438,8 +463,9 @@ func _process_hunger(delta):
 		return
 	_hunger_timer = 0.0
 
-	# Drain hunger
-	_hunger -= _hunger_drain * HUNGER_CHECK_INTERVAL
+	# Drain hunger — herbivores x30 pour manger ~1x/min, carnivores x1 (chassent rarement)
+	var drain_mult = 30.0 if _prey_mobs.is_empty() else 1.0
+	_hunger -= _hunger_drain * HUNGER_CHECK_INTERVAL * drain_mult
 	_hunger = maxf(_hunger, 0.0)
 
 	# Need to eat?
@@ -657,27 +683,58 @@ func _ai_hostile(delta):
 			return
 
 		if dist < _aggro_range:
+			_chase_persistence = 30.0  # 30s de poursuite acharnée
+			_chase_player(delta)
+			return
+		elif _chase_persistence > 0:
+			# Hors de portée mais ne lâche pas encore
+			_chase_persistence -= delta
 			_chase_player(delta)
 			return
 
 	_do_wander(delta)
 
 func _do_wander(delta):
+	# Mobs aquatiques hors de l'eau → désespawn immédiat (comme MC)
+	if _needs_water and world_manager:
+		var feet_pos = Vector3(global_position.x, global_position.y - 0.5, global_position.z).floor()
+		var block_at_feet = world_manager.get_block_at_position(feet_pos)
+		if block_at_feet != BlockRegistry.BlockType.WATER:
+			queue_free()
+			return
+
+	# Mob coincé sans issue → IDLE total (ne bouge plus, attend despawn faim)
+	if _truly_stuck:
+		velocity.x = 0
+		velocity.z = 0
+		_play_anim("idle")
+		return
+
 	wander_timer -= delta
 	if wander_timer <= 0:
 		_pick_new_wander()
 
 	if is_moving and is_on_floor():
-		# --- Stuck detection: if barely moved in 0.5s, we're against something ---
+		# --- Stuck detection: if barely moved in 0.3s, we're against something ---
 		_stuck_timer += delta
-		if _stuck_timer >= 0.5:
+		if _stuck_timer >= 0.3:
 			var moved_xz = Vector2(global_position.x - _last_xz_pos.x, global_position.z - _last_xz_pos.z).length()
 			_last_xz_pos = global_position
 			_stuck_timer = 0.0
 			if moved_xz < STUCK_THRESHOLD:
-				# Stuck! Turn around and rest
-				_force_idle_rest(1.5, 3.0)
+				velocity.x = 0
+				velocity.z = 0
+				_consecutive_stuck += 1
+				if _consecutive_stuck >= 4:
+					# 4 stuck consécutifs → IDLE total, le mob est vraiment coincé
+					_truly_stuck = true
+					_play_anim("idle")
+					return
+				_force_idle_rest(1.0, 2.0)
 				return
+			else:
+				# A bougé → reset du compteur stuck
+				_consecutive_stuck = 0
 
 		# --- Wall / cliff detection ahead ---
 		_nav_check_timer += delta
@@ -686,31 +743,30 @@ func _do_wander(delta):
 			if world_manager and is_on_floor():
 				var ahead_pos = global_position + wander_direction * 1.0
 				var feet_y = floori(global_position.y - 0.1)
-				# Blocs devant à différentes hauteurs
 				var b_at_feet = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y, ahead_pos.z).floor())
 				var b_plus1 = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y + 1, ahead_pos.z).floor())
 				var b_plus2 = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y + 2, ahead_pos.z).floor())
 				var b_below = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y - 1, ahead_pos.z).floor())
 
-				# Eau devant → stop
+				# Eau devant → demi-tour
 				if b_at_feet == BlockRegistry.BlockType.WATER:
 					_force_idle_rest(2.0, 5.0)
 					return
 
-				# Falaise : pas de sol devant ni en dessous → stop
+				# Falaise : pas de sol devant ni en dessous → demi-tour
 				if _is_passable(b_at_feet) and _is_passable(b_below):
 					_force_idle_rest(2.0, 5.0)
 					return
 
 				# Marche d'1 bloc : bloc solide à feet+1, espace libre au-dessus
-				# → step-up instantané (comme MC, pas de saut)
 				if _is_real_wall(b_plus1) and _is_passable(b_plus2):
-					global_position.y = feet_y + 1 + 1.05  # monter au-dessus de la marche
+					global_position.y = feet_y + 1 + 1.05
 					_wall_jump_count = 0
+					_consecutive_stuck = 0  # A réussi à monter
 				elif _is_real_wall(b_plus1):
-					# Mur de 2+ blocs (tronc d'arbre, falaise) → demi-tour
+					# Mur de 2+ blocs → demi-tour
 					_wall_jump_count = 0
-					_force_idle_rest(2.0, 6.0)
+					_force_idle_rest(1.5, 3.0)
 					return
 
 		velocity.x = wander_direction.x * move_speed
@@ -745,14 +801,24 @@ func _is_real_wall(block: int) -> bool:
 	return block != 0 and not _is_passable(block)
 
 func _force_idle_rest(min_time: float, max_time: float):
-	"""Stop moving, turn around, and rest idle for a while."""
+	"""Stop moving, turn around away from obstacle, and rest idle."""
 	is_moving = false
 	velocity.x = 0
 	velocity.z = 0
-	# Turn around ~180° with some randomness
-	rotation.y += PI + randf_range(-0.5, 0.5)
+	_consecutive_stuck += 1
+	# Trop de stuck consécutifs → IDLE total
+	if _consecutive_stuck >= 4:
+		_truly_stuck = true
+		_play_anim("idle")
+		return
+	# Demi-tour ~180° avec variance pour ne pas boucler
+	var turn = PI + randf_range(-0.8, 0.8)
+	rotation.y += turn
 	wander_timer = randf_range(min_time, max_time)
-	wander_direction = Vector3.ZERO
+	# Pré-charger la direction du prochain wander
+	wander_direction = Vector3(-sin(rotation.y), 0, -cos(rotation.y))
+	_stuck_timer = 0.0
+	_last_xz_pos = global_position
 	_play_anim("idle")
 	_stuck_timer = 0.0
 	_last_xz_pos = global_position
@@ -1147,6 +1213,72 @@ func _find_skeleton_in_model(node: Node) -> Skeleton3D:
 		if found: return found
 	return null
 
+# ── Head Tracking ──
+# Les mobs passifs/neutres tournent la tête vers le joueur quand il est proche
+
+func _init_head_tracking():
+	if not _model_root or not _is_glb_model:
+		return
+	var skel = _find_skeleton_in_model(_model_root)
+	if not skel:
+		return
+	# Essayer plusieurs noms de bone possibles
+	for bone_name in ["head", "Head", "HEAD"]:
+		_head_bone_idx = skel.find_bone(bone_name)
+		if _head_bone_idx >= 0:
+			_head_base_transform = skel.get_bone_pose(_head_bone_idx)
+			return
+
+func _update_head_tracking(delta: float):
+	if _head_bone_idx < 0:
+		return
+	# Pas de head tracking pendant la fuite ou le combat
+	if _flee_timer > 0 or _is_eating:
+		return
+
+	var skel = _find_skeleton_in_model(_model_root)
+	if not skel:
+		return
+
+	var target_angle: float = 0.0
+	var tracking_player = false
+
+	# Priorité 1 : regarder le joueur s'il est proche
+	var player_node = get_tree().get_first_node_in_group("player")
+	if player_node and is_instance_valid(player_node):
+		var to_player = player_node.global_position - global_position
+		var dist = to_player.length()
+		if dist < 12.0 and dist > 1.0:
+			var world_angle = atan2(-to_player.x, -to_player.z)
+			var relative_angle = world_angle - rotation.y
+			while relative_angle > PI: relative_angle -= TAU
+			while relative_angle < -PI: relative_angle += TAU
+			# ±20° max — subtil et naturel, pas l'Exorciste
+			target_angle = clampf(relative_angle, -0.35, 0.35)
+			tracking_player = true
+
+	# Priorité 2 : mouvements aléatoires de la tête (curiosité naturelle)
+	if not tracking_player:
+		_head_random_timer -= delta
+		if _head_random_timer <= 0:
+			_head_random_timer = randf_range(2.0, 5.0)
+			if randf() < 0.4:
+				_head_random_target = 0.0
+			else:
+				_head_random_target = randf_range(-0.25, 0.25)  # ±15°
+		target_angle = _head_random_target
+
+	# Lerp doux vers l'angle cible (lent = naturel)
+	_head_track_angle = lerp(_head_track_angle, target_angle, delta * 2.0)
+
+	# Appliquer rotation depuis la pose de repos (pas la pose animée — évite accumulation)
+	var rest_rot = _head_base_transform.basis
+	if abs(_head_track_angle) > 0.005:
+		var extra_rot = Basis(Vector3.UP, _head_track_angle)
+		skel.set_bone_pose_rotation(_head_bone_idx, (rest_rot * extra_rot).get_rotation_quaternion())
+	else:
+		skel.set_bone_pose_rotation(_head_bone_idx, rest_rot.get_rotation_quaternion())
+
 func _flee_from_player(delta):
 	if not _target_player or not is_instance_valid(_target_player):
 		_target_player = get_tree().get_first_node_in_group("player")
@@ -1309,8 +1441,12 @@ func _pick_new_wander():
 	wander_timer = randf_range(3.0, 7.0)
 	is_moving = randf() > 0.35
 	if is_moving:
-		var angle = randf() * TAU
-		wander_direction = Vector3(cos(angle), 0, sin(angle)).normalized()
+		# Si une direction a été pré-chargée par _force_idle_rest, l'utiliser
+		if wander_direction.length_squared() > 0.5:
+			pass  # Garder la direction du demi-tour
+		else:
+			var angle = randf() * TAU
+			wander_direction = Vector3(cos(angle), 0, sin(angle)).normalized()
 		_last_xz_pos = global_position
 		_stuck_timer = 0.0
 	else:

@@ -148,13 +148,13 @@ const VILLAGE_NPC_COUNT = 0  # Inhibé — remettre à 9 pour mode Settlers
 
 # ── Mobs ──
 var mobs: Array = []
-const MAX_MOBS = 40
+const MAX_MOBS = 60
 const MOBS_PER_CHUNK_PASSIVE = 2  # max passive mobs spawned per chunk
 const MOBS_PER_CHUNK_HOSTILE = 1  # max hostile mobs spawned per chunk
 const MOB_SPAWN_MIN_DIST = 24.0   # min distance from player to spawn
 const MOB_SPAWN_MAX_DIST = 64.0   # max distance from player to spawn
 var _mob_spawn_timer: float = 0.0
-const MOB_SPAWN_INTERVAL = 10.0   # check spawn every N seconds
+const MOB_SPAWN_INTERVAL = 5.0    # check spawn every N seconds (was 10)
 var _spawned_chunks: Dictionary = {}  # chunk_pos -> true (already spawned passive)
 var _pending_mob_chunks: Array = []   # [Vector3i] — chunk positions waiting for mesh
 var _pending_chunk_data: Array = []   # Buffer de chunks générés en attente d'instanciation
@@ -1019,7 +1019,15 @@ func _find_ground_y_in_chunk(blocks: PackedByteArray, lx: int, lz: int) -> int:
 func _try_spawn_passive_mobs_in_chunk(chunk_pos: Vector3i, blocks: PackedByteArray):
 	"""Spawn mobs when a new chunk is generated — uses mob_database.json."""
 	mobs = mobs.filter(func(m): return is_instance_valid(m))
-	if mobs.size() >= MAX_MOBS:
+	# Compter seulement les mobs proches du joueur (pas ceux qui vont despawn)
+	var nearby_count = 0
+	if player:
+		for m in mobs:
+			if is_instance_valid(m) and m.global_position.distance_to(player.global_position) < 80.0:
+				nearby_count += 1
+	else:
+		nearby_count = mobs.size()
+	if nearby_count >= MAX_MOBS:
 		return
 
 	# Spawn in ~50% of chunks
@@ -1108,16 +1116,18 @@ func _try_spawn_mobs():
 	if not is_night:
 		return  # Hostile mobs only spawn at night
 
-	# Count current hostile mobs
+	# Count current hostile mobs PROCHES du joueur
 	var hostile_count = 0
 	for m in mobs:
 		if is_instance_valid(m) and m is PassiveMob and m._behavior == PassiveMob.Behavior.HOSTILE:
-			hostile_count += 1
-	if hostile_count >= 10:
+			if m.global_position.distance_to(player.global_position) < 80.0:
+				hostile_count += 1
+	if hostile_count >= 20:
 		return
 
 	var player_pos = player.global_position
-	for _i in range(5):
+	var spawned_this_cycle = 0
+	for _i in range(8):
 		var angle = randf() * TAU
 		var dist = randf_range(MOB_SPAWN_MIN_DIST, MOB_SPAWN_MAX_DIST)
 		var spawn_x = player_pos.x + cos(angle) * dist
@@ -1156,7 +1166,9 @@ func _try_spawn_mobs():
 		var chosen_id = hostile_list[randi() % hostile_list.size()]
 		var spawn_pos = Vector3(spawn_x, sy + 1.0, spawn_z)
 		_spawn_mob_by_id(chosen_id, spawn_pos, spawn_chunk)
-		break  # One per cycle
+		spawned_this_cycle += 1
+		if spawned_this_cycle >= 3:  # Up to 3 mobs per cycle
+			break
 
 func _preload_mob_glbs():
 	"""Preload all mob GLB scenes + load mob database."""
