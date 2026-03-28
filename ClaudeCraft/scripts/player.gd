@@ -1092,6 +1092,7 @@ func _handle_block_interaction(delta: float):
 
 	var break_pos: Vector3
 	var place_pos: Vector3
+	var collision_point: Vector3 = Vector3.ZERO
 
 	if hitting_cross:
 		# Cross-mesh detecte par raywalk — priorite sur le raycast
@@ -1112,7 +1113,7 @@ func _handle_block_interaction(delta: float):
 			if block_highlighter:
 				block_highlighter.hide_highlight()
 			return
-		var collision_point = raycast.get_collision_point()
+		collision_point = raycast.get_collision_point()
 		var normal = raycast.get_collision_normal()
 		break_pos = (collision_point - normal * 0.01).floor()
 		place_pos = Vector3(break_pos) + normal
@@ -1220,27 +1221,27 @@ func _handle_block_interaction(delta: float):
 		var player_feet = global_position.floor()
 		var player_head = (global_position + Vector3(0, 1, 0)).floor()
 
-		# Placement bloqué par le joueur ?
-		var is_blocked_by_player = place_pos == player_feet or place_pos == player_head
-		if is_blocked_by_player and is_on_floor():
-			# On regarde le bloc sous nos pieds → rediriger vers la face verticale
-			# dans la direction horizontale du regard
-			var cam_forward = -camera.global_basis.z
-			var cam_h = Vector3(cam_forward.x, 0, cam_forward.z).normalized()
-			# Direction cardinale la plus proche du regard
-			var best_dir = Vector3.ZERO
-			var best_dot = -2.0
-			for dir in [Vector3(1,0,0), Vector3(-1,0,0), Vector3(0,0,1), Vector3(0,0,-1)]:
-				var d = cam_h.dot(dir)
-				if d > best_dot:
-					best_dot = d
-					best_dir = dir
-			# Placer sur la face verticale du bloc sous les pieds (même Y que break_pos)
-			var side_pos = Vector3(break_pos) + best_dir
-			var side_type = world_manager.get_block_at_position(side_pos)
-			var side_blocked = side_pos == player_feet or side_pos == player_head
-			if not side_blocked and (side_type == BlockRegistry.BlockType.AIR or side_type == BlockRegistry.BlockType.WATER or BlockRegistry.is_cross_mesh(side_type)):
-				place_pos = side_pos
+		# Placement bloqué par le joueur sur la face supérieure du bloc sous ses pieds ?
+		# Si la croix pointe près d'un bord de la face, rediriger vers cette face verticale
+		var blocks_player_init = place_pos == player_feet or place_pos == player_head
+		var block_below_feet = (global_position + Vector3(0, -1, 0)).floor()
+		if blocks_player_init and is_on_floor() and break_pos == block_below_feet:
+			# Où sur la face supérieure le rayon touche-t-il ?
+			var dx = collision_point.x - (break_pos.x + 0.5)
+			var dz = collision_point.z - (break_pos.z + 0.5)
+			# Seulement si la croix est près d'un bord (zone extérieure > 0.15 du centre)
+			# Plus la croix est près du bord, plus c'est clair que le joueur vise la face verticale
+			if max(abs(dx), abs(dz)) > 0.15:
+				var best_dir: Vector3
+				if abs(dx) > abs(dz):
+					best_dir = Vector3(1, 0, 0) if dx > 0 else Vector3(-1, 0, 0)
+				else:
+					best_dir = Vector3(0, 0, 1) if dz > 0 else Vector3(0, 0, -1)
+				var side_pos = Vector3(break_pos) + best_dir
+				var side_type = world_manager.get_block_at_position(side_pos)
+				var side_blocked = side_pos == player_feet or side_pos == player_head
+				if not side_blocked and (side_type == BlockRegistry.BlockType.AIR or side_type == BlockRegistry.BlockType.WATER or BlockRegistry.is_cross_mesh(side_type)):
+					place_pos = side_pos
 
 		var place_block_type = world_manager.get_block_at_position(place_pos)
 		var is_flora = BlockRegistry.is_cross_mesh(place_block_type)
