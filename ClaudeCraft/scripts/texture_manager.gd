@@ -142,7 +142,7 @@ func _ready():
 
 	# Auto-detecter la resolution depuis la premiere texture trouvee
 	_tex_resolution = _detect_resolution(tex_path)
-	print("[TextureManager] Pack: %s | Resolution: %dx%d" % [GC.ACTIVE_PACK, _tex_resolution, _tex_resolution])
+	#print("[TextureManager] Pack: %s | Resolution: %dx%d" % [GC.ACTIVE_PACK, _tex_resolution, _tex_resolution])
 
 	# Charger les images (avec systeme d'alias pour les noms manquants)
 	var images: Array[Image] = []
@@ -157,7 +157,7 @@ func _ready():
 
 		if not loaded:
 			img = _fallback_color_image(tex_name)
-			print("[TextureManager] Fallback couleur pour: ", tex_name)
+			#print("[TextureManager] Fallback couleur pour: ", tex_name)
 
 		img.convert(Image.FORMAT_RGBA8)
 		if img.get_width() != _tex_resolution or img.get_height() != _tex_resolution:
@@ -177,7 +177,8 @@ func _ready():
 					if has_alpha:
 						break
 				if not has_alpha:
-					print("[TextureManager] ATTENTION: %s n'a pas de transparence!" % tex_name)
+					#print("[TextureManager] ATTENTION: %s n'a pas de transparence!" % tex_name)
+					pass
 		images.append(img)
 
 	# Construire le Texture2DArray

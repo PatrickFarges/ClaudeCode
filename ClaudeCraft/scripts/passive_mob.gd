@@ -111,6 +111,13 @@ var _last_xz_pos: Vector3 = Vector3.ZERO
 var _consecutive_wanders: int = 0  # how many wander cycles without a rest
 var _consecutive_stuck: int = 0    # compteur de stuck consécutifs → IDLE total après 3
 var _truly_stuck: bool = false     # mob coincé sans issue → idle total jusqu'à despawn
+var _mob_radius: float = 0.45     # demi-largeur collision, pour adapter la détection de mur
+var _mob_height: float = 1.0      # hauteur collision
+
+# Cached references (évite get_tree().get_first_node_in_group() chaque frame)
+var _cached_player: Node = null
+var _cached_dnc: Node = null
+var _cached_skeleton: Skeleton3D = null
 
 # Throttle
 var _nav_check_timer: float = 0.0
@@ -157,7 +164,7 @@ static func load_database():
 		return
 	_mob_db = root["mobs"]
 	_build_spawn_tables()
-	print("[MobSystem] Loaded %d mobs from database" % _mob_db.size())
+	#print("[MobSystem] Loaded %d mobs from database" % _mob_db.size())
 
 static func _build_spawn_tables():
 	"""Precalcule les tables de spawn par biome et heure."""
@@ -199,11 +206,11 @@ static func _build_spawn_tables():
 	# Debug print
 	for b in range(7):
 		var biome_names = ["desert", "forest", "mountain", "plains", "ocean", "beach", "river"]
-		print("[MobSystem] %s — jour: %s | nuit: %s" % [
-			biome_names[b],
-			str(BIOME_DAY_MOBS[b]),
-			str(BIOME_NIGHT_MOBS[b])
-		])
+		#print("[MobSystem] %s — jour: %s | nuit: %s" % [
+		#	biome_names[b],
+		#	str(BIOME_DAY_MOBS[b]),
+		#	str(BIOME_NIGHT_MOBS[b])
+		#])
 
 static func get_mob_data(id: String) -> Dictionary:
 	load_database()
@@ -272,6 +279,11 @@ func setup_from_id(id: String, pos: Vector3, chunk_pos: Vector3i):
 	_is_creeper = (mob_id == "creeper")
 	_is_skeleton = (mob_id == "skeleton" or mob_id == "stray" or mob_id == "bogged")
 
+	# Collision size for pathfinding
+	var cs = _data.get("collision_size", [0.9, 1.0, 0.9])
+	_mob_radius = max(cs[0], cs[2]) / 2.0  # demi-largeur
+	_mob_height = cs[1]
+
 func _ready():
 	position = _spawn_pos
 	_create_model()
@@ -279,6 +291,8 @@ func _ready():
 	_pick_new_wander()
 	rotation.y = randf() * TAU
 	world_manager = get_tree().get_first_node_in_group("world_manager")
+	_cached_player = get_tree().get_first_node_in_group("player")
+	_cached_dnc = get_tree().get_first_node_in_group("day_night_cycle")
 	add_to_group("passive_mobs")
 	if _is_skeleton:
 		_attach_skeleton_bow()
@@ -301,7 +315,7 @@ func _create_model():
 			add_child(instance)
 			_model_root = instance
 			_is_glb_model = true
-			_anim_player = _find_animation_player(instance)
+			_anim_player = NodeUtils.find_animation_player(instance)
 			if _anim_player:
 				_play_anim("idle")
 			return
@@ -314,15 +328,6 @@ static func _load_glb(path: String) -> PackedScene:
 	if scene:
 		_glb_cache[path] = scene
 	return scene
-
-func _find_animation_player(node: Node) -> AnimationPlayer:
-	if node is AnimationPlayer:
-		return node
-	for child in node.get_children():
-		var found = _find_animation_player(child)
-		if found:
-			return found
-	return null
 
 func _play_anim(logical_name: String):
 	if not _anim_player or _current_anim == logical_name:
@@ -425,12 +430,13 @@ func _process(delta):
 func _process_sunburn(delta):
 	if not _is_daytime():
 		return
+	_sun_damage_timer += delta
+	if _sun_damage_timer < SUN_DAMAGE_INTERVAL:
+		return  # Throttle : check ciel seulement quand le dommage s'appliquerait
+	_sun_damage_timer = 0.0
 	# Check if exposed to sky (no block above)
 	if world_manager and _is_exposed_to_sky():
-		_sun_damage_timer += delta
-		if _sun_damage_timer >= SUN_DAMAGE_INTERVAL:
-			_sun_damage_timer = 0.0
-			health -= SUN_DAMAGE
+		health -= SUN_DAMAGE
 			_flash_model_red()
 			_hurt_flash_timer = 0.3
 			# Visual: fire particles could be added here
@@ -667,7 +673,7 @@ func _ai_hostile(delta):
 
 	# Find player
 	if not _target_player or not is_instance_valid(_target_player):
-		_target_player = get_tree().get_first_node_in_group("player")
+		_target_player = _cached_player
 
 	if _target_player and is_instance_valid(_target_player):
 		var dist = global_position.distance_to(_target_player.global_position)
@@ -741,12 +747,18 @@ func _do_wander(delta):
 		if _nav_check_timer >= NAV_CHECK_INTERVAL:
 			_nav_check_timer = 0.0
 			if world_manager and is_on_floor():
-				var ahead_pos = global_position + wander_direction * 1.0
+				# Adapter la distance de détection au rayon du mob
+				var check_dist = max(_mob_radius + 0.5, 1.0)
+				var ahead_pos = global_position + wander_direction * check_dist
 				var feet_y = floori(global_position.y - 0.1)
 				var b_at_feet = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y, ahead_pos.z).floor())
 				var b_plus1 = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y + 1, ahead_pos.z).floor())
 				var b_plus2 = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y + 2, ahead_pos.z).floor())
 				var b_below = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y - 1, ahead_pos.z).floor())
+				# Pour mobs hauts (cheval, etc.) vérifier aussi un bloc plus haut
+				var b_plus3 = 0  # AIR
+				if _mob_height > 1.5:
+					b_plus3 = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y + 3, ahead_pos.z).floor())
 
 				# Eau devant → demi-tour
 				if b_at_feet == BlockRegistry.BlockType.WATER:
@@ -759,7 +771,11 @@ func _do_wander(delta):
 					return
 
 				# Marche d'1 bloc : bloc solide à feet+1, espace libre au-dessus
-				if _is_real_wall(b_plus1) and _is_passable(b_plus2):
+				# Pour mobs grands, vérifier aussi b_plus3
+				var can_step_up = _is_real_wall(b_plus1) and _is_passable(b_plus2)
+				if can_step_up and _mob_height > 1.5:
+					can_step_up = _is_passable(b_plus3)
+				if can_step_up:
 					global_position.y = feet_y + 1 + 1.05
 					_wall_jump_count = 0
 					_consecutive_stuck = 0  # A réussi à monter
@@ -805,12 +821,6 @@ func _force_idle_rest(min_time: float, max_time: float):
 	is_moving = false
 	velocity.x = 0
 	velocity.z = 0
-	_consecutive_stuck += 1
-	# Trop de stuck consécutifs → IDLE total
-	if _consecutive_stuck >= 4:
-		_truly_stuck = true
-		_play_anim("idle")
-		return
 	# Demi-tour ~180° avec variance pour ne pas boucler
 	var turn = PI + randf_range(-0.8, 0.8)
 	rotation.y += turn
@@ -820,24 +830,28 @@ func _force_idle_rest(min_time: float, max_time: float):
 	_stuck_timer = 0.0
 	_last_xz_pos = global_position
 	_play_anim("idle")
-	_stuck_timer = 0.0
-	_last_xz_pos = global_position
 
 func _try_auto_jump(move_dir: Vector3):
 	"""Step-up over 1-block walls when chasing/fleeing. Instant like MC."""
 	if not is_on_floor() or not world_manager:
 		return
-	var ahead_pos = global_position + move_dir * 0.8
+	var check_dist = max(_mob_radius + 0.3, 0.8)
+	var ahead_pos = global_position + move_dir * check_dist
 	var feet_y = floori(global_position.y - 0.1)
 	var b_plus1 = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y + 1, ahead_pos.z).floor())
 	var b_plus2 = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y + 2, ahead_pos.z).floor())
 	# Step-up instantané si mur d'1 bloc avec espace au-dessus
-	if _is_real_wall(b_plus1) and _is_passable(b_plus2):
+	var can_step = _is_real_wall(b_plus1) and _is_passable(b_plus2)
+	# Mobs hauts : vérifier aussi b_plus3
+	if can_step and _mob_height > 1.5:
+		var b_plus3 = world_manager.get_block_at_position(Vector3(ahead_pos.x, feet_y + 3, ahead_pos.z).floor())
+		can_step = _is_passable(b_plus3)
+	if can_step:
 		global_position.y = feet_y + 1 + 1.05
 
 func _chase_player(delta):
 	if not _target_player or not is_instance_valid(_target_player):
-		_target_player = get_tree().get_first_node_in_group("player")
+		_target_player = _cached_player
 		if not _target_player:
 			_do_wander(delta)
 			return
@@ -973,7 +987,7 @@ func _creeper_explode():
 
 func _creeper_damage_entities(center: Vector3):
 	# Damage player
-	var player = get_tree().get_first_node_in_group("player")
+	var player = _cached_player
 	if player and is_instance_valid(player):
 		var dist = player.global_position.distance_to(center)
 		if dist < CREEPER_DAMAGE_RADIUS and player.has_method("take_damage"):
@@ -1008,8 +1022,6 @@ func _flash_model_white():
 					mat.albedo_color = Color(2, 2, 2, 1)
 
 func _play_fuse_sound():
-	var audio = get_tree().get_first_node_in_group("audio_manager")
-	if not audio: return
 	var path = "res://assets/Audio/Minecraft/random/fuse.mp3"
 	if FileAccess.file_exists(path):
 		var stream = AudioStreamMP3.new()
@@ -1020,8 +1032,6 @@ func _play_fuse_sound():
 		asp.finished.connect(asp.queue_free)
 
 func _play_explosion_sound(pos: Vector3):
-	var audio = get_tree().get_first_node_in_group("audio_manager")
-	if not audio: return
 	var idx = randi_range(1, 4)
 	var path = "res://assets/Audio/Minecraft/random/explode%d.mp3" % idx
 	if FileAccess.file_exists(path):
@@ -1125,11 +1135,12 @@ func _skeleton_shoot():
 	arrow.initialize(from, aim_dir, 0.8, self)  # 80% charge
 	# Bow sound
 	_play_bow_sound()
-	# Animate bow pull
+	# Animate bow pull (tween relative to base rotation)
 	if _skeleton_bow_node:
+		var base_rot = _skeleton_bow_node.rotation_degrees
 		var tween = create_tween()
-		tween.tween_property(_skeleton_bow_node, "rotation:x", -0.4, 0.1)
-		tween.tween_property(_skeleton_bow_node, "rotation:x", 0.0, 0.3)
+		tween.tween_property(_skeleton_bow_node, "rotation_degrees:x", base_rot.x - 25.0, 0.1)
+		tween.tween_property(_skeleton_bow_node, "rotation_degrees:x", base_rot.x, 0.3)
 
 func _play_bow_sound():
 	var path = "res://assets/Audio/Minecraft/random/bow.mp3"
@@ -1143,25 +1154,31 @@ func _play_bow_sound():
 
 func _attach_skeleton_bow():
 	if not _model_root: return
-	# Find skeleton to attach bow to left hand
-	var skeleton = _find_skeleton_in_model(_model_root)
+	var skeleton = NodeUtils.find_skeleton(_model_root)
 	if not skeleton: return
-	# Find leftItem bone
-	var bone_idx = skeleton.find_bone("leftItem")
+	# Bedrock: bow attaches to leftItem bone (left hand holds the bow)
+	var bone_name = "leftItem"
+	var bone_idx = skeleton.find_bone(bone_name)
 	if bone_idx < 0:
-		bone_idx = skeleton.find_bone("leftArm")
+		bone_name = "leftArm"
+		bone_idx = skeleton.find_bone(bone_name)
 	if bone_idx < 0: return
 	var attachment = BoneAttachment3D.new()
-	attachment.bone_name = skeleton.get_bone_name(bone_idx)
+	attachment.bone_name = bone_name
 	skeleton.add_child(attachment)
-	# Build a simple bow mesh (flat quad with bow texture)
+	# Build extruded bow mesh
 	_skeleton_bow_node = Node3D.new()
 	var bow_mesh = _build_bow_mesh()
 	if bow_mesh:
 		_skeleton_bow_node.add_child(bow_mesh)
-		_skeleton_bow_node.scale = Vector3(0.035, 0.035, 0.035)
-		_skeleton_bow_node.position = Vector3(1, 0, -1)
-		_skeleton_bow_node.rotation_degrees = Vector3(0, 0, -45)
+		# Bedrock bow.geo.json: position [2, 1, -2] pixels, rotation [0, -135, 90]
+		# GLB uses 1/16 scale (1 pixel = 1/16 block), bow texture is 16x16
+		# Scale: each pixel of the extruded mesh = 1 unit, we need 1/16 block per pixel
+		_skeleton_bow_node.scale = Vector3(1.0, 1.0, 1.0) / 16.0
+		# Position in bone-local space (Bedrock pixels -> blocks: /16)
+		_skeleton_bow_node.position = Vector3(2.0, 1.0, -2.0) / 16.0
+		# Bedrock rotation [0, -135, 90] = bow flat, angled diagonally in hand
+		_skeleton_bow_node.rotation_degrees = Vector3(0, -135, 90)
 	attachment.add_child(_skeleton_bow_node)
 
 func _build_bow_mesh() -> MeshInstance3D:
@@ -1182,11 +1199,15 @@ func _build_bow_mesh() -> MeshInstance3D:
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	st.set_material(mat)
 	# Flat quad per opaque pixel (extruded 1 pixel depth)
+	# Bedrock bow local_pivot = [6, 0, 6] — pivot at pixel (6, 10) from top-left
+	# (6 from left, 16-6=10 from top in image coords)
+	var pivot_x = 6.0  # Bedrock local_pivot.x
+	var pivot_y = 6.0  # Bedrock local_pivot.z (= Y in 2D)
 	for py in range(h):
 		for px in range(w):
 			var c = img.get_pixel(px, py)
 			if c.a < 0.5: continue
-			var x0 = float(px) - w / 2.0; var y0 = float(h - 1 - py) - h / 2.0
+			var x0 = float(px) - pivot_x; var y0 = float(h - 1 - py) - pivot_y
 			st.set_color(c)
 			# Front face
 			st.set_uv(Vector2(0, 0)); st.add_vertex(Vector3(x0, y0, 0.5))
@@ -1206,20 +1227,14 @@ func _build_bow_mesh() -> MeshInstance3D:
 	mi.mesh = st.commit()
 	return mi
 
-func _find_skeleton_in_model(node: Node) -> Skeleton3D:
-	if node is Skeleton3D: return node
-	for child in node.get_children():
-		var found = _find_skeleton_in_model(child)
-		if found: return found
-	return null
-
 # ── Head Tracking ──
 # Les mobs passifs/neutres tournent la tête vers le joueur quand il est proche
 
 func _init_head_tracking():
 	if not _model_root or not _is_glb_model:
 		return
-	var skel = _find_skeleton_in_model(_model_root)
+	_cached_skeleton = NodeUtils.find_skeleton(_model_root)
+	var skel = _cached_skeleton
 	if not skel:
 		return
 	# Essayer plusieurs noms de bone possibles
@@ -1236,7 +1251,7 @@ func _update_head_tracking(delta: float):
 	if _flee_timer > 0 or _is_eating:
 		return
 
-	var skel = _find_skeleton_in_model(_model_root)
+	var skel = _cached_skeleton
 	if not skel:
 		return
 
@@ -1244,7 +1259,7 @@ func _update_head_tracking(delta: float):
 	var tracking_player = false
 
 	# Priorité 1 : regarder le joueur s'il est proche
-	var player_node = get_tree().get_first_node_in_group("player")
+	var player_node = _cached_player
 	if player_node and is_instance_valid(player_node):
 		var to_player = player_node.global_position - global_position
 		var dist = to_player.length()
@@ -1281,7 +1296,7 @@ func _update_head_tracking(delta: float):
 
 func _flee_from_player(delta):
 	if not _target_player or not is_instance_valid(_target_player):
-		_target_player = get_tree().get_first_node_in_group("player")
+		_target_player = _cached_player
 	if not _target_player:
 		_do_wander(delta)
 		return
@@ -1298,14 +1313,13 @@ func _flee_from_player(delta):
 	_play_anim("walk")
 
 func _is_daytime() -> bool:
-	var dnc = get_tree().get_first_node_in_group("day_night_cycle")
-	if dnc:
-		var hour = dnc.get_hour()
+	if _cached_dnc:
+		var hour = _cached_dnc.get_hour()
 		return hour >= 6.0 and hour < 18.0
 	return true
 
 func _check_despawn():
-	var player_node = get_tree().get_first_node_in_group("player")
+	var player_node = _cached_player
 	if player_node and is_instance_valid(player_node):
 		var dist = global_position.distance_to(player_node.global_position)
 		if dist > DESPAWN_DISTANCE:
@@ -1322,7 +1336,7 @@ func take_hit(damage: int, knockback: Vector3 = Vector3.ZERO):
 	velocity += knockback
 	_hurt_flash_timer = 0.3
 	_flash_model_red()
-	_target_player = get_tree().get_first_node_in_group("player")
+	_target_player = _cached_player
 
 	var when_hit: String = _data.get("when_hit", "flee")
 	match when_hit:
@@ -1360,7 +1374,7 @@ func _drop_loot():
 	if drops.is_empty():
 		return
 	# For now: heal player with first meat-like drop
-	var player_node = get_tree().get_first_node_in_group("player")
+	var player_node = _cached_player
 	var total_food = 0
 	var loot_name = ""
 	for item_name in drops:

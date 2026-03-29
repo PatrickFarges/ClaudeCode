@@ -128,7 +128,7 @@ func _ready():
 	add_to_group("village_manager")
 	_init_blueprints()
 	_init_storage_map()
-	print("VillageManager: initialisé")
+	#print("VillageManager: initialisé")
 
 func _init_storage_map():
 	_storage_map = {
@@ -141,10 +141,13 @@ func _init_storage_map():
 		for bt in _storage_map[bn]:
 			_item_to_building[bt] = bn
 
+var _cached_dnc: Node = null
+
 func _get_game_speed() -> float:
-	var dnc = get_tree().get_first_node_in_group("day_night_cycle")
-	if dnc and dnc.has_method("get_speed_multiplier"):
-		return dnc.get_speed_multiplier()
+	if not _cached_dnc:
+		_cached_dnc = get_tree().get_first_node_in_group("day_night_cycle")
+	if _cached_dnc and _cached_dnc.has_method("get_speed_multiplier"):
+		return _cached_dnc.get_speed_multiplier()
 	return 1.0
 
 func _process(delta):
@@ -188,7 +191,7 @@ func _process(delta):
 func set_village_center(pos: Vector3):
 	village_center = pos
 	_center_set = true
-	print("VillageManager: centre du village à %s" % str(pos))
+	#print("VillageManager: centre du village à %s" % str(pos))
 	# On attend que tous les chunks de la zone village soient chargés
 	_waiting_for_chunks = true
 
@@ -234,7 +237,7 @@ func _generate_flatten_plan():
 				if sy > 0:
 					surface_ys.append(sy)
 		if surface_ys.size() == 0:
-			print("VillageManager: flatten — aucune surface trouvée")
+			#print("VillageManager: flatten — aucune surface trouvée")
 			_flatten_complete = true
 			return
 		surface_ys.sort()
@@ -271,9 +274,10 @@ func _generate_flatten_plan():
 
 	if flatten_plan.size() == 0:
 		_flatten_complete = true
-		print("VillageManager: terrain déjà plat (ref_y=%d)" % village_ref_y)
+		#print("VillageManager: terrain déjà plat (ref_y=%d)" % village_ref_y)
 	else:
-		print("VillageManager: flatten plan — %d colonnes à nettoyer, ref_y=%d" % [flatten_plan.size(), village_ref_y])
+		#print("VillageManager: flatten plan — %d colonnes à nettoyer, ref_y=%d" % [flatten_plan.size(), village_ref_y])
+		pass
 
 func get_next_flatten_column() -> Dictionary:
 	# Retourne la prochaine colonne à nettoyer { pos: Vector3i }
@@ -283,12 +287,12 @@ func get_next_flatten_column() -> Dictionary:
 			_flatten_pass += 1
 			_generate_flatten_plan()
 			if flatten_plan.size() > 0:
-				print("VillageManager: flatten passe %d — %d colonnes supplémentaires" % [_flatten_pass, flatten_plan.size()])
+				#print("VillageManager: flatten passe %d — %d colonnes supplémentaires" % [_flatten_pass, flatten_plan.size()])
 				var entry = flatten_plan[flatten_index]
 				flatten_index += 1
 				return entry
 		_flatten_complete = true
-		print("VillageManager: aplanissement terminé après %d passe(s)" % _flatten_pass)
+		#print("VillageManager: aplanissement terminé après %d passe(s)" % _flatten_pass)
 		return {}
 	var entry = flatten_plan[flatten_index]
 	flatten_index += 1
@@ -324,8 +328,6 @@ func _cleanup_orphan_leaves():
 		return
 	var cx = int(village_center.x)
 	var cz = int(village_center.z)
-	var leaf_set = { 6: true, 44: true, 45: true, 46: true, 47: true, 48: true, 49: true }
-	var wood_set = { 5: true, 32: true, 33: true, 34: true, 35: true, 36: true, 42: true }
 	var ref_y = village_ref_y if village_ref_y > 0 else int(village_center.y)
 
 	# Échantillonnage : scanner un quadrant aléatoire pour ne pas tout scanner à chaque tick
@@ -346,9 +348,9 @@ func _cleanup_orphan_leaves():
 				var bt = world_manager.get_block_at_position(Vector3(x, y, z))
 				if bt == 0:
 					continue
-				if leaf_set.has(bt):
+				if BlockRegistry.LEAF_TYPES.has(bt):
 					leaf_positions.append(Vector3i(x, y, z))
-				elif wood_set.has(bt):
+				elif BlockRegistry.WOOD_TYPES.has(bt):
 					trunk_positions.append(Vector3i(x, y, z))
 
 	if leaf_positions.is_empty():
@@ -398,7 +400,8 @@ func _cleanup_orphan_leaves():
 	flush_affected_chunks(affected_chunks_cleanup)
 
 	if orphan_leaves.size() > 0:
-		print("VillageManager: nettoyage feuilles orphelines — %d feuilles détruites" % orphan_leaves.size())
+		#print("VillageManager: nettoyage feuilles orphelines — %d feuilles détruites" % orphan_leaves.size())
+		pass
 
 func _flatten_drop(bt: int) -> int:
 	# Retourne le type de ressource obtenu en cassant un bloc pendant le flatten
@@ -447,7 +450,7 @@ func get_resource_count(block_type: int) -> int:
 func get_total_wood() -> int:
 	# Compte tous les types de bûches (stockpile + coffres)
 	var total = 0
-	for bt in [5, 32, 33, 34, 35, 36, 42]:  # WOOD, SPRUCE_LOG, BIRCH_LOG, JUNGLE_LOG, ACACIA_LOG, DARK_OAK_LOG, CHERRY_LOG
+	for bt in BlockRegistry.WOOD_TYPES_ARRAY:
 		total += get_total_resource(bt)
 	return total
 
@@ -492,7 +495,7 @@ func consume_any_stone(count: int) -> bool:
 	return _consume_types_anywhere([25, 3], count)  # COBBLESTONE d'abord, puis STONE
 
 func consume_any_wood(count: int) -> bool:
-	return _consume_types_anywhere([5, 32, 33, 34, 35, 36, 42], count)
+	return _consume_types_anywhere(BlockRegistry.WOOD_TYPES_ARRAY, count)
 
 func consume_any_planks(count: int) -> bool:
 	return _consume_types_anywhere([11, 37, 38, 39, 40, 41, 43], count)
@@ -580,9 +583,9 @@ func _init_building_storage(building_name: String, chest_pos: Vector3i):
 	if not building_storage.has(building_name):
 		building_storage[building_name] = { "items": {}, "chests": [] }
 	building_storage[building_name]["chests"].append(chest_pos)
-	print("VillageManager: coffre placé dans '%s' à %s (capacité %d)" % [
-		building_name, str(chest_pos),
-		building_storage[building_name]["chests"].size() * CHEST_CAPACITY])
+	#print("VillageManager: coffre placé dans '%s' à %s (capacité %d)" % [
+	#	building_name, str(chest_pos),
+	#	building_storage[building_name]["chests"].size() * CHEST_CAPACITY])
 
 func _find_chest_spot_in_building(origin: Vector3i, size: Vector3i) -> Vector3i:
 	"""Trouve un emplacement libre (air + sol solide) à l'intérieur d'un bâtiment."""
@@ -677,7 +680,8 @@ func _evaluate_phase_0():
 	# Besoin de 10 bois pour démarrer — bûcherons ET fermier y participent
 	if total_wood < 10 and total_planks < 4:
 		if task_queue.size() == 0:
-			print("VillageManager: Phase 0 — bois=%d planches=%d → ajout tâches récolte" % [total_wood, total_planks])
+			#print("VillageManager: Phase 0 — bois=%d planches=%d → ajout tâches récolte" % [total_wood, total_planks])
+			pass
 		_add_harvest_tasks(5, 4)  # Bûcherons uniquement — le fermier fait la ferme
 		return
 
@@ -724,7 +728,7 @@ func _evaluate_phase_0():
 		village_phase = 1
 		if village_tool_tier < 1:
 			village_tool_tier = 1
-		print("VillageManager: === PHASE 1 — ÂGE DU BOIS ===  (tier %s)" % village_tool_tier)
+		#print("VillageManager: === PHASE 1 — ÂGE DU BOIS ===  (tier %s)" % village_tool_tier)
 
 func _evaluate_phase_1():
 	# Phase 1: Récolter plus de bois + pierre, crafter furnace, construire
@@ -827,7 +831,7 @@ func _evaluate_phase_1():
 		village_phase = 2
 		if village_tool_tier < 2:
 			village_tool_tier = 2
-		print("VillageManager: === PHASE 2 — ÂGE DE LA PIERRE === (tier %s)" % village_tool_tier)
+		#print("VillageManager: === PHASE 2 — ÂGE DE LA PIERRE === (tier %s)" % village_tool_tier)
 
 func _evaluate_phase_2():
 	# Phase 2: Miner charbon/fer, fondre, crafter stone_table
@@ -941,7 +945,7 @@ func _evaluate_phase_2():
 		village_phase = 3
 		if village_tool_tier < 3:
 			village_tool_tier = 3
-		print("VillageManager: === PHASE 3 — ÂGE DU FER === (tier %s)" % village_tool_tier)
+		#print("VillageManager: === PHASE 3 — ÂGE DU FER === (tier %s)" % village_tool_tier)
 
 func _evaluate_phase_3():
 	# Phase 3: Expansion continue
@@ -1021,7 +1025,7 @@ func _evaluate_phase_3():
 	# Transition Phase 3 → Phase 4 : château quand 5+ bâtiments et outils fer
 	if built_structures.size() >= 5 and village_tool_tier >= 3:
 		village_phase = 4
-		print("VillageManager: === PHASE 4 — ÂGE MÉDIÉVAL === Construction du château !")
+		#print("VillageManager: === PHASE 4 — ÂGE MÉDIÉVAL === Construction du château !")
 		# Spawner le village ennemi
 		var wm = get_tree().get_first_node_in_group("world_manager")
 		if wm and wm.has_method("_spawn_enemy_village"):
@@ -1220,10 +1224,9 @@ func _count_builders() -> int:
 
 func _add_harvest_tasks(block_type: int, count: int):
 	# Tous les types de bois sont acceptables
-	var wood_types = [5, 32, 33, 34, 35, 36, 42]  # WOOD + toutes les essences
 	var existing = 0
 	for t in task_queue:
-		if t["type"] == "harvest" and t.get("target_block", -1) in wood_types:
+		if t["type"] == "harvest" and t.get("target_block", -1) in BlockRegistry.WOOD_TYPES_ARRAY:
 			existing += 1
 	# Compter aussi les villageois déjà en train de récolter
 	for v in villagers:
@@ -1239,43 +1242,6 @@ func _add_harvest_tasks(block_type: int, count: int):
 			"priority": 20,
 			"required_profession": VProfession.Profession.BUCHERON,
 		})
-
-func _add_mine_tasks(block_type: int, count: int):
-	var existing = 0
-	for t in task_queue:
-		if t["type"] == "mine" and t.get("target_block", -1) == block_type:
-			existing += 1
-	if existing >= count:
-		return
-
-	for i in range(count - existing):
-		_add_task({
-			"type": "mine",
-			"target_block": block_type,
-			"priority": 25,
-			"required_profession": VProfession.Profession.MINEUR,
-		})
-
-func _add_sand_harvest_tasks(count: int):
-	# Récolte de sable — max 2 tâches à la fois, tout villageois libre
-	var max_sand_tasks = 2
-	var existing = 0
-	for t in task_queue:
-		if t["type"] == "mine" and t.get("target_block", -1) == 4:
-			existing += 1
-	# Aussi compter les villageois déjà en train de chercher du sable
-	for v in villagers:
-		if is_instance_valid(v) and v.current_task.get("type", "") == "mine" \
-			and v.current_task.get("target_block", -1) == 4:
-			existing += 1
-	if existing >= max_sand_tasks:
-		return
-	_add_task({
-		"type": "mine",
-		"target_block": 4,  # SAND
-		"priority": 15,  # priorité moyenne — le verre est critique pour les bâtiments
-		# Pas de required_profession — tout villageois libre peut récolter du sable
-	})
 
 func _add_farming_tasks():
 	# Le fermier crée les parcelles et récolte le blé
@@ -1324,11 +1290,6 @@ func get_next_task_for(prof: int) -> Dictionary:
 			return task
 	return {}
 
-func get_next_task() -> Dictionary:
-	if task_queue.size() == 0:
-		return {}
-	return task_queue.pop_front()
-
 func return_task(task: Dictionary):
 	# Remettre une tâche non terminée dans la queue (triée par priorité)
 	task_queue.append(task)
@@ -1375,9 +1336,8 @@ func find_nearest_block(block_type: int, from_pos: Vector3, radius: float = 32.0
 	var chunk_radius = mini(ceili(radius / CHUNK_SIZE) + 1, 2)
 
 	var acceptable_set: Dictionary = {}
-	if block_type == 5:  # WOOD -> accepter toutes les essences
-		for bt in [5, 32, 33, 34, 35, 36, 42]:
-			acceptable_set[bt] = true
+	if BlockRegistry.WOOD_TYPES.has(block_type):  # WOOD -> accepter toutes les essences
+		acceptable_set = BlockRegistry.WOOD_TYPES.duplicate()
 	else:
 		acceptable_set[block_type] = true
 
@@ -1414,9 +1374,8 @@ func find_nearest_surface_block(block_type: int, from_pos: Vector3, radius: floa
 	var best_dist = INF
 
 	var acceptable_set: Dictionary = {}
-	if block_type == 5:
-		for bt in [5, 32, 33, 34, 35, 36, 42]:
-			acceptable_set[bt] = true
+	if BlockRegistry.WOOD_TYPES.has(block_type):
+		acceptable_set = BlockRegistry.WOOD_TYPES.duplicate()
 	else:
 		acceptable_set[block_type] = true
 
@@ -1508,7 +1467,7 @@ func _init_mine():
 				break
 
 	if best_pos == Vector3i(-9999, -9999, -9999):
-		print("VillageManager: ERREUR — impossible de trouver un spot de mine !")
+		#print("VillageManager: ERREUR — impossible de trouver un spot de mine !")
 		return
 
 	mine_entrance = best_pos
@@ -1598,7 +1557,7 @@ func _init_mine():
 				mine_plan.append(Vector3i(bx, target_y, bz))
 
 	_mine_expansion_dir = 0
-	print("VillageManager: mine planifiée — %d blocs à creuser depuis %s (cible y=%d)" % [mine_plan.size(), str(mine_entrance), target_y])
+	#print("VillageManager: mine planifiée — %d blocs à creuser depuis %s (cible y=%d)" % [mine_plan.size(), str(mine_entrance), target_y])
 
 func is_mine_stock_full() -> bool:
 	# Retourne true si les ressources minières sont TOUTES au-dessus des seuils de pause
@@ -1672,7 +1631,7 @@ func _expand_mine():
 			_mine_gallery_y = maxi(_mine_gallery_y - 5, 15)
 			mine_plan.clear()
 			mine_front_index = 0
-			print("VillageManager: mine réinitialisée — nouveau niveau y=%d" % _mine_gallery_y)
+			#print("VillageManager: mine réinitialisée — nouveau niveau y=%d" % _mine_gallery_y)
 		else:
 			return
 
@@ -1751,7 +1710,8 @@ func _expand_mine():
 				mine_plan.append(Vector3i(bx, y, bz))
 
 	if _mine_expansion_dir % 5 == 0:
-		print("VillageManager: mine étendue — total %d blocs, y=%d" % [mine_plan.size(), _mine_gallery_y])
+		#print("VillageManager: mine étendue — total %d blocs, y=%d" % [mine_plan.size(), _mine_gallery_y])
+		pass
 
 func _is_block_accessible(pos: Vector3i) -> bool:
 	# Un bloc est accessible s'il a au moins un voisin AIR (on peut l'atteindre)
@@ -1853,12 +1813,12 @@ func try_craft(recipe_name: String) -> bool:
 			# Forge : upgrade tool tier
 			if recipe.has("_tool_tier"):
 				village_tool_tier = recipe["_tool_tier"]
-				print("VillageManager: outils améliorés au tier %d (%s)" % [village_tool_tier, TOOL_TIER_NAMES.get(village_tool_tier, "?")])
+				#print("VillageManager: outils améliorés au tier %d (%s)" % [village_tool_tier, TOOL_TIER_NAMES.get(village_tool_tier, "?")])
 				return true
 
 			# Produire l'output → coffre du bâtiment si applicable, sinon stockpile virtuel
 			_route_craft_output(recipe["output_type"], recipe["output_count"])
-			print("VillageManager: crafté %s x%d" % [recipe_name, recipe["output_count"]])
+			#print("VillageManager: crafté %s x%d" % [recipe_name, recipe["output_count"]])
 			return true
 
 	return false
@@ -1905,7 +1865,7 @@ func place_workstation_at(block_type: int, pos: Vector3i):
 		world_manager.place_block_at_position(Vector3(pos.x, pos.y, pos.z), block_type as BlockRegistry.BlockType)
 		placed_workstations[block_type] = pos
 		invalidate_scan_cache()
-		print("VillageManager: workstation %d placée à %s" % [block_type, str(pos)])
+		#print("VillageManager: workstation %d placée à %s" % [block_type, str(pos)])
 
 		# Scanner le chunk pour les POI
 		var chunk_pos = Vector3i(
@@ -2014,7 +1974,7 @@ func _try_queue_build(blueprint_index: int) -> bool:
 	# Trouver un emplacement
 	var origin = _find_build_site(bp)
 	if origin == Vector3i(-9999, -9999, -9999):
-		print("VillageManager: '%s' — pas de site valide trouvé" % bp["name"])
+		#print("VillageManager: '%s' — pas de site valide trouvé" % bp["name"])
 		return false
 
 	# Consommer les matériaux
@@ -2036,7 +1996,7 @@ func _try_queue_build(blueprint_index: int) -> bool:
 		"priority": 15,
 		"required_profession": VProfession.Profession.BATISSEUR,
 	})
-	print("VillageManager: construction de '%s' à %s" % [bp["name"], str(origin)])
+	#print("VillageManager: construction de '%s' à %s" % [bp["name"], str(origin)])
 	return true
 
 func _find_build_site(blueprint: Dictionary) -> Vector3i:
@@ -2139,7 +2099,7 @@ func _find_build_site(blueprint: Dictionary) -> Vector3i:
 
 func register_built_structure(name: String, origin: Vector3i, size: Vector3i):
 	built_structures.append({ "name": name, "origin": origin, "size": size })
-	print("VillageManager: structure '%s' terminée à %s" % [name, str(origin)])
+	#print("VillageManager: structure '%s' terminée à %s" % [name, str(origin)])
 	# Placer un coffre si le bâtiment stocke des items
 	if _storage_map.has(name):
 		var chest_pos = _find_chest_spot_in_building(origin, size)
@@ -2149,7 +2109,7 @@ func register_built_structure(name: String, origin: Vector3i, size: Vector3i):
 		else:
 			# Pas de spot trouvé — init storage sans coffre physique (fallback)
 			_init_building_storage(name, origin + Vector3i(size.x / 2, 1, size.z / 2))
-			print("VillageManager: WARNING — pas de spot pour coffre dans '%s'" % name)
+			#print("VillageManager: WARNING — pas de spot pour coffre dans '%s'" % name)
 	# Générer un chemin de 3 blocs de large entre le bâtiment et la plaza
 	_generate_road_to_plaza(origin, size, name)
 	# Relancer la construction des chemins si nécessaire
@@ -2218,7 +2178,7 @@ func _generate_road_to_plaza(origin: Vector3i, size: Vector3i, building_name: St
 			_path_blocks.append([Vector3i(cx + half_w + 1, sy + 1, z), BT_TORCH])
 			blocks_added += 1
 
-	print("VillageManager: chemin vers '%s' planifié — %d blocs (3 large, torches)" % [building_name, blocks_added])
+	#print("VillageManager: chemin vers '%s' planifié — %d blocs (3 large, torches)" % [building_name, blocks_added])
 
 func _generate_chapel_plaza(origin: Vector3i, size: Vector3i, sy: int):
 	var BT_COBBLE = BlockRegistry.BlockType.COBBLESTONE
@@ -2246,7 +2206,7 @@ func _generate_chapel_plaza(origin: Vector3i, size: Vector3i, sy: int):
 		_path_blocks.append([Vector3i(corner[0], sy + 1, corner[1]), BT_TORCH])
 		blocks_added += 4
 
-	print("VillageManager: place de la chapelle planifiée — %d blocs (marge %d)" % [blocks_added, margin])
+	#print("VillageManager: place de la chapelle planifiée — %d blocs (marge %d)" % [blocks_added, margin])
 
 # ============================================================
 # PLACE DU VILLAGE (place pavée circulaire + puits + chemins)
@@ -2330,7 +2290,7 @@ func _generate_plaza_plan():
 					_path_blocks.append([Vector3i(wx, sy, wz), BT_COBBLE])
 
 	_path_index = 0
-	print("VillageManager: place du village planifiée — %d blocs (rayon %d)" % [_path_blocks.size(), PLAZA_RADIUS])
+	#print("VillageManager: place du village planifiée — %d blocs (rayon %d)" % [_path_blocks.size(), PLAZA_RADIUS])
 
 # ============================================================
 # MINAGE VILLAGEOIS
@@ -2363,7 +2323,7 @@ func get_next_path_block() -> Array:
 func mark_path_complete():
 	if _path_index >= _path_blocks.size():
 		_path_built = true
-		print("VillageManager: place du village terminée !")
+		#print("VillageManager: place du village terminée !")
 
 const INVALID_POS_CONST = Vector3i(-9999, -9999, -9999)
 
@@ -2485,7 +2445,7 @@ func _init_blueprints():
 		"res://structures/tour_defense.json",
 		"Tour de défense", 4, terrain_set)
 
-	print("VillageManager: %d blueprints chargés" % BLUEPRINTS.size())
+	#print("VillageManager: %d blueprints chargés" % BLUEPRINTS.size())
 
 
 func _load_structure_blueprint(path: String, bp_name: String, phase: int, terrain_set: Dictionary):
@@ -2625,9 +2585,9 @@ func _load_structure_blueprint(path: String, bp_name: String, phase: int, terrai
 		"block_list": block_list,
 		"phase": phase,
 	})
-	print("VillageManager: blueprint '%s' chargé — %dx%dx%d, %d blocs (W:%d S:%d G:%d)" % [
-		bp_name, bp_size.x, bp_size.y, bp_size.z, block_list.size(),
-		wood_count, stone_count, glass_count])
+	#print("VillageManager: blueprint '%s' chargé — %dx%dx%d, %d blocs (W:%d S:%d G:%d)" % [
+	#	bp_name, bp_size.x, bp_size.y, bp_size.z, block_list.size(),
+	#	wood_count, stone_count, glass_count])
 
 # ============================================================
 # AGRICULTURE (Farming)
@@ -2711,10 +2671,10 @@ func init_farm():
 
 			_farm_center = Vector3i(tx, first_y, tz)
 			_farm_initialized = true
-			print("VillageManager: ferme planifiée à %s (passe %d)" % [str(_farm_center), pass_num + 1])
+			#print("VillageManager: ferme planifiée à %s (passe %d)" % [str(_farm_center), pass_num + 1])
 			return
 
-	print("VillageManager: ERREUR — impossible de trouver un spot de ferme !")
+	#print("VillageManager: ERREUR — impossible de trouver un spot de ferme !")
 
 func create_farm_plot(pos: Vector3i):
 	# Convertir GRASS/DIRT en FARMLAND et planter du blé dessus
@@ -2799,8 +2759,8 @@ func _try_grow_village():
 
 	# Spawn le nouveau villageois
 	_spawn_new_villager(spawn_pos, prof)
-	print("VillageManager: nouveau villageois %s ! Population %d/%d" % [
-		VProfession.get_profession_name(prof), pop + 1, cap])
+	#print("VillageManager: nouveau villageois %s ! Population %d/%d" % [
+	#	VProfession.get_profession_name(prof), pop + 1, cap])
 
 func get_population_cap() -> int:
 	var houses = 0

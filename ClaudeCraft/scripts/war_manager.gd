@@ -109,7 +109,7 @@ func send_spies():
 		})
 
 	war_phase = WarPhase.ESPIONAGE
-	print("WarManager: 4 espions envoyés en reconnaissance")
+	#print("WarManager: 4 espions envoyés en reconnaissance")
 
 func _update_spies(dt: float):
 	for spy in spies:
@@ -126,7 +126,7 @@ func _update_spies(dt: float):
 					spy["state"] = SpyState.SCOUTING
 					spy["found"] = true
 					spy["timer"] = 0.0
-					print("WarManager: espion a trouvé le village ennemi ! Direction: %s" % str(spy["direction"]))
+					#print("WarManager: espion a trouvé le village ennemi ! Direction: %s" % str(spy["direction"]))
 				elif spy["distance_traveled"] >= SPY_MAX_RANGE:
 					# Rien trouvé, retour
 					spy["state"] = SpyState.RETURNING
@@ -147,7 +147,7 @@ func _update_spies(dt: float):
 					if spy["found"]:
 						enemy_discovered = true
 						enemy_position = enemy_village.village_center
-						print("WarManager: rapport d'espion reçu ! Village ennemi à %s" % str(enemy_position))
+						#print("WarManager: rapport d'espion reçu ! Village ennemi à %s" % str(enemy_position))
 						war_phase = WarPhase.PREPARATION
 
 func get_spies_status() -> Dictionary:
@@ -189,8 +189,8 @@ func launch_attack(num_soldiers: int):
 	army_timer = 0.0
 
 	war_phase = WarPhase.WAR
-	print("WarManager: armée de %d soldats en marche ! Distance: %.0f blocs, durée: %.0fs" % [
-		num_soldiers, distance, army_march_duration])
+	#print("WarManager: armée de %d soldats en marche ! Distance: %.0f blocs, durée: %.0fs" % [
+	#	num_soldiers, distance, army_march_duration])
 
 func _update_army(dt: float):
 	match army_state:
@@ -206,13 +206,13 @@ func _update_army(dt: float):
 				army_timer = 0.0
 				if war_phase == WarPhase.WAR:
 					war_phase = WarPhase.PEACE
-				print("WarManager: armée de retour au village")
+				#print("WarManager: armée de retour au village")
 
 func _resolve_battle():
 	"""Résoudre le combat."""
-	print("WarManager: === BATAILLE ! ===")
-	print("  Attaque: %d soldats (force %d)" % [army_soldiers, army_strength])
-	print("  Défense ennemie: %d" % enemy_village.get_defense_strength())
+	#print("WarManager: === BATAILLE ! ===")
+	#print("  Attaque: %d soldats (force %d)" % [army_soldiers, army_strength])
+	#print("  Défense ennemie: %d" % enemy_village.get_defense_strength())
 
 	var destroyed = enemy_village.take_damage(army_strength)
 
@@ -223,14 +223,14 @@ func _resolve_battle():
 		# Soldats survivants (pertes légères en cas de victoire)
 		var losses = maxi(1, army_soldiers / 4)
 		army_soldiers -= losses
-		print("WarManager: VICTOIRE ! Pertes: %d soldats" % losses)
+		#print("WarManager: VICTOIRE ! Pertes: %d soldats" % losses)
 	else:
 		# Défaite partielle — pertes lourdes
 		var losses = maxi(army_soldiers / 2, 1)
 		army_soldiers -= losses
 		army_state = ArmyState.RETURNING_DEFEAT
 		army_timer = 0.0
-		print("WarManager: attaque repoussée. Pertes: %d soldats" % losses)
+		#print("WarManager: attaque repoussée. Pertes: %d soldats" % losses)
 
 func get_army_progress() -> float:
 	"""Retourne 0.0-1.0 progression de la marche."""
@@ -262,17 +262,17 @@ func _try_enemy_attack():
 		enemy_army_incoming = true
 		enemy_army_timer = 0.0
 		enemy_attack_strength = enemy_village.soldiers_count * 5
-		print("WarManager: ALERTE ! Armée ennemie en approche (%d soldats)" % enemy_village.soldiers_count)
+		#print("WarManager: ALERTE ! Armée ennemie en approche (%d soldats)" % enemy_village.soldiers_count)
 
 func _resolve_enemy_attack():
 	var player_defense = guards_count * 6 + village_manager.built_structures.size() * 2
-	print("WarManager: === ATTAQUE ENNEMIE ! ===")
-	print("  Attaque ennemie: force %d" % enemy_attack_strength)
-	print("  Défense joueur: %d (gardes: %d)" % [player_defense, guards_count])
+	#print("WarManager: === ATTAQUE ENNEMIE ! ===")
+	#print("  Attaque ennemie: force %d" % enemy_attack_strength)
+	#print("  Défense joueur: %d (gardes: %d)" % [player_defense, guards_count])
 
 	if enemy_attack_strength > player_defense:
 		# Le village joueur subit des dégâts (perte de ressources, pas de destruction totale)
-		print("WarManager: le village a subi des dégâts !")
+		#print("WarManager: le village a subi des dégâts !")
 		# Pertes de ressources
 		var lost_resources = [11, 25, 71, 19]  # planches, pavé, pain, fer
 		for bt in lost_resources:
@@ -283,7 +283,7 @@ func _resolve_enemy_attack():
 		# Pertes de gardes
 		guards_count = maxi(0, guards_count - enemy_attack_strength / 6)
 	else:
-		print("WarManager: attaque repoussée ! Pertes ennemies lourdes")
+		#print("WarManager: attaque repoussée ! Pertes ennemies lourdes")
 		enemy_village.soldiers_count = maxi(0, enemy_village.soldiers_count - 3)
 
 # ============================================================

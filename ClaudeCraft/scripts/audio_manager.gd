@@ -133,6 +133,17 @@ const CAVE_MOOD_INCREMENT = 1.0 / 6000.0  # MC : 1/6000 par tick en obscurité t
 const CAVE_MOOD_LIGHT_DECREMENT = 1.0 / 1000.0  # Diminution par source lumineuse proche
 var cave_ambient_player: AudioStreamPlayer = null
 
+# ── Debug : log des derniers sons ambiants ──
+var _ambient_log: Array = []  # Array de String, max 20 entrées
+
+func _log_ambient(category: String, description: String):
+	var timestamp = Time.get_ticks_msec() / 1000.0
+	var entry = "[%.1fs] %s: %s" % [timestamp, category, description]
+	_ambient_log.append(entry)
+	if _ambient_log.size() > 20:
+		_ambient_log.pop_front()
+	print(entry)
+
 # ============================================================
 # MUSIQUE D'AMBIANCE MC — Tracks aléatoires avec pauses
 # ============================================================
@@ -729,19 +740,26 @@ func _on_ambient_b_finished():
 			ambient_player_b.play()
 
 func _generate_biome_ambient(biome: int, height: float) -> AudioStream:
+	var biome_names = {BIOME_DESERT: "Désert", BIOME_FOREST: "Forêt", BIOME_MOUNTAIN: "Montagne", BIOME_PLAINS: "Plaines"}
 	if biome == BIOME_FOREST:
 		var forest_stream = _get_forest_ambient_for_current_hour()
 		if forest_stream:
+			_log_ambient("BIOME_FOREST", "fichier: %s" % forest_stream.resource_path.get_file())
 			return forest_stream
+		_log_ambient("BIOME_FOREST", "procédural (pas de fichier pour cette heure)")
 		return _generate_ambient_forest()
 	match biome:
 		BIOME_DESERT:
+			_log_ambient("BIOME", "procédural Désert")
 			return _generate_ambient_desert()
 		BIOME_MOUNTAIN:
+			_log_ambient("BIOME", "procédural Montagne (h=%.0f)" % height)
 			return _generate_ambient_mountain(height)
 		BIOME_PLAINS:
+			_log_ambient("BIOME", "procédural Plaines")
 			return _generate_ambient_plains()
 		_:
+			_log_ambient("BIOME", "procédural Plaines (fallback)")
 			return _generate_ambient_plains()
 
 func _get_forest_ambient_for_current_hour() -> AudioStream:
@@ -990,15 +1008,21 @@ func _update_cave_mood(delta: float):
 		cave_mood = max(0.0, cave_mood - 0.05)
 		return
 
-	# 2) Sous terre : compter les sources de lumière proches (rayon 7 blocs)
+	# 2) Sous terre : compter les sources de lumière proches (rayon 5, pas de 3)
 	var light_sources = 0
-	for dx in range(-7, 8, 2):  # Pas de 2 pour performance
-		for dy in range(-4, 5, 2):
-			for dz in range(-7, 8, 2):
+	for dx in range(-5, 6, 3):
+		for dy in range(-3, 4, 3):
+			for dz in range(-5, 6, 3):
 				var check_pos = Vector3(floor(pos.x) + dx, player_y + dy, floor(pos.z) + dz)
 				var bt = world_mgr.get_block_at_position(check_pos)
 				if bt == BlockRegistry.BlockType.TORCH or bt == BlockRegistry.BlockType.LANTERN:
 					light_sources += 1
+					if light_sources >= 3:
+						break  # Suffisant pour savoir qu'on est éclairé
+			if light_sources >= 3:
+				break
+		if light_sources >= 3:
+			break
 
 	# 3) Calculer le changement de mood (simule CAVE_MOOD_TICKS_PER_CHECK ticks MC)
 	var mood_change = 0.0
@@ -1029,6 +1053,7 @@ func _play_cave_ambient():
 	cave_ambient_player.volume_db = linear_to_db(ambient_volume * master_volume * 0.6)
 	cave_ambient_player.pitch_scale = randf_range(0.9, 1.1)
 	cave_ambient_player.play()
+	_log_ambient("CAVE", "%s (pitch=%.2f)" % [stream.resource_path.get_file(), cave_ambient_player.pitch_scale])
 
 # ============================================================
 # MUSIQUE D'AMBIANCE MC
@@ -1080,7 +1105,7 @@ func _load_music_pools():
 	if music_day.size() < 3:
 		music_day = music_night.duplicate()
 
-	print("[MUSIC] Loaded ", music_day.size(), " day tracks, ", music_night.size(), " night tracks, ", music_water.size(), " water tracks")
+	#print("[MUSIC] Loaded ", music_day.size(), " day tracks, ", music_night.size(), " night tracks, ", music_water.size(), " water tracks")
 
 func _update_music(delta: float):
 	# Pendant une pause entre morceaux
@@ -1143,7 +1168,7 @@ func _play_next_music():
 	active_p.stream = stream
 	active_p.volume_db = linear_to_db(0.001)
 	active_p.play()
-	print("[MUSIC] Now playing: ", stream.resource_path.get_file(), " (pool: ", music_current_pool, ")")
+	_log_ambient("MUSIC", "%s (pool: %s)" % [stream.resource_path.get_file(), music_current_pool])
 
 	# Fade in progressif via crossfade
 	music_is_crossfading = true
@@ -1153,6 +1178,7 @@ func _on_music_finished():
 	# Morceau terminé → pause aléatoire MC (60-300 secondes = 1-5 minutes)
 	music_is_paused = true
 	music_pause_timer = randf_range(60.0, 300.0)
+	_log_ambient("MUSIC", "track terminé — pause %.0fs avant prochain morceau" % music_pause_timer)
 
 func _handle_music_crossfade(delta: float):
 	if not music_is_crossfading:

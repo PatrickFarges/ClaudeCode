@@ -73,7 +73,7 @@ func initialize(center: Vector3, ref_y: int = 70):
 		25: 20,   # COBBLESTONE
 		16: 5,    # COAL_ORE
 	}
-	print("EnemyVillage: initialisé à %s (ref_y=%d)" % [str(center), ref_y])
+	#print("EnemyVillage: initialisé à %s (ref_y=%d)" % [str(center), ref_y])
 
 func _process(delta):
 	if not _initialized or is_destroyed:
@@ -208,17 +208,17 @@ func _try_advance_phase():
 			if _get_stock(11) >= 20:  # 20 planches
 				village_phase = 1
 				village_tool_tier = 1
-				print("EnemyVillage: === PHASE 1 — ÂGE DU BOIS ===")
+				#print("EnemyVillage: === PHASE 1 — ÂGE DU BOIS ===")
 		1:
 			if _get_stock(25) >= 30 and total_buildings >= 2:
 				village_phase = 2
 				village_tool_tier = 2
-				print("EnemyVillage: === PHASE 2 — ÂGE DE LA PIERRE ===")
+				#print("EnemyVillage: === PHASE 2 — ÂGE DE LA PIERRE ===")
 		2:
 			if _get_stock(19) >= 5 and total_buildings >= 5:
 				village_phase = 3
 				village_tool_tier = 3
-				print("EnemyVillage: === PHASE 3 — ÂGE DU FER ===")
+				#print("EnemyVillage: === PHASE 3 — ÂGE DU FER ===")
 
 func _add_stock(bt: int, amount: int):
 	stockpile[bt] = stockpile.get(bt, 0) + amount
@@ -244,13 +244,13 @@ func take_damage(attack_strength: int) -> bool:
 	var defense = get_defense_strength()
 	if attack_strength > defense:
 		is_destroyed = true
-		print("EnemyVillage: DÉTRUIT ! (attaque %d vs défense %d)" % [attack_strength, defense])
+		#print("EnemyVillage: DÉTRUIT ! (attaque %d vs défense %d)" % [attack_strength, defense])
 		return true
 	else:
 		# Pertes
 		var losses = attack_strength / 3
 		soldiers_count = maxi(0, soldiers_count - losses)
-		print("EnemyVillage: attaque repoussée (attaque %d vs défense %d, pertes: %d)" % [attack_strength, defense, losses])
+		#print("EnemyVillage: attaque repoussée (attaque %d vs défense %d, pertes: %d)" % [attack_strength, defense, losses])
 		return false
 
 func get_status_text() -> String:

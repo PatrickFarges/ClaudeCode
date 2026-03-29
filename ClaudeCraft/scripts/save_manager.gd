@@ -82,7 +82,7 @@ func save_world(world_name: String) -> bool:
 			if _save_chunk_raw(chunks_dir, chunk_pos, blocks_data):
 				saved_count += 1
 
-	print("[SaveManager] Sauvegarde terminee : ", saved_count, " chunks modifies")
+	#print("[SaveManager] Sauvegarde terminee : ", saved_count, " chunks modifies")
 	return true
 
 func _serialize_player() -> Dictionary:
@@ -178,7 +178,7 @@ func load_world(world_name: String) -> bool:
 	world_manager.last_player_chunk = Vector3i(-9999, 0, -9999)
 	world_manager._update_chunks()
 
-	print("[SaveManager] Chargement termine : ", world_manager.saved_chunk_data.size(), " chunks modifies restaures")
+	#print("[SaveManager] Chargement termine : ", world_manager.saved_chunk_data.size(), " chunks modifies restaures")
 	return true
 
 func _clear_world():

@@ -292,9 +292,6 @@ func _init_inventory():
 	inventory[BlockRegistry.BlockType.IRON_DOOR] = 0
 	inventory[BlockRegistry.BlockType.LANTERN] = 0
 	inventory[BlockRegistry.BlockType.IRON_BARS] = 0
-	inventory[BlockRegistry.BlockType.OAK_DOOR] = 0
-	inventory[BlockRegistry.BlockType.IRON_DOOR] = 0
-	inventory[BlockRegistry.BlockType.GLASS_PANE] = 0
 
 func _create_block_highlighter():
 	block_highlighter = BlockHighlighter.new()
@@ -341,7 +338,7 @@ func _create_player_model():
 					_steve_packed = packed
 					scene_root.queue_free()
 	if not _steve_packed:
-		print("Player: IMPOSSIBLE de charger steve.glb pour vue 3e personne")
+		#print("Player: IMPOSSIBLE de charger steve.glb pour vue 3e personne")
 		return
 	_player_model = _steve_packed.instantiate()
 	_player_model.scale = Vector3(0.85, 0.85, 0.85)
@@ -350,21 +347,12 @@ func _create_player_model():
 	# Appliquer le skin Steve (même méthode que npc_villager.gd)
 	_apply_steve_skin()
 	# Trouver l'AnimationPlayer
-	_player_anim = _find_anim_player(_player_model)
+	_player_anim = NodeUtils.find_animation_player(_player_model)
 	if _player_anim:
 		_player_anim.deterministic = true
-		print("Player: modèle 3e personne prêt (%d anims)" % _player_anim.get_animation_list().size())
+		#print("Player: modèle 3e personne prêt (%d anims)" % _player_anim.get_animation_list().size())
 	# Trouver le skeleton pour le systeme d'armure
-	_player_skeleton = _find_skeleton(_player_model)
-
-func _find_skeleton(node: Node) -> Skeleton3D:
-	if node is Skeleton3D:
-		return node
-	for child in node.get_children():
-		var found = _find_skeleton(child)
-		if found:
-			return found
-	return null
+	_player_skeleton = NodeUtils.find_skeleton(_player_model)
 
 func equip_armor_set(armor_material: String) -> void:
 	if not _player_skeleton:
@@ -372,12 +360,12 @@ func equip_armor_set(armor_material: String) -> void:
 	if armor_material.is_empty():
 		ArmorMgr.unequip_all(_player_skeleton)
 		equipped_armor.clear()
-		print("Player: armure retirée")
+		#print("Player: armure retirée")
 	else:
 		ArmorMgr.equip_set(_player_skeleton, armor_material)
 		for piece in ["helmet", "chestplate", "leggings", "boots"]:
 			equipped_armor[piece] = armor_material
-		print("Player: armure %s équipée" % armor_material)
+		#print("Player: armure %s équipée" % armor_material)
 
 func equip_armor_piece(piece_name: String, armor_material: String) -> void:
 	if not _player_skeleton:
@@ -416,19 +404,10 @@ func _apply_skin_recursive(node: Node, tex: Texture2D):
 	for child in node.get_children():
 		_apply_skin_recursive(child, tex)
 
-func _find_anim_player(node: Node) -> AnimationPlayer:
-	for child in node.get_children():
-		if child is AnimationPlayer:
-			return child
-		var found = _find_anim_player(child)
-		if found:
-			return found
-	return null
-
 func _cycle_camera_mode():
 	camera_mode = (camera_mode + 1) % 3
 	var mode_names = ["1ère personne", "3ème personne (dos)", "3ème personne (face)"]
-	print("Caméra: %s" % mode_names[camera_mode])
+	#print("Caméra: %s" % mode_names[camera_mode])
 	match camera_mode:
 		0:  # 1ère personne
 			camera.position = Vector3(0, CAMERA_HEAD_Y, 0)
@@ -462,7 +441,6 @@ func _update_third_person_camera():
 	# Empêcher la caméra de passer sous le terrain
 	var cam_world = global_position + transform.basis * target_pos
 	if world_manager:
-		var ground_y = global_position.y  # fallback
 		var check_pos = cam_world.floor()
 		var block_at_cam = world_manager.get_block_at_position(check_pos)
 		if block_at_cam != BlockRegistry.BlockType.AIR and block_at_cam != BlockRegistry.BlockType.WATER:
@@ -869,28 +847,44 @@ func get_air_ratio() -> float:
 	# Retourne le ratio d'air restant (0.0 = noyade, 1.0 = plein)
 	return clampf(_air_supply / DROWN_TIME, 0.0, 1.0)
 
+# Pré-chargement sons swim/splash (évite load() depuis le disque à chaque son)
+var _swim_sounds: Array = []
+var _splash_sound: AudioStream = null
+var _swim_sounds_loaded: bool = false
+
+func _load_swim_sounds():
+	if _swim_sounds_loaded:
+		return
+	_swim_sounds_loaded = true
+	for i in range(1, 19):
+		var snd = load("res://assets/Audio/Minecraft/liquid/swim%d.mp3" % i)
+		if snd:
+			_swim_sounds.append(snd)
+	_splash_sound = load("res://assets/Audio/Minecraft/liquid/splash.mp3")
+
 func _play_swim_sound():
-	var idx = randi_range(1, 18)
-	var path = "res://assets/Audio/Minecraft/liquid/swim%d.mp3" % idx
-	var snd = load(path)
-	if snd:
-		var asp = AudioStreamPlayer.new()
-		asp.stream = snd
-		asp.volume_db = -12.0
-		add_child(asp)
-		asp.play()
-		asp.finished.connect(asp.queue_free)
+	if not _swim_sounds_loaded:
+		_load_swim_sounds()
+	if _swim_sounds.is_empty():
+		return
+	var asp = AudioStreamPlayer.new()
+	asp.stream = _swim_sounds[randi() % _swim_sounds.size()]
+	asp.volume_db = -12.0
+	add_child(asp)
+	asp.play()
+	asp.finished.connect(asp.queue_free)
 
 func _play_splash_sound():
-	var path = "res://assets/Audio/Minecraft/liquid/splash.mp3"
-	var snd = load(path)
-	if snd:
-		var asp = AudioStreamPlayer.new()
-		asp.stream = snd
-		asp.volume_db = -6.0
-		add_child(asp)
-		asp.play()
-		asp.finished.connect(asp.queue_free)
+	if not _swim_sounds_loaded:
+		_load_swim_sounds()
+	if not _splash_sound:
+		return
+	var asp = AudioStreamPlayer.new()
+	asp.stream = _splash_sound
+	asp.volume_db = -6.0
+	add_child(asp)
+	asp.play()
+	asp.finished.connect(asp.queue_free)
 
 func _physics_process(delta):
 	_update_compass()
@@ -934,26 +928,39 @@ func _physics_process(delta):
 					nb.create_collision()
 
 	# Sécurité : détecter chute à travers le terrain (sol existe mais on tombe)
-	if world_manager and not in_water and velocity.y < -10.0 and _traverse_cooldown <= 0:
+	# Vérifie si le joueur est DANS un bloc solide (= collision manquante)
+	if world_manager and not in_water and velocity.y < -5.0 and _traverse_cooldown <= 0:
 		var wx = int(floor(global_position.x))
 		var wz = int(floor(global_position.z))
 		var fy = int(floor(global_position.y))
-		# Vérifier s'il y a un bloc solide juste en dessous ou au-dessus de nous
-		for check_y in range(fy, fy + 10):
-			var bt = world_manager.get_block_at_position(Vector3(wx, check_y, wz))
-			if bt > 0 and bt != BlockRegistry.BlockType.WATER and bt != BlockRegistry.BlockType.LEAVES and not BlockRegistry.is_cross_mesh(bt):
-				# On est en train de traverser un bloc solide — remonter dessus
-				global_position.y = check_y + 1.5
-				velocity = Vector3.ZERO
-				# Forcer la collision du chunk à cette position
-				var cp = Vector3i(int(floor(float(wx) / 16.0)), 0, int(floor(float(wz) / 16.0)))
-				if world_manager.chunks.has(cp):
-					var c = world_manager.chunks[cp]
-					if c.is_mesh_built:
-						c.create_collision()
-				_traverse_cooldown = 1.0  # anti-boucle : 1s de cooldown
-				print("Player: traverse le sol — repositionné à Y=%d" % int(global_position.y))
-				break
+		# Vérifier si le joueur traverse un bloc solide (pieds ou corps dans un bloc solide)
+		var feet_bt = world_manager.get_block_at_position(Vector3(wx, fy, wz))
+		var body_bt = world_manager.get_block_at_position(Vector3(wx, fy + 1, wz))
+		var is_solid_feet = feet_bt > 0 and feet_bt != BlockRegistry.BlockType.WATER and feet_bt != BlockRegistry.BlockType.LEAVES and not BlockRegistry.is_cross_mesh(feet_bt)
+		var is_solid_body = body_bt > 0 and body_bt != BlockRegistry.BlockType.WATER and body_bt != BlockRegistry.BlockType.LEAVES and not BlockRegistry.is_cross_mesh(body_bt)
+		if is_solid_feet or is_solid_body:
+			# On est à l'intérieur d'un bloc solide — chercher le dessus le plus proche
+			var surface_y = fy
+			if is_solid_body:
+				surface_y = fy + 1
+			# Remonter jusqu'à trouver de l'air au-dessus d'un bloc solide
+			for check_y in range(surface_y, surface_y + 20):
+				var bt_above = world_manager.get_block_at_position(Vector3(wx, check_y + 1, wz))
+				var bt_here = world_manager.get_block_at_position(Vector3(wx, check_y, wz))
+				var here_solid = bt_here > 0 and bt_here != BlockRegistry.BlockType.WATER and bt_here != BlockRegistry.BlockType.LEAVES and not BlockRegistry.is_cross_mesh(bt_here)
+				var above_air = bt_above == 0 or bt_above == BlockRegistry.BlockType.WATER or bt_above == BlockRegistry.BlockType.LEAVES or BlockRegistry.is_cross_mesh(bt_above)
+				if here_solid and above_air:
+					global_position.y = check_y + 1.5
+					velocity = Vector3.ZERO
+					# Forcer la collision du chunk à cette position
+					var cp = Vector3i(int(floor(float(wx) / 16.0)), 0, int(floor(float(wz) / 16.0)))
+					if world_manager.chunks.has(cp):
+						var c = world_manager.chunks[cp]
+						if c.is_mesh_built:
+							c.create_collision()
+					_traverse_cooldown = 0.5  # anti-boucle : 0.5s de cooldown
+					#print("Player: traverse le sol — repositionné à Y=%d" % int(global_position.y))
+					break
 	if _traverse_cooldown > 0:
 		_traverse_cooldown -= delta
 
@@ -970,7 +977,7 @@ func _physics_process(delta):
 					break
 		global_position.y = safe_y
 		velocity = Vector3.ZERO
-		print("Player: chute sous le monde — téléport de sécurité à Y=%d" % int(safe_y))
+		#print("Player: chute sous le monde — téléport de sécurité à Y=%d" % int(safe_y))
 
 	# Gravité (réduite dans l'eau et sur échelle)
 	if not is_on_floor():

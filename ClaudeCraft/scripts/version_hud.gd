@@ -156,7 +156,7 @@ func _update_speed_label():
 
 func _cycle_render_preset():
 	if not _env:
-		print("RenderPresets: pas d'Environment trouvé!")
+		#print("RenderPresets: pas d'Environment trouvé!")
 		return
 	_render_preset = (_render_preset + 1) % RENDER_NAMES.size()
 	match _render_preset:
@@ -172,7 +172,7 @@ func _cycle_render_preset():
 			_apply_reshade_epique()
 	render_label.text = "Rendu : %s (F2)" % RENDER_NAMES[_render_preset]
 	render_label.add_theme_color_override("font_color", RENDER_COLORS[_render_preset])
-	print("Render preset: %s" % RENDER_NAMES[_render_preset])
+	#print("Render preset: %s" % RENDER_NAMES[_render_preset])
 
 func _reset_env():
 	# Reset TOUTES les propriétés post-process à un état neutre
@@ -197,8 +197,8 @@ func _apply_vanilla():
 	_env.volumetric_fog_enabled = false
 	_env.adjustment_enabled = false
 
-	_env.tonemap_mode = 2
-	_env.tonemap_white = 6.0
+	_env.tonemap_mode = 0  # Linear — comme Bedrock Edition
+	_env.tonemap_white = 1.0
 	_env.tonemap_exposure = 1.0
 
 	_env.ssao_enabled = true

@@ -41,7 +41,7 @@ func initialize(origin: Vector3, dir: Vector3, charge_factor: float, shoot_node:
 	is_critical = charge_factor >= 1.0
 	shooter = shoot_node
 	_orient_to_direction()
-	print("[Arrow] Spawned at %s dir=%s speed=%.1f factor=%.2f" % [str(global_position), str(direction), speed, charge_factor])
+	#print("[Arrow] Spawned at %s dir=%s speed=%.1f factor=%.2f" % [str(global_position), str(direction), speed, charge_factor])
 
 func _process(delta: float):
 	lifetime += delta
@@ -97,7 +97,7 @@ func _on_hit(result: Dictionary):
 	var audio = get_tree().get_first_node_in_group("audio_manager")
 	if audio:
 		audio.play_place_sound(BlockRegistry.BlockType.STONE, global_position)
-	print("[Arrow] Hit block at %s" % str(result.position))
+	#print("[Arrow] Hit block at %s" % str(result.position))
 
 func _check_entity_hits():
 	var hit_range = 1.2
@@ -134,7 +134,7 @@ func _damage_entity(entity: Node):
 	ground_timer = GROUND_LIFETIME - 3.0
 	if trail_particles:
 		trail_particles.emitting = false
-	print("[Arrow] Hit entity! Damage: %d" % damage)
+	#print("[Arrow] Hit entity! Damage: %d" % damage)
 
 func _calculate_damage() -> int:
 	var vel_mag = speed / 40.0  # Normaliser
@@ -177,7 +177,7 @@ func _build_arrow_mesh():
 		mat.albedo_color = Color(0.6, 0.4, 0.2)
 		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		mesh_instance.material_override = mat
-		print("[Arrow] Fallback mesh (texture not found: %s)" % abs_path)
+		#print("[Arrow] Fallback mesh (texture not found: %s)" % abs_path)
 
 	mesh_instance.rotation_degrees = Vector3(0, 0, 45)
 	mesh_instance.scale = Vector3(1.5, 1.5, 1.5)

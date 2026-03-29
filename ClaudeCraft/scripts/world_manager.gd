@@ -184,7 +184,7 @@ func _ready():
 		var placements = struct_mgr.get_placement_data()
 		if placements.size() > 0:
 			chunk_generator.set_structure_placements(placements)
-			print("WorldManager: %d structure(s) à placer" % placements.size())
+			#print("WorldManager: %d structure(s) à placer" % placements.size())
 
 	# Attendre que le joueur soit prêt
 	await get_tree().process_frame
@@ -213,10 +213,10 @@ func _find_land_spawn_xz():
 	var pz = int(player.global_position.z)
 	var start_biome = chunk_generator.get_biome_at(px, pz)
 	if start_biome <= 3:
-		print("WorldManager: spawn XZ OK (%d, %d) biome=%d" % [px, pz, start_biome])
+		#print("WorldManager: spawn XZ OK (%d, %d) biome=%d" % [px, pz, start_biome])
 		return
 	# Chercher la terre la plus proche en spirale
-	print("WorldManager: spawn en eau (biome %d), recherche spirale..." % start_biome)
+	#print("WorldManager: spawn en eau (biome %d), recherche spirale..." % start_biome)
 	for radius in range(1, 500):
 		var steps = maxi(radius * 8, 8)
 		for step in range(steps):
@@ -226,9 +226,9 @@ func _find_land_spawn_xz():
 			if chunk_generator.get_biome_at(wx, wz) <= 3:
 				player.global_position.x = wx
 				player.global_position.z = wz
-				print("WorldManager: terre trouvee a (%d, %d) rayon=%d" % [wx, wz, radius])
+				#print("WorldManager: terre trouvee a (%d, %d) rayon=%d" % [wx, wz, radius])
 				return
-	print("WorldManager: pas de terre trouvee, spawn par defaut")
+	#print("WorldManager: pas de terre trouvee, spawn par defaut")
 
 func _finalize_spawn():
 	"""Phase 2 : une fois le chunk genere, scanner les blocs reels pour trouver le sol."""
@@ -264,8 +264,8 @@ func _finalize_spawn():
 		player.spawn_position = player.global_position
 		_spawn_pending = false
 		_spawn_enable_timer = 10  # attendre 10 frames pour la collision
-		print("WorldManager: SPAWN FINAL a (%d, %d, %d) bloc=%d" % [
-			int(player.global_position.x), spawn_y, int(player.global_position.z), bt])
+		#print("WorldManager: SPAWN FINAL a (%d, %d, %d) bloc=%d" % [
+		#	int(player.global_position.x), spawn_y, int(player.global_position.z), bt])
 		return
 	# Aucun sol trouve — fallback haut
 	player.global_position.y = 120
@@ -273,7 +273,7 @@ func _finalize_spawn():
 	player.spawn_position = player.global_position
 	_spawn_pending = false
 	_spawn_enable_timer = 10
-	print("WorldManager: SPAWN fallback Y=120 (pas de sol dans le chunk)")
+	#print("WorldManager: SPAWN fallback Y=120 (pas de sol dans le chunk)")
 
 func _process(_delta):
 	# Instancier les chunks en attente (max 2/frame)
@@ -290,7 +290,7 @@ func _process(_delta):
 		if _spawn_enable_timer == 0 and player:
 			player.set_physics_process(true)
 			player.visible = true
-			print("WorldManager: joueur active (collision prete)")
+			#print("WorldManager: joueur active (collision prete)")
 
 	# Collision différée : créer/supprimer selon distance joueur (1/frame)
 	if player:
@@ -310,14 +310,14 @@ func _process(_delta):
 			_mob_spawn_timer = 0.0
 			_try_spawn_mobs()
 
-		# Deferred passive mob spawning — wait for chunk mesh to be built
-		if not _pending_mob_chunks.is_empty():
-			_process_pending_mob_spawns()
-
 		# Preload mob GLBs once (after first chunks are loaded, avoid startup freeze)
 		if not _mob_glbs_preloaded and chunks.size() >= 4:
 			_mob_glbs_preloaded = true
 			_preload_mob_glbs()
+
+		# Deferred passive mob spawning — wait for chunk mesh to be built AND db loaded
+		if _mob_glbs_preloaded and not _pending_mob_chunks.is_empty():
+			_process_pending_mob_spawns()
 
 func _update_chunk_collisions():
 	var player_chunk = _world_to_chunk(player.global_position)
@@ -444,7 +444,8 @@ func _instantiate_chunk(chunk_data: Dictionary):
 
 	var _t_inst = Time.get_ticks_msec() - _t0
 	if _t_inst > 5:
-		print("[WorldManager] instantiate chunk %s: %dms" % [str(chunk_pos), _t_inst])
+		#print("[WorldManager] instantiate chunk %s: %dms" % [str(chunk_pos), _t_inst])
+		pass
 
 func _unload_distant_chunks(player_chunk_pos: Vector3i):
 	var chunks_to_remove = []
@@ -636,8 +637,6 @@ func find_surface_y(wx: int, wz: int) -> int:
 
 func find_ground_y(wx: int, wz: int) -> int:
 	# Trouver le Y du SOL (ignore feuilles, troncs, herbe, végétation)
-	var leaf_set = { 6: true, 44: true, 45: true, 46: true, 47: true, 48: true, 49: true }
-	var trunk_set = { 5: true, 32: true, 33: true, 34: true, 35: true, 36: true, 42: true }
 	var flora_set = { 77: true, 78: true, 79: true, 80: true, 81: true, 82: true }
 	var chunk_pos = Vector3i(floori(float(wx) / Chunk.CHUNK_SIZE), 0, floori(float(wz) / Chunk.CHUNK_SIZE))
 	var start_y = 120
@@ -647,7 +646,7 @@ func find_ground_y(wx: int, wz: int) -> int:
 		var bt = get_block_at_position(Vector3(wx, y, wz))
 		if bt == BlockRegistry.BlockType.AIR or bt == BlockRegistry.BlockType.WATER:
 			continue
-		if leaf_set.has(bt) or trunk_set.has(bt) or flora_set.has(bt):
+		if BlockRegistry.LEAF_TYPES.has(bt) or BlockRegistry.WOOD_TYPES.has(bt) or flora_set.has(bt):
 			continue
 		return y
 	return -1
@@ -830,7 +829,7 @@ func _try_spawn_village(chunk_pos: Vector3i, chunk_data: Dictionary):
 	if player and center_surface_y > 0 and center_surface_y < 200:
 		player.global_position.y = center_surface_y + 3.0
 		player.velocity = Vector3.ZERO
-		print("Player: téléporté à la surface Y=%d" % (center_surface_y + 3))
+		#print("Player: téléporté à la surface Y=%d" % (center_surface_y + 3))
 
 	var village_center = Vector3(
 		chunk_pos.x * Chunk.CHUNK_SIZE + center_x + 0.5,
@@ -895,7 +894,7 @@ func _try_spawn_village(chunk_pos: Vector3i, chunk_data: Dictionary):
 
 		spawned += 1
 
-	print("WorldManager: village spawné avec %d villageois à %s" % [spawned, str(village_center)])
+	#print("WorldManager: village spawné avec %d villageois à %s" % [spawned, str(village_center)])
 
 	# Le village ennemi sera spawné par VillageManager quand le joueur atteint Phase 4
 
@@ -922,8 +921,8 @@ func _spawn_enemy_village(player_village_center: Vector3):
 	war_mgr.name = "WarManager"
 	get_parent().call_deferred("add_child", war_mgr)
 
-	print("WorldManager: village ennemi initialisé à %s (distance: %d blocs, direction: %s)" % [
-		str(enemy_center), distance, str(dir)])
+	#print("WorldManager: village ennemi initialisé à %s (distance: %d blocs, direction: %s)" % [
+	#	str(enemy_center), distance, str(dir)])
 
 func _flatten_village_area(chunk_pos: Vector3i, packed_blocks: PackedByteArray, cx: int, cz: int, ref_y: int):
 	# Supprimer les blocs gênants au-dessus du sol dans un rayon de 6 blocs
@@ -954,7 +953,8 @@ func _flatten_village_area(chunk_pos: Vector3i, packed_blocks: PackedByteArray, 
 						packed_blocks[idx] = 0  # AIR
 						cleared += 1
 	if cleared > 0:
-		print("WorldManager: terrain aplati — %d blocs retirés autour du village" % cleared)
+		#print("WorldManager: terrain aplati — %d blocs retirés autour du village" % cleared)
+		pass
 
 # ============================================================
 #  MOB SPAWNING

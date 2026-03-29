@@ -8,6 +8,9 @@ const CHUNK_HEIGHT = 256
 static var _shared_material: Material = null
 static var _shared_water_material: StandardMaterial3D = null
 static var _shared_cross_material: Material = null
+static var _shared_torch_handle_mat: StandardMaterial3D = null
+static var _shared_torch_flame_mat: StandardMaterial3D = null
+static var _shared_lantern_mat: StandardMaterial3D = null
 const WATER_TYPE: int = 15  # BlockRegistry.BlockType.WATER
 
 # Cross mesh block types (vegetation) — skipped by greedy mesher, rendered as X quads
@@ -46,9 +49,6 @@ const THIN_TYPES: Dictionary = {
 	94: true,  # OAK_TRAPDOOR
 }
 const LANTERN_TYPE: int = 96  # LANTERN
-
-func _is_special_shape(bt: int) -> bool:
-	return SLAB_TYPES.has(bt) or STAIR_TYPES.has(bt) or FENCE_TYPES.has(bt) or DOOR_TYPES.has(bt) or THIN_TYPES.has(bt) or bt == LANTERN_TYPE
 
 # Bloc à exclure du greedy mesher (non-cube: flora, special shapes)
 static func _skip_bt(bt: int) -> bool:
@@ -200,7 +200,6 @@ func _thread_entry():
 
 ## P1 — Block property caches (populated once per mesh build, avoids thousands of registry lookups)
 var _tint_cache: Dictionary = {}   # "bt:face" -> Color
-var _tex_cache: Dictionary = {}    # "bt:face" -> String
 var _layer_cache: Dictionary = {}  # tex_name -> float
 
 ## P5 — AO is a stub (returns 1.0), pre-compute constant
@@ -246,8 +245,7 @@ func _compute_mesh_arrays():
 
 	# P1 — Clear caches for this build
 	_tint_cache.clear()
-	_tex_cache.clear()
-	_layer_cache.clear()
+_layer_cache.clear()
 
 	if y_min <= y_max:
 		_greedy_mesh_y_faces()
@@ -257,7 +255,7 @@ func _compute_mesh_arrays():
 		_build_water_mesh()
 		_build_flora_mesh()
 
-func _apply_mesh_data():
+func _apply_mesh_data(skip_throttle: bool = false):
 	# Toujours finir le thread d'abord (pas de crash si chunk freed)
 	if _mesh_thread:
 		_mesh_thread.wait_to_finish()
@@ -270,16 +268,18 @@ func _apply_mesh_data():
 		is_mesh_built = true
 		return
 
-	# Throttle: max 2 chunks appliqués par frame pour éviter les freeze
-	var frame = Engine.get_frames_drawn()
-	if frame != _apply_frame:
-		_apply_frame = frame
-		_apply_count = 0
-	if _apply_count >= MAX_APPLY_PER_FRAME:
-		# Reporter la construction mesh/collision à la frame suivante
-		get_tree().process_frame.connect(_deferred_apply, CONNECT_ONE_SHOT)
-		return
-	_apply_count += 1
+	# Throttle: max 1 chunk appliqué par frame pour éviter les freeze
+	# (skip_throttle=true pour les rebuilds joueur — collision critique)
+	if not skip_throttle:
+		var frame = Engine.get_frames_drawn()
+		if frame != _apply_frame:
+			_apply_frame = frame
+			_apply_count = 0
+		if _apply_count >= MAX_APPLY_PER_FRAME:
+			# Reporter la construction mesh/collision à la frame suivante
+			get_tree().process_frame.connect(_deferred_apply, CONNECT_ONE_SHOT)
+			return
+		_apply_count += 1
 
 	_build_and_attach_meshes()
 
@@ -361,7 +361,8 @@ func _build_and_attach_meshes():
 
 	var _t_total = Time.get_ticks_msec() - _t0
 	if _t_total > 10:
-		print("[Chunk %s] mesh: %dms (verts: %d)" % [str(chunk_position), _t_total, _vertices.size()])
+		#print("[Chunk %s] mesh: %dms (verts: %d)" % [str(chunk_position), _t_total, _vertices.size()])
+		pass
 
 	# Libérer les tableaux temporaires (sauf collision — gardées pour create_collision)
 	_vertices = PackedVector3Array()
@@ -421,7 +422,11 @@ func _thread_entry_rebuild():
 	call_deferred("_apply_rebuild_data")
 
 func _apply_rebuild_data():
-	# Nettoyer les anciens mesh/collision avant d'appliquer les nouveaux
+	# Garder l'ancienne collision active pendant la reconstruction pour éviter
+	# que le joueur tombe à travers le sol (la nouvelle remplacera l'ancienne)
+	var old_static_body = static_body
+
+	# Nettoyer les anciens mesh (mais PAS la collision — gardée temporairement)
 	if mesh_instance:
 		mesh_instance.queue_free()
 		mesh_instance = null
@@ -431,16 +436,20 @@ func _apply_rebuild_data():
 	if flora_mesh_instance:
 		flora_mesh_instance.queue_free()
 		flora_mesh_instance = null
-	if static_body:
-		static_body.queue_free()
-		static_body = null
-		collision_shape = null
+	# NE PAS détruire l'ancienne collision ici — on la garde comme filet de sécurité
+	static_body = null
+	collision_shape = null
 	has_collision = false
 	_clear_torch_lights()
 	# _apply_mesh_data fait le wait_to_finish du thread et crée les nouveaux mesh
-	_apply_mesh_data()
+	# skip_throttle=true : rebuild joueur, collision critique — ne pas reporter
+	_apply_mesh_data(true)
 	# Rebuild = joueur est dans ce chunk, collision immédiate nécessaire
 	create_collision()
+
+	# Maintenant que la nouvelle collision est en place, supprimer l'ancienne
+	if old_static_body:
+		old_static_body.queue_free()
 	# Si un rebuild était en attente pendant le thread, le relancer
 	if _rebuild_pending:
 		_rebuild_pending = false
@@ -914,12 +923,13 @@ func _create_torch_at(lx: int, ly: int, lz: int):
 	box.size = Vector3(0.15, 0.5, 0.15)
 	mesh_inst.mesh = box
 	mesh_inst.position = Vector3(0, 0.25, 0)
-	var mat = StandardMaterial3D.new()
-	mat.albedo_color = Color(0.6, 0.4, 0.2, 1.0)
-	mat.emission_enabled = true
-	mat.emission = Color(1.0, 0.85, 0.5, 1.0)
-	mat.emission_energy_multiplier = 2.0
-	mesh_inst.material_override = mat
+	if not _shared_torch_handle_mat:
+		_shared_torch_handle_mat = StandardMaterial3D.new()
+		_shared_torch_handle_mat.albedo_color = Color(0.6, 0.4, 0.2, 1.0)
+		_shared_torch_handle_mat.emission_enabled = true
+		_shared_torch_handle_mat.emission = Color(1.0, 0.85, 0.5, 1.0)
+		_shared_torch_handle_mat.emission_energy_multiplier = 2.0
+	mesh_inst.material_override = _shared_torch_handle_mat
 	pivot.add_child(mesh_inst)
 
 	# Flamme : petit cube émissif au sommet
@@ -928,12 +938,13 @@ func _create_torch_at(lx: int, ly: int, lz: int):
 	flame_box.size = Vector3(0.1, 0.15, 0.1)
 	flame_inst.mesh = flame_box
 	flame_inst.position = Vector3(0, 0.55, 0)
-	var flame_mat = StandardMaterial3D.new()
-	flame_mat.albedo_color = Color(1.0, 0.7, 0.1, 1.0)
-	flame_mat.emission_enabled = true
-	flame_mat.emission = Color(1.0, 0.85, 0.4, 1.0)
-	flame_mat.emission_energy_multiplier = 4.0
-	flame_inst.material_override = flame_mat
+	if not _shared_torch_flame_mat:
+		_shared_torch_flame_mat = StandardMaterial3D.new()
+		_shared_torch_flame_mat.albedo_color = Color(1.0, 0.7, 0.1, 1.0)
+		_shared_torch_flame_mat.emission_enabled = true
+		_shared_torch_flame_mat.emission = Color(1.0, 0.85, 0.4, 1.0)
+		_shared_torch_flame_mat.emission_energy_multiplier = 4.0
+	flame_inst.material_override = _shared_torch_flame_mat
 	pivot.add_child(flame_inst)
 
 	# Lumière omnidirectionnelle
@@ -964,12 +975,13 @@ func _create_lantern_at(lx: int, ly: int, lz: int):
 	box.size = Vector3(0.35, 0.45, 0.35)
 	body.mesh = box
 	body.position = Vector3(0, 0.225, 0)
-	var mat = StandardMaterial3D.new()
-	mat.albedo_color = Color(0.3, 0.3, 0.35, 1.0)
-	mat.emission_enabled = true
-	mat.emission = Color(1.0, 0.8, 0.4, 1.0)
-	mat.emission_energy_multiplier = 3.0
-	body.material_override = mat
+	if not _shared_lantern_mat:
+		_shared_lantern_mat = StandardMaterial3D.new()
+		_shared_lantern_mat.albedo_color = Color(0.3, 0.3, 0.35, 1.0)
+		_shared_lantern_mat.emission_enabled = true
+		_shared_lantern_mat.emission = Color(1.0, 0.8, 0.4, 1.0)
+		_shared_lantern_mat.emission_energy_multiplier = 3.0
+	body.material_override = _shared_lantern_mat
 	lantern_node.add_child(body)
 
 	# Lumière
@@ -1263,51 +1275,3 @@ func _emit_trapdoor(x: int, y: int, z: int, bt: int):
 	_emit_quad(Vector3(fx + 1, fy, fz), Vector3(fx + 1, fy, fz + 1), Vector3(fx + 1, fy + height, fz + 1), Vector3(fx + 1, fy + height, fz), Vector3.RIGHT, tint * 0.7, _AO_FULL, 1.0, height, layer)
 	_emit_quad(Vector3(fx, fy, fz + 1), Vector3(fx, fy, fz), Vector3(fx, fy + height, fz), Vector3(fx, fy + height, fz + 1), Vector3.LEFT, tint * 0.7, _AO_FULL, 1.0, height, layer)
 
-# ============================================================
-# AMBIENT OCCLUSION
-# ============================================================
-
-func _is_block_solid(x: int, y: int, z: int) -> bool:
-	if x < 0 or x >= CHUNK_SIZE or y < 0 or y >= CHUNK_HEIGHT or z < 0 or z >= CHUNK_SIZE:
-		return false
-	var bt: int = blocks[x * 4096 + z * 256 + y]
-	return bt != 0 and bt != WATER_TYPE and bt != TORCH_TYPE and not CROSS_TYPES.has(bt)
-
-func _calculate_ao_for_face(direction: Vector3, x: int, y: int, z: int) -> Array:
-	var ao = [1.0, 1.0, 1.0, 1.0]
-
-	if direction == Vector3.UP:
-		ao[0] = _calculate_vertex_ao(x-1, y+1, z-1, x-1, y+1, z, x, y+1, z-1)
-		ao[1] = _calculate_vertex_ao(x+1, y+1, z-1, x+1, y+1, z, x, y+1, z-1)
-		ao[2] = _calculate_vertex_ao(x+1, y+1, z+1, x+1, y+1, z, x, y+1, z+1)
-		ao[3] = _calculate_vertex_ao(x-1, y+1, z+1, x-1, y+1, z, x, y+1, z+1)
-	elif direction == Vector3.DOWN:
-		ao[0] = _calculate_vertex_ao(x-1, y-1, z+1, x-1, y-1, z, x, y-1, z+1)
-		ao[1] = _calculate_vertex_ao(x+1, y-1, z+1, x+1, y-1, z, x, y-1, z+1)
-		ao[2] = _calculate_vertex_ao(x+1, y-1, z-1, x+1, y-1, z, x, y-1, z-1)
-		ao[3] = _calculate_vertex_ao(x-1, y-1, z-1, x-1, y-1, z, x, y-1, z-1)
-	elif direction == Vector3.FORWARD:
-		ao[0] = _calculate_vertex_ao(x-1, y-1, z-1, x-1, y, z-1, x, y-1, z-1)
-		ao[1] = _calculate_vertex_ao(x+1, y-1, z-1, x+1, y, z-1, x, y-1, z-1)
-		ao[2] = _calculate_vertex_ao(x+1, y+1, z-1, x+1, y, z-1, x, y+1, z-1)
-		ao[3] = _calculate_vertex_ao(x-1, y+1, z-1, x-1, y, z-1, x, y+1, z-1)
-	elif direction == Vector3.BACK:
-		ao[0] = _calculate_vertex_ao(x+1, y-1, z+1, x+1, y, z+1, x, y-1, z+1)
-		ao[1] = _calculate_vertex_ao(x-1, y-1, z+1, x-1, y, z+1, x, y-1, z+1)
-		ao[2] = _calculate_vertex_ao(x-1, y+1, z+1, x-1, y, z+1, x, y+1, z+1)
-		ao[3] = _calculate_vertex_ao(x+1, y+1, z+1, x+1, y, z+1, x, y+1, z+1)
-	elif direction == Vector3.LEFT:
-		ao[0] = _calculate_vertex_ao(x-1, y-1, z+1, x-1, y, z+1, x-1, y-1, z)
-		ao[1] = _calculate_vertex_ao(x-1, y-1, z-1, x-1, y, z-1, x-1, y-1, z)
-		ao[2] = _calculate_vertex_ao(x-1, y+1, z-1, x-1, y, z-1, x-1, y+1, z)
-		ao[3] = _calculate_vertex_ao(x-1, y+1, z+1, x-1, y, z+1, x-1, y+1, z)
-	elif direction == Vector3.RIGHT:
-		ao[0] = _calculate_vertex_ao(x+1, y-1, z-1, x+1, y, z-1, x+1, y-1, z)
-		ao[1] = _calculate_vertex_ao(x+1, y-1, z+1, x+1, y, z+1, x+1, y-1, z)
-		ao[2] = _calculate_vertex_ao(x+1, y+1, z+1, x+1, y, z+1, x+1, y+1, z)
-		ao[3] = _calculate_vertex_ao(x+1, y+1, z-1, x+1, y, z-1, x+1, y+1, z)
-
-	return ao
-
-func _calculate_vertex_ao(_x1: int, _y1: int, _z1: int, _x2: int, _y2: int, _z2: int, _x3: int, _y3: int, _z3: int) -> float:
-	return 1.0

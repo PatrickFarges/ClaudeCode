@@ -21,6 +21,8 @@ void fragment() {
 	ALPHA_SCISSOR_THRESHOLD = 0.5;
 	ROUGHNESS = roughness_value;
 	METALLIC = 0.0;
-	// Emission legere pour contrer le SSAO/SSIL sur la vegetation fine
-	EMISSION = ALBEDO * 0.15;
+	// Bedrock-like: lumière traverse les deux faces des billboards (élimine côté sombre)
+	BACKLIGHT = vec3(0.4);
+	// Emission légère pour contrer le SSAO sur la végétation fine
+	EMISSION = ALBEDO * 0.05;
 }

@@ -97,7 +97,7 @@ func _load_structure(sname: String, path: String):
 		push_warning("StructureManager: RLE incomplet dans %s (%d/%d blocs)" % [path, pos, total])
 
 	_structures[sname] = {"size": size, "blocks": blocks}
-	print("StructureManager: '%s' chargée (%dx%dx%d)" % [sname, size.x, size.y, size.z])
+	#print("StructureManager: '%s' chargée (%dx%dx%d)" % [sname, size.x, size.y, size.z])
 
 func _resolve_block_type(block_name: String) -> int:
 	if block_name == "AIR":
@@ -143,7 +143,8 @@ func _load_placements():
 		_placements.append({"structure": struct_name, "position": pos})
 
 	if _placements.size() > 0:
-		print("StructureManager: %d placement(s) chargé(s)" % _placements.size())
+		#print("StructureManager: %d placement(s) chargé(s)" % _placements.size())
+		pass
 
 # ============================================================
 # API POUR LE CHUNK GENERATOR (thread-safe, lecture seule)

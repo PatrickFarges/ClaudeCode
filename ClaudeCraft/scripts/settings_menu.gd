@@ -318,7 +318,7 @@ func _build_audio_sliders(parent: VBoxContainer):
 		slider.max_value = 1.0
 		slider.step = 0.01
 		slider.value = current_val
-		slider.custom_minimum_size = Vector2(300, 24)
+		slider.custom_minimum_size = Vector2(260, 24)
 		slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		# Style the slider track
 		var track_style = StyleBoxFlat.new()

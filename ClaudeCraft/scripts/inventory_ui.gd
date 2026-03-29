@@ -253,11 +253,11 @@ func _setup_steve_preview(tex_left: float, tex_top: float):
 		_steve_model.rotation_degrees = Vector3(0, -160, 0)
 		_steve_viewport.add_child(_steve_model)
 		_apply_preview_skin()
-		_steve_skeleton = _find_skeleton_in(_steve_model)
+		_steve_skeleton = NodeUtils.find_skeleton(_steve_model)
 		# Appliquer l'armure du joueur
 		_refresh_preview_armor()
 		# Jouer idle
-		var anim = _find_anim_player_in(_steve_model)
+		var anim = NodeUtils.find_animation_player(_steve_model)
 		if anim and anim.has_animation("idle"):
 			anim.play("idle")
 	# TextureRect pour afficher le rendu
@@ -357,20 +357,6 @@ func _on_preview_input(event: InputEvent):
 		_preview_dragging = event.pressed and event.button_index == MOUSE_BUTTON_LEFT
 	elif event is InputEventMouseMotion and _preview_dragging and _steve_model:
 		_steve_model.rotation_degrees.y -= event.relative.x * 0.8
-
-func _find_skeleton_in(node: Node) -> Skeleton3D:
-	if node is Skeleton3D: return node
-	for child in node.get_children():
-		var found = _find_skeleton_in(child)
-		if found: return found
-	return null
-
-func _find_anim_player_in(node: Node) -> AnimationPlayer:
-	for child in node.get_children():
-		if child is AnimationPlayer: return child
-		var found = _find_anim_player_in(child)
-		if found: return found
-	return null
 
 # ============================================================
 # HELPERS

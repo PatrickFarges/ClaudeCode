@@ -906,6 +906,35 @@ const LANTERN_BLOCKS: Dictionary = {
 	BlockType.LANTERN: true,
 }
 
+# Types de bûches (logs) — tous les troncs d'arbre
+const WOOD_TYPES: Dictionary = {
+	BlockType.WOOD: true,
+	BlockType.SPRUCE_LOG: true,
+	BlockType.BIRCH_LOG: true,
+	BlockType.JUNGLE_LOG: true,
+	BlockType.ACACIA_LOG: true,
+	BlockType.DARK_OAK_LOG: true,
+	BlockType.CHERRY_LOG: true,
+}
+
+# Types de feuillage — toutes les feuilles d'arbre
+const LEAF_TYPES: Dictionary = {
+	BlockType.LEAVES: true,
+	BlockType.SPRUCE_LEAVES: true,
+	BlockType.BIRCH_LEAVES: true,
+	BlockType.JUNGLE_LEAVES: true,
+	BlockType.ACACIA_LEAVES: true,
+	BlockType.DARK_OAK_LEAVES: true,
+	BlockType.CHERRY_LEAVES: true,
+}
+
+# Array versions pour les iterations consommant un tableau
+static var WOOD_TYPES_ARRAY: Array = [
+	BlockType.WOOD, BlockType.SPRUCE_LOG, BlockType.BIRCH_LOG,
+	BlockType.JUNGLE_LOG, BlockType.ACACIA_LOG, BlockType.DARK_OAK_LOG,
+	BlockType.CHERRY_LOG,
+]
+
 static func is_slab(block_type) -> bool:
 	return SLAB_BLOCKS.has(block_type)
 
@@ -921,33 +950,44 @@ static func is_door(block_type) -> bool:
 static func is_special_shape(block_type) -> bool:
 	return SLAB_BLOCKS.has(block_type) or STAIR_BLOCKS.has(block_type) or FENCE_BLOCKS.has(block_type) or DOOR_BLOCKS.has(block_type) or THIN_BLOCKS.has(block_type) or LANTERN_BLOCKS.has(block_type)
 
+static func is_passable(block_type) -> bool:
+	"""Returns true if the block type is something an entity can walk through (not a real obstacle)."""
+	if block_type == BlockType.AIR: return true
+	if block_type == BlockType.WATER: return true
+	if CROSS_MESH_BLOCKS.has(block_type): return true
+	if LEAF_TYPES.has(block_type): return true
+	if block_type == BlockType.TORCH: return true
+	if block_type == BlockType.LANTERN: return true
+	return false
+
 static func get_block_tint(block_type: BlockType, face: String = "all") -> Color:
+	# Tints calés sur Bedrock Edition (biome plains)
 	match block_type:
 		BlockType.GRASS:
 			if face == "top":
-				return Color(0.55, 0.9, 0.4, 1.0)
+				return Color(0.48, 0.74, 0.32, 1.0)
 			return Color(1.0, 1.0, 1.0, 1.0)
 		BlockType.DARK_GRASS:
 			if face == "top":
-				return Color(0.35, 0.65, 0.3, 1.0)
+				return Color(0.30, 0.55, 0.25, 1.0)
 			return Color(0.75, 0.85, 0.75, 1.0)
 		BlockType.LEAVES:
-			return Color(0.47, 0.82, 0.35, 1.0)
+			return Color(0.40, 0.68, 0.28, 1.0)
 		BlockType.SPRUCE_LEAVES:
-			return Color(0.35, 0.65, 0.35, 1.0)
+			return Color(0.32, 0.58, 0.32, 1.0)
 		BlockType.BIRCH_LEAVES:
-			return Color(0.6, 0.85, 0.35, 1.0)
+			return Color(0.50, 0.72, 0.30, 1.0)
 		BlockType.JUNGLE_LEAVES:
-			return Color(0.3, 0.8, 0.25, 1.0)
+			return Color(0.25, 0.68, 0.20, 1.0)
 		BlockType.ACACIA_LEAVES:
-			return Color(0.55, 0.75, 0.3, 1.0)
+			return Color(0.48, 0.65, 0.25, 1.0)
 		BlockType.DARK_OAK_LEAVES:
-			return Color(0.3, 0.55, 0.25, 1.0)
+			return Color(0.25, 0.48, 0.20, 1.0)
 		BlockType.CHERRY_LEAVES:
 			return Color(0.9, 0.6, 0.7, 1.0)
 		BlockType.SHORT_GRASS:
-			return Color(0.4, 1.0, 0.35, 1.0)
+			return Color(0.48, 0.74, 0.32, 1.0)
 		BlockType.FERN:
-			return Color(0.3, 0.9, 0.25, 1.0)
+			return Color(0.38, 0.72, 0.28, 1.0)
 		_:
 			return Color(1.0, 1.0, 1.0, 1.0)

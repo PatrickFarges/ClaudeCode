@@ -61,10 +61,10 @@ static func _preload_steve():
 	# Méthode 1 : load() classique (nécessite .import)
 	_steve_scene = load(STEVE_GLB_PATH) as PackedScene
 	if _steve_scene:
-		print("NpcVillager: Steve GLB chargé via load()")
+		#print("NpcVillager: Steve GLB chargé via load()")
 		return
 	# Méthode 2 : chargement runtime via GLTFDocument (pas besoin d'import)
-	print("NpcVillager: load() échoué, chargement GLB via GLTFDocument...")
+	#print("NpcVillager: load() échoué, chargement GLB via GLTFDocument...")
 	var gltf_doc = GLTFDocument.new()
 	var gltf_state = GLTFState.new()
 	var err = gltf_doc.append_from_file(STEVE_GLB_PATH, gltf_state)
@@ -76,7 +76,7 @@ static func _preload_steve():
 			packed.pack(scene)
 			_steve_scene = packed
 			scene.queue_free()
-			print("NpcVillager: Steve GLB chargé via GLTFDocument (%d nodes)" % [packed.get_state().get_node_count()])
+			#print("NpcVillager: Steve GLB chargé via GLTFDocument (%d nodes)" % [packed.get_state().get_node_count()])
 			return
 	push_error("NpcVillager: IMPOSSIBLE de charger steve.glb (err=%s)" % str(err))
 
@@ -201,28 +201,30 @@ func _create_model():
 	# Appliquer le skin de profession
 	var skin_path = VProfession.get_skin_for_profession(profession)
 	_apply_skin_texture(_model_instance, skin_path)
-	_anim_player = _find_animation_player(_model_instance)
+	_anim_player = NodeUtils.find_animation_player(_model_instance)
 	if _anim_player:
 		# deterministic=true force le reset des bones sans track à la rest pose
 		# (par défaut AnimationPlayer est non-déterministe et garde la pose précédente)
 		_anim_player.deterministic = true
 		if villager_index == 0:
 			var anims: PackedStringArray = _anim_player.get_animation_list()
-			print("NpcVillager: AnimationPlayer trouvé, %d animations: %s" % [anims.size(), str(anims)])
+			#print("NpcVillager: AnimationPlayer trouvé, %d animations: %s" % [anims.size(), str(anims)])
 		_play_anim("idle")
 	else:
 		if villager_index == 0:
-			print("NpcVillager: AUCUN AnimationPlayer trouvé dans le modèle")
+			#print("NpcVillager: AUCUN AnimationPlayer trouvé dans le modèle")
+			pass
 	# Outils tenus en main (BoneAttachment3D sur rightArm/leftArm)
-	_skeleton = _find_skeleton(_model_instance)
+	_skeleton = NodeUtils.find_skeleton(_model_instance)
 	if _skeleton and villager_index == 0:
 		var bone_count = _skeleton.get_bone_count()
 		var bone_names = []
 		for i in range(bone_count):
 			bone_names.append(_skeleton.get_bone_name(i))
-		print("NpcVillager: Skeleton trouvé, %d bones: %s" % [bone_count, str(bone_names)])
+		#print("NpcVillager: Skeleton trouvé, %d bones: %s" % [bone_count, str(bone_names)])
 	elif villager_index == 0:
-		print("NpcVillager: AUCUN Skeleton3D trouvé dans le modèle")
+		#print("NpcVillager: AUCUN Skeleton3D trouvé dans le modèle")
+		pass
 	_setup_held_tools()
 	_setup_armor()
 
@@ -250,7 +252,7 @@ static func _load_skin_texture(skin_path: String) -> Texture2D:
 	if img:
 		var itex = ImageTexture.create_from_image(img)
 		_skin_cache[skin_path] = itex
-		print("NpcVillager: skin chargé via Image: " + skin_path)
+		#print("NpcVillager: skin chargé via Image: " + skin_path)
 		return itex
 	push_warning("NpcVillager: skin introuvable: " + skin_path)
 	return null
@@ -275,15 +277,6 @@ func _apply_skin_recursive(node: Node, tex: Texture2D):
 	for child in node.get_children():
 		_apply_skin_recursive(child, tex)
 
-func _find_animation_player(node: Node) -> AnimationPlayer:
-	if node is AnimationPlayer:
-		return node
-	for child in node.get_children():
-		var found = _find_animation_player(child)
-		if found:
-			return found
-	return null
-
 func _play_anim(anim_name: String):
 	if not _anim_player or _current_anim == anim_name:
 		return
@@ -297,20 +290,11 @@ func _play_anim(anim_name: String):
 		_anim_player.seek(0.0, true)  # force update au frame 0
 		_current_anim = anim_name
 
-func _find_skeleton(node: Node) -> Skeleton3D:
-	if node is Skeleton3D:
-		return node
-	for child in node.get_children():
-		var found = _find_skeleton(child)
-		if found:
-			return found
-	return null
-
 func _setup_held_tools():
 	var tools = VProfession.get_held_tools(profession)
 	if tools.is_empty() or not _model_instance or not _skeleton:
 		return
-	print("NpcVillager[%d]: setup tools %s (prof=%d)" % [villager_index, str(tools), profession])
+	#print("NpcVillager[%d]: setup tools %s (prof=%d)" % [villager_index, str(tools), profession])
 	# Main droite — BoneAttachment3D sur rightItem (bone enfant de rightArm, bout de la main)
 	# Ry(-90°) vue de profil + Rz(180°) flip pour que la lame pointe vers le bas (-Y = loin de l'épaule)
 	# Offset Y = -half pour que le grip (bas original de la texture) soit dans la main
@@ -350,7 +334,7 @@ func _attach_tool_to_bone(mesh: ArrayMesh, bone_name: String, offset: Vector3, r
 	mesh_inst.extra_cull_margin = 100.0
 	mesh_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	attachment.add_child(mesh_inst)
-	print("NpcVillager: tool attaché au bone '%s' (idx=%d), offset=%s, rot=%s" % [bone_name, bone_idx, str(offset), str(rot_deg)])
+	#print("NpcVillager: tool attaché au bone '%s' (idx=%d), offset=%s, rot=%s" % [bone_name, bone_idx, str(offset), str(rot_deg)])
 	return mesh_inst
 
 static func _build_npc_tool_mesh(tex_path: String, rot_deg: Vector3 = Vector3.ZERO) -> ArrayMesh:
@@ -793,7 +777,8 @@ func _behavior_village_work(delta):
 		var prof_name = VProfession.get_profession_name(profession)
 		# Log uniquement les tâches notables (pas harvest/mine_gallery qui spamment)
 		if task_type not in ["harvest", "mine_gallery", "mine", "farm_harvest"]:
-			print("%s: prend tâche '%s'" % [prof_name, task_type])
+			#print("%s: prend tâche '%s'" % [prof_name, task_type])
+			pass
 		# Reset navigation
 		has_target = false
 		_arrived_at_target = false
@@ -920,9 +905,6 @@ func _harvest_leaves_around(center_pos: Vector3i):
 	# Leaf decay style Minecraft : détruit toutes les feuilles orphelines autour du tronc abattu.
 	# Une feuille est orpheline si aucun tronc n'existe dans un rayon de 4 blocs (Manhattan).
 	# BATCHED : modifie directement chunk.blocks, rebuild 1 seule fois par chunk.
-	var leaf_set = { 6: true, 44: true, 45: true, 46: true, 47: true, 48: true, 49: true }
-	var wood_set = { 5: true, 32: true, 33: true, 34: true, 35: true, 36: true, 42: true }
-
 	# Scan élargi : rayon 8, grande portée verticale (feuilles souvent sous le sommet)
 	var scan_r = 8
 	var scan_h_min = -12
@@ -936,9 +918,9 @@ func _harvest_leaves_around(center_pos: Vector3i):
 			for dz in range(-scan_r, scan_r + 1):
 				var pos = Vector3i(center_pos.x + dx, center_pos.y + dy, center_pos.z + dz)
 				var bt = world_manager.get_block_at_position(Vector3(pos.x, pos.y, pos.z))
-				if leaf_set.has(bt):
+				if BlockRegistry.LEAF_TYPES.has(bt):
 					leaf_positions.append(pos)
-				elif wood_set.has(bt):
+				elif BlockRegistry.WOOD_TYPES.has(bt):
 					trunk_positions.append(pos)
 
 	if leaf_positions.is_empty():
@@ -977,7 +959,6 @@ func _find_nearest_trunk_around(from: Vector3, radius: float) -> Vector3i:
 	# Optimisé : Dict lookup pour les types, early exit si trouvé à dist <= 1
 	if not world_manager:
 		return INVALID_POS
-	var wood_set = { 5: true, 32: true, 33: true, 34: true, 35: true, 36: true, 42: true }
 	var r = int(ceil(radius))
 	var center = Vector3i(int(round(from.x)), int(from.y), int(round(from.z)))
 	var best = INVALID_POS
@@ -989,7 +970,7 @@ func _find_nearest_trunk_around(from: Vector3, radius: float) -> Vector3i:
 			for dz in range(-r, r + 1):
 				var pos = Vector3i(center.x + dx, center.y + dy, center.z + dz)
 				var bt = world_manager.get_block_at_position(Vector3(pos.x, pos.y, pos.z))
-				if wood_set.has(bt):
+				if BlockRegistry.WOOD_TYPES.has(bt):
 					if village_manager and village_manager.claimed_positions.has(pos):
 						continue
 					var d = from.distance_to(Vector3(pos.x, pos.y, pos.z))
@@ -1170,7 +1151,7 @@ func _execute_mine_gallery(delta):
 			_berserker_walk_toward(target_world, delta)
 		_mine_timer += delta  # timeout en temps RÉEL (pas accéléré)
 		if _mine_timer > 45.0:
-			print("Mineur: skip bloc trop profond à %s (dy=%.1f)" % [str(_mine_target), dy])
+			#print("Mineur: skip bloc trop profond à %s (dy=%.1f)" % [str(_mine_target), dy])
 			village_manager.release_position(_mine_target)
 			_mine_target = INVALID_POS
 			_mine_timer = 0.0
@@ -1181,7 +1162,7 @@ func _execute_mine_gallery(delta):
 		_berserker_walk_toward(target_world, delta)
 		_mine_timer += delta  # timeout en temps RÉEL (pas accéléré)
 		if _mine_timer > 30.0:
-			print("Mineur: skip bloc inaccessible à %s (dist_h=%.1f)" % [str(_mine_target), dist_h])
+			#print("Mineur: skip bloc inaccessible à %s (dist_h=%.1f)" % [str(_mine_target), dist_h])
 			village_manager.release_position(_mine_target)
 			_mine_target = INVALID_POS
 			_mine_timer = 0.0
