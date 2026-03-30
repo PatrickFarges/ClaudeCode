@@ -154,7 +154,7 @@ const MOBS_PER_CHUNK_HOSTILE = 1  # max hostile mobs spawned per chunk
 const MOB_SPAWN_MIN_DIST = 24.0   # min distance from player to spawn
 const MOB_SPAWN_MAX_DIST = 64.0   # max distance from player to spawn
 var _mob_spawn_timer: float = 0.0
-const MOB_SPAWN_INTERVAL = 5.0    # check spawn every N seconds (was 10)
+const MOB_SPAWN_INTERVAL = 3.0    # check spawn/respawn every 3s
 var _spawned_chunks: Dictionary = {}  # chunk_pos -> true (already spawned passive)
 var _pending_mob_chunks: Array = []   # [Vector3i] — chunk positions waiting for mesh
 var _pending_chunk_data: Array = []   # Buffer de chunks générés en attente d'instanciation
@@ -1016,7 +1016,7 @@ func _find_ground_y_in_chunk(blocks: PackedByteArray, lx: int, lz: int) -> int:
 			return y
 	return -1
 
-func _try_spawn_passive_mobs_in_chunk(chunk_pos: Vector3i, blocks: PackedByteArray):
+func _try_spawn_passive_mobs_in_chunk(chunk_pos: Vector3i, blocks: PackedByteArray, force: bool = false):
 	"""Spawn mobs when a new chunk is generated — uses mob_database.json."""
 	mobs = mobs.filter(func(m): return is_instance_valid(m))
 	# Compter seulement les mobs proches du joueur (pas ceux qui vont despawn)
@@ -1030,8 +1030,8 @@ func _try_spawn_passive_mobs_in_chunk(chunk_pos: Vector3i, blocks: PackedByteArr
 	if nearby_count >= MAX_MOBS:
 		return
 
-	# Spawn in ~50% of chunks
-	if randf() > 0.5:
+	# Spawn in ~50% of chunks (skip si pas forcé par le respawn)
+	if not force and randf() > 0.5:
 		return
 
 	var biome = _get_biome_at_chunk(chunk_pos)
@@ -1180,24 +1180,25 @@ func _try_respawn_passive_mobs():
 	for m in mobs:
 		if is_instance_valid(m) and m.global_position.distance_to(player.global_position) < 80.0:
 			nearby_count += 1
-	# Only respawn if population is low (under half cap)
-	if nearby_count >= MAX_MOBS / 2:
+	# Only respawn if population is low
+	if nearby_count >= MAX_MOBS:
 		return
 	var player_chunk = _world_to_chunk(player.global_position)
-	# Pick up to 2 random loaded chunks near the player to attempt spawns
+	# Collecter les chunks proches du joueur (distance 2 à render_distance)
 	var candidate_chunks: Array = []
 	for cp in chunks:
 		var dist = abs(cp.x - player_chunk.x) + abs(cp.z - player_chunk.z)
 		if dist >= 2 and dist <= render_distance and chunks[cp].is_mesh_built:
 			candidate_chunks.append(cp)
 	candidate_chunks.shuffle()
+	# Plus agressif quand la population est basse
+	var max_spawns = 4 if nearby_count < MAX_MOBS / 3 else 2
 	var spawned = 0
 	for cp in candidate_chunks:
-		if spawned >= 2:
+		if spawned >= max_spawns:
 			break
-		if randf() > 0.3:
-			continue  # 70% skip to spread spawns over time
-		_try_spawn_passive_mobs_in_chunk(cp, chunks[cp].blocks)
+		# Pas de skip aléatoire — le respawn est déjà limité à toutes les 5s
+		_try_spawn_passive_mobs_in_chunk(cp, chunks[cp].blocks, true)
 		spawned += 1
 
 func _preload_mob_glbs():
