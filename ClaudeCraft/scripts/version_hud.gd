@@ -209,10 +209,11 @@ func _apply_vanilla():
 	_env.ssao_sharpness = 0.5
 
 	_env.fog_enabled = true
-	_env.fog_density = 0.012
-	_env.fog_aerial_perspective = 0.6
+	_env.fog_density = 0.006
+	_env.fog_aerial_perspective = 0.3
 	_env.fog_light_color = Color(0.7, 0.85, 0.95, 1)
-	_env.fog_light_energy = 1.0
+	_env.fog_light_energy = 0.5
+	_env.fog_sun_scatter = 0.1  # Réduit la tache blanche vers le soleil
 
 	_env.ambient_light_source = 2
 	_env.ambient_light_color = Color(1, 1, 1, 1)

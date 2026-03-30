@@ -84,11 +84,11 @@ func _update_sky(sun_height: float):
 		env.fog_density = 0.003
 	elif sun_height < 0.1:
 		var t = (sun_height + 0.1) / 0.2
-		env.fog_light_energy = lerpf(0.02, 1.0, t)
-		env.fog_density = lerpf(0.003, 0.012, t)
+		env.fog_light_energy = lerpf(0.02, 0.5, t)
+		env.fog_density = lerpf(0.003, 0.006, t)
 	else:
-		env.fog_light_energy = 1.0
-		env.fog_density = 0.012
+		env.fog_light_energy = 0.5
+		env.fog_density = 0.006
 
 func _update_ambient(sun_height: float):
 	# Forcer source COLOR (pas Sky qui injecte de la lumière parasite)
