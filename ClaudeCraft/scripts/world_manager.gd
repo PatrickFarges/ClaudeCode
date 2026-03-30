@@ -304,11 +304,12 @@ func _process(_delta):
 			last_player_chunk = current_chunk
 			_update_chunks()
 
-		# Mob spawning timer (hostile at night)
+		# Mob spawning timer (hostile at night + passive respawn)
 		_mob_spawn_timer += _delta
 		if _mob_spawn_timer >= MOB_SPAWN_INTERVAL:
 			_mob_spawn_timer = 0.0
 			_try_spawn_mobs()
+			_try_respawn_passive_mobs()
 
 		# Preload mob GLBs once (after first chunks are loaded, avoid startup freeze)
 		if not _mob_glbs_preloaded and chunks.size() >= 4:
@@ -972,9 +973,8 @@ func _process_pending_mob_spawns():
 		if chunk.is_mesh_built and processed < 3:
 			_try_spawn_passive_mobs_in_chunk(cp, chunk.blocks)
 			processed += 1
-		elif not chunk.is_mesh_built:
-			still_pending.append(cp)
-		# mesh built but over limit → drop (don't re-queue, mob already missed)
+		else:
+			still_pending.append(cp)  # mesh not ready OR over frame limit → retry next frame
 	_pending_mob_chunks = still_pending
 
 func _get_biome_at_chunk(chunk_pos: Vector3i) -> int:
@@ -1169,6 +1169,36 @@ func _try_spawn_mobs():
 		spawned_this_cycle += 1
 		if spawned_this_cycle >= 3:  # Up to 3 mobs per cycle
 			break
+
+func _try_respawn_passive_mobs():
+	"""Periodic passive mob respawn — fills nearby loaded chunks that have few mobs.
+	This compensates for mobs that despawned when the player moved away."""
+	if not _mob_glbs_preloaded or not player:
+		return
+	mobs = mobs.filter(func(m): return is_instance_valid(m))
+	var nearby_count = 0
+	for m in mobs:
+		if is_instance_valid(m) and m.global_position.distance_to(player.global_position) < 80.0:
+			nearby_count += 1
+	# Only respawn if population is low (under half cap)
+	if nearby_count >= MAX_MOBS / 2:
+		return
+	var player_chunk = _world_to_chunk(player.global_position)
+	# Pick up to 2 random loaded chunks near the player to attempt spawns
+	var candidate_chunks: Array = []
+	for cp in chunks:
+		var dist = abs(cp.x - player_chunk.x) + abs(cp.z - player_chunk.z)
+		if dist >= 2 and dist <= render_distance and chunks[cp].is_mesh_built:
+			candidate_chunks.append(cp)
+	candidate_chunks.shuffle()
+	var spawned = 0
+	for cp in candidate_chunks:
+		if spawned >= 2:
+			break
+		if randf() > 0.3:
+			continue  # 70% skip to spread spawns over time
+		_try_spawn_passive_mobs_in_chunk(cp, chunks[cp].blocks)
+		spawned += 1
 
 func _preload_mob_glbs():
 	"""Preload all mob GLB scenes + load mob database."""

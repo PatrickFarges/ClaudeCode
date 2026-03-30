@@ -23,6 +23,6 @@ void fragment() {
 	METALLIC = 0.0;
 	// Bedrock-like: lumière traverse les deux faces des billboards (élimine côté sombre)
 	BACKLIGHT = vec3(0.4);
-	// Emission légère pour contrer le SSAO sur la végétation fine
-	EMISSION = ALBEDO * 0.05;
+	// Emission très légère pour contrer le SSAO sur la végétation fine
+	EMISSION = ALBEDO * 0.02;
 }

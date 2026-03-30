@@ -958,32 +958,35 @@ static func is_passable(block_type) -> bool:
 
 static func get_block_tint(block_type: BlockType, face: String = "all") -> Color:
 	# Tints calés sur Bedrock Edition (biome plains)
+	# Bedrock plains grass = #79BA24 ≈ sRGB(0.475, 0.729, 0.141)
+	# grass_block_top.png et short_grass.png sont des textures GRAYSCALE
+	# multipliées par ce tint — le canal bleu doit rester bas pour un vert saturé
 	match block_type:
 		BlockType.GRASS:
 			if face == "top":
-				return Color(0.48, 0.74, 0.32, 1.0)
+				return Color(0.47, 0.73, 0.14, 1.0)
 			return Color(1.0, 1.0, 1.0, 1.0)
 		BlockType.DARK_GRASS:
 			if face == "top":
-				return Color(0.30, 0.55, 0.25, 1.0)
+				return Color(0.30, 0.55, 0.10, 1.0)
 			return Color(0.75, 0.85, 0.75, 1.0)
 		BlockType.LEAVES:
-			return Color(0.40, 0.68, 0.28, 1.0)
+			return Color(0.40, 0.68, 0.13, 1.0)
 		BlockType.SPRUCE_LEAVES:
-			return Color(0.32, 0.58, 0.32, 1.0)
+			return Color(0.32, 0.58, 0.18, 1.0)
 		BlockType.BIRCH_LEAVES:
-			return Color(0.50, 0.72, 0.30, 1.0)
+			return Color(0.50, 0.72, 0.15, 1.0)
 		BlockType.JUNGLE_LEAVES:
-			return Color(0.25, 0.68, 0.20, 1.0)
+			return Color(0.25, 0.68, 0.10, 1.0)
 		BlockType.ACACIA_LEAVES:
-			return Color(0.48, 0.65, 0.25, 1.0)
+			return Color(0.48, 0.65, 0.12, 1.0)
 		BlockType.DARK_OAK_LEAVES:
-			return Color(0.25, 0.48, 0.20, 1.0)
+			return Color(0.25, 0.48, 0.10, 1.0)
 		BlockType.CHERRY_LEAVES:
 			return Color(0.9, 0.6, 0.7, 1.0)
 		BlockType.SHORT_GRASS:
-			return Color(0.48, 0.74, 0.32, 1.0)
+			return Color(0.47, 0.73, 0.14, 1.0)
 		BlockType.FERN:
-			return Color(0.38, 0.72, 0.28, 1.0)
+			return Color(0.38, 0.72, 0.12, 1.0)
 		_:
 			return Color(1.0, 1.0, 1.0, 1.0)

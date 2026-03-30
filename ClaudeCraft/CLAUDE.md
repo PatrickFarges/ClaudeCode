@@ -121,6 +121,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 | 16-16.1 | v19.5-19.6 | GUI MC Faithful32 (HUD, inventaire, crafting), fix chute terrain |
 | 17-17.0.1 | v19.7 | IA mobs (pathfinding murs/stuck), pagination inventaire, fix traverse sable |
 | 18 | v20.0 | Craft MC drag & drop, inventaire items possédés uniquement |
+| 18.1 | v20.1.1 | Fix tints herbe/feuilles délavés — couleurs Bedrock #79BA24, réduction émission cross-mesh |
 
 ### En cours / À venir
 

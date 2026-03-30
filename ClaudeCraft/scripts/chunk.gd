@@ -534,7 +534,7 @@ func _greedy_mesh_y_faces():
 			var quads = _run_greedy(mask, CHUNK_SIZE, CHUNK_SIZE)
 			for q in quads:
 				var u: int = q[0]; var v: int = q[1]; var w: int = q[2]; var h: int = q[3]; var bt: int = q[4]
-				var tint: Color = _cached_tint(bt, "top")
+				var tint: Color = _cached_tint(bt, "top") * 0.95
 				var layer: float = _cached_tex_layer(bt, "top")
 				_emit_quad(
 					Vector3(u, y + 1, v), Vector3(u + w, y + 1, v),
