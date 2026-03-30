@@ -19,6 +19,8 @@ var _volume_labels: Dictionary = {}  # key -> Label showing percentage
 func _ready():
 	visible = false
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	# Charger les réglages sauvegardés au démarrage (deferred pour que les autres nodes soient prêts)
+	call_deferred("load_settings")
 
 func _input(event):
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -481,3 +483,4 @@ func load_settings():
 			audio.ambient_volume = float(cfg.get_value("audio", "ambient_volume"))
 		if cfg.has_section_key("audio", "music_volume"):
 			audio.music_volume = float(cfg.get_value("audio", "music_volume"))
+		audio.apply_volumes()
