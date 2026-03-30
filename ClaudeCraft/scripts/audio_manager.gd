@@ -173,6 +173,22 @@ func _ready():
 	_create_audio_pools()
 	call_deferred("_start_ambient")
 
+func apply_volumes():
+	"""Applique les volumes actuels à tous les players actifs (appelé par settings_menu)."""
+	# Ambiance biome
+	if ambient_player_a and ambient_player_a.playing:
+		ambient_player_a.volume_db = linear_to_db(ambient_volume * master_volume)
+	if ambient_player_b and ambient_player_b.playing:
+		ambient_player_b.volume_db = linear_to_db(ambient_volume * master_volume)
+	# Cave
+	if cave_ambient_player and cave_ambient_player.playing:
+		cave_ambient_player.volume_db = linear_to_db(ambient_volume * master_volume * 0.6)
+	# Musique
+	var active_music = music_player_a if music_active == "a" else music_player_b
+	if active_music and active_music.playing:
+		active_music.volume_db = linear_to_db(music_volume * master_volume)
+	# SFX pools — s'appliqueront au prochain son joué
+
 func _safe_load(path: String) -> AudioStream:
 	var res = load(path)
 	if res == null:
