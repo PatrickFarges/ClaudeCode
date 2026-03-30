@@ -1,3 +1,4 @@
+extends RefCounted
 class_name NodeUtils
 ## Utilitaires partagés pour la recherche récursive de noeuds dans un arbre de scène.
 

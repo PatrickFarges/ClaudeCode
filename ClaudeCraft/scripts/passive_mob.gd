@@ -437,12 +437,11 @@ func _process_sunburn(delta):
 	# Check if exposed to sky (no block above)
 	if world_manager and _is_exposed_to_sky():
 		health -= SUN_DAMAGE
-			_flash_model_red()
-			_hurt_flash_timer = 0.3
-			# Visual: fire particles could be added here
-			if health <= 0:
-				_drop_loot()
-				queue_free()
+		_flash_model_red()
+		_hurt_flash_timer = 0.3
+		if health <= 0:
+			_drop_loot()
+			queue_free()
 
 func _is_exposed_to_sky() -> bool:
 	if not world_manager:

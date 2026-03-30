@@ -245,7 +245,7 @@ func _compute_mesh_arrays():
 
 	# P1 — Clear caches for this build
 	_tint_cache.clear()
-_layer_cache.clear()
+	_layer_cache.clear()
 
 	if y_min <= y_max:
 		_greedy_mesh_y_faces()

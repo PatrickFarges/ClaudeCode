@@ -928,12 +928,8 @@ const LEAF_TYPES: Dictionary = {
 	BlockType.CHERRY_LEAVES: true,
 }
 
-# Array versions pour les iterations consommant un tableau
-static var WOOD_TYPES_ARRAY: Array = [
-	BlockType.WOOD, BlockType.SPRUCE_LOG, BlockType.BIRCH_LOG,
-	BlockType.JUNGLE_LOG, BlockType.ACACIA_LOG, BlockType.DARK_OAK_LOG,
-	BlockType.CHERRY_LOG,
-]
+# Array version pour les itérations consommant un tableau
+const WOOD_TYPES_ARRAY: Array = [5, 32, 33, 34, 35, 36, 42]  # WOOD, SPRUCE_LOG..CHERRY_LOG
 
 static func is_slab(block_type) -> bool:
 	return SLAB_BLOCKS.has(block_type)
