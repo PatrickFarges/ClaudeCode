@@ -96,7 +96,7 @@ func _build_ui():
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	# Marge droite pour ne pas passer sous la scrollbar verticale
 	var margin = MarginContainer.new()
-	margin.add_theme_constant_override("margin_right", 30)
+	margin.add_theme_constant_override("margin_right", 60)
 	margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	margin.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.add_child(margin)
