@@ -94,13 +94,7 @@ func _build_ui():
 	var vbox = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 8)
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	# Marge droite pour ne pas passer sous la scrollbar verticale
-	var margin = MarginContainer.new()
-	margin.add_theme_constant_override("margin_right", 60)
-	margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	margin.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.add_child(margin)
-	margin.add_child(vbox)
+	scroll.add_child(vbox)
 
 	# Titre
 	var title = Label.new()
@@ -326,8 +320,7 @@ func _build_audio_sliders(parent: VBoxContainer):
 		slider.max_value = 1.0
 		slider.step = 0.01
 		slider.value = current_val
-		slider.custom_minimum_size = Vector2(150, 24)
-		slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		slider.custom_minimum_size = Vector2(500, 24)
 		# Style the slider track
 		var track_style = StyleBoxFlat.new()
 		track_style.bg_color = Color(0.18, 0.18, 0.25, 0.8)
