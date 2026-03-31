@@ -21,6 +21,7 @@ Jeu voxel type Minecraft en GDScript avec Godot 4.6+, style pastel. Évolue vers
 - **`chunk_generator.gd`** : génération procédurale threadée (4 workers), 11 noises, terrain MC 1.18 simplifié (continentalness + erosion + domain warping). Grottes spaghetti (~5% air), bedrock y=0-7. Minerais : charbon 6.3% (y<80), fer 5.2% (y<55), cuivre 3.1% (y<50), or (y<30), diamant (y<16)
 - **`texture_manager.gd`** : Texture2DArray (102 layers), auto-détection résolution, fallback aliases, matériau cross-mesh séparé
 - **`cloud_manager.gd`** : nuages procéduraux (FBM noise 4 octaves), plan 1024x1024 à y=160, vent animé, couleurs jour/aube/nuit, presets par mode de rendu
+- **`weather_manager.gd`** v1.0.0 : système météo dynamique — 4 états (Clair/Nuageux/Pluie/Orage), transitions douces 8s, GPUParticles3D pluie (3000-6000 gouttes), éclairs+tonnerre, fog grisâtre, assombrissement soleil, audio pluie loop. F4 pour cycler
 - **`structure_manager.gd`** : Autoload — structures JSON depuis `res://structures/`, RLE, thread-safe
 
 ### Village autonome (The Settlers)
@@ -100,7 +101,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 
 ## Direction du projet
 
-**Version actuelle : v20.2.0**
+**Version actuelle : v20.3.0**
 
 ### Phases terminées (résumé)
 
@@ -124,6 +125,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 | 18 | v20.0 | Craft MC drag & drop, inventaire items possédés uniquement |
 | 18.1 | v20.1.1 | Fix tints herbe/feuilles délavés — couleurs Bedrock #79BA24, réduction émission cross-mesh |
 | 19 | v20.2.0 | Nuages procéduraux (FBM noise, vent, couleurs jour/nuit, presets par mode rendu) |
+| 20 | v20.3.0 | Système météo dynamique (4 états, pluie GPU particles, éclairs/tonnerre, fog, F4 cycle) |
 
 ### En cours / À venir
 

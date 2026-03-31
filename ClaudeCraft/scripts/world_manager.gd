@@ -186,6 +186,10 @@ func _ready():
 			chunk_generator.set_structure_placements(placements)
 			#print("WorldManager: %d structure(s) à placer" % placements.size())
 
+	# Preload mob GLBs tôt (ne bloque pas la génération, évite le retard de spawn)
+	_preload_mob_glbs()
+	_mob_glbs_preloaded = true
+
 	# Attendre que le joueur soit prêt
 	await get_tree().process_frame
 	player = get_tree().get_first_node_in_group("player")
@@ -311,12 +315,7 @@ func _process(_delta):
 			_try_spawn_mobs()
 			_try_respawn_passive_mobs()
 
-		# Preload mob GLBs once (after first chunks are loaded, avoid startup freeze)
-		if not _mob_glbs_preloaded and chunks.size() >= 4:
-			_mob_glbs_preloaded = true
-			_preload_mob_glbs()
-
-		# Deferred passive mob spawning — wait for chunk mesh to be built AND db loaded
+		# Deferred passive mob spawning — wait for chunk mesh+collision to be built
 		if _mob_glbs_preloaded and not _pending_mob_chunks.is_empty():
 			_process_pending_mob_spawns()
 
@@ -963,18 +962,19 @@ func _flatten_village_area(chunk_pos: Vector3i, packed_blocks: PackedByteArray, 
 
 func _process_pending_mob_spawns():
 	"""Process queued mob spawns — only when chunk mesh+collision is ready.
-	Max 3 per frame, uses chunk.blocks directly (no copy)."""
+	Max 6 per frame, uses chunk.blocks directly (no copy).
+	Waits for has_collision to avoid mobs falling through terrain."""
 	var still_pending = []
 	var processed = 0
 	for cp in _pending_mob_chunks:
 		if not chunks.has(cp):
 			continue  # chunk unloaded, drop
 		var chunk = chunks[cp]
-		if chunk.is_mesh_built and processed < 3:
+		if chunk.is_mesh_built and chunk.has_collision and processed < 6:
 			_try_spawn_passive_mobs_in_chunk(cp, chunk.blocks)
 			processed += 1
 		else:
-			still_pending.append(cp)  # mesh not ready OR over frame limit → retry next frame
+			still_pending.append(cp)  # not ready OR over frame limit → retry next frame
 	_pending_mob_chunks = still_pending
 
 func _get_biome_at_chunk(chunk_pos: Vector3i) -> int:
@@ -1030,8 +1030,8 @@ func _try_spawn_passive_mobs_in_chunk(chunk_pos: Vector3i, blocks: PackedByteArr
 	if nearby_count >= MAX_MOBS:
 		return
 
-	# Spawn in ~50% of chunks (skip si pas forcé par le respawn)
-	if not force and randf() > 0.5:
+	# Spawn dans ~80% des chunks (skip 20% pour variété naturelle)
+	if not force and randf() > 0.8:
 		return
 
 	var biome = _get_biome_at_chunk(chunk_pos)
@@ -1098,7 +1098,7 @@ func _try_spawn_passive_mobs_in_chunk(chunk_pos: Vector3i, blocks: PackedByteArr
 					continue
 				var wx = chunk_pos.x * Chunk.CHUNK_SIZE + lx
 				var wz = chunk_pos.z * Chunk.CHUNK_SIZE + lz
-				_spawn_mob_by_id(chosen_id, Vector3(wx + 0.5, sy + 1.0, wz + 0.5), chunk_pos)
+				_spawn_mob_by_id(chosen_id, Vector3(wx + 0.5, sy + 1.05, wz + 0.5), chunk_pos)
 				break
 
 func _try_spawn_mobs():
@@ -1164,7 +1164,7 @@ func _try_spawn_mobs():
 			continue
 
 		var chosen_id = hostile_list[randi() % hostile_list.size()]
-		var spawn_pos = Vector3(spawn_x, sy + 1.0, spawn_z)
+		var spawn_pos = Vector3(spawn_x, sy + 1.05, spawn_z)
 		_spawn_mob_by_id(chosen_id, spawn_pos, spawn_chunk)
 		spawned_this_cycle += 1
 		if spawned_this_cycle >= 3:  # Up to 3 mobs per cycle

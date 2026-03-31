@@ -1,4 +1,4 @@
-[gd_scene load_steps=17 format=3 uid="uid://d3k8p4r5m1qhw"]
+[gd_scene load_steps=18 format=3 uid="uid://d3k8p4r5m1qhw"]
 
 [ext_resource type="Script" path="res://scripts/world_manager.gd" id="1_world"]
 [ext_resource type="PackedScene" uid="uid://c2yqr8n3m0qhv" path="res://scenes/player.tscn" id="2_player"]
@@ -15,6 +15,7 @@
 [ext_resource type="Script" path="res://scripts/village_inventory_ui.gd" id="13_village_inv"]
 [ext_resource type="Script" path="res://scripts/settings_menu.gd" id="14_settings"]
 [ext_resource type="Script" path="res://scripts/cloud_manager.gd" id="15_clouds"]
+[ext_resource type="Script" path="res://scripts/weather_manager.gd" id="16_weather"]
 
 [sub_resource type="Environment" id="Environment_1"]
 background_mode = 1
@@ -78,3 +79,6 @@ script = ExtResource("14_settings")
 
 [node name="CloudPlane" type="MeshInstance3D" parent="." groups=["cloud_manager"]]
 script = ExtResource("15_clouds")
+
+[node name="WeatherManager" type="Node3D" parent="." groups=["weather_manager"]]
+script = ExtResource("16_weather")

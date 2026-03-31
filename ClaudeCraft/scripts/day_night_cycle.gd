@@ -6,6 +6,7 @@ extends Node
 var current_time: float = 0.3
 var sun: DirectionalLight3D
 var env: Environment
+var weather_manager = null
 
 # Vitesse du temps
 var speed_index: int = 1  # 0=Lent, 1=Normal, 2=Rapide, 3=Très rapide
@@ -29,6 +30,10 @@ func _ready():
 	env = world_env.environment
 	add_to_group("day_night_cycle")
 
+	# Récupérer le weather_manager après un frame (il est créé en même temps)
+	await get_tree().process_frame
+	weather_manager = get_tree().get_first_node_in_group("weather_manager")
+
 func _process(delta):
 	var speed_mult = SPEED_MULTIPLIERS[speed_index]
 	current_time += (delta * speed_mult) / day_duration
@@ -49,15 +54,19 @@ func _update_sun_transform():
 	sun.rotation_degrees = Vector3(-angle, -30.0, 0.0)
 
 func _update_sun_light(sun_height: float):
+	var weather_factor: float = 1.0
+	if weather_manager:
+		weather_factor = weather_manager.get_light_factor()
+
 	if sun_height > 0.2:
 		# Jour
-		sun.light_energy = 0.9
+		sun.light_energy = 0.9 * weather_factor
 		sun.light_color = SUN_DAY
 		sun.shadow_enabled = true
 	elif sun_height > -0.1:
 		# Aube / Crépuscule
 		var t: float = (sun_height + 0.1) / 0.3
-		sun.light_energy = lerpf(0.05, 0.9, t)
+		sun.light_energy = lerpf(0.05, 0.9, t) * weather_factor
 		sun.light_color = SUN_DAWN.lerp(SUN_DAY, t)
 		sun.shadow_enabled = true
 	else:
@@ -78,17 +87,20 @@ func _update_sky(sun_height: float):
 		sky_color = SKY_NIGHT
 	env.background_color = sky_color
 	env.fog_light_color = sky_color
-	# Réduire le fog la nuit
+	# Réduire le fog la nuit (fog_density géré par weather_manager si présent)
 	if sun_height < -0.1:
 		env.fog_light_energy = 0.02
-		env.fog_density = 0.003
+		if not weather_manager:
+			env.fog_density = 0.003
 	elif sun_height < 0.1:
 		var t = (sun_height + 0.1) / 0.2
 		env.fog_light_energy = lerpf(0.02, 0.5, t)
-		env.fog_density = lerpf(0.003, 0.006, t)
+		if not weather_manager:
+			env.fog_density = lerpf(0.003, 0.006, t)
 	else:
 		env.fog_light_energy = 0.5
-		env.fog_density = 0.006
+		if not weather_manager:
+			env.fog_density = 0.006
 
 func _update_ambient(sun_height: float):
 	# Forcer source COLOR (pas Sky qui injecte de la lumière parasite)

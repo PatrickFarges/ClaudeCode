@@ -7,13 +7,15 @@ var time_label: Label
 var speed_label: Label
 var render_label: Label
 var target_label: Label
+var weather_label: Label
 
-const VERSION = "v20.2.0"
+const VERSION = "v20.3.0"
 
 var audio_manager = null
 var player = null
 var day_night_cycle = null
 var cloud_manager = null
+var weather_manager = null
 var _pending_preset: int = -1  # preset à appliquer après warmup
 var _warmup_frames: int = 0    # compteur de frames avant application
 
@@ -86,9 +88,20 @@ func _ready():
 	render_label.text = "Rendu : Vanilla (F2)"
 	add_child(render_label)
 
+	# Label météo (sous le render)
+	weather_label = Label.new()
+	weather_label.position = Vector2(0, 142)
+	weather_label.size = Vector2(350, 23)
+	weather_label.add_theme_color_override("font_color", Color(0.6, 0.75, 0.95, 0.7))
+	weather_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
+	weather_label.add_theme_constant_override("shadow_offset_x", 1)
+	weather_label.add_theme_constant_override("shadow_offset_y", 1)
+	weather_label.add_theme_font_size_override("font_size", 13)
+	add_child(weather_label)
+
 	# Label bloc ciblé (décalé plus bas)
 	target_label = Label.new()
-	target_label.position = Vector2(0, 142)
+	target_label.position = Vector2(0, 165)
 	target_label.size = Vector2(300, 23)
 	target_label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.7))
 	target_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
@@ -102,6 +115,7 @@ func _ready():
 	player = get_tree().get_first_node_in_group("player")
 	day_night_cycle = get_tree().get_first_node_in_group("day_night_cycle")
 	cloud_manager = get_tree().get_first_node_in_group("cloud_manager")
+	weather_manager = get_tree().get_first_node_in_group("weather_manager")
 
 	# Récupérer l'Environment pour les presets de rendu
 	for child in get_tree().current_scene.get_children():
@@ -136,6 +150,9 @@ func _input(event):
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_F2:
 			_cycle_render_preset()
+			get_viewport().set_input_as_handled()
+		elif event.keycode == KEY_F4:
+			_cycle_weather()
 			get_viewport().set_input_as_handled()
 
 func _change_speed(direction: int):
@@ -452,6 +469,12 @@ func _apply_reshade_epique():
 	if cloud_manager:
 		cloud_manager.set_cloud_preset(0.55, 0.65, 0.35, 0.015)
 
+func _cycle_weather():
+	if not weather_manager:
+		return
+	var next_w = (weather_manager.current_weather + 1) % 4
+	weather_manager.set_weather(next_w)
+
 func _process(_delta):
 	# Appliquer le preset sauvegardé après warmup (le renderer a besoin de
 	# quelques frames avec de la géométrie pour que SSAO/SDFGI fonctionnent)
@@ -493,6 +516,25 @@ func _process(_delta):
 		time_label.text = day_night_cycle.get_time_string() + speed_txt
 	else:
 		time_label.text = ""
+
+	# Météo
+	if weather_manager:
+		var wname = weather_manager.get_weather_name()
+		var weather_icons = {
+			"Clair": "☀",
+			"Nuageux": "☁",
+			"Pluie": "🌧",
+			"Orage": "⛈",
+		}
+		# Chercher l'icône dans le nom (peut être "Clair -> Pluie")
+		var icon = "☀"
+		for key in weather_icons:
+			if wname.ends_with(key):
+				icon = weather_icons[key]
+				break
+		weather_label.text = "%s Météo : %s" % [icon, wname]
+	else:
+		weather_label.text = ""
 
 	# Bloc ciblé
 	if player and player.look_block_type != BlockRegistry.BlockType.AIR:
