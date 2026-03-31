@@ -20,6 +20,7 @@ Jeu voxel type Minecraft en GDScript avec Godot 4.6+, style pastel. Évolue vers
 - **`chunk.gd`** : 16x16x256, greedy meshing, AO, collision ConcavePolygon, torches/lanternes OmniLight3D (max 16/chunk), flora cross billboards, special shape mesh (dalles, escaliers, clôtures, portes, vitres, échelles, trappes). `_is_greedy_solid()` exclut blocs >=77 sauf STONE_BRICKS
 - **`chunk_generator.gd`** : génération procédurale threadée (4 workers), 11 noises, terrain MC 1.18 simplifié (continentalness + erosion + domain warping). Grottes spaghetti (~5% air), bedrock y=0-7. Minerais : charbon 6.3% (y<80), fer 5.2% (y<55), cuivre 3.1% (y<50), or (y<30), diamant (y<16)
 - **`texture_manager.gd`** : Texture2DArray (102 layers), auto-détection résolution, fallback aliases, matériau cross-mesh séparé
+- **`cloud_manager.gd`** : nuages procéduraux (FBM noise 4 octaves), plan 1024x1024 à y=160, vent animé, couleurs jour/aube/nuit, presets par mode de rendu
 - **`structure_manager.gd`** : Autoload — structures JSON depuis `res://structures/`, RLE, thread-safe
 
 ### Village autonome (The Settlers)
@@ -99,7 +100,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 
 ## Direction du projet
 
-**Version actuelle : v20.0.0**
+**Version actuelle : v20.2.0**
 
 ### Phases terminées (résumé)
 
@@ -122,6 +123,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 | 17-17.0.1 | v19.7 | IA mobs (pathfinding murs/stuck), pagination inventaire, fix traverse sable |
 | 18 | v20.0 | Craft MC drag & drop, inventaire items possédés uniquement |
 | 18.1 | v20.1.1 | Fix tints herbe/feuilles délavés — couleurs Bedrock #79BA24, réduction émission cross-mesh |
+| 19 | v20.2.0 | Nuages procéduraux (FBM noise, vent, couleurs jour/nuit, presets par mode rendu) |
 
 ### En cours / À venir
 

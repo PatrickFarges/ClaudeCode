@@ -8,11 +8,12 @@ var speed_label: Label
 var render_label: Label
 var target_label: Label
 
-const VERSION = "v19.7.0"
+const VERSION = "v20.2.0"
 
 var audio_manager = null
 var player = null
 var day_night_cycle = null
+var cloud_manager = null
 var _pending_preset: int = -1  # preset à appliquer après warmup
 var _warmup_frames: int = 0    # compteur de frames avant application
 
@@ -100,6 +101,7 @@ func _ready():
 	audio_manager = get_tree().get_first_node_in_group("audio_manager")
 	player = get_tree().get_first_node_in_group("player")
 	day_night_cycle = get_tree().get_first_node_in_group("day_night_cycle")
+	cloud_manager = get_tree().get_first_node_in_group("cloud_manager")
 
 	# Récupérer l'Environment pour les presets de rendu
 	for child in get_tree().current_scene.get_children():
@@ -219,6 +221,10 @@ func _apply_vanilla():
 	_env.ambient_light_color = Color(1, 1, 1, 1)
 	_env.ambient_light_energy = 0.12
 
+	# Nuages : nets, style Minecraft
+	if cloud_manager:
+		cloud_manager.set_cloud_preset(0.45, 0.75, 0.25, 0.008)
+
 func _apply_gi():
 	_apply_vanilla()
 
@@ -232,6 +238,10 @@ func _apply_gi():
 	_env.sdfgi_bounce_feedback = 0.5
 
 	_env.ambient_light_energy = 0.08
+
+	# Nuages : mêmes que Vanilla
+	if cloud_manager:
+		cloud_manager.set_cloud_preset(0.45, 0.75, 0.25, 0.008)
 
 func _apply_cinematic():
 	_reset_env()
@@ -297,6 +307,10 @@ func _apply_cinematic():
 	_env.adjustment_saturation = 1.5
 	_env.adjustment_contrast = 1.08
 	_env.adjustment_brightness = 1.0
+
+	# Nuages : doux, rêveurs
+	if cloud_manager:
+		cloud_manager.set_cloud_preset(0.40, 0.70, 0.35, 0.01)
 
 func _apply_enb_sombre():
 	_reset_env()
@@ -364,6 +378,10 @@ func _apply_enb_sombre():
 	_env.adjustment_contrast = 1.1
 	_env.adjustment_brightness = 0.98
 
+	# Nuages : couverture élevée, brume dorée
+	if cloud_manager:
+		cloud_manager.set_cloud_preset(0.50, 0.60, 0.30, 0.012)
+
 func _apply_reshade_epique():
 	_reset_env()
 	# Inspiré ReShade presets — cinématique dramatique, couleurs profondes, ambiance épique
@@ -429,6 +447,10 @@ func _apply_reshade_epique():
 	_env.adjustment_saturation = 1.45
 	_env.adjustment_contrast = 1.15
 	_env.adjustment_brightness = 0.92
+
+	# Nuages : dramatiques, plus de couverture
+	if cloud_manager:
+		cloud_manager.set_cloud_preset(0.55, 0.65, 0.35, 0.015)
 
 func _process(_delta):
 	# Appliquer le preset sauvegardé après warmup (le renderer a besoin de
