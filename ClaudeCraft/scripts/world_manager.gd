@@ -1,7 +1,8 @@
 extends Node3D
 class_name WorldManager
 
-@export var render_distance: int = 4
+#@export var render_distance: int = 4  # ancien (9x9)
+@export var render_distance: int = 6  # étendu (13x13) — chunks lointains = affichage seul, pas de collision
 @export var chunk_load_per_frame: int = 2
 @export var unload_distance_margin: int = 3  # Marge pour éviter le clignotement
 
@@ -148,8 +149,8 @@ const VILLAGE_NPC_COUNT = 0  # Inhibé — remettre à 9 pour mode Settlers
 
 # ── Mobs ──
 var mobs: Array = []
-const MAX_MOBS = 60
-const MOBS_PER_CHUNK_PASSIVE = 2  # max passive mobs spawned per chunk
+const MAX_MOBS = 40
+const MOBS_PER_CHUNK_PASSIVE = 1  # max passive mobs spawned per chunk (réduit de 2→1)
 const MOBS_PER_CHUNK_HOSTILE = 1  # max hostile mobs spawned per chunk
 const MOB_SPAWN_MIN_DIST = 24.0   # min distance from player to spawn
 const MOB_SPAWN_MAX_DIST = 64.0   # max distance from player to spawn
@@ -158,9 +159,13 @@ const MOB_SPAWN_INTERVAL = 3.0    # check spawn/respawn every 3s
 var _spawned_chunks: Dictionary = {}  # chunk_pos -> true (already spawned passive)
 var _pending_mob_chunks: Array = []   # [Vector3i] — chunk positions waiting for mesh
 var _pending_chunk_data: Array = []   # Buffer de chunks générés en attente d'instanciation
-const MAX_CHUNK_INSTANTIATE_PER_FRAME: int = 2
-const COLLISION_DISTANCE: int = 3     # Chunks à ≤3 Manhattan = collision active
-const COLLISION_REMOVE_DISTANCE: int = 5  # Au-delà = collision retirée
+const MAX_CHUNK_INSTANTIATE_PER_FRAME: int = 1
+#const COLLISION_DISTANCE: int = 3     # ancien
+#const COLLISION_REMOVE_DISTANCE: int = 5  # ancien
+const COLLISION_DISTANCE: int = 3     # Collision pour les chunks proches (remonté de 2 — évite les trous)
+const COLLISION_REMOVE_DISTANCE: int = 5  # Retirer au-delà
+#const LOD_FULL_DISTANCE: int = 4  # ancien — trop large, upgrade trop lent
+const LOD_FULL_DISTANCE: int = 3  # Distance ≤3 = LOD 0, >3 = LOD 1 (flora invisible de si loin)
 var _mob_glbs_preloaded: bool = false
 
 func _ready():
@@ -321,25 +326,58 @@ func _process(_delta):
 
 func _update_chunk_collisions():
 	var player_chunk = _world_to_chunk(player.global_position)
-	# Priorité absolue : chunk du joueur + 4 voisins directs (jamais throttlé)
+	# Priorité absolue : chunk du joueur + 4 voisins directs (jamais throttlé — évite de tomber dans le sol)
 	for offset in [Vector3i(0,0,0), Vector3i(1,0,0), Vector3i(-1,0,0), Vector3i(0,0,1), Vector3i(0,0,-1)]:
 		var cp = player_chunk + offset
 		if chunks.has(cp):
 			var c = chunks[cp]
 			if c.is_mesh_built and not c.has_collision:
 				c.create_collision()
-	# Reste : 1 collision par frame max
-	var created_this_frame = 0
+	# LOD upgrade/downgrade — prioriser les chunks les plus proches
+	var upgrade_candidates: Array = []
+	var downgrade_candidate: Dictionary = {}  # un seul par frame suffit
 	for chunk_pos in chunks:
+		if chunk_pos == player_chunk:
+			continue
 		var chunk = chunks[chunk_pos]
 		if not chunk.is_mesh_built:
 			continue
 		var dist = abs(chunk_pos.x - player_chunk.x) + abs(chunk_pos.z - player_chunk.z)
-		if dist <= COLLISION_DISTANCE and dist > 1 and not chunk.has_collision:
+		if dist <= LOD_FULL_DISTANCE and chunk.lod_level == 1:
+			upgrade_candidates.append({"pos": chunk_pos, "dist": dist})
+		elif dist > LOD_FULL_DISTANCE + 1 and chunk.lod_level == 0 and not chunk.is_modified and downgrade_candidate.is_empty():
+			downgrade_candidate = {"pos": chunk_pos, "dist": dist}
+	# Upgrade : trier par distance (plus proche d'abord), max 2/frame
+	if not upgrade_candidates.is_empty():
+		upgrade_candidates.sort_custom(func(a, b): return a["dist"] < b["dist"])
+		var upgraded = 0
+		for uc in upgrade_candidates:
+			if upgraded >= 2:
+				break
+			var chunk = chunks[uc["pos"]]
+			chunk.lod_level = 0
+			chunk._rebuild_mesh()
+			upgraded += 1
+	# Downgrade : 1/frame max, seulement si pas d'upgrade ce frame
+	elif not downgrade_candidate.is_empty():
+		var chunk = chunks[downgrade_candidate["pos"]]
+		chunk.lod_level = 1
+		chunk._rebuild_mesh()
+
+	# Collisions : max 1 par frame (y compris voisins directs)
+	var created_this_frame = 0
+	for chunk_pos in chunks:
+		if chunk_pos == player_chunk:
+			continue
+		var chunk = chunks[chunk_pos]
+		if not chunk.is_mesh_built:
+			continue
+		var dist = abs(chunk_pos.x - player_chunk.x) + abs(chunk_pos.z - player_chunk.z)
+		if dist <= COLLISION_DISTANCE and not chunk.has_collision:
 			chunk.create_collision()
 			created_this_frame += 1
 			if created_this_frame >= 1:
-				return  # Max 1 collision créée par frame pour les chunks lointains
+				return  # Max 1 collision créée par frame — étale la charge
 		elif dist > COLLISION_REMOVE_DISTANCE and chunk.has_collision:
 			chunk.remove_collision()
 
@@ -423,6 +461,11 @@ func _instantiate_chunk(chunk_data: Dictionary):
 	chunk.position = Vector3(chunk_pos.x * Chunk.CHUNK_SIZE, 0, chunk_pos.z * Chunk.CHUNK_SIZE)
 	if saved_chunk_data.has(chunk_pos):
 		chunk.is_modified = true
+	# LOD distant : pas de flora/water/special/torches pour les chunks lointains
+	if player:
+		var player_chunk = _world_to_chunk(player.global_position)
+		var dist = abs(chunk_pos.x - player_chunk.x) + abs(chunk_pos.z - player_chunk.z)
+		chunk.lod_level = 0 if dist <= LOD_FULL_DISTANCE else 1
 	add_child(chunk)
 	chunks[chunk_pos] = chunk
 
@@ -1030,8 +1073,8 @@ func _try_spawn_passive_mobs_in_chunk(chunk_pos: Vector3i, blocks: PackedByteArr
 	if nearby_count >= MAX_MOBS:
 		return
 
-	# Spawn dans ~80% des chunks (skip 20% pour variété naturelle)
-	if not force and randf() > 0.8:
+	# Spawn dans ~50% des chunks (réduit de 80% pour perf)
+	if not force and randf() > 0.5:
 		return
 
 	var biome = _get_biome_at_chunk(chunk_pos)
@@ -1191,8 +1234,8 @@ func _try_respawn_passive_mobs():
 		if dist >= 2 and dist <= render_distance and chunks[cp].is_mesh_built:
 			candidate_chunks.append(cp)
 	candidate_chunks.shuffle()
-	# Plus agressif quand la population est basse
-	var max_spawns = 4 if nearby_count < MAX_MOBS / 3 else 2
+	# Respawn modéré (réduit pour perf)
+	var max_spawns = 2 if nearby_count < MAX_MOBS / 3 else 1
 	var spawned = 0
 	for cp in candidate_chunks:
 		if spawned >= max_spawns:

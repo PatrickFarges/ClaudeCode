@@ -62,6 +62,7 @@ var chunk_position: Vector3i
 var blocks: PackedByteArray
 var y_min: int = 0
 var y_max: int = 0
+var lod_level: int = 0  # 0 = full detail, 1 = distant (pas de flora/water/special/torches)
 var _open_doors_cache: Dictionary = {}  # Vector3i -> true, copie thread-safe
 var _door_data_cache: Dictionary = {}  # Vector3i -> { "facing": int, "hinge": String }
 var _pane_orient_cache: Dictionary = {}  # Vector3i -> int (0=N-S, 1=E-W)
@@ -251,9 +252,10 @@ func _compute_mesh_arrays():
 		_greedy_mesh_y_faces()
 		_greedy_mesh_z_faces()
 		_greedy_mesh_x_faces()
-		_build_special_mesh()
-		_build_water_mesh()
-		_build_flora_mesh()
+		if lod_level == 0:
+			_build_special_mesh()
+			_build_water_mesh()
+			_build_flora_mesh()
 
 func _apply_mesh_data(skip_throttle: bool = false):
 	# Toujours finir le thread d'abord (pas de crash si chunk freed)
@@ -354,8 +356,9 @@ func _build_and_attach_meshes():
 		flora_mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(flora_mesh_instance)
 
-	# Torches : scanner et spawner les lumières
-	_spawn_torch_lights()
+	# Torches : scanner et spawner les lumières (LOD 0 seulement)
+	if lod_level == 0:
+		_spawn_torch_lights()
 
 	is_mesh_built = true
 

@@ -953,12 +953,15 @@ func _physics_process(delta):
 					global_position.y = check_y + 1.5
 					velocity = Vector3.ZERO
 					# Forcer la collision du chunk à cette position
+					# Forcer la collision du chunk + voisins pour éviter le yo-yo
 					var cp = Vector3i(int(floor(float(wx) / 16.0)), 0, int(floor(float(wz) / 16.0)))
-					if world_manager.chunks.has(cp):
-						var c = world_manager.chunks[cp]
-						if c.is_mesh_built:
-							c.create_collision()
-					_traverse_cooldown = 0.5  # anti-boucle : 0.5s de cooldown
+					for offset in [Vector3i(0,0,0), Vector3i(1,0,0), Vector3i(-1,0,0), Vector3i(0,0,1), Vector3i(0,0,-1)]:
+						var ncp = cp + offset
+						if world_manager.chunks.has(ncp):
+							var c = world_manager.chunks[ncp]
+							if c.is_mesh_built and not c.has_collision:
+								c.create_collision()
+					_traverse_cooldown = 2.0  # anti-boucle : 2s de cooldown (réduit le yo-yo)
 					#print("Player: traverse le sol — repositionné à Y=%d" % int(global_position.y))
 					break
 	if _traverse_cooldown > 0:

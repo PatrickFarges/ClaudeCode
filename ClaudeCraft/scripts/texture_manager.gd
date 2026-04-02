@@ -147,13 +147,22 @@ func _ready():
 	# Charger les images (avec systeme d'alias pour les noms manquants)
 	var images: Array[Image] = []
 	for tex_name in TEXTURE_LIST:
-		var img := Image.new()
+		var img: Image = null
 		var loaded = false
 
 		# Essayer le nom original, puis alias via GameConfig
 		var resolved = GC.resolve_block_texture(tex_name)
-		if not resolved.is_empty() and img.load(resolved) == OK:
-			loaded = true
+		if not resolved.is_empty():
+			# En export, les PNG sont converties en .ctex — utiliser ResourceLoader
+			var tex = ResourceLoader.load(resolved) as Texture2D
+			if tex:
+				img = tex.get_image()
+				loaded = true
+			else:
+				# Fallback: essayer Image.load() (fonctionne en editeur)
+				img = Image.new()
+				if img.load(resolved) == OK:
+					loaded = true
 
 		if not loaded:
 			img = _fallback_color_image(tex_name)
@@ -207,12 +216,19 @@ func _force_opaque(img: Image) -> void:
 func _detect_resolution(tex_path: String) -> int:
 	for tex_name in TEXTURE_LIST:
 		var path = tex_path + tex_name + ".png"
-		var img := Image.new()
-		# Essayer res:// d'abord, puis chemin absolu
-		if img.load(path) == OK or img.load(ProjectSettings.globalize_path(path)) == OK:
-			var size = img.get_width()
+		# Utiliser ResourceLoader pour compatibilite export
+		var tex = ResourceLoader.load(path) as Texture2D
+		if tex:
+			var size = tex.get_width()
 			if size >= 16:
 				return size
+		else:
+			# Fallback Image.load() (editeur)
+			var img := Image.new()
+			if img.load(path) == OK:
+				var size = img.get_width()
+				if size >= 16:
+					return size
 	return 16
 
 func get_layer_index(texture_name: String) -> int:

@@ -1171,37 +1171,41 @@ func _attach_skeleton_bow():
 	if bow_mesh:
 		_skeleton_bow_node.add_child(bow_mesh)
 		# Bedrock bow.geo.json: position [2, 1, -2] pixels, rotation [0, -135, 90]
-		# GLB uses 1/16 scale (1 pixel = 1/16 block), bow texture is 16x16
-		# Scale: each pixel of the extruded mesh = 1 unit, we need 1/16 block per pixel
-		_skeleton_bow_node.scale = Vector3(1.0, 1.0, 1.0) / 16.0
-		# Position in bone-local space (Bedrock pixels -> blocks: /16)
+		# Scale adapté à la résolution du pack (32x32 = 2x plus de pixels → diviser par 32)
+		var tex_res = float(TextureManager.get_texture_resolution())
+		_skeleton_bow_node.scale = Vector3(1.0, 1.0, 1.0) / tex_res
+		# Position in bone-local space (Bedrock pixels -> blocks: /16, indépendant de la résolution)
 		_skeleton_bow_node.position = Vector3(2.0, 1.0, -2.0) / 16.0
 		# Bedrock rotation [0, -135, 90] = bow flat, angled diagonally in hand
 		_skeleton_bow_node.rotation_degrees = Vector3(0, -135, 90)
 	attachment.add_child(_skeleton_bow_node)
 
 func _build_bow_mesh() -> MeshInstance3D:
-	# Load bow texture and build extruded 3D mesh (same technique as hand_item_renderer)
+	# Load bow texture and build extruded 3D mesh (vertex colors only, no texture tiling)
 	var tex_path = GC.get_item_texture_path() + "bow_pulling_2.png"
-	if not FileAccess.file_exists(tex_path):
+	if not ResourceLoader.exists(tex_path) and not FileAccess.file_exists(tex_path):
 		tex_path = GC.get_item_texture_path() + "bow.png"
-	var img = Image.new()
-	if img.load(tex_path) != OK: return null
+	var img: Image = null
+	# ResourceLoader pour compatibilité export
+	var tex = ResourceLoader.load(tex_path) as Texture2D
+	if tex:
+		img = tex.get_image()
+	else:
+		img = Image.new()
+		if img.load(tex_path) != OK: return null
 	img.convert(Image.FORMAT_RGBA8)
 	var w = img.get_width(); var h = img.get_height()
 	var st = SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var mat = StandardMaterial3D.new()
-	mat.albedo_texture = ImageTexture.create_from_image(img)
-	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	mat.vertex_color_use_as_albedo = true
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	st.set_material(mat)
-	# Flat quad per opaque pixel (extruded 1 pixel depth)
-	# Bedrock bow local_pivot = [6, 0, 6] — pivot at pixel (6, 10) from top-left
-	# (6 from left, 16-6=10 from top in image coords)
-	var pivot_x = 6.0  # Bedrock local_pivot.x
-	var pivot_y = 6.0  # Bedrock local_pivot.z (= Y in 2D)
+	# Pivot adapté à la résolution (Bedrock pivot [6,6] est pour 16x16)
+	var scale_factor = float(w) / 16.0
+	var pivot_x = 6.0 * scale_factor
+	var pivot_y = 6.0 * scale_factor
 	for py in range(h):
 		for px in range(w):
 			var c = img.get_pixel(px, py)
@@ -1209,19 +1213,19 @@ func _build_bow_mesh() -> MeshInstance3D:
 			var x0 = float(px) - pivot_x; var y0 = float(h - 1 - py) - pivot_y
 			st.set_color(c)
 			# Front face
-			st.set_uv(Vector2(0, 0)); st.add_vertex(Vector3(x0, y0, 0.5))
-			st.set_uv(Vector2(1, 0)); st.add_vertex(Vector3(x0 + 1, y0, 0.5))
-			st.set_uv(Vector2(1, 1)); st.add_vertex(Vector3(x0 + 1, y0 + 1, 0.5))
-			st.set_uv(Vector2(0, 0)); st.add_vertex(Vector3(x0, y0, 0.5))
-			st.set_uv(Vector2(1, 1)); st.add_vertex(Vector3(x0 + 1, y0 + 1, 0.5))
-			st.set_uv(Vector2(0, 1)); st.add_vertex(Vector3(x0, y0 + 1, 0.5))
+			st.add_vertex(Vector3(x0, y0, 0.5))
+			st.add_vertex(Vector3(x0 + 1, y0, 0.5))
+			st.add_vertex(Vector3(x0 + 1, y0 + 1, 0.5))
+			st.add_vertex(Vector3(x0, y0, 0.5))
+			st.add_vertex(Vector3(x0 + 1, y0 + 1, 0.5))
+			st.add_vertex(Vector3(x0, y0 + 1, 0.5))
 			# Back face
-			st.set_uv(Vector2(0, 0)); st.add_vertex(Vector3(x0 + 1, y0, -0.5))
-			st.set_uv(Vector2(1, 0)); st.add_vertex(Vector3(x0, y0, -0.5))
-			st.set_uv(Vector2(1, 1)); st.add_vertex(Vector3(x0, y0 + 1, -0.5))
-			st.set_uv(Vector2(0, 0)); st.add_vertex(Vector3(x0 + 1, y0, -0.5))
-			st.set_uv(Vector2(1, 1)); st.add_vertex(Vector3(x0, y0 + 1, -0.5))
-			st.set_uv(Vector2(0, 1)); st.add_vertex(Vector3(x0 + 1, y0 + 1, -0.5))
+			st.add_vertex(Vector3(x0 + 1, y0, -0.5))
+			st.add_vertex(Vector3(x0, y0, -0.5))
+			st.add_vertex(Vector3(x0, y0 + 1, -0.5))
+			st.add_vertex(Vector3(x0 + 1, y0, -0.5))
+			st.add_vertex(Vector3(x0, y0 + 1, -0.5))
+			st.add_vertex(Vector3(x0 + 1, y0 + 1, -0.5))
 	var mi = MeshInstance3D.new()
 	mi.mesh = st.commit()
 	return mi
