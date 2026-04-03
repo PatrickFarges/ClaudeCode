@@ -35,8 +35,11 @@ var is_moving: bool = false
 var gravity_val: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var world_manager = null
 var _model_root: Node3D = null
-var _anim_player: AnimationPlayer = null
+var _anim_player: AnimationPlayer = null  # Legacy
+var _bedrock_anim: BedrockAnimPlayer = null  # Moteur d'animation Bedrock
 var _current_anim: String = ""
+var _total_distance_moved: float = 0.0
+var _attack_anim_timer: float = -1.0
 var _hurt_flash_timer: float = 0.0
 var _is_glb_model: bool = false
 
@@ -315,9 +318,17 @@ func _create_model():
 			add_child(instance)
 			_model_root = instance
 			_is_glb_model = true
+			# Désactiver AnimationPlayer legacy, setup Bedrock
 			_anim_player = NodeUtils.find_animation_player(instance)
 			if _anim_player:
-				_play_anim("idle")
+				_anim_player.active = false
+			var skel := NodeUtils.find_skeleton(instance)
+			if skel:
+				_bedrock_anim = BedrockAnimPlayer.new()
+				_bedrock_anim.name = "BedrockAnimPlayer"
+				add_child(_bedrock_anim)
+				_bedrock_anim.setup(skel)
+				BedrockEntityLoader.configure_entity(_bedrock_anim, mob_id)
 			return
 	_create_colored_box()
 
@@ -330,13 +341,14 @@ static func _load_glb(path: String) -> PackedScene:
 	return scene
 
 func _play_anim(logical_name: String):
-	if not _anim_player or _current_anim == logical_name:
+	if _current_anim == logical_name:
 		return
-	if _anim_player.has_animation(logical_name):
-		var anim = _anim_player.get_animation(logical_name)
-		anim.loop_mode = Animation.LOOP_LINEAR
-		_anim_player.play(logical_name)
-		_current_anim = logical_name
+	_current_anim = logical_name
+	match logical_name:
+		"attack", "attack2":
+			_attack_anim_timer = 0.4
+		"walk", "idle", "eat":
+			pass  # Géré automatiquement par le move controller Bedrock
 
 func _create_colored_box():
 	var cs_arr: Array = _data.get("collision_size", [0.9, 1.0, 0.9])
@@ -368,6 +380,21 @@ func _create_collision():
 # ============================================================
 
 func _physics_process(delta):
+	# ── Bedrock Animation Engine : feed movement data ──
+	if _bedrock_anim:
+		var horiz_vel := Vector3(velocity.x, 0, velocity.z)
+		var horiz_speed := horiz_vel.length()
+		_total_distance_moved += horiz_speed * delta
+		_bedrock_anim.update_movement(delta, velocity, _total_distance_moved)
+		if _attack_anim_timer >= 0.0:
+			_attack_anim_timer -= delta
+			var attack_progress := 1.0 - maxf(0.0, _attack_anim_timer) / 0.4
+			_bedrock_anim.variables["attack_time"] = attack_progress * 0.7
+		else:
+			_bedrock_anim.variables["attack_time"] = -1.0
+		_bedrock_anim.set_query("query.is_on_ground", 1.0 if is_on_floor() else 0.0)
+		_bedrock_anim.set_query("query.modified_move_speed", horiz_speed)
+
 	# Hurt flash
 	if _hurt_flash_timer > 0:
 		_hurt_flash_timer -= delta

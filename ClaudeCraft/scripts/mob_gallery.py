@@ -34,7 +34,7 @@ Changelog:
              orbite camera, QPainter overlay pour noms
 """
 
-APP_VERSION = "1.1.0"
+APP_VERSION = "2.0.0"
 
 import sys
 import json
@@ -42,6 +42,9 @@ import struct
 import math
 import os
 from pathlib import Path
+
+# Import du moteur d'animation Bedrock
+from bedrock_anim_engine import BedrockAnimPlayer, euler_deg_to_quat
 
 from PyQt6.QtWidgets import QApplication, QMainWindow
 from PyQt6.QtCore import Qt, QTimer, QRectF
@@ -267,23 +270,64 @@ class GLBData:
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 class SkeletalAnimator:
+    """Animateur hybride Bedrock + Legacy GLB pour la galerie de mobs."""
+
     def __init__(self, glb):
         self.glb = glb
         self.current_anim = None; self.time = 0.0
         self.speed = 1.0; self.playing = False; self.loop = True
-        self.last_world_transforms = None  # Set after compute_skinned
+        self.last_world_transforms = None
 
-    def set_animation(self, name):
+        # Bedrock animation engine
+        self.bedrock = BedrockAnimPlayer()
+        self._bedrock_anim_names = []
+        self._use_bedrock = False
+        self._distance_sim = 0.0
+
+        # Auto-load Bedrock animations
+        data_dir = Path(__file__).parent.parent / "data"
+        if data_dir.exists() and glb.path:
+            entity_id = glb.path.stem.lower()
+            if entity_id == "steve":
+                entity_id = "skeleton"
+            self.bedrock.load_entity(entity_id, str(data_dir))
+            self._bedrock_anim_names = self.bedrock.get_animation_names()
+
+    def get_all_animation_names(self):
+        """Retourne tous les noms d'animations (Bedrock + Legacy)."""
+        names = []
+        for name in self._bedrock_anim_names:
+            names.append(("bedrock", name))
+        for name in self.glb.animations:
+            names.append(("legacy", name))
+        return names
+
+    def set_animation(self, name, source="auto"):
         self.current_anim = name; self.time = 0.0
+        # Auto-detect source
+        if source == "auto":
+            source = "bedrock" if name in self.bedrock.animations else "legacy"
+        self._use_bedrock = (source == "bedrock" and name in self.bedrock.animations)
+        if self._use_bedrock:
+            self.bedrock.stop_all()
+            self.bedrock.play(name)
+            self.bedrock.move_speed = 1.0
 
     def advance(self, dt):
         if not self.playing or not self.current_anim: return
-        anim = self.glb.animations.get(self.current_anim)
-        if not anim: return
-        self.time += dt * self.speed
-        dur = anim["duration"]
-        if dur > 0:
-            self.time = self.time % dur if self.loop else min(self.time, dur)
+        if self._use_bedrock:
+            self._distance_sim += 4.0 * dt * self.speed
+            self.bedrock.move_speed = 4.0 * self.speed
+            self.bedrock.distance_moved = self._distance_sim
+            self.bedrock.speed_scale = self.speed
+            self.bedrock.advance(dt)
+        else:
+            anim = self.glb.animations.get(self.current_anim)
+            if not anim: return
+            self.time += dt * self.speed
+            dur = anim["duration"]
+            if dur > 0:
+                self.time = self.time % dur if self.loop else min(self.time, dur)
 
     def _sample_channel(self, cd, t):
         ts, vals = cd["timestamps"], cd["values"]
@@ -299,8 +343,31 @@ class SkeletalAnimator:
 
     def compute_skinned(self):
         glb = self.glb; n = len(glb.bones)
-        br, bt = {}, {}
-        if self.current_anim and self.current_anim in glb.animations:
+        br, bt, bs = {}, {}, {}
+
+        if self._use_bedrock and self.playing:
+            # Bedrock animations
+            bone_transforms = self.bedrock._compute_bone_transforms()
+            for bname_lower, transforms in bone_transforms.items():
+                for bi, bone in enumerate(glb.bones):
+                    if bone["name"].lower() == bname_lower:
+                        rot_deg = transforms["rotation"]
+                        # Bedrock +X=forward, +Y=left ; GLB +X=backward, +Y=right
+                        q = euler_deg_to_quat(-rot_deg[0], -rot_deg[1], rot_deg[2])
+                        br[bone["name"]] = q
+                        pos = transforms["position"]
+                        if any(abs(v) > 0.001 for v in pos):
+                            S = 1.0 / 16.0
+                            bt[bone["name"]] = [
+                                bone["translation"][0] + pos[0] * S,
+                                bone["translation"][1] + pos[1] * S,
+                                bone["translation"][2] + pos[2] * S,
+                            ]
+                        scl = transforms["scale"]
+                        if any(abs(v - 1.0) > 0.001 for v in scl):
+                            bs[bone["name"]] = scl
+                        break
+        elif self.current_anim and self.current_anim in glb.animations:
             for bname, chs in glb.animations[self.current_anim]["channels"].items():
                 if "rotation" in chs:
                     q = self._sample_channel(chs["rotation"], self.time)
@@ -308,16 +375,17 @@ class SkeletalAnimator:
                 if "translation" in chs:
                     v = self._sample_channel(chs["translation"], self.time)
                     if v: bt[bname] = v
+
         wt = [None] * n
         for bi in range(n):
             bone = glb.bones[bi]
             local = mat4_trs(bt.get(bone["name"], bone["translation"]),
-                           br.get(bone["name"], bone["rotation"]), bone["scale"])
+                           br.get(bone["name"], bone["rotation"]),
+                           bs.get(bone["name"], bone["scale"]))
             if bi in glb.bone_parent and wt[glb.bone_parent[bi]]:
                 wt[bi] = mat4_multiply(wt[glb.bone_parent[bi]], local)
             else:
                 wt[bi] = local
-        # Store world transforms for bone rendering
         self.last_world_transforms = wt
         sm = [mat4_multiply(wt[bi], glb.ibms[bi]) if wt[bi] else mat4_identity() for bi in range(n)]
         sp, sn = [], []
@@ -376,12 +444,27 @@ class MobEntry:
         self.name = glb_path.stem
         self.glb = GLBData(glb_path)
         self.animator = SkeletalAnimator(self.glb)
-        # Auto-play idle or first animation
-        self.anim_names = list(self.glb.animations.keys())
-        if "idle" in self.anim_names:
-            self.animator.set_animation("idle")
-        elif self.anim_names:
-            self.animator.set_animation(self.anim_names[0])
+        # Build animation list: Bedrock first, then legacy
+        self.anim_names = []
+        self.anim_sources = {}  # name -> "bedrock" or "legacy"
+        for source, name in self.animator.get_all_animation_names():
+            short = name.split(".")[-1] if source == "bedrock" else name
+            display = f"[B] {name}" if source == "bedrock" else f"[L] {name}"
+            self.anim_names.append(display)
+            self.anim_sources[display] = (source, name)
+        # Auto-play: prefer Bedrock walk/move, fallback legacy idle
+        started = False
+        for source, name in self.animator.get_all_animation_names():
+            if source == "bedrock" and ("move" in name or "walk" in name):
+                self.animator.set_animation(name, "bedrock")
+                started = True
+                break
+        if not started:
+            legacy_names = list(self.glb.animations.keys())
+            if "idle" in legacy_names:
+                self.animator.set_animation("idle", "legacy")
+            elif legacy_names:
+                self.animator.set_animation(legacy_names[0], "legacy")
         self.animator.playing = True
         # Camera state
         self.theta = 200.0  # degrees
@@ -940,10 +1023,14 @@ class MobGalleryWidget(QOpenGLWidget):
 
         if list_type == "anim":
             if 0 <= idx < len(m.anim_names):
-                aname = m.anim_names[idx]
-                m.animator.set_animation(aname)
+                display_name = m.anim_names[idx]
+                if display_name in m.anim_sources:
+                    source, real_name = m.anim_sources[display_name]
+                    m.animator.set_animation(real_name, source)
+                else:
+                    m.animator.set_animation(display_name, "auto")
                 m.animator.playing = True
-                print(f"Animation: {aname}")
+                print(f"Animation: {display_name}")
 
         elif list_type == "tex":
             if idx < 0:

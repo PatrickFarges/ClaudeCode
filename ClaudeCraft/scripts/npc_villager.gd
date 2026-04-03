@@ -94,12 +94,15 @@ var wander_direction: Vector3 = Vector3.ZERO
 var is_moving: bool = false
 var gravity_val: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var world_manager = null
-var _anim_player: AnimationPlayer = null
+var _anim_player: AnimationPlayer = null  # Legacy — conservé pour compatibilité
+var _bedrock_anim: BedrockAnimPlayer = null  # Moteur d'animation Bedrock
 var _current_anim: String = ""
 var _skeleton: Skeleton3D = null
 var _model_instance: Node3D = null
 var _right_tool: MeshInstance3D = null  # outil main droite
 var _left_tool: MeshInstance3D = null   # outil main gauche
+var _total_distance_moved: float = 0.0  # Pour le walk cycle Bedrock
+var _attack_anim_timer: float = -1.0     # Timer attaque Bedrock (< 0 = pas d'attaque)
 var _jump_velocity: float = 5.0
 var _stuck_timer: float = 0.0
 var _last_pos: Vector3 = Vector3.ZERO
@@ -201,21 +204,22 @@ func _create_model():
 	# Appliquer le skin de profession
 	var skin_path = VProfession.get_skin_for_profession(profession)
 	_apply_skin_texture(_model_instance, skin_path)
-	_anim_player = NodeUtils.find_animation_player(_model_instance)
-	if _anim_player:
-		# deterministic=true force le reset des bones sans track à la rest pose
-		# (par défaut AnimationPlayer est non-déterministe et garde la pose précédente)
-		_anim_player.deterministic = true
-		if villager_index == 0:
-			var anims: PackedStringArray = _anim_player.get_animation_list()
-			#print("NpcVillager: AnimationPlayer trouvé, %d animations: %s" % [anims.size(), str(anims)])
-		_play_anim("idle")
-	else:
-		if villager_index == 0:
-			#print("NpcVillager: AUCUN AnimationPlayer trouvé dans le modèle")
-			pass
 	# Outils tenus en main (BoneAttachment3D sur rightArm/leftArm)
 	_skeleton = NodeUtils.find_skeleton(_model_instance)
+	# Désactiver l'AnimationPlayer legacy (on utilise BedrockAnimPlayer)
+	_anim_player = NodeUtils.find_animation_player(_model_instance)
+	if _anim_player:
+		_anim_player.active = false
+	# Setup du moteur d'animation Bedrock
+	if _skeleton:
+		_bedrock_anim = BedrockAnimPlayer.new()
+		_bedrock_anim.name = "BedrockAnimPlayer"
+		add_child(_bedrock_anim)
+		_bedrock_anim.setup(_skeleton)
+		# Charger les animations humanoid + controllers
+		BedrockEntityLoader.configure_entity(_bedrock_anim, "skeleton")  # squelette = humanoid standard
+		# Vitesse du jeu
+		_bedrock_anim.speed_scale = _get_game_speed()
 	if _skeleton and villager_index == 0:
 		var bone_count = _skeleton.get_bone_count()
 		var bone_names = []
@@ -278,17 +282,18 @@ func _apply_skin_recursive(node: Node, tex: Texture2D):
 		_apply_skin_recursive(child, tex)
 
 func _play_anim(anim_name: String):
-	if not _anim_player or _current_anim == anim_name:
+	# Moteur Bedrock : walk/idle sont automatiques (basés sur la vitesse).
+	# attack/mine sont pilotés par variable.attack_time.
+	if _current_anim == anim_name:
 		return
-	if _anim_player.has_animation(anim_name):
-		var anim = _anim_player.get_animation(anim_name)
-		anim.loop_mode = Animation.LOOP_LINEAR
-		# Reset les bones à la rest pose avant de switcher (évite les jambes écartées)
-		if _skeleton:
-			_skeleton.reset_bone_poses()
-		_anim_player.play(anim_name, 0)  # blend=0 (instant switch)
-		_anim_player.seek(0.0, true)  # force update au frame 0
-		_current_anim = anim_name
+	_current_anim = anim_name
+	match anim_name:
+		"attack", "mine", "attack2":
+			# Déclencher l'animation d'attaque Bedrock
+			_attack_anim_timer = 0.4 if anim_name != "mine" else 0.6
+		"walk", "idle":
+			# Gérés automatiquement par le move controller
+			pass
 
 func _setup_held_tools():
 	var tools = VProfession.get_held_tools(profession)
@@ -503,6 +508,26 @@ func _physics_process(delta):
 	# Vitesse de déplacement adaptée au multiplicateur (cap à ×3 pour éviter la physique cassée)
 	var game_speed = _get_game_speed()
 	move_speed = _base_move_speed * minf(game_speed, 3.0)
+
+	# ── Bedrock Animation Engine : feed movement data ──
+	if _bedrock_anim:
+		var horiz_vel := Vector3(velocity.x, 0, velocity.z)
+		var horiz_speed := horiz_vel.length()
+		_total_distance_moved += horiz_speed * delta
+		_bedrock_anim.update_movement(delta, velocity, _total_distance_moved)
+		_bedrock_anim.speed_scale = minf(game_speed, 3.0)
+		# Attack timer
+		if _attack_anim_timer >= 0.0:
+			_attack_anim_timer -= delta
+			# attack_time goes from 0 → 0.7 over the attack duration
+			var attack_progress := 1.0 - maxf(0.0, _attack_anim_timer) / 0.4
+			_bedrock_anim.variables["attack_time"] = attack_progress * 0.7
+		else:
+			_bedrock_anim.variables["attack_time"] = -1.0
+		# Entity state queries
+		_bedrock_anim.set_query("query.is_on_ground", 1.0 if is_on_floor() else 0.0)
+		_bedrock_anim.set_query("query.is_moving", 1.0 if horiz_speed > 0.1 else 0.0)
+		_bedrock_anim.set_query("query.modified_move_speed", horiz_speed)
 
 	# Vérifier le schedule — accéléré par la vitesse du jeu
 	_schedule_timer += delta * game_speed

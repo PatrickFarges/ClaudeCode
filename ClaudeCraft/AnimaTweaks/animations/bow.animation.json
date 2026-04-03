@@ -1,0 +1,22 @@
+{
+  "format_version": "1.10.0",
+  "animations": {
+    "animation.bow.wield": {
+      "loop": true,
+      "bones": {
+        "rightitem": {
+          "position": [ "c.is_first_person ? 0.0 : 0.0", "c.is_first_person ? 0.0 : -2.0", "c.is_first_person ? 2.0 : 0.0" ],
+          "rotation": [ "c.is_first_person ? 57.0 : 0.0", "c.is_first_person ? 20.0 : 0.0", "c.is_first_person ? 50.0 : 0.0" ]
+        }
+      }
+    },
+    "animation.bow.wield_first_person_pull": {
+      "loop": true,
+      "bones": {
+        "rightitem": {
+          "position": [ -4.0, "math.sin(q.life_time * 800.0) * 0.05", -6.0 ]
+        }
+      }
+    }
+  }
+}

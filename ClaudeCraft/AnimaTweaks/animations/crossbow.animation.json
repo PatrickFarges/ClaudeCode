@@ -1,0 +1,14 @@
+{
+  "format_version": "1.10.0",
+  "animations": {
+    "animation.crossbow.wield": {
+      "loop": true,
+      "bones": {
+        "rightitem": {
+          "position": [ "c.is_first_person ? 8.7 : 0.5", "c.is_first_person ? 1.9: -0.5", "c.is_first_person ? 18.0 : -1.5" ],
+          "rotation": [ "c.is_first_person ? 30.0 : 0.0", "c.is_first_person ? 35.0 : -3.0", "c.is_first_person ? 15.0 : 3.25" ]
+        }
+      }
+    }
+  }
+}

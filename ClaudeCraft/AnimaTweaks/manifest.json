@@ -1,0 +1,19 @@
+{
+   "format_version": 2,
+   "header": {
+      "description": "§l§6BetterTweaks §r§7v1.0 §8- §bUltimate Player Animation Pack\n§7Enhanced movements, realistic animations & smooth transitions\n§8Created by §bDylanDevs",
+      "name": "§6✨ §lBetterTweaks §r§6✨",
+      "uuid": "e0988d67-266b-424e-aaf0-e94a52364214",
+      "version": [1, 0, 0],
+      "min_engine_version": [1, 19, 0]
+   },
+   "modules": [
+      {
+         "description": "§l§6Enhanced Player Animations §r§7- Realistic movement system with smooth transitions",
+         "type": "resources",
+         "uuid": "00a6d56e-4a14-4775-a082-14faf2d3fd00",
+         "version": [1, 0, 0]
+      }
+   ]
+} 
+   

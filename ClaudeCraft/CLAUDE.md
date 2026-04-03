@@ -36,6 +36,12 @@ Jeu voxel type Minecraft en GDScript avec Godot 4.6+, style pastel. Évolue vers
 - **`war_manager.gd`** : espionnage, armée en marche, combat résolu. Phases PEACE->ESPIONAGE->PREPARATION->WAR->VICTORY/DEFEAT
 - **`generate_castle.py`** : générateur Python de 4 structures château JSON
 
+### Moteur d'animation Bedrock (Phase 22)
+- **`molang_evaluator.gd`** v1.0.0 : parser récursif descent + évaluateur AST Molang. 20+ fonctions math (sin/cos/lerp/clamp...), variables/queries, ternaire, cache AST, support 'this'
+- **`bedrock_anim_player.gd`** v1.0.0 : charge les animations JSON Bedrock, évalue Molang par frame, applique aux bones Skeleton3D. Supporte keyframes timeline, expressions statiques, pre_animation scripts, animation controllers (machines à états)
+- **`bedrock_entity_loader.gd`** v1.0.0 : charge les entity definitions Bedrock, résout les aliases animation/controller, auto-configure BedrockAnimPlayer
+- **`bedrock_anim_engine.py`** v1.0.0 : portage Python du moteur (Molang + AnimPlayer) pour character_viewer et mob_gallery
+
 ### Armures
 - **`armor_manager.gd`** v2.0.0 : BoneAttachment3D. 5 matériaux x 4 pièces. Textures Bedrock 64x32. PNJ militaires auto-armurés. Joueur : touche P
 
@@ -68,6 +74,9 @@ WorldManager + Player (spawn y=80) + WorldEnvironment (SSAO, ciel pastel) + Dire
 ## Données (`data/`)
 
 - **`mob_database.json`** : 57 mobs avec métadonnées complètes (spawn, biomes, comportement, stats, faim, prédation, drops, Bedrock paths)
+- **`animations/`** : 83 fichiers JSON d'animation Bedrock (humanoid, mobs, équipement)
+- **`animation_controllers/`** : 51 fichiers JSON de machines à états (move, attack, look_at_target...)
+- **`entity_definitions/`** : 147 fichiers JSON de définition d'entités (bindings animations/controllers/pre_animation)
 
 ## Structures prédéfinies (`structures/`)
 
@@ -78,10 +87,10 @@ Format JSON : palette + RLE layer-first. `KEEP`=terrain intact, `AIR`=creuser. P
 - **`scripts/convert_schem.py`** (~940 lignes) : convertisseur `.schem` -> JSON ClaudeCraft, 260+ mappings blocs
 - **`scripts/structure_viewer.py`** (v2.3.0, ~3200 lignes) : éditeur + visualiseur 3D PyQt6/PyOpenGL, 73 blocs, undo/redo, sélection rectangulaire, AO, sauvegarde rapide
 - **`scripts/bedrock_to_glb.py`** (v1.2.0) : convertisseur Bedrock -> GLB, mesh skinné 28 bones, 8 animations
-- **`scripts/character_viewer.py`** (v1.3.0) : visualiseur personnage GLB, skin swap, animations, armures overlay
+- **`scripts/character_viewer.py`** (v2.0.0) : visualiseur personnage GLB, skin swap, armures overlay, **animations Bedrock natives** (Molang + JSON)
 - **`scripts/minecraft_import.py`** : extracteur client.jar -> 8 JSON dans `minecraft_data/`
 - **`scripts/download_mc_sounds.py`** : téléchargeur sons MC, 3998 MP3
-- **`scripts/mob_gallery.py`** (v1.0.1) : galerie 3D mobs, rotation auto, animations
+- **`scripts/mob_gallery.py`** (v2.0.0) : galerie 3D mobs, rotation auto, **animations Bedrock natives** (Molang + JSON)
 
 ## Packs de textures (`TexturesPack/`)
 
@@ -101,7 +110,7 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 
 ## Direction du projet
 
-**Version actuelle : v20.3.0**
+**Version actuelle : v21.0.0**
 
 ### Phases terminées (résumé)
 
@@ -126,12 +135,15 @@ Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-dét
 | 18.1 | v20.1.1 | Fix tints herbe/feuilles délavés — couleurs Bedrock #79BA24, réduction émission cross-mesh |
 | 19 | v20.2.0 | Nuages procéduraux (FBM noise, vent, couleurs jour/nuit, presets par mode rendu) |
 | 20 | v20.3.0 | Système météo dynamique (4 états, pluie GPU particles, éclairs/tonnerre, fog, F4 cycle) |
+| 21 | v20.5.0 | LOD distant (chunks >3 = solides uniquement), collision lazy (throttle 1/frame), render_distance 4→6, fix textures export, fix arc squelette vertex colors, mobs passifs réduits 1/3 |
+| 22 | v21.0.0 | **Moteur d'animation Bedrock** : évaluateur Molang complet, chargeur JSON Bedrock (83 anims, 51 controllers, 147 entity defs), BedrockAnimPlayer remplace AnimationPlayer, intégration npc_villager + passive_mob, Python engine pour viewers, character_viewer v2.0 + mob_gallery v2.0 |
 
 ### En cours / À venir
 
 | Phase | Statut | Contenu |
 |-------|--------|---------|
 | 9.4 | WIP | v16.1.0 — **Outils tenus PNJ** : mesh extrudé 3D pixel-par-pixel, fix moonwalk (+PI atan2), fix jambes écartées (deterministic + epsilon rotation). **TODO** : agrandir outils x2-3, positionner sur le bras, bone tracking |
+| 22 | **FAIT** | **Moteur d'animation Bedrock** v21.0.0 : évaluateur Molang complet (GDScript + Python), BedrockAnimPlayer remplace AnimationPlayer Godot, 83 animations + 51 controllers + 147 entity defs copiés dans `data/`, intégration npc_villager + passive_mob, character_viewer v2.0 + mob_gallery v2.0. Walk/idle automatiques par move controller, attack/mine par variable.attack_time |
 | 18.1 | A venir | Livre de recettes (guide craftable), comportements spécifiques mobs (creeper explosion, skeleton archer), mini-boss x1.6, nouveaux biomes (marécage, forêt géante) |
 
 **Packs GLB utilisés** : Steve GLB (Bedrock converti, 28 bones, 4 anims) pour tous les PNJ. **PNJ futurs** : KayKit Adventurers (161 anims travail)

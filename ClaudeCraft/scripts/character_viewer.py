@@ -24,9 +24,11 @@ Changelog:
     v1.2.0 — Scan recursif sous-dossiers skins, labels avec prefixe dossier
     v1.1.0 — Fix faces noires : rendu alpha blend pour overlays, depth sort
     v1.0.0 — Creation initiale
+    v2.0.0 — Moteur d'animation Bedrock natif : Molang, animations JSON Bedrock,
+             remplacement complet des animations baked GLB
 """
 
-APP_VERSION = "1.5.0"
+APP_VERSION = "2.0.0"
 
 import sys
 import json
@@ -34,6 +36,9 @@ import struct
 import math
 import os
 from pathlib import Path
+
+# Import du moteur d'animation Bedrock
+from bedrock_anim_engine import BedrockAnimPlayer, euler_deg_to_quat
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -347,6 +352,9 @@ class GLBData:
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 class SkeletalAnimator:
+    """Animateur squelettique hybride : supporte les animations Bedrock JSON
+    (via BedrockAnimPlayer) ET les animations baked GLB (legacy fallback)."""
+
     def __init__(self, glb: GLBData):
         self.glb = glb
         self.current_anim = None
@@ -354,25 +362,126 @@ class SkeletalAnimator:
         self.speed = 1.0
         self.playing = False
         self.loop = True
-        self.last_skin_matrices = None  # Cached for armor rendering
+        self.last_skin_matrices = None
 
-    def set_animation(self, name):
+        # Bedrock animation engine
+        self.bedrock = BedrockAnimPlayer()
+        self._bedrock_anim_names = []  # Noms des animations Bedrock disponibles
+        self._use_bedrock = False       # True si l'animation courante est Bedrock
+        self._distance_sim = 0.0        # Distance simulee pour le walk cycle
+
+        # Charger les animations Bedrock
+        data_dir = Path(__file__).parent.parent / "data"
+        if data_dir.exists():
+            self._load_bedrock_anims(str(data_dir))
+
+    def _load_bedrock_anims(self, data_dir):
+        """Charge toutes les animations Bedrock disponibles."""
+        # Determiner l'entity_id depuis le nom du GLB
+        entity_id = "skeleton"  # Default: humanoid
+        if self.glb.path:
+            stem = self.glb.path.stem.lower()
+            if stem != "steve":
+                entity_id = stem
+
+        self.bedrock.load_entity(entity_id, data_dir)
+
+        # Charger AnimaTweaks si disponible
+        animatweaks_dir = Path(data_dir).parent / "AnimaTweaks" / "animations"
+        if animatweaks_dir.exists():
+            for f in sorted(animatweaks_dir.glob("*.json")):
+                self.bedrock.load_animations_file(str(f))
+
+        self._bedrock_anim_names = self.bedrock.get_animation_names()
+
+        # Pre_animation par defaut pour les humanoids
+        if not self.bedrock.pre_animation:
+            self.bedrock.pre_animation.append(
+                "variable.tcos0 = (math.cos(query.modified_distance_moved * 38.17) "
+                "* query.modified_move_speed / variable.gliding_speed_value) * 57.3;"
+            )
+
+    def get_all_animation_names(self):
+        """Retourne les noms des animations (Bedrock + legacy GLB)."""
+        names = []
+        for name in self._bedrock_anim_names:
+            names.append(("bedrock", name))
+        for name in self.glb.animations:
+            names.append(("legacy", name))
+        return names
+
+    # Animations qui vont en paire (jouer ensemble automatiquement)
+    ANIM_PAIRS = {
+        "animation.player.sprint.arms": "animation.player.sprint.legs",
+        "animation.player.sprint.legs": "animation.player.sprint.arms",
+        "animation.player.move.arms": "animation.player.move.legs",
+        "animation.player.move.legs": "animation.player.move.arms",
+        "animation.player.tiptoe.arms": "animation.player.tiptoe.legs",
+        "animation.player.tiptoe.legs": "animation.player.tiptoe.arms",
+    }
+
+    # Animations first-person (pas faites pour le rendu 3e personne)
+    FP_ANIMS = {"animation.fp.", "animation.player.first_person."}
+
+    def set_animation(self, name, source="bedrock"):
         self.current_anim = name
         self.time = 0.0
+        self._use_bedrock = (source == "bedrock" and name in self.bedrock.animations)
+        if self._use_bedrock:
+            self.bedrock.stop_all()
+            self.bedrock.play(name)
+            # Auto-jouer la paire si elle existe
+            pair = self.ANIM_PAIRS.get(name)
+            if pair and pair in self.bedrock.animations:
+                self.bedrock.play(pair)
+            self.bedrock.move_speed = 4.0
+            self._distance_sim = 0.0
+            # Auto-detect variables used by the animation and simulate them
+            self._sim_attack = False
+            self._sim_attack_phase = 0.0
+            anim = self.bedrock.animations.get(name)
+            if anim:
+                if "attack_time" in name or "attack" in name:
+                    self._sim_attack = True
+                for bname, bdata in anim.bones.items():
+                    for ch in (bdata.get("rotation"), bdata.get("position"), bdata.get("scale")):
+                        if ch and "attack_time" in str(ch):
+                            self._sim_attack = True
+                            break
+        else:
+            pass
 
     def advance(self, dt):
         if not self.playing or not self.current_anim:
             return
-        anim = self.glb.animations.get(self.current_anim)
-        if not anim:
-            return
-        self.time += dt * self.speed
-        dur = anim["duration"]
-        if dur > 0:
-            if self.loop:
-                self.time = self.time % dur
-            else:
-                self.time = min(self.time, dur)
+
+        if self._use_bedrock:
+            # Simuler le deplacement pour les animations expression-driven
+            self._distance_sim += 4.0 * dt * self.speed
+            self.bedrock.move_speed = 4.0 * self.speed
+            self.bedrock.distance_moved = self._distance_sim
+            self.bedrock.speed_scale = self.speed
+            # Simuler variable.attack_time (cycle 0→0.7 sur 0.4s, puis pause 0.3s)
+            if self._sim_attack:
+                self._sim_attack_phase += dt * self.speed
+                cycle = self._sim_attack_phase % 0.7  # 0.4s swing + 0.3s pause
+                if cycle < 0.4:
+                    self.bedrock.variables["attack_time"] = (cycle / 0.4) * 0.7
+                else:
+                    self.bedrock.variables["attack_time"] = -1.0
+            self.bedrock.advance(dt)
+        else:
+            # Legacy animation
+            anim = self.glb.animations.get(self.current_anim)
+            if not anim:
+                return
+            self.time += dt * self.speed
+            dur = anim["duration"]
+            if dur > 0:
+                if self.loop:
+                    self.time = self.time % dur
+                else:
+                    self.time = min(self.time, dur)
 
     def _sample_channel(self, channel_data, t):
         ts = channel_data["timestamps"]
@@ -399,7 +508,39 @@ class SkeletalAnimator:
         n_bones = len(glb.bones)
         bone_rotations = {}
         bone_translations = {}
-        if self.current_anim and self.current_anim in glb.animations:
+        bone_scales = {}
+
+        if self._use_bedrock and self.playing:
+            # Bedrock animations : convertir euler degrees en quaternions
+            bone_transforms = self.bedrock._compute_bone_transforms()
+            for bname_lower, transforms in bone_transforms.items():
+                # Trouver le bone par nom (case-insensitive)
+                for bi, bone in enumerate(glb.bones):
+                    if bone["name"].lower() == bname_lower:
+                        rot_deg = transforms["rotation"]
+                        # Bedrock +X=forward, +Y=left ; GLB +X=backward, +Y=right
+                        # → nier X et Y, garder Z
+                        q = euler_deg_to_quat(-rot_deg[0], -rot_deg[1], rot_deg[2])
+                        bone_rotations[bone["name"]] = q
+
+                        pos = transforms["position"]
+                        if any(abs(v) > 0.001 for v in pos):
+                            S = 1.0 / 16.0
+                            bone_translations[bone["name"]] = [
+                                bone["translation"][0] + pos[0] * S,
+                                bone["translation"][1] + pos[1] * S,
+                                bone["translation"][2] + pos[2] * S,
+                            ]
+
+                        # Scale
+                        scl = transforms["scale"]
+                        if any(abs(v - 1.0) > 0.001 for v in scl):
+                            if bone["name"] not in bone_scales:
+                                bone_scales[bone["name"]] = list(bone["scale"])
+                            bone_scales[bone["name"]] = [scl[0], scl[1], scl[2]]
+                        break
+        elif self.current_anim and self.current_anim in glb.animations:
+            # Legacy GLB animation
             anim = glb.animations[self.current_anim]
             for bname, channels in anim["channels"].items():
                 if "rotation" in channels:
@@ -416,7 +557,7 @@ class SkeletalAnimator:
             bone = glb.bones[bi]
             t = bone_translations.get(bone["name"], bone["translation"])
             r = bone_rotations.get(bone["name"], bone["rotation"])
-            s = bone["scale"]
+            s = bone_scales.get(bone["name"], bone["scale"])
             local = mat4_trs(t, r, s)
             if bi in glb.bone_parent:
                 parent_world = world_transforms[glb.bone_parent[bi]]
@@ -1084,17 +1225,38 @@ class CharacterViewer(QMainWindow):
 
         left_layout.addWidget(armor_group)
 
+        # Animations
+        self.anim_group = QGroupBox("Animations")
+        anim_layout = QVBoxLayout(self.anim_group)
+        self.anim_list = QListWidget()
+        self.anim_list.currentItemChanged.connect(self._on_anim_list_changed)
+        anim_layout.addWidget(self.anim_list)
+        # Play/Pause + Speed row
+        play_row = QHBoxLayout()
+        self.btn_play = QPushButton("Play")
+        self.btn_play.setFixedWidth(70)
+        self.btn_play.clicked.connect(self._toggle_play)
+        play_row.addWidget(self.btn_play)
+        self.speed_slider = QSlider(Qt.Orientation.Horizontal)
+        self.speed_slider.setRange(10, 300)
+        self.speed_slider.setValue(100)
+        self.speed_slider.valueChanged.connect(self._on_speed_changed)
+        play_row.addWidget(self.speed_slider)
+        self.speed_label = QLabel("1.0x")
+        self.speed_label.setFixedWidth(35)
+        play_row.addWidget(self.speed_label)
+        anim_layout.addLayout(play_row)
+        left_layout.addWidget(self.anim_group)
+
         # Bones
         bone_group = QGroupBox(f"Bones ({len(self.glb.bones)})")
         bone_layout = QVBoxLayout(bone_group)
         self.bone_list = QListWidget()
-        self.bone_list.setMaximumHeight(150)
+        self.bone_list.setMaximumHeight(120)
         for bone in self.glb.bones:
             self.bone_list.addItem(bone["name"])
         bone_layout.addWidget(self.bone_list)
         left_layout.addWidget(bone_group)
-
-        left_layout.addStretch()
         main_layout.addWidget(left)
 
         # -- Center: viewport + controls --
@@ -1105,34 +1267,10 @@ class CharacterViewer(QMainWindow):
         self.viewport = GLViewport()
         center_layout.addWidget(self.viewport, stretch=1)
 
-        # Controls bar
+        # Controls bar (options de rendu seulement)
         controls = QWidget()
-        controls.setFixedHeight(50)
+        controls.setFixedHeight(40)
         ctrl_layout = QHBoxLayout(controls)
-
-        ctrl_layout.addWidget(QLabel("Animation:"))
-        self.anim_combo = QComboBox()
-        self.anim_combo.setMinimumWidth(120)
-        self.anim_combo.currentTextChanged.connect(self._on_anim_changed)
-        ctrl_layout.addWidget(self.anim_combo)
-
-        self.btn_play = QPushButton("Pause")
-        self.btn_play.setFixedWidth(90)
-        self.btn_play.clicked.connect(self._toggle_play)
-        ctrl_layout.addWidget(self.btn_play)
-
-        ctrl_layout.addWidget(QLabel("Vitesse:"))
-        self.speed_slider = QSlider(Qt.Orientation.Horizontal)
-        self.speed_slider.setRange(10, 300)
-        self.speed_slider.setValue(100)
-        self.speed_slider.setFixedWidth(120)
-        self.speed_slider.valueChanged.connect(self._on_speed_changed)
-        ctrl_layout.addWidget(self.speed_slider)
-        self.speed_label = QLabel("1.0x")
-        self.speed_label.setFixedWidth(40)
-        ctrl_layout.addWidget(self.speed_label)
-
-        ctrl_layout.addSpacing(20)
 
         cb_grid = QCheckBox("Grille")
         cb_grid.setChecked(True)
@@ -1170,17 +1308,45 @@ class CharacterViewer(QMainWindow):
     # -- Skins / Animations --
 
     def _populate_animations(self):
-        self.anim_combo.blockSignals(True)
-        self.anim_combo.clear()
-        self.anim_combo.addItem("(bind pose)")
+        self.anim_list.blockSignals(True)
+        self.anim_list.clear()
+        self._anim_entries = []  # [(source, real_name)]
+
+        # (bind pose)
+        self.anim_list.addItem("(bind pose)")
+        self._anim_entries.append(("none", ""))
+
+        # Animations Bedrock (prioritaires)
+        if self.viewport.animator:
+            for source, name in self.viewport.animator.get_all_animation_names():
+                if source == "bedrock":
+                    anim = self.viewport.animator.bedrock.animations.get(name)
+                    dur = anim.length if anim else 0
+                    short = name.replace("animation.", "")
+                    # Marquer les anims first-person
+                    is_fp = any(name.startswith(prefix) for prefix in ("animation.fp.", "animation.player.first_person."))
+                    tag = "[FP]" if is_fp else "[B]"
+                    label = f"{tag} {short} ({dur:.1f}s)"
+                    self.anim_list.addItem(label)
+                    self._anim_entries.append(("bedrock", name))
+
+        # Animations legacy GLB
         for name in self.glb.animations:
             dur = self.glb.animations[name]["duration"]
-            n_ch = len(self.glb.animations[name]["channels"])
-            self.anim_combo.addItem(f"{name} ({dur:.1f}s, {n_ch}ch)")
-        if self.glb.animations:
-            self.anim_combo.setCurrentIndex(1)
-        self.anim_combo.blockSignals(False)
-        self._on_anim_changed(self.anim_combo.currentText())
+            label = f"[L] {name} ({dur:.1f}s)"
+            self.anim_list.addItem(label)
+            self._anim_entries.append(("legacy", name))
+
+        count_b = sum(1 for s, _ in self._anim_entries if s == "bedrock")
+        count_l = sum(1 for s, _ in self._anim_entries if s == "legacy")
+        self.anim_group.setTitle(f"Animations ({count_b} Bedrock + {count_l} Legacy)")
+
+        if self.anim_list.count() > 1:
+            self.anim_list.setCurrentRow(1)
+        self.anim_list.blockSignals(False)
+        # Trigger initial animation
+        if self.anim_list.count() > 1:
+            self._on_anim_list_changed(self.anim_list.item(1), None)
 
     def _populate_skins(self):
         self.skin_list.clear()
@@ -1241,15 +1407,19 @@ class CharacterViewer(QMainWindow):
         elif path and os.path.exists(path):
             self.viewport.load_texture_from_file(path)
 
-    def _on_anim_changed(self, text):
-        if not self.viewport.animator:
+    def _on_anim_list_changed(self, current, previous=None):
+        if not self.viewport.animator or current is None:
             return
-        if text.startswith("(bind"):
+        row = self.anim_list.row(current)
+        if row < 0 or row >= len(self._anim_entries):
+            return
+        source, name = self._anim_entries[row]
+        if source == "none":
             self.viewport.animator.current_anim = None
             self.viewport.animator.playing = False
+            self.btn_play.setText("Play")
         else:
-            name = text.split(" (")[0]
-            self.viewport.animator.set_animation(name)
+            self.viewport.animator.set_animation(name, source)
             self.viewport.animator.playing = True
             self.btn_play.setText("Pause")
 
