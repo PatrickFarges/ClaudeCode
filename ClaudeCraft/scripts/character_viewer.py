@@ -28,7 +28,7 @@ Changelog:
              remplacement complet des animations baked GLB
 """
 
-APP_VERSION = "2.0.0"
+APP_VERSION = "2.1.0"
 
 import sys
 import json
@@ -363,6 +363,7 @@ class SkeletalAnimator:
         self.playing = False
         self.loop = True
         self.last_skin_matrices = None
+        self.negate_x = True  # Toggle: True = -X (actuel), False = +X
 
         # Bedrock animation engine
         self.bedrock = BedrockAnimPlayer()
@@ -518,9 +519,10 @@ class SkeletalAnimator:
                 for bi, bone in enumerate(glb.bones):
                     if bone["name"].lower() == bname_lower:
                         rot_deg = transforms["rotation"]
-                        # Bedrock +X=forward, +Y=left ; GLB +X=backward, +Y=right
-                        # → nier X et Y, garder Z
-                        q = euler_deg_to_quat(-rot_deg[0], -rot_deg[1], rot_deg[2])
+                        # Bedrock left-hand → GLB right-hand rotation conversion
+                        # Toggle negate_x pour diagnostic (touche N dans le viewer)
+                        rx = -rot_deg[0] if self.negate_x else rot_deg[0]
+                        q = euler_deg_to_quat(rx, -rot_deg[1], rot_deg[2])
                         bone_rotations[bone["name"]] = q
 
                         pos = transforms["position"]
@@ -841,6 +843,9 @@ class GLViewport(QOpenGLWidget):
         self.show_grid = True
         self.show_bones = False
         self.show_wireframe = False
+        self.show_face_arrow = True  # Flèche direction du visage
+        self.negate_x = True  # True = -X,-Y,+Z (actuel), False = +X,-Y,+Z
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)  # Recevoir les touches clavier
         # Animation timer
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
@@ -1050,6 +1055,10 @@ class GLViewport(QOpenGLWidget):
         if self.show_bones:
             self._draw_bones()
 
+        # Draw face direction arrow (cyan arrow from nose, pointing forward = -Z)
+        if self.show_face_arrow and self.animator:
+            self._draw_face_arrow()
+
     def _draw_grid(self):
         glDisable(GL_LIGHTING)
         glDisable(GL_TEXTURE_2D)
@@ -1103,9 +1112,49 @@ class GLViewport(QOpenGLWidget):
         glEnable(GL_DEPTH_TEST)
         glEnable(GL_LIGHTING)
 
+    def _draw_face_arrow(self):
+        """Flèche cyan depuis le nez de Steve montrant la direction 'avant' (-Z dans le modèle)."""
+        glDisable(GL_LIGHTING)
+        glDisable(GL_DEPTH_TEST)
+        glDisable(GL_TEXTURE_2D)
+        # Steve nose position: head pivot [0, 24, 0] in Bedrock, face at Z=-4 (head cube z0)
+        # In GLB units: [0, 1.5, -0.25] (approx nose tip)
+        # Get actual head bone world position if available
+        nose = [0.0, 1.55, -0.25]  # Default nose pos in GLB units
+        if self.animator:
+            bp = self.animator.get_bone_positions()
+            for bi, bone in enumerate(self.glb.bones):
+                if bone["name"].lower() == "head":
+                    nose = [bp[bi][0], bp[bi][1] + 0.05, bp[bi][2] - 0.15]
+                    break
+        # Arrow: nose -> nose + (-Z * 0.6)
+        end = [nose[0], nose[1], nose[2] - 0.6]
+        glLineWidth(3.0)
+        glBegin(GL_LINES)
+        glColor3f(0.0, 1.0, 1.0)  # Cyan
+        glVertex3f(*nose)
+        glVertex3f(*end)
+        # Arrowhead
+        glVertex3f(*end)
+        glVertex3f(end[0] + 0.05, end[1] + 0.05, end[2] + 0.1)
+        glVertex3f(*end)
+        glVertex3f(end[0] - 0.05, end[1] + 0.05, end[2] + 0.1)
+        glEnd()
+        # Label "FACE" near arrow
+        glPointSize(8.0)
+        glBegin(GL_POINTS)
+        glColor3f(0.0, 1.0, 1.0)
+        glVertex3f(*end)
+        glEnd()
+        glPointSize(1.0)
+        glLineWidth(1.0)
+        glEnable(GL_DEPTH_TEST)
+        glEnable(GL_LIGHTING)
+
     # -- Mouse --
 
     def mousePressEvent(self, event):
+        self.setFocus()  # S'assurer que le viewport a le focus pour les touches
         self._last_mouse = event.pos()
         self._mouse_button = event.button()
 
@@ -1131,6 +1180,43 @@ class GLViewport(QOpenGLWidget):
         delta = event.angleDelta().y()
         self.cam_dist *= 0.95 if delta > 0 else 1.05
         self.cam_dist = max(0.5, min(20.0, self.cam_dist))
+        self.update()
+
+    def keyPressEvent(self, event):
+        key = event.key()
+        if key == Qt.Key.Key_N:
+            # Toggle X negation pour diagnostic
+            if self.animator:
+                self.animator.negate_x = not self.animator.negate_x
+                mode = "-X (Bedrock left-hand)" if self.animator.negate_x else "+X (raw Bedrock)"
+                print(f"[DIAG] Rotation X mode: {mode}")
+                # Print current bone rotations
+                if self.animator._use_bedrock and self.animator.playing:
+                    bt = self.animator.bedrock._compute_bone_transforms()
+                    for bname, tr in bt.items():
+                        r = tr["rotation"]
+                        if any(abs(v) > 0.1 for v in r):
+                            rx = -r[0] if self.animator.negate_x else r[0]
+                            print(f"  {bname}: Bedrock=[{r[0]:.1f}, {r[1]:.1f}, {r[2]:.1f}] -> GLB=[{rx:.1f}, {-r[1]:.1f}, {r[2]:.1f}]")
+        elif key == Qt.Key.Key_F:
+            # Face arrow toggle
+            self.show_face_arrow = not self.show_face_arrow
+        elif key == Qt.Key.Key_1:
+            # Front view (face Steve from the front, looking at his face)
+            self.cam_theta = 180.0; self.cam_phi = 10.0; self.cam_pan = [0, 0]
+            print("[CAM] Front view (theta=180)")
+        elif key == Qt.Key.Key_2:
+            # Right side view (Blockbench-like)
+            self.cam_theta = 90.0; self.cam_phi = 10.0; self.cam_pan = [0, 0]
+            print("[CAM] Right side view (theta=90)")
+        elif key == Qt.Key.Key_3:
+            # Back view
+            self.cam_theta = 0.0; self.cam_phi = 10.0; self.cam_pan = [0, 0]
+            print("[CAM] Back view (theta=0)")
+        elif key == Qt.Key.Key_4:
+            # Left side view
+            self.cam_theta = 270.0; self.cam_phi = 10.0; self.cam_pan = [0, 0]
+            print("[CAM] Left side view (theta=270)")
         self.update()
 
 

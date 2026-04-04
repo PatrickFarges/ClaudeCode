@@ -87,7 +87,7 @@ Format JSON : palette + RLE layer-first. `KEEP`=terrain intact, `AIR`=creuser. P
 - **`scripts/convert_schem.py`** (~940 lignes) : convertisseur `.schem` -> JSON ClaudeCraft, 260+ mappings blocs
 - **`scripts/structure_viewer.py`** (v2.3.0, ~3200 lignes) : éditeur + visualiseur 3D PyQt6/PyOpenGL, 73 blocs, undo/redo, sélection rectangulaire, AO, sauvegarde rapide
 - **`scripts/bedrock_to_glb.py`** (v1.2.0) : convertisseur Bedrock -> GLB, mesh skinné 28 bones, 8 animations
-- **`scripts/character_viewer.py`** (v2.0.0) : visualiseur personnage GLB, skin swap, armures overlay, **animations Bedrock natives** (Molang + JSON)
+- **`scripts/character_viewer.py`** (v2.1.0) : visualiseur personnage GLB, skin swap, armures overlay, **animations Bedrock natives** (Molang + JSON). Diagnostic rotations : touche N toggle convention X, touches 1-4 vues preset (face/côté/dos), flèche cyan direction faciale (F toggle)
 - **`scripts/minecraft_import.py`** : extracteur client.jar -> 8 JSON dans `minecraft_data/`
 - **`scripts/download_mc_sounds.py`** : téléchargeur sons MC, 3998 MP3
 - **`scripts/mob_gallery.py`** (v2.0.0) : galerie 3D mobs, rotation auto, **animations Bedrock natives** (Molang + JSON)
@@ -99,6 +99,14 @@ Format JSON : palette + RLE layer-first. `KEEP`=terrain intact, `AIR`=creuser. P
 - `Aurore Stone/` : alternatif (16x16)
 
 Changer `ACTIVE_PACK` dans `game_config.gd` pour switcher. Résolution auto-détectée.
+
+## AnimaTweaks (`AnimaTweaks/`)
+
+Pack d'animations Bedrock améliorées (par ICEy, v4.0). **100% format Bedrock**, même convention que vanilla. 15 fichiers JSON d'animation, controllers, render controllers.
+
+Animations notables : sprint (arms + legs séparés, body lean + torsion), walk amélioré, tiptoe, sneak, jump, swim, idle, emotes (wave/point/clap/dance). Seuils de vitesse : idle 0-0.8, tiptoe 0.8-2.5, walk 2.5-4.0, sprint 4.0+.
+
+**Convention de rotation :** Bedrock left-hand → GLB right-hand = `-rot_deg.x, -rot_deg.y, +rot_deg.z`. Confirmé fonctionnel pour toutes les animations (walk, sprint, bow, idle). Certaines animations (`bow_and_arrow`, `charging`, `sleeping`) dépendent de variables runtime (`variable.charge_amount`, `query.target_x/y_rotation`, `query.sleep_rotation`) non disponibles dans le viewer — elles ne sont pas cassées.
 
 ## Assets
 

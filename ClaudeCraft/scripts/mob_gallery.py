@@ -353,6 +353,7 @@ class SkeletalAnimator:
                     if bone["name"].lower() == bname_lower:
                         rot_deg = transforms["rotation"]
                         # Bedrock +X=forward, +Y=left ; GLB +X=backward, +Y=right
+                        # → nier X et Y, garder Z
                         q = euler_deg_to_quat(-rot_deg[0], -rot_deg[1], rot_deg[2])
                         br[bone["name"]] = q
                         pos = transforms["position"]
