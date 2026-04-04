@@ -46,6 +46,8 @@ static func _is_junk_block(bt: int) -> bool:
 
 # Modèle Steve GLB unique — chaque villageois reçoit un skin de profession différent
 const STEVE_GLB_PATH = "res://assets/PlayerModel/steve.glb"
+const ANIMATWEAKS_DIR = "res://AnimaTweaks/animations/"
+const CC_MOVE_CTRL = "res://data/animation_controllers/claudecraft_move.animation_controllers.json"
 static var _steve_scene: PackedScene = null
 static var _skin_cache: Dictionary = {}  # cache des ImageTexture par chemin
 static var _tool_mesh_cache: Dictionary = {}  # cache des ArrayMesh par texture path
@@ -218,6 +220,8 @@ func _create_model():
 		_bedrock_anim.setup(_skeleton)
 		# Charger les animations humanoid + controllers
 		BedrockEntityLoader.configure_entity(_bedrock_anim, "skeleton")  # squelette = humanoid standard
+		# Charger les animations AnimaTweaks (sprint, walk amélioré, idle, tiptoe)
+		_load_animatweaks()
 		# Vitesse du jeu
 		_bedrock_anim.speed_scale = _get_game_speed()
 	if _skeleton and villager_index == 0:
@@ -280,6 +284,32 @@ func _apply_skin_recursive(node: Node, tex: Texture2D):
 				mi.set_surface_override_material(i, mat)
 	for child in node.get_children():
 		_apply_skin_recursive(child, tex)
+
+func _load_animatweaks():
+	if not _bedrock_anim:
+		return
+	# Charger les fichiers d'animation AnimaTweaks
+	var dir := DirAccess.open(ANIMATWEAKS_DIR)
+	if dir:
+		dir.list_dir_begin()
+		var fname := dir.get_next()
+		while not fname.is_empty():
+			if fname.ends_with(".json"):
+				_bedrock_anim.load_animations(ANIMATWEAKS_DIR + fname)
+			fname = dir.get_next()
+	# Aliases pour le controller de mouvement ClaudeCraft
+	_bedrock_anim.set_alias("cc_idle", "animation.player.stationary")
+	_bedrock_anim.set_alias("cc_walk_arms", "animation.player.move.arms")
+	_bedrock_anim.set_alias("cc_walk_legs", "animation.player.move.legs")
+	_bedrock_anim.set_alias("cc_sprint_arms", "animation.player.sprint.arms")
+	_bedrock_anim.set_alias("cc_sprint_legs", "animation.player.sprint.legs")
+	# Désactiver le controller de mouvement vanilla (humanoid.move)
+	# Il joue animation.humanoid.move (tcos0) — on le remplace
+	if _bedrock_anim._controller_states.has("controller.animation.humanoid.move"):
+		_bedrock_anim._controller_states.erase("controller.animation.humanoid.move")
+	# Charger et activer le controller de mouvement ClaudeCraft
+	_bedrock_anim.load_controllers(CC_MOVE_CTRL)
+	_bedrock_anim.activate_controller("controller.animation.claudecraft.move")
 
 func _play_anim(anim_name: String):
 	# Moteur Bedrock : walk/idle sont automatiques (basés sur la vitesse).

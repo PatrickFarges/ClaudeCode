@@ -1,0 +1,32 @@
+{
+	"format_version": "1.10.0",
+	"animation_controllers": {
+		"controller.animation.claudecraft.move": {
+			"initial_state": "idle",
+			"states": {
+				"idle": {
+					"animations": ["cc_idle"],
+					"transitions": [
+						{"walk": "query.ground_speed >= 0.5"}
+					],
+					"blend_transition": 0.25
+				},
+				"walk": {
+					"animations": ["cc_walk_arms", "cc_walk_legs"],
+					"transitions": [
+						{"idle": "query.ground_speed < 0.3"},
+						{"sprint": "query.ground_speed >= 5.0"}
+					],
+					"blend_transition": 0.2
+				},
+				"sprint": {
+					"animations": ["cc_sprint_arms", "cc_sprint_legs"],
+					"transitions": [
+						{"walk": "query.ground_speed < 4.5"}
+					],
+					"blend_transition": 0.15
+				}
+			}
+		}
+	}
+}
