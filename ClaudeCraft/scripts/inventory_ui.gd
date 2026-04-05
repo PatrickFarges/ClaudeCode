@@ -62,7 +62,6 @@ static var _steve_packed: PackedScene = null
 # Recipe book
 var _recipe_book: Control = null
 var _recipe_book_btn: Button = null
-var _recipe_book_icon: TextureRect = null
 const RB_DIR = GUI_DIR + "sprites/recipe_book/"
 
 const TEX_W = 352
@@ -212,28 +211,22 @@ func _build_ui():
 	var rb_btn_img = Image.load_from_file(RB_DIR + "button.png")
 	if rb_btn_img:
 		var rb_icon_tex = ImageTexture.create_from_image(rb_btn_img)
-		# Bouton livre vert — bord supérieur droit, SUR le cadre du panneau
-		var rb_w = 40 * GUI_SCALE  # button.png is 40x36 Faithful32
-		var rb_h = 36 * GUI_SCALE
-		var rb_x = -tex_left - rb_w - 2 * GUI_SCALE  # bord droit du panneau
-		var rb_y = tex_top - rb_h / 2                 # à cheval sur le bord supérieur
-		_recipe_book_icon = TextureRect.new()
-		_recipe_book_icon.texture = rb_icon_tex
-		_recipe_book_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		_recipe_book_icon.set_anchors_preset(Control.PRESET_CENTER)
-		_recipe_book_icon.offset_left = rb_x; _recipe_book_icon.offset_right = rb_x + rb_w
-		_recipe_book_icon.offset_top = rb_y; _recipe_book_icon.offset_bottom = rb_y + rb_h
-		_recipe_book_icon.stretch_mode = TextureRect.STRETCH_SCALE
-		_recipe_book_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_recipe_book_icon.z_index = 150
-		add_child(_recipe_book_icon)
+		# Bouton livre vert — coin supérieur droit du panneau, sur le cadre
+		var rb_w = 20 * GUI_SCALE  # taille affichée
+		var rb_h = 18 * GUI_SCALE
+		# Position en haut à droite du panneau (dans la bordure)
+		var rb_x = tex_left + (TEX_W - 24) * GUI_SCALE
+		var rb_y = tex_top + 3 * GUI_SCALE
 		_recipe_book_btn = Button.new()
-		_recipe_book_btn.flat = true
 		_recipe_book_btn.set_anchors_preset(Control.PRESET_CENTER)
 		_recipe_book_btn.offset_left = rb_x; _recipe_book_btn.offset_right = rb_x + rb_w
 		_recipe_book_btn.offset_top = rb_y; _recipe_book_btn.offset_bottom = rb_y + rb_h
+		_recipe_book_btn.icon = rb_icon_tex
+		_recipe_book_btn.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_recipe_book_btn.expand_icon = true
+		_recipe_book_btn.flat = true
+		_recipe_book_btn.mouse_filter = Control.MOUSE_FILTER_STOP
 		_recipe_book_btn.pressed.connect(_on_recipe_book_toggle)
-		_recipe_book_btn.z_index = 150
 		add_child(_recipe_book_btn)
 
 	# --- Recipe book panel (hidden by default) ---
@@ -253,7 +246,7 @@ func _build_ui():
 	_cursor_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_cursor_tex.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_cursor_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE; _cursor_tex.visible = false
-	_cursor_tex.z_index = 200  # Toujours au-dessus du recipe book et autres panels
+	_cursor_tex.z_index = 200; _cursor_tex.top_level = true
 	add_child(_cursor_tex)
 	_cursor_count = Label.new(); _cursor_count.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_cursor_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -263,7 +256,7 @@ func _build_ui():
 	_cursor_count.add_theme_constant_override("shadow_offset_x", 2)
 	_cursor_count.add_theme_constant_override("shadow_offset_y", 2)
 	_cursor_count.mouse_filter = Control.MOUSE_FILTER_IGNORE; _cursor_count.visible = false
-	_cursor_count.z_index = 200
+	_cursor_count.z_index = 200; _cursor_count.top_level = true
 	add_child(_cursor_count)
 
 # ============================================================
