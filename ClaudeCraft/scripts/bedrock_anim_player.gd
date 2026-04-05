@@ -549,8 +549,8 @@ func _apply_animations_to_skeleton() -> void:
 			var acc: Dictionary = accumulated[bone_idx]
 
 			# Set 'this' values for the evaluator
-			var current_rot := acc["rot"]
-			var current_pos := acc["pos"]
+			var current_rot: Vector3 = acc["rot"]
+			var current_pos: Vector3 = acc["pos"]
 
 			# Override previous = reset accumulated
 			if anim.override_previous:
