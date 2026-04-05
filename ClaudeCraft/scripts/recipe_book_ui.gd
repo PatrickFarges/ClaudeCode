@@ -304,9 +304,7 @@ func _build_tabs():
 
 
 func _build_recipe_grid():
-	var slot_px = SLOT_SIZE / 2 * GUI_SCALE  # slots are 25 vanilla → 50 F32 / 2 for display
-	# Actually let's use a good size for the grid
-	var grid_slot = 26 * GUI_SCALE  # 26 vanilla pixels per slot
+	var grid_slot = 26 * GUI_SCALE  # 26 pixels par slot en Faithful32
 	var icon_sz = 20 * GUI_SCALE
 	var pad = (grid_slot - icon_sz) / 2.0
 
