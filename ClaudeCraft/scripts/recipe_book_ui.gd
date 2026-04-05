@@ -1,8 +1,9 @@
-# recipe_book_ui.gd v1.1.0
-# Panneau de recettes MC Bedrock — s'affiche à gauche de l'inventaire ou du craft
-# 5 onglets : Recherche, Construction, Equipement, Objets, Nature
+# recipe_book_ui.gd v2.0.0
+# Panneau de recettes MC Bedrock Edition — s'affiche à gauche de l'inventaire ou du craft
+# 5 onglets : Construction, Equipement, Objets, Nature, Recherche
 # Filtre fabricables, barre de recherche, grille paginée, auto-craft au clic
-# v1.1.0 — Fix positionnement : onglets hors du panneau, loupe en haut à droite, search sous le label
+# v2.0.0 — Refonte visuelle style Bedrock Edition : fond sombre programmatique,
+#           grands onglets colorés, loupe séparée, palette dark UI
 
 extends Control
 
@@ -11,38 +12,53 @@ const GUI_DIR = "res://TexturesPack/Faithful32/assets/minecraft/textures/gui/"
 const RB_DIR = GUI_DIR + "sprites/recipe_book/"
 const GUI_SCALE = 2
 
-# Atlas recipe_book.png : panneau = region (2,2)-(296,334) en Faithful32
-const PANEL_ATLAS_X = 2
-const PANEL_ATLAS_Y = 2
-const PANEL_ATLAS_W = 294
-const PANEL_ATLAS_H = 332
+# Panel dimensions (display pixels before GUI_SCALE)
+const PANEL_W = 300
+const PANEL_H = 340
 
-# Layout — onglets horizontaux au-dessus du panneau (style Bedrock)
+# Tab layout — 5 large tabs inside the panel, top row (Bedrock style)
 const TAB_COUNT = 5
-# Taille d'un onglet en Faithful32 px (avant GUI_SCALE)
-# Panel = 294px wide, 5 onglets + marges = (294 - 12) / 5 ≈ 56px max, on prend 50
-const TAB_W = 50
-const TAB_H = 28
-const TAB_MARGIN_LEFT = 10  # marge gauche
-const TAB_SPACING = 4       # espacement entre onglets
+const TAB_SZ = 21         # tab button size (pre-scale) — 42px at GUI_SCALE
+const TAB_ICON_SZ = 14    # icon size (pre-scale) — 28px at GUI_SCALE
+const TAB_MARGIN_LEFT = 8
+const TAB_MARGIN_TOP = 8
+const TAB_SPACING = 3
+
+# Visual tab order → Category enum mapping
+# Visual: Construction(0), Equipment(1), Items(2), Nature(3), Search(4)
+const TAB_TO_CATEGORY = [1, 2, 3, 4, 0]  # Category.CONSTRUCTION, EQUIPMENT, ITEMS, NATURE, SEARCH
+const CATEGORY_TO_TAB = [4, 0, 1, 2, 3]  # inverse mapping
+
+# Loupe button (separate, top-right corner)
+const LOUPE_SZ = 20       # pre-scale — 40px at GUI_SCALE
 
 # Search bar sous le label catégorie
-const SEARCH_Y = 30       # Y dans le panneau (Faithful32 px)
-const SEARCH_H = 24
-const SEARCH_MARGIN = 10
+const SEARCH_H = 12       # pre-scale
+const SEARCH_MARGIN = 8
 
-const FILTER_W = 52
-const FILTER_H = 26
+const FILTER_W = 26        # pre-scale
+const FILTER_H = 13        # pre-scale
 
 const GRID_COLS = 5
 const GRID_ROWS = 4
-const GRID_MARGIN_LEFT = 12
-const GRID_MARGIN_TOP = 84  # sous la barre de recherche (tabs 8+24=32, label 38+16=54, search 56+24=80)
+const GRID_MARGIN_LEFT = 10
+const GRID_MARGIN_TOP = 72  # tabs(8+21=29) + label(32+14=46) + search(48+12=60) + padding
 const GRID_SPACING = 2
 
 const SLOTS_PER_PAGE = 20  # 5x4
-const PAGE_BTN_W = 24
-const PAGE_BTN_H = 34
+const PAGE_BTN_W = 12      # pre-scale
+const PAGE_BTN_H = 17      # pre-scale
+
+# Bedrock dark palette
+const COLOR_PANEL_BG = Color(0.376, 0.376, 0.376)       # #606060
+const COLOR_BORDER = Color(0.55, 0.55, 0.55)             # medium gray border
+const COLOR_TAB_BG = Color(0.282, 0.282, 0.282)          # #484848
+const COLOR_TAB_SELECTED = Color(0.38, 0.38, 0.38)       # lighter when selected
+const COLOR_TAB_BORDER = Color(0.6, 0.6, 0.6)            # selected tab border
+const COLOR_SEARCH_BG = Color(0.19, 0.19, 0.19)          # #303030
+const COLOR_SEARCH_BORDER = Color(0.45, 0.45, 0.45)
+const COLOR_TEXT = Color(1.0, 1.0, 1.0)                   # white text
+const COLOR_TEXT_DIM = Color(0.75, 0.75, 0.75)            # light gray text
 
 # Categories
 enum Category { SEARCH, CONSTRUCTION, EQUIPMENT, ITEMS, NATURE }
@@ -100,7 +116,8 @@ var current_tier: int = 0
 var has_furnace: bool = false
 
 # UI nodes
-var _panel_bg: TextureRect = null
+var _panel_bg: Panel = null
+var _loupe_btn: Button = null
 var _tab_buttons: Array = []      # [{btn, icon}]
 var _category_label: Label = null
 var _filter_btn: Button = null
@@ -168,22 +185,24 @@ func toggle():
 
 
 func _build_ui():
-	var pw = PANEL_ATLAS_W * GUI_SCALE
-	var ph = PANEL_ATLAS_H * GUI_SCALE
+	var pw = PANEL_W * GUI_SCALE
+	var ph = PANEL_H * GUI_SCALE
 
-	# --- Panel background ---
-	var atlas_img = Image.load_from_file(GUI_DIR + "recipe_book.png")
-	if atlas_img:
-		atlas_img.convert(Image.FORMAT_RGBA8)
-		var panel_region = atlas_img.get_region(Rect2i(PANEL_ATLAS_X, PANEL_ATLAS_Y, PANEL_ATLAS_W, PANEL_ATLAS_H))
-		_panel_bg = TextureRect.new()
-		_panel_bg.texture = ImageTexture.create_from_image(panel_region)
-		_panel_bg.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		_panel_bg.position = Vector2.ZERO
-		_panel_bg.size = Vector2(pw, ph)
-		_panel_bg.stretch_mode = TextureRect.STRETCH_SCALE
-		_panel_bg.mouse_filter = Control.MOUSE_FILTER_STOP
-		add_child(_panel_bg)
+	# --- Panel background (dark Bedrock style, programmatic StyleBoxFlat) ---
+	_panel_bg = Panel.new()
+	var panel_style = StyleBoxFlat.new()
+	panel_style.bg_color = COLOR_PANEL_BG
+	panel_style.border_color = COLOR_BORDER
+	panel_style.border_width_top = 4
+	panel_style.border_width_left = 4
+	panel_style.border_width_bottom = 4
+	panel_style.border_width_right = 4
+	panel_style.set_corner_radius_all(0)
+	_panel_bg.add_theme_stylebox_override("panel", panel_style)
+	_panel_bg.position = Vector2.ZERO
+	_panel_bg.size = Vector2(pw, ph)
+	_panel_bg.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(_panel_bg)
 
 	size = Vector2(pw, ph)
 
@@ -193,22 +212,27 @@ func _build_ui():
 	_slot_craftable_tex = _load_sprite("slot_craftable.png")
 	_slot_uncraftable_tex = _load_sprite("slot_uncraftable.png")
 
-	# --- Tabs (petits boutons sombres DANS le panneau, près du haut) ---
+	# --- Tabs (large dark buttons inside the panel, Bedrock style) ---
 	_build_tabs()
 
-	# --- Category label (sous les tabs, texte clair sur fond sombre) ---
+	# --- Loupe button (separate, top-right corner, overlapping border) ---
+	_build_loupe_button(pw)
+
+	# --- Category label (below tabs, white text, right-aligned) ---
+	var label_y = (TAB_MARGIN_TOP + TAB_SZ + 3) * GUI_SCALE
 	_category_label = Label.new()
 	_category_label.text = CATEGORY_LABELS[0]
-	_category_label.position = Vector2(12 * GUI_SCALE, 38 * GUI_SCALE)
-	_category_label.size = Vector2(160 * GUI_SCALE, 16 * GUI_SCALE)
-	_category_label.add_theme_font_size_override("font_size", 13)
-	_category_label.add_theme_color_override("font_color", Color(0.85, 0.85, 0.82))
+	_category_label.position = Vector2(SEARCH_MARGIN * GUI_SCALE, label_y)
+	_category_label.size = Vector2((PANEL_W - SEARCH_MARGIN * 2) * GUI_SCALE, 14 * GUI_SCALE)
+	_category_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_category_label.add_theme_font_size_override("font_size", 14)
+	_category_label.add_theme_color_override("font_color", COLOR_TEXT)
 	_category_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_category_label)
 
-	# --- Filter toggle (à droite du label, sprites MC) ---
-	var filter_x = pw - (FILTER_W + 8) * GUI_SCALE
-	var filter_y = 36 * GUI_SCALE
+	# --- Filter toggle (to the right of search bar area, using MC sprites) ---
+	var filter_y = (TAB_MARGIN_TOP + TAB_SZ + 3 + 16) * GUI_SCALE
+	var filter_x = pw - (FILTER_W + SEARCH_MARGIN) * GUI_SCALE
 	_filter_icon = TextureRect.new()
 	_filter_icon.texture = _filter_disabled_tex
 	_filter_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -224,24 +248,25 @@ func _build_ui():
 	_filter_btn.pressed.connect(_on_filter_toggle)
 	add_child(_filter_btn)
 
-	# --- Search input (style sombre MC, sous le label) ---
+	# --- Search input (dark Bedrock style, below category label) ---
+	var search_y = (TAB_MARGIN_TOP + TAB_SZ + 3 + 16) * GUI_SCALE
+	var search_w = (PANEL_W - SEARCH_MARGIN * 3 - FILTER_W) * GUI_SCALE
 	_search_input = LineEdit.new()
 	_search_input.placeholder_text = "Rechercher..."
-	_search_input.position = Vector2(SEARCH_MARGIN * GUI_SCALE, 56 * GUI_SCALE)
-	_search_input.size = Vector2((PANEL_ATLAS_W - SEARCH_MARGIN * 2) * GUI_SCALE, SEARCH_H * GUI_SCALE)
+	_search_input.position = Vector2(SEARCH_MARGIN * GUI_SCALE, search_y)
+	_search_input.size = Vector2(search_w, SEARCH_H * GUI_SCALE)
 	_search_input.add_theme_font_size_override("font_size", 12)
-	_search_input.add_theme_color_override("font_color", Color(0.9, 0.9, 0.9))
+	_search_input.add_theme_color_override("font_color", COLOR_TEXT)
 	_search_input.add_theme_color_override("font_placeholder_color", Color(0.5, 0.5, 0.5))
-	# Style sombre pour s'intégrer au panneau
 	var search_style = StyleBoxFlat.new()
-	search_style.bg_color = Color(0.15, 0.15, 0.15, 0.9)
-	search_style.border_color = Color(0.4, 0.4, 0.4, 0.8)
+	search_style.bg_color = COLOR_SEARCH_BG
+	search_style.border_color = COLOR_SEARCH_BORDER
 	search_style.set_border_width_all(1)
-	search_style.set_corner_radius_all(2)
+	search_style.set_corner_radius_all(0)
 	search_style.set_content_margin_all(4)
 	_search_input.add_theme_stylebox_override("normal", search_style)
 	var search_focus = search_style.duplicate()
-	search_focus.border_color = Color(0.6, 0.6, 0.5, 1.0)
+	search_focus.border_color = Color(0.7, 0.7, 0.65, 1.0)
 	_search_input.add_theme_stylebox_override("focus", search_focus)
 	_search_input.text_changed.connect(_on_search_changed)
 	add_child(_search_input)
@@ -257,47 +282,59 @@ func _build_ui():
 
 
 func _build_tabs():
-	# Onglets = petits boutons sombres avec icônes, DANS le panneau, en ligne près du haut
-	# Style MC Bedrock : fond sombre, sélection = bord clair subtil
-	var icon_sz = 18 * GUI_SCALE  # taille de l'icône
-	var tab_sz = 24 * GUI_SCALE   # taille du bouton (icône + padding)
-	var tab_y = 8 * GUI_SCALE     # Y dans le panneau
-	var tab_start_x = 12 * GUI_SCALE
-	var tab_gap = 6 * GUI_SCALE
+	# 5 large dark tab buttons inside the panel (Bedrock style)
+	# Visual order: Construction, Equipment, Items, Nature, Search
+	var tab_px = TAB_SZ * GUI_SCALE
+	var icon_px = TAB_ICON_SZ * GUI_SCALE
+	var tab_y = TAB_MARGIN_TOP * GUI_SCALE
+	var tab_start_x = TAB_MARGIN_LEFT * GUI_SCALE
+	var tab_gap = TAB_SPACING * GUI_SCALE
 	var icons_list = _get_category_icons()
 
-	# Style pour l'onglet sélectionné
+	# Visual tab order: Construction(cat 1), Equipment(cat 2), Items(cat 3), Nature(cat 4), Search(cat 0)
+	var visual_order = [
+		Category.CONSTRUCTION,
+		Category.EQUIPMENT,
+		Category.ITEMS,
+		Category.NATURE,
+		Category.SEARCH,
+	]
+
+	# Styles
 	var style_selected = StyleBoxFlat.new()
-	style_selected.bg_color = Color(0.35, 0.33, 0.3, 0.9)
-	style_selected.border_color = Color(0.7, 0.65, 0.55, 0.8)
-	style_selected.set_border_width_all(1)
-	style_selected.set_corner_radius_all(2)
+	style_selected.bg_color = COLOR_TAB_SELECTED
+	style_selected.border_color = COLOR_TAB_BORDER
+	style_selected.set_border_width_all(2)
+	style_selected.set_corner_radius_all(0)
 
-	# Style pour l'onglet normal (hover)
-	var style_hover = StyleBoxFlat.new()
-	style_hover.bg_color = Color(0.25, 0.24, 0.22, 0.7)
-	style_hover.set_corner_radius_all(2)
-
-	# Style normal (transparent)
 	var style_normal = StyleBoxFlat.new()
-	style_normal.bg_color = Color(0, 0, 0, 0)
+	style_normal.bg_color = COLOR_TAB_BG
+	style_normal.set_corner_radius_all(0)
 
-	for i in range(TAB_COUNT):
-		var tx = tab_start_x + i * (tab_sz + tab_gap)
+	var style_hover = StyleBoxFlat.new()
+	style_hover.bg_color = Color(0.34, 0.34, 0.34)
+	style_hover.set_corner_radius_all(0)
 
-		# Tab icon
+	# _tab_buttons is indexed by category (0=SEARCH, 1=CONSTRUCTION, etc.)
+	# We need to build them in visual order but store them by category index
+	_tab_buttons.resize(TAB_COUNT)
+
+	for vi in range(TAB_COUNT):
+		var cat_idx = visual_order[vi]
+		var tx = tab_start_x + vi * (tab_px + tab_gap)
+
+		# Tab icon (large, colorful)
 		var icon = TextureRect.new()
 		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		var pad = (tab_sz - icon_sz) / 2.0
+		var pad = (tab_px - icon_px) / 2.0
 		icon.position = Vector2(tx + pad, tab_y + pad)
-		icon.size = Vector2(icon_sz, icon_sz)
+		icon.size = Vector2(icon_px, icon_px)
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		# Charger l'icône de catégorie
-		var bt = icons_list[i]
+		var bt = icons_list[cat_idx]
 		if bt == -1:
-			# Onglet recherche — loupe depuis l'atlas
+			# Search tab — loupe from atlas
 			var loupe_img = Image.load_from_file(GUI_DIR + "recipe_book.png")
 			if loupe_img:
 				loupe_img.convert(Image.FORMAT_RGBA8)
@@ -309,21 +346,49 @@ func _build_tabs():
 			icon.texture = _load_block_icon(bt)
 		add_child(icon)
 
-		# Tab button (clickable, avec styles MC)
+		# Tab button
 		var btn = Button.new()
 		btn.flat = true
 		btn.position = Vector2(tx, tab_y)
-		btn.size = Vector2(tab_sz, tab_sz)
-		btn.add_theme_stylebox_override("normal", style_selected.duplicate() if i == 0 else style_normal.duplicate())
+		btn.size = Vector2(tab_px, tab_px)
+		var is_default = (cat_idx == Category.SEARCH)  # default category
+		btn.add_theme_stylebox_override("normal", style_selected.duplicate() if is_default else style_normal.duplicate())
 		btn.add_theme_stylebox_override("hover", style_hover.duplicate())
-		btn.pressed.connect(_on_tab_pressed.bind(i))
+		btn.pressed.connect(_on_tab_pressed.bind(cat_idx))
 		add_child(btn)
 
-		_tab_buttons.append({"btn": btn, "icon": icon})
+		# Store by category index so _refresh_grid can use _tab_buttons[i] with i=category
+		_tab_buttons[cat_idx] = {"btn": btn, "icon": icon}
+
+
+func _build_loupe_button(pw: float):
+	# Separate loupe button at top-right corner, partially overlapping the border
+	var loupe_px = LOUPE_SZ * GUI_SCALE
+	_loupe_btn = Button.new()
+	_loupe_btn.flat = true
+	_loupe_btn.position = Vector2(pw - loupe_px - 2 * GUI_SCALE, 2 * GUI_SCALE)
+	_loupe_btn.size = Vector2(loupe_px, loupe_px)
+	var loupe_style = StyleBoxFlat.new()
+	loupe_style.bg_color = COLOR_TAB_BG
+	loupe_style.border_color = COLOR_BORDER
+	loupe_style.set_border_width_all(2)
+	loupe_style.set_corner_radius_all(0)
+	_loupe_btn.add_theme_stylebox_override("normal", loupe_style)
+	var loupe_hover = loupe_style.duplicate()
+	loupe_hover.bg_color = COLOR_TAB_SELECTED
+	_loupe_btn.add_theme_stylebox_override("hover", loupe_hover)
+	# Loupe icon
+	var loupe_img = Image.load_from_file(GUI_DIR + "recipe_book.png")
+	if loupe_img:
+		loupe_img.convert(Image.FORMAT_RGBA8)
+		var loupe_region = loupe_img.get_region(Rect2i(6, 6, 16, 16))
+		_loupe_btn.icon = ImageTexture.create_from_image(loupe_region)
+	_loupe_btn.pressed.connect(_on_tab_pressed.bind(Category.SEARCH))
+	add_child(_loupe_btn)
 
 
 func _build_recipe_grid():
-	var grid_slot = 26 * GUI_SCALE  # 26 pixels par slot en Faithful32
+	var grid_slot = 26 * GUI_SCALE
 	var icon_sz = 20 * GUI_SCALE
 	var pad = (grid_slot - icon_sz) / 2.0
 
@@ -332,7 +397,7 @@ func _build_recipe_grid():
 			var sx = (GRID_MARGIN_LEFT + col * (26 + GRID_SPACING)) * GUI_SCALE
 			var sy = (GRID_MARGIN_TOP + row * (26 + GRID_SPACING)) * GUI_SCALE
 
-			# Slot background
+			# Slot background (dark beveled MC sprites)
 			var slot_bg = TextureRect.new()
 			slot_bg.texture = _slot_uncraftable_tex
 			slot_bg.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -352,14 +417,14 @@ func _build_recipe_grid():
 			icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			add_child(icon)
 
-			# Count label
+			# Count label (white with dark shadow)
 			var cnt = Label.new()
 			cnt.position = Vector2(sx + grid_slot - 20 * GUI_SCALE, sy + grid_slot - 12 * GUI_SCALE)
 			cnt.size = Vector2(18 * GUI_SCALE, 12 * GUI_SCALE)
 			cnt.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 			cnt.add_theme_font_size_override("font_size", 12)
-			cnt.add_theme_color_override("font_color", Color.WHITE)
-			cnt.add_theme_color_override("font_shadow_color", Color(0.2, 0.2, 0.2, 1))
+			cnt.add_theme_color_override("font_color", COLOR_TEXT)
+			cnt.add_theme_color_override("font_shadow_color", Color(0.1, 0.1, 0.1, 1))
 			cnt.add_theme_constant_override("shadow_offset_x", 1)
 			cnt.add_theme_constant_override("shadow_offset_y", 1)
 			cnt.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -382,28 +447,28 @@ func _build_recipe_grid():
 
 
 func _build_page_nav(pw: float, ph: float):
-	var nav_y = ph - 40 * GUI_SCALE
+	var nav_y = ph - 24 * GUI_SCALE
 	var center_x = pw / 2.0
 
 	# Page back
 	var back_tex = _load_sprite("page_backward.png")
 	_page_back_btn = Button.new()
 	_page_back_btn.flat = true
-	_page_back_btn.position = Vector2(center_x - 60 * GUI_SCALE, nav_y)
+	_page_back_btn.position = Vector2(center_x - 50 * GUI_SCALE, nav_y)
 	_page_back_btn.size = Vector2(PAGE_BTN_W * GUI_SCALE, PAGE_BTN_H * GUI_SCALE)
 	_page_back_btn.pressed.connect(_on_page_back)
 	if back_tex:
 		_page_back_btn.icon = back_tex
 	add_child(_page_back_btn)
 
-	# Page label
+	# Page label (light gray on dark)
 	_page_label = Label.new()
 	_page_label.text = "1/1"
-	_page_label.position = Vector2(center_x - 20 * GUI_SCALE, nav_y + 4 * GUI_SCALE)
-	_page_label.size = Vector2(40 * GUI_SCALE, 20 * GUI_SCALE)
+	_page_label.position = Vector2(center_x - 16 * GUI_SCALE, nav_y + 2 * GUI_SCALE)
+	_page_label.size = Vector2(32 * GUI_SCALE, 14 * GUI_SCALE)
 	_page_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_page_label.add_theme_font_size_override("font_size", 13)
-	_page_label.add_theme_color_override("font_color", Color(0.25, 0.25, 0.25))
+	_page_label.add_theme_color_override("font_color", COLOR_TEXT_DIM)
 	_page_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_page_label)
 
@@ -422,10 +487,10 @@ func _build_page_nav(pw: float, ph: float):
 func _build_tooltip():
 	_tooltip_panel = PanelContainer.new()
 	var style = StyleBoxFlat.new()
-	style.bg_color = Color(0.12, 0.08, 0.18, 0.95)
-	style.border_color = Color(0.4, 0.3, 0.6, 0.9)
+	style.bg_color = Color(0.16, 0.16, 0.16, 0.95)
+	style.border_color = Color(0.45, 0.45, 0.45, 0.9)
 	style.set_border_width_all(2)
-	style.set_corner_radius_all(4)
+	style.set_corner_radius_all(0)
 	style.set_content_margin_all(8)
 	_tooltip_panel.add_theme_stylebox_override("panel", style)
 	_tooltip_panel.visible = false
@@ -575,18 +640,19 @@ func _refresh_grid():
 	# Update filter icon
 	_filter_icon.texture = _filter_enabled_tex if _filter_craftable else _filter_disabled_tex
 
-	# Update tab styles (sélection = bord clair)
+	# Update tab styles (selected = lighter with border, Bedrock dark palette)
 	for i in range(TAB_COUNT):
 		var style: StyleBoxFlat
 		if i == _current_category:
 			style = StyleBoxFlat.new()
-			style.bg_color = Color(0.35, 0.33, 0.3, 0.9)
-			style.border_color = Color(0.7, 0.65, 0.55, 0.8)
-			style.set_border_width_all(1)
-			style.set_corner_radius_all(2)
+			style.bg_color = COLOR_TAB_SELECTED
+			style.border_color = COLOR_TAB_BORDER
+			style.set_border_width_all(2)
+			style.set_corner_radius_all(0)
 		else:
 			style = StyleBoxFlat.new()
-			style.bg_color = Color(0, 0, 0, 0)
+			style.bg_color = COLOR_TAB_BG
+			style.set_corner_radius_all(0)
 		_tab_buttons[i]["btn"].add_theme_stylebox_override("normal", style)
 
 	# Search visibility
