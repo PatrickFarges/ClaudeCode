@@ -17,17 +17,14 @@ const PANEL_ATLAS_Y = 2
 const PANEL_ATLAS_W = 294
 const PANEL_ATLAS_H = 332
 
-# Layout — tabs ABOVE the panel (negative Y = outside, protruding)
-const TAB_W = 54         # largeur d'un onglet (Faithful32)
-const TAB_H = 30         # hauteur d'un onglet
+# Layout — onglets horizontaux au-dessus du panneau (style Bedrock)
 const TAB_COUNT = 5
-const TAB_MARGIN_LEFT = 6
-const TAB_SPACING = 2
-const TAB_Y_OFFSET = -28  # pixels au-dessus du panneau (négatif = hors du panel)
-
-# Loupe en haut à droite du panneau
-const LOUPE_SIZE = 20     # taille icône loupe (Faithful32)
-const LOUPE_MARGIN = 8    # marge depuis le bord
+# Taille d'un onglet en Faithful32 px (avant GUI_SCALE)
+# Panel = 294px wide, 5 onglets + marges = (294 - 12) / 5 ≈ 56px max, on prend 50
+const TAB_W = 50
+const TAB_H = 28
+const TAB_MARGIN_LEFT = 10  # marge gauche
+const TAB_SPACING = 4       # espacement entre onglets
 
 # Search bar sous le label catégorie
 const SEARCH_Y = 30       # Y dans le panneau (Faithful32 px)
@@ -206,8 +203,8 @@ func _build_ui():
 	# --- Category label (en haut du panneau, à gauche) ---
 	_category_label = Label.new()
 	_category_label.text = CATEGORY_LABELS[0]
-	_category_label.position = Vector2(10 * GUI_SCALE, 6 * GUI_SCALE)
-	_category_label.size = Vector2(140 * GUI_SCALE, 18 * GUI_SCALE)
+	_category_label.position = Vector2(12 * GUI_SCALE, 8 * GUI_SCALE)
+	_category_label.size = Vector2(160 * GUI_SCALE, 18 * GUI_SCALE)
 	_category_label.add_theme_font_size_override("font_size", 14)
 	_category_label.add_theme_color_override("font_color", Color(0.25, 0.25, 0.25))
 	_category_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -254,12 +251,13 @@ func _build_ui():
 func _build_tabs():
 	var tw = TAB_W * GUI_SCALE
 	var th = TAB_H * GUI_SCALE
-	var ty = TAB_Y_OFFSET * GUI_SCALE  # négatif = au-dessus du panneau
+	var ty = -th  # bord inférieur de l'onglet = bord supérieur du panneau (y=0)
+	var icons_list = _get_category_icons()
 
 	for i in range(TAB_COUNT):
 		var tx = (TAB_MARGIN_LEFT + i * (TAB_W + TAB_SPACING)) * GUI_SCALE
 
-		# Tab background
+		# Tab background — utilise tab.png / tab_selected.png redimensionné
 		var tab_bg = TextureRect.new()
 		tab_bg.texture = _tab_selected_tex if i == 0 else _tab_normal_tex
 		tab_bg.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -269,10 +267,10 @@ func _build_tabs():
 		tab_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(tab_bg)
 
-		# Tab icon
+		# Tab icon — taille uniforme pour tous les onglets
 		var icon = TextureRect.new()
 		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		var icon_sz = 20 * GUI_SCALE
+		var icon_sz = 16 * GUI_SCALE  # 16px Faithful32 = taille uniforme
 		var icon_pad_x = (tw - icon_sz) / 2.0
 		var icon_pad_y = (th - icon_sz) / 2.0
 		icon.position = Vector2(tx + icon_pad_x, ty + icon_pad_y)
@@ -280,12 +278,17 @@ func _build_tabs():
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		# Load category icon
-		var icons = _get_category_icons()
-		var bt = icons[i]
+		# Charger l'icône de catégorie
+		var bt = icons_list[i]
 		if bt == -1:
-			# Search tab — load loupe sprite
-			icon.texture = _load_sprite("filter_disabled.png")
+			# Onglet recherche (loupe) — dernier onglet à droite
+			# Utiliser la loupe du panneau atlas
+			var loupe_img = Image.load_from_file(GUI_DIR + "recipe_book.png")
+			if loupe_img:
+				loupe_img.convert(Image.FORMAT_RGBA8)
+				# La loupe est en haut à gauche de l'atlas, environ (6,6) taille 16x16 en F32
+				var loupe_region = loupe_img.get_region(Rect2i(6, 6, 16, 16))
+				icon.texture = ImageTexture.create_from_image(loupe_region)
 		elif bt == BlockRegistry.BlockType.IRON_SWORD:
 			icon.texture = _load_tool_icon_static(bt)
 		else:
