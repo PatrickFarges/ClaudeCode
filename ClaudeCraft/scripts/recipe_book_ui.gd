@@ -331,7 +331,21 @@ func _build_tabs():
 		var cat_idx = visual_order[vi]
 		var tx = tab_start_x + vi * (tab_px + tab_gap)
 
-		# Tab icon (large, colorful)
+		# Tab button D'ABORD (fond gris sombre)
+		var btn = Button.new()
+		btn.flat = false
+		btn.position = Vector2(tx, tab_y)
+		btn.size = Vector2(tab_px, tab_px)
+		var is_default = (cat_idx == Category.SEARCH)
+		var s = style_selected.duplicate() if is_default else style_normal.duplicate()
+		btn.add_theme_stylebox_override("normal", s)
+		btn.add_theme_stylebox_override("hover", style_hover.duplicate())
+		btn.add_theme_stylebox_override("pressed", style_hover.duplicate())
+		btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+		btn.pressed.connect(_on_tab_pressed.bind(cat_idx))
+		add_child(btn)
+
+		# Tab icon PAR-DESSUS le bouton (colorée, visible)
 		var icon = TextureRect.new()
 		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		var pad = (tab_px - icon_px) / 2.0
@@ -342,7 +356,6 @@ func _build_tabs():
 		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var bt = icons_list[cat_idx]
 		if bt == -1:
-			# Search tab — loupe from atlas
 			var loupe_img = Image.load_from_file(GUI_DIR + "recipe_book.png")
 			if loupe_img:
 				loupe_img.convert(Image.FORMAT_RGBA8)
@@ -353,20 +366,6 @@ func _build_tabs():
 		else:
 			icon.texture = _load_block_icon(bt)
 		add_child(icon)
-
-		# Tab button (flat=false pour que le StyleBox "normal" soit dessiné)
-		var btn = Button.new()
-		btn.flat = false
-		btn.position = Vector2(tx, tab_y)
-		btn.size = Vector2(tab_px, tab_px)
-		var is_default = (cat_idx == Category.SEARCH)  # default category
-		var s = style_selected.duplicate() if is_default else style_normal.duplicate()
-		btn.add_theme_stylebox_override("normal", s)
-		btn.add_theme_stylebox_override("hover", style_hover.duplicate())
-		btn.add_theme_stylebox_override("pressed", style_hover.duplicate())
-		btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-		btn.pressed.connect(_on_tab_pressed.bind(cat_idx))
-		add_child(btn)
 
 		# Store by category index so _refresh_grid can use _tab_buttons[i] with i=category
 		_tab_buttons[cat_idx] = {"btn": btn, "icon": icon}
