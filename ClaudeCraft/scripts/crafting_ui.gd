@@ -274,7 +274,7 @@ func _setup_recipe_book(tex_left: float, tex_top: float):
 		_recipe_book.offset_left = tex_left - rb_panel_w - 4
 		_recipe_book.offset_right = tex_left - 4
 		_recipe_book.offset_top = tex_top
-		_recipe_book.offset_bottom = tex_top + disp_h
+		_recipe_book.offset_bottom = tex_top + TEX_H * GUI_SCALE
 		add_child(_recipe_book)
 
 # ============================================================
