@@ -1,7 +1,8 @@
-# recipe_book_ui.gd v1.0.0
+# recipe_book_ui.gd v1.1.0
 # Panneau de recettes MC Bedrock — s'affiche à gauche de l'inventaire ou du craft
 # 5 onglets : Recherche, Construction, Equipement, Objets, Nature
 # Filtre fabricables, barre de recherche, grille paginée, auto-craft au clic
+# v1.1.0 — Fix positionnement : onglets hors du panneau, loupe en haut à droite, search sous le label
 
 extends Control
 
@@ -16,25 +17,30 @@ const PANEL_ATLAS_Y = 2
 const PANEL_ATLAS_W = 294
 const PANEL_ATLAS_H = 332
 
-# Layout interne (en pixels Faithful32, avant GUI_SCALE)
-const TAB_W = 70
-const TAB_H = 54
+# Layout — tabs ABOVE the panel (negative Y = outside, protruding)
+const TAB_W = 54         # largeur d'un onglet (Faithful32)
+const TAB_H = 30         # hauteur d'un onglet
 const TAB_COUNT = 5
-const TAB_MARGIN_LEFT = 4
+const TAB_MARGIN_LEFT = 6
 const TAB_SPACING = 2
+const TAB_Y_OFFSET = -28  # pixels au-dessus du panneau (négatif = hors du panel)
 
-const SEARCH_Y = 60      # Y de la barre de recherche
-const SEARCH_H = 28
+# Loupe en haut à droite du panneau
+const LOUPE_SIZE = 20     # taille icône loupe (Faithful32)
+const LOUPE_MARGIN = 8    # marge depuis le bord
+
+# Search bar sous le label catégorie
+const SEARCH_Y = 30       # Y dans le panneau (Faithful32 px)
+const SEARCH_H = 24
 const SEARCH_MARGIN = 10
 
 const FILTER_W = 52
-const FILTER_H = 32
+const FILTER_H = 26
 
-const SLOT_SIZE = 50      # taille slot Faithful32
 const GRID_COLS = 5
 const GRID_ROWS = 4
 const GRID_MARGIN_LEFT = 12
-const GRID_MARGIN_TOP = 100  # sous la barre de recherche
+const GRID_MARGIN_TOP = 62  # sous la barre de recherche
 const GRID_SPACING = 2
 
 const SLOTS_PER_PAGE = 20  # 5x4
@@ -120,9 +126,13 @@ var _parent_refresh_func: Callable
 signal recipe_crafted(recipe: Dictionary)
 
 
+# Persistent state — remembered across open/close
+static var _was_open: bool = false
+
 func _ready():
 	visible = false
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	clip_contents = false  # Allow tabs to protrude above the panel
 
 
 func setup(p_player: CharacterBody3D, p_tier: int, p_furnace: bool, parent_ui = null, refresh_func: Callable = Callable()):
@@ -186,19 +196,19 @@ func _build_ui():
 	# --- Tabs ---
 	_build_tabs()
 
-	# --- Category label ---
+	# --- Category label (en haut du panneau, à gauche) ---
 	_category_label = Label.new()
 	_category_label.text = CATEGORY_LABELS[0]
-	_category_label.position = Vector2(20 * GUI_SCALE, (TAB_H + 4) * GUI_SCALE)
-	_category_label.size = Vector2(160 * GUI_SCALE, 20 * GUI_SCALE)
+	_category_label.position = Vector2(10 * GUI_SCALE, 6 * GUI_SCALE)
+	_category_label.size = Vector2(140 * GUI_SCALE, 18 * GUI_SCALE)
 	_category_label.add_theme_font_size_override("font_size", 14)
 	_category_label.add_theme_color_override("font_color", Color(0.25, 0.25, 0.25))
 	_category_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_category_label)
 
-	# --- Filter toggle ---
-	var filter_x = pw - (FILTER_W + 14) * GUI_SCALE
-	var filter_y = (TAB_H + 2) * GUI_SCALE
+	# --- Filter toggle (à droite du label catégorie) ---
+	var filter_x = pw - (FILTER_W + 10) * GUI_SCALE
+	var filter_y = 4 * GUI_SCALE
 	_filter_btn = Button.new()
 	_filter_btn.flat = true
 	_filter_btn.position = Vector2(filter_x, filter_y)
@@ -215,7 +225,7 @@ func _build_ui():
 	_filter_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_filter_icon)
 
-	# --- Search input ---
+	# --- Search input (sous le label catégorie) ---
 	_search_input = LineEdit.new()
 	_search_input.placeholder_text = "Rechercher..."
 	_search_input.position = Vector2(SEARCH_MARGIN * GUI_SCALE, SEARCH_Y * GUI_SCALE)
@@ -235,15 +245,16 @@ func _build_ui():
 
 
 func _build_tabs():
+	var tw = TAB_W * GUI_SCALE
+	var th = TAB_H * GUI_SCALE
+	var ty = TAB_Y_OFFSET * GUI_SCALE  # négatif = au-dessus du panneau
+
 	for i in range(TAB_COUNT):
-		var tx = (TAB_MARGIN_LEFT + i * (TAB_W / 2 + TAB_SPACING)) * GUI_SCALE
-		var ty = 2 * GUI_SCALE
-		var tw = (TAB_W / 2) * GUI_SCALE
-		var th = TAB_H / 2 * GUI_SCALE
+		var tx = (TAB_MARGIN_LEFT + i * (TAB_W + TAB_SPACING)) * GUI_SCALE
 
 		# Tab background
 		var tab_bg = TextureRect.new()
-		tab_bg.texture = _tab_normal_tex if i != 0 else _tab_selected_tex
+		tab_bg.texture = _tab_selected_tex if i == 0 else _tab_normal_tex
 		tab_bg.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		tab_bg.position = Vector2(tx, ty)
 		tab_bg.size = Vector2(tw, th)
@@ -254,7 +265,7 @@ func _build_tabs():
 		# Tab icon
 		var icon = TextureRect.new()
 		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		var icon_sz = 16 * GUI_SCALE
+		var icon_sz = 20 * GUI_SCALE
 		var icon_pad_x = (tw - icon_sz) / 2.0
 		var icon_pad_y = (th - icon_sz) / 2.0
 		icon.position = Vector2(tx + icon_pad_x, ty + icon_pad_y)
@@ -262,15 +273,15 @@ func _build_tabs():
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		if i == 0:
-			# Search tab — loupe icon from panel background (already there)
-			pass
+		# Load category icon
+		var bt = CATEGORY_ICONS[i]
+		if bt == -1:
+			# Search tab — load loupe sprite
+			icon.texture = _load_sprite("filter_disabled.png")
+		elif bt == BlockRegistry.BlockType.IRON_SWORD:
+			icon.texture = _load_tool_icon_static(bt)
 		else:
-			var bt = CATEGORY_ICONS[i]
-			if bt == BlockRegistry.BlockType.IRON_SWORD:
-				icon.texture = _load_tool_icon_static(bt)
-			else:
-				icon.texture = _load_block_icon(bt)
+			icon.texture = _load_block_icon(bt)
 		add_child(icon)
 
 		# Tab button (clickable)

@@ -223,10 +223,11 @@ func _build_ui():
 	var rb_btn_img = Image.load_from_file(RB_DIR + "button.png")
 	if rb_btn_img:
 		var rb_icon_tex = ImageTexture.create_from_image(rb_btn_img)
-		var rb_x = tex_left + 22 * GUI_SCALE
-		var rb_y = tex_top + 60 * GUI_SCALE
+		# Bouton livre vert — bord supérieur droit du panneau crafting
 		var rb_w = 40 * GUI_SCALE
 		var rb_h = 36 * GUI_SCALE
+		var rb_x = -tex_left - rb_w - 6 * GUI_SCALE  # bord droit - marge
+		var rb_y = tex_top + 4 * GUI_SCALE            # bord supérieur + petit offset
 		_recipe_book_icon = TextureRect.new()
 		_recipe_book_icon.texture = rb_icon_tex
 		_recipe_book_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -334,16 +335,25 @@ func open_crafting(tier: int = 0, furnace: bool = false):
 			_available_recipes.append(recipe)
 	_build_inv_slots()
 	_update_station_label()
-	if _recipe_book:
-		_recipe_book.visible = false
 	visible = true
 	_refresh_all()
+	# Restaurer l'état du recipe book
+	if _recipe_book:
+		var RecipeBookUI = load("res://scripts/recipe_book_ui.gd")
+		if RecipeBookUI._was_open:
+			_recipe_book.setup(player, current_tier, has_furnace, self, Callable(self, "_on_recipe_book_craft"))
+			_recipe_book.visible = true
+		else:
+			_recipe_book.visible = false
 
 func close_crafting():
+	# Mémoriser l'état du recipe book
+	if _recipe_book:
+		var RecipeBookUI = load("res://scripts/recipe_book_ui.gd")
+		RecipeBookUI._was_open = _recipe_book.visible
+		_recipe_book.visible = false
 	_return_items_to_inventory()
 	is_open = false; visible = false
-	if _recipe_book:
-		_recipe_book.visible = false
 
 func _on_recipe_book_toggle():
 	if _recipe_book:

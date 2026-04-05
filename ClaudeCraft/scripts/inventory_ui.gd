@@ -212,10 +212,11 @@ func _build_ui():
 	var rb_btn_img = Image.load_from_file(RB_DIR + "button.png")
 	if rb_btn_img:
 		var rb_icon_tex = ImageTexture.create_from_image(rb_btn_img)
-		var rb_x = tex_left + 160 * GUI_SCALE
-		var rb_y = tex_top + 36 * GUI_SCALE
+		# Bouton livre vert — bord supérieur droit du panneau inventaire
 		var rb_w = 40 * GUI_SCALE  # button.png is 40x36 Faithful32
 		var rb_h = 36 * GUI_SCALE
+		var rb_x = -tex_left - rb_w - 6 * GUI_SCALE  # bord droit - marge
+		var rb_y = tex_top + 4 * GUI_SCALE            # bord supérieur + petit offset
 		_recipe_book_icon = TextureRect.new()
 		_recipe_book_icon.texture = rb_icon_tex
 		_recipe_book_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -447,14 +448,25 @@ func open_inventory():
 	for i in range(GRID_SIZE): _grid_contents[i] = {}
 	_matched_recipe = {}
 	_refresh_preview_armor()
-	if _recipe_book:
-		_recipe_book.visible = false
 	_build_inv_slots(); visible = true; _refresh_all()
 	set_process(true)
 	if _steve_viewport:
 		_steve_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	# Restaurer l'état du recipe book (ouvert/fermé depuis la dernière fois)
+	if _recipe_book:
+		var RecipeBookUI = load("res://scripts/recipe_book_ui.gd")
+		if RecipeBookUI._was_open:
+			_recipe_book.setup(player, 0, false, self, Callable(self, "_on_recipe_book_craft"))
+			_recipe_book.visible = true
+		else:
+			_recipe_book.visible = false
 
 func close_inventory():
+	# Mémoriser l'état du recipe book avant de fermer
+	if _recipe_book:
+		var RecipeBookUI = load("res://scripts/recipe_book_ui.gd")
+		RecipeBookUI._was_open = _recipe_book.visible
+		_recipe_book.visible = false
 	_return_items_to_inventory(); is_open = false; visible = false
 	set_process(false)
 	if _steve_viewport:
