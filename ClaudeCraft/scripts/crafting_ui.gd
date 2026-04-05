@@ -248,7 +248,7 @@ func _setup_recipe_book(tex_left: float, tex_top: float):
 		var rb_w = 40 * GUI_SCALE
 		var rb_h = 36 * GUI_SCALE
 		var rb_x = tex_left + (TEX_W - 46) * GUI_SCALE
-		var rb_y = tex_top + 2 * GUI_SCALE
+		var rb_y = tex_top - rb_h  # bord inférieur de l'icône = bord supérieur du panneau
 		_recipe_book_icon = TextureRect.new()
 		_recipe_book_icon.texture = rb_icon_tex
 		_recipe_book_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST

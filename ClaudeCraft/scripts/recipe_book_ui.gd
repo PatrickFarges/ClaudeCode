@@ -50,14 +50,19 @@ const PAGE_BTN_H = 34
 # Categories
 enum Category { SEARCH, CONSTRUCTION, EQUIPMENT, ITEMS, NATURE }
 
-# Category icons — block types pour chaque onglet
-const CATEGORY_ICONS = [
-	-1,  # SEARCH — utilise la loupe du fond
-	BlockRegistry.BlockType.BRICK,          # CONSTRUCTION
-	BlockRegistry.BlockType.IRON_SWORD,     # EQUIPMENT (sera tool icon)
-	BlockRegistry.BlockType.TORCH,          # ITEMS
-	BlockRegistry.BlockType.LEAVES,         # NATURE
-]
+# Category icons — block types pour chaque onglet (var car les enum BlockType ne sont pas des const littéraux)
+static var CATEGORY_ICONS: Array = []
+
+static func _get_category_icons() -> Array:
+	if CATEGORY_ICONS.is_empty():
+		CATEGORY_ICONS = [
+			-1,  # SEARCH
+			BlockRegistry.BlockType.BRICK,          # CONSTRUCTION
+			BlockRegistry.BlockType.IRON_SWORD,     # EQUIPMENT
+			BlockRegistry.BlockType.TORCH,          # ITEMS
+			BlockRegistry.BlockType.LEAVES,         # NATURE
+		]
+	return CATEGORY_ICONS
 
 # Category labels
 const CATEGORY_LABELS = ["Recherche", "Construction", "Equipement", "Objets", "Nature"]
@@ -276,7 +281,8 @@ func _build_tabs():
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		# Load category icon
-		var bt = CATEGORY_ICONS[i]
+		var icons = _get_category_icons()
+		var bt = icons[i]
 		if bt == -1:
 			# Search tab — load loupe sprite
 			icon.texture = _load_sprite("filter_disabled.png")
