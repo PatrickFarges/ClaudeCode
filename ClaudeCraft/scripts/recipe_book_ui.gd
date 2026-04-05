@@ -126,7 +126,7 @@ var _tooltip_station: Label = null
 
 # Parent UI callback
 var _parent_ui = null
-var _parent_refresh_func: Callable
+var _parent_refresh_func: Callable = Callable()
 
 signal recipe_crafted(recipe: Dictionary)
 
