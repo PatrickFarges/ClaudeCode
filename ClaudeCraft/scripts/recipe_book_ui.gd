@@ -12,9 +12,9 @@ const GUI_DIR = "res://TexturesPack/Faithful32/assets/minecraft/textures/gui/"
 const RB_DIR = GUI_DIR + "sprites/recipe_book/"
 const GUI_SCALE = 2
 
-# Panel dimensions (pre-scale — largeur ~60% de l'inventaire, même hauteur)
-const PANEL_W = 220
-const PANEL_H = 166
+# Panel dimensions (en pixels Faithful32, multiplié par GUI_SCALE pour l'affichage)
+const PANEL_W = 260   # largeur F32 → 520px display
+const PANEL_H = 332   # hauteur F32 = TEX_H inventaire → 664px display (même hauteur)
 
 # Tab layout — 5 tabs protruding ABOVE the panel (Bedrock style)
 const TAB_COUNT = 5
@@ -39,13 +39,13 @@ const SEARCH_MARGIN = 8
 const FILTER_W = 26        # pre-scale
 const FILTER_H = 13        # pre-scale
 
-const GRID_COLS = 7
-const GRID_ROWS = 4
+const GRID_COLS = 8
+const GRID_ROWS = 8
 const GRID_MARGIN_LEFT = 6
 const GRID_MARGIN_TOP = 42  # label(6+14=20) + search(22+12=34) + padding
 const GRID_SPACING = 2
 
-const SLOTS_PER_PAGE = 28  # 7x4
+const SLOTS_PER_PAGE = 64  # 8x8
 const PAGE_BTN_W = 12      # pre-scale
 const PAGE_BTN_H = 17      # pre-scale
 

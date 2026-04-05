@@ -270,7 +270,7 @@ func _setup_recipe_book(tex_left: float, tex_top: float):
 	if rb_script:
 		_recipe_book = rb_script.new()
 		_recipe_book.set_anchors_preset(Control.PRESET_CENTER)
-		var rb_panel_w = 220 * GUI_SCALE  # match PANEL_W in recipe_book_ui.gd
+		var rb_panel_w = 260 * GUI_SCALE  # match PANEL_W in recipe_book_ui.gd
 		_recipe_book.offset_left = tex_left - rb_panel_w - 4
 		_recipe_book.offset_right = tex_left - 4
 		_recipe_book.offset_top = tex_top
