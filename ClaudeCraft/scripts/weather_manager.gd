@@ -2,7 +2,7 @@ extends Node3D
 ## Gestionnaire météo — pluie procédurale avec transitions douces
 ## Intègre nuages, brouillard, lumière, particules et son
 
-const APP_VERSION = "v20.3.1"
+const APP_VERSION = "v20.4.0"
 
 # ---- États météo ----
 enum Weather { CLEAR, CLOUDY, RAIN, STORM }
@@ -88,6 +88,7 @@ const RAIN_VOLUME_FADE_SPEED = 15.0  # dB/sec
 var lightning_timer: float = 0.0
 var lightning_flash_time: float = 0.0
 var is_flashing: bool = false
+var _thunder_sounds: Array = []  # preloaded thunder AudioStreams
 
 func _ready():
 	add_to_group("weather_manager")
@@ -104,7 +105,14 @@ func _ready():
 
 	_setup_rain_particles()
 	_setup_rain_audio()
+	_preload_thunder_sounds()
 	_schedule_next_weather()
+
+func _preload_thunder_sounds():
+	for path in ["res://Audio/thunder-1.mp3", "res://Audio/thunder-2.mp3", "res://Audio/thunder-3.mp3"]:
+		var stream = load(path)
+		if stream:
+			_thunder_sounds.append(stream)
 
 func _setup_rain_particles():
 	rain_particles = GPUParticles3D.new()
@@ -389,13 +397,10 @@ func _play_thunder():
 	var thunder_player = audio_manager._get_free_sfx()
 	if not thunder_player:
 		return
-	# Choisir un son de tonnerre aléatoire parmi les 3 disponibles
-	var thunder_files = [
-		"res://Audio/thunder-1.mp3",
-		"res://Audio/thunder-2.mp3",
-		"res://Audio/thunder-3.mp3",
-	]
-	var thunder_stream = load(thunder_files[randi() % thunder_files.size()])
+	# Choisir un son de tonnerre aléatoire parmi les préchargés
+	if _thunder_sounds.is_empty():
+		return
+	var thunder_stream = _thunder_sounds[randi() % _thunder_sounds.size()]
 	if thunder_stream:
 		thunder_player.stream = thunder_stream
 		thunder_player.volume_db = randf_range(-6.0, -2.0)

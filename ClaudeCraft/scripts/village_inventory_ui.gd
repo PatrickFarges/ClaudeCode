@@ -1,6 +1,7 @@
 extends CanvasLayer
 
 # Inventaire du village — ouvert avec F1
+# v1.1 — Hash-based skip : ne reconstruit l'UI que si les données ont changé
 # Deux panneaux côte à côte :
 #   Gauche : statut village + liste villageois (clic = téléport)
 #   Droite : toutes les ressources (stockpile 2 colonnes) + stockage bâtiments
@@ -27,6 +28,17 @@ var scroll_right: ScrollContainer
 var scroll_villagers: ScrollContainer
 var _update_timer: float = 0.0
 
+# Hash-based skip — avoid rebuilding UI when data hasn't changed
+var _last_data_hash: int = 0
+
+# Cached StyleBoxFlat objects — avoid recreating ~36 StyleBoxFlat per refresh
+var _style_btn_normal: StyleBoxFlat
+var _style_btn_hover: StyleBoxFlat
+var _style_hunger_green: StyleBoxFlat
+var _style_hunger_yellow: StyleBoxFlat
+var _style_hunger_red: StyleBoxFlat
+var _style_hunger_bg: StyleBoxFlat
+
 # Largeurs des panneaux
 const LEFT_W = 460
 const RIGHT_W = 560
@@ -36,7 +48,35 @@ const GAP = 12
 func _ready():
 	visible = false
 	add_to_group("village_inventory_ui")
+	_init_cached_styles()
 	_build_ui()
+
+func _init_cached_styles():
+	# Button normal style (villager rows)
+	_style_btn_normal = StyleBoxFlat.new()
+	_style_btn_normal.bg_color = Color(0.15, 0.15, 0.22, 0.3)
+	_style_btn_normal.corner_radius_top_left = 4
+	_style_btn_normal.corner_radius_top_right = 4
+	_style_btn_normal.corner_radius_bottom_left = 4
+	_style_btn_normal.corner_radius_bottom_right = 4
+
+	# Button hover style
+	_style_btn_hover = StyleBoxFlat.new()
+	_style_btn_hover.bg_color = Color(0.25, 0.3, 0.45, 0.6)
+	_style_btn_hover.corner_radius_top_left = 4
+	_style_btn_hover.corner_radius_top_right = 4
+	_style_btn_hover.corner_radius_bottom_left = 4
+	_style_btn_hover.corner_radius_bottom_right = 4
+
+	# Hunger bar styles
+	_style_hunger_green = StyleBoxFlat.new()
+	_style_hunger_green.bg_color = Color(0.3, 0.8, 0.3)
+	_style_hunger_yellow = StyleBoxFlat.new()
+	_style_hunger_yellow.bg_color = Color(0.9, 0.8, 0.2)
+	_style_hunger_red = StyleBoxFlat.new()
+	_style_hunger_red.bg_color = Color(0.9, 0.2, 0.2)
+	_style_hunger_bg = StyleBoxFlat.new()
+	_style_hunger_bg.bg_color = Color(0.2, 0.2, 0.2)
 
 func _process(delta):
 	if not is_open:
@@ -254,15 +294,70 @@ func open_inventory():
 	village_manager = get_node_or_null("/root/VillageManager")
 	is_open = true
 	visible = true
+	_last_data_hash = 0  # Force refresh on open
 	_refresh_contents()
 
 func close_inventory():
 	is_open = false
 	visible = false
 
+func _compute_data_hash() -> int:
+	if not village_manager:
+		return 0
+	var h: int = 0
+	# Village phase & tool tier
+	h = h * 31 + village_manager.village_phase
+	h = h * 31 + village_manager.village_tool_tier
+	# Population
+	h = h * 31 + village_manager.villagers.size()
+	# Task queue size
+	h = h * 31 + village_manager.task_queue.size()
+	# Stockpile contents
+	for key in village_manager.stockpile:
+		h = h * 31 + hash(key) + village_manager.stockpile[key] * 7
+	# Built structures count
+	h = h * 31 + village_manager.built_structures.size()
+	# Farm state
+	h = h * 31 + (1 if village_manager._farm_initialized else 0)
+	var farm_stats = village_manager.get_farm_stats()
+	h = h * 31 + farm_stats.get("total", 0) * 17 + farm_stats.get("mature", 0) * 13
+	# Flatten / path / mine progress
+	h = h * 31 + village_manager.flatten_index
+	if village_manager.get("_path_index") != null:
+		h = h * 31 + village_manager._path_index
+	h = h * 31 + (1 if village_manager._waiting_for_chunks else 0)
+	h = h * 31 + (1 if village_manager._flatten_complete else 0)
+	h = h * 31 + (1 if village_manager._path_built else 0)
+	h = h * 31 + (1 if village_manager._mine_initialized else 0)
+	if village_manager._mine_initialized:
+		h = h * 31 + village_manager.mine_front_index
+	# Villager states (activity, task status, hunger bucket, profession)
+	for npc in village_manager.villagers:
+		if is_instance_valid(npc):
+			h = h * 31 + npc.current_activity
+			h = h * 31 + hash(npc._task_status)
+			h = h * 31 + npc.profession
+			# Hunger in buckets of 5 to avoid hash change on tiny float drift
+			h = h * 31 + int(npc.hunger / 5.0)
+			h = h * 31 + (1 if npc._is_starving else 0)
+	# Building storage
+	var storage_info = village_manager.get_building_storage_info()
+	for bn in storage_info:
+		var si = storage_info[bn]
+		h = h * 31 + si["used"] * 11 + si["capacity"] * 3
+		for item_bt in si["items"]:
+			h = h * 31 + hash(item_bt) + si["items"][item_bt] * 7
+	return h
+
 func _refresh_contents():
 	if not village_manager:
 		return
+
+	# Hash-based skip: don't rebuild if nothing changed
+	var new_hash = _compute_data_hash()
+	if new_hash == _last_data_hash:
+		return
+	_last_data_hash = new_hash
 
 	var phase_names = ["Phase 0 — Bootstrap", "Phase 1 — Age du Bois", "Phase 2 — Age de la Pierre", "Phase 3 — Age du Fer", "Phase 4 — Age Médiéval"]
 	var phase_idx = clampi(village_manager.village_phase, 0, phase_names.size() - 1)
@@ -518,21 +613,9 @@ func _refresh_villagers():
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 
-		# Style du bouton
-		var btn_style_normal = StyleBoxFlat.new()
-		btn_style_normal.bg_color = Color(0.15, 0.15, 0.22, 0.3)
-		btn_style_normal.corner_radius_top_left = 4
-		btn_style_normal.corner_radius_top_right = 4
-		btn_style_normal.corner_radius_bottom_left = 4
-		btn_style_normal.corner_radius_bottom_right = 4
-		btn.add_theme_stylebox_override("normal", btn_style_normal)
-		var btn_style_hover = StyleBoxFlat.new()
-		btn_style_hover.bg_color = Color(0.25, 0.3, 0.45, 0.6)
-		btn_style_hover.corner_radius_top_left = 4
-		btn_style_hover.corner_radius_top_right = 4
-		btn_style_hover.corner_radius_bottom_left = 4
-		btn_style_hover.corner_radius_bottom_right = 4
-		btn.add_theme_stylebox_override("hover", btn_style_hover)
+		# Style du bouton (cached)
+		btn.add_theme_stylebox_override("normal", _style_btn_normal)
+		btn.add_theme_stylebox_override("hover", _style_btn_hover)
 
 		var row = HBoxContainer.new()
 		row.add_theme_constant_override("separation", 6)
@@ -569,17 +652,14 @@ func _refresh_villagers():
 		hunger_bar.max_value = npc.HUNGER_MAX
 		hunger_bar.value = npc.hunger
 		hunger_bar.show_percentage = false
-		var bar_style = StyleBoxFlat.new()
+		# Cached hunger bar styles
 		if npc.hunger > 60:
-			bar_style.bg_color = Color(0.3, 0.8, 0.3)
+			hunger_bar.add_theme_stylebox_override("fill", _style_hunger_green)
 		elif npc.hunger > 30:
-			bar_style.bg_color = Color(0.9, 0.8, 0.2)
+			hunger_bar.add_theme_stylebox_override("fill", _style_hunger_yellow)
 		else:
-			bar_style.bg_color = Color(0.9, 0.2, 0.2)
-		hunger_bar.add_theme_stylebox_override("fill", bar_style)
-		var bar_bg = StyleBoxFlat.new()
-		bar_bg.bg_color = Color(0.2, 0.2, 0.2)
-		hunger_bar.add_theme_stylebox_override("background", bar_bg)
+			hunger_bar.add_theme_stylebox_override("fill", _style_hunger_red)
+		hunger_bar.add_theme_stylebox_override("background", _style_hunger_bg)
 		row.add_child(hunger_bar)
 
 		# Tâche en cours (activité temps réel)

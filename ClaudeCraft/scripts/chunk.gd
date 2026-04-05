@@ -1,8 +1,12 @@
 extends Node3D
 class_name Chunk
+## chunk.gd v21.1.0 — P-CHUNK-1 flat PackedInt32Array mask, P-CHUNK-3 face int constants
 
 const CHUNK_SIZE = 16
 const CHUNK_HEIGHT = 256
+
+## P-CHUNK-3 — Face string → integer for cache keys (avoids String.hash() in hot paths)
+const FACE_INT := {"top": 0, "bottom": 1, "front": 2, "back": 3, "left": 4, "right": 5, "all": 6}
 
 # Shared material (un seul pour tous les chunks)
 static var _shared_material: Material = null
@@ -206,9 +210,9 @@ var _layer_cache: Dictionary = {}  # tex_name -> float
 ## P5 — AO is a stub (returns 1.0), pre-compute constant
 const _AO_FULL: Array = [1.0, 1.0, 1.0, 1.0]
 
-## P1 — Cached block property accessors
+## P1 — Cached block property accessors (P-CHUNK-3: face int keys instead of String.hash())
 func _cached_tint(bt: int, face: String) -> Color:
-	var key: int = bt * 8 + face.hash()
+	var key: int = bt * 8 + FACE_INT[face]
 	if _tint_cache.has(key):
 		return _tint_cache[key]
 	var val: Color = BlockRegistry.get_block_tint(bt, face)
@@ -216,7 +220,7 @@ func _cached_tint(bt: int, face: String) -> Color:
 	return val
 
 func _cached_tex_layer(bt: int, face: String) -> float:
-	var key: int = bt * 8 + face.hash()
+	var key: int = bt * 8 + FACE_INT[face]
 	if _layer_cache.has(key):
 		return _layer_cache[key]
 	var tex_name: String = BlockRegistry.get_face_texture(bt, face)
@@ -468,25 +472,26 @@ func _exit_tree():
 # GREEDY MESHING — Algorithme 2D
 # ============================================================
 
-func _run_greedy(mask: Array, u_size: int, v_size: int) -> Array:
+## P-CHUNK-1 — Flat PackedInt32Array mask instead of Array[Array]
+func _run_greedy(mask: PackedInt32Array, u_size: int, v_size: int) -> Array:
 	var quads: Array = []
 	for v in range(v_size):
 		var u: int = 0
 		while u < u_size:
-			var bt: int = mask[u][v]
+			var bt: int = mask[u * v_size + v]
 			if bt == -1:
 				u += 1
 				continue
 
 			var w: int = 1
-			while u + w < u_size and mask[u + w][v] == bt:
+			while u + w < u_size and mask[(u + w) * v_size + v] == bt:
 				w += 1
 
 			var h: int = 1
 			var can_extend: bool = true
 			while v + h < v_size and can_extend:
 				for k in range(w):
-					if mask[u + k][v + h] != bt:
+					if mask[(u + k) * v_size + v + h] != bt:
 						can_extend = false
 						break
 				if can_extend:
@@ -496,7 +501,7 @@ func _run_greedy(mask: Array, u_size: int, v_size: int) -> Array:
 
 			for dv in range(h):
 				for du in range(w):
-					mask[u + du][v + dv] = -1
+					mask[(u + du) * v_size + v + dv] = -1
 
 			u += w
 	return quads
@@ -506,32 +511,29 @@ func _run_greedy(mask: Array, u_size: int, v_size: int) -> Array:
 # ============================================================
 
 func _greedy_mesh_y_faces():
-	# P2 — Pre-allocate mask once, clear per Y-level
-	var mask: Array = []
-	mask.resize(CHUNK_SIZE)
-	for i in range(CHUNK_SIZE):
-		mask[i] = []
-		mask[i].resize(CHUNK_SIZE)
-		for j in range(CHUNK_SIZE):
-			mask[i][j] = -1
+	# P-CHUNK-1 — Flat PackedInt32Array mask, u=x, v=z (CHUNK_SIZE x CHUNK_SIZE)
+	var mask := PackedInt32Array()
+	mask.resize(CHUNK_SIZE * CHUNK_SIZE)
+	mask.fill(-1)
 
 	for y in range(y_min, y_max + 1):
 		# --- UP (+Y) ---
 		var has_faces: bool = false
 		for x in range(CHUNK_SIZE):
 			var x_off: int = x * 4096
+			var xcs: int = x * CHUNK_SIZE
 			for z in range(CHUNK_SIZE):
 				var idx: int = x_off + z * 256 + y
 				var bt: int = blocks[idx]
 				if _is_greedy_solid(bt):
 					var nb: int = blocks[idx + 1] if y + 1 < CHUNK_HEIGHT else 0
 					if not _is_greedy_solid(nb):
-						mask[x][z] = bt
+						mask[xcs + z] = bt
 						has_faces = true
 					else:
-						mask[x][z] = -1
+						mask[xcs + z] = -1
 				else:
-					mask[x][z] = -1
+					mask[xcs + z] = -1
 
 		if has_faces:
 			var quads = _run_greedy(mask, CHUNK_SIZE, CHUNK_SIZE)
@@ -548,18 +550,19 @@ func _greedy_mesh_y_faces():
 		has_faces = false
 		for x in range(CHUNK_SIZE):
 			var x_off: int = x * 4096
+			var xcs: int = x * CHUNK_SIZE
 			for z in range(CHUNK_SIZE):
 				var idx: int = x_off + z * 256 + y
 				var bt: int = blocks[idx]
 				if _is_greedy_solid(bt):
 					var nb: int = blocks[idx - 1] if y - 1 >= 0 else 0
 					if not _is_greedy_solid(nb):
-						mask[x][z] = bt
+						mask[xcs + z] = bt
 						has_faces = true
 					else:
-						mask[x][z] = -1
+						mask[xcs + z] = -1
 				else:
-					mask[x][z] = -1
+					mask[xcs + z] = -1
 
 		if has_faces:
 			var quads = _run_greedy(mask, CHUNK_SIZE, CHUNK_SIZE)
@@ -580,14 +583,10 @@ func _greedy_mesh_z_faces():
 	var y_range: int = y_max - y_min + 1
 	if y_range <= 0:
 		return
-	# P2 — Pre-allocate mask once
-	var mask: Array = []
-	mask.resize(CHUNK_SIZE)
-	for i in range(CHUNK_SIZE):
-		mask[i] = []
-		mask[i].resize(y_range)
-		for j in range(y_range):
-			mask[i][j] = -1
+	# P-CHUNK-1 — Flat PackedInt32Array mask, u=x, v=iy (CHUNK_SIZE x y_range)
+	var mask := PackedInt32Array()
+	mask.resize(CHUNK_SIZE * y_range)
+	mask.fill(-1)
 
 	for z in range(CHUNK_SIZE):
 		# --- BACK (+Z) ---
@@ -596,18 +595,19 @@ func _greedy_mesh_z_faces():
 			var x_off: int = x * 4096
 			var xz_off: int = x_off + z * 256
 			var xzp_off: int = x_off + (z + 1) * 256
+			var xyr: int = x * y_range
 			for iy in range(y_range):
 				var y: int = y_min + iy
 				var bt: int = blocks[xz_off + y]
 				if _is_greedy_solid(bt):
 					var nb: int = blocks[xzp_off + y] if z + 1 < CHUNK_SIZE else 0
 					if not _is_greedy_solid(nb):
-						mask[x][iy] = bt
+						mask[xyr + iy] = bt
 						has_faces = true
 					else:
-						mask[x][iy] = -1
+						mask[xyr + iy] = -1
 				else:
-					mask[x][iy] = -1
+					mask[xyr + iy] = -1
 
 		if has_faces:
 			var quads = _run_greedy(mask, CHUNK_SIZE, y_range)
@@ -626,18 +626,19 @@ func _greedy_mesh_z_faces():
 			var x_off: int = x * 4096
 			var xz_off: int = x_off + z * 256
 			var xzm_off: int = x_off + (z - 1) * 256
+			var xyr: int = x * y_range
 			for iy in range(y_range):
 				var y: int = y_min + iy
 				var bt: int = blocks[xz_off + y]
 				if _is_greedy_solid(bt):
 					var nb: int = blocks[xzm_off + y] if z - 1 >= 0 else 0
 					if not _is_greedy_solid(nb):
-						mask[x][iy] = bt
+						mask[xyr + iy] = bt
 						has_faces = true
 					else:
-						mask[x][iy] = -1
+						mask[xyr + iy] = -1
 				else:
-					mask[x][iy] = -1
+					mask[xyr + iy] = -1
 
 		if has_faces:
 			var quads = _run_greedy(mask, CHUNK_SIZE, y_range)
@@ -658,14 +659,10 @@ func _greedy_mesh_x_faces():
 	var y_range: int = y_max - y_min + 1
 	if y_range <= 0:
 		return
-	# P2 — Pre-allocate mask once
-	var mask: Array = []
-	mask.resize(CHUNK_SIZE)
-	for i in range(CHUNK_SIZE):
-		mask[i] = []
-		mask[i].resize(y_range)
-		for j in range(y_range):
-			mask[i][j] = -1
+	# P-CHUNK-1 — Flat PackedInt32Array mask, u=z, v=iy (CHUNK_SIZE x y_range)
+	var mask := PackedInt32Array()
+	mask.resize(CHUNK_SIZE * y_range)
+	mask.fill(-1)
 
 	for x in range(CHUNK_SIZE):
 		var x_off: int = x * 4096
@@ -676,18 +673,19 @@ func _greedy_mesh_x_faces():
 		var has_faces: bool = false
 		for z in range(CHUNK_SIZE):
 			var z_off: int = z * 256
+			var zyr: int = z * y_range
 			for iy in range(y_range):
 				var y: int = y_min + iy
 				var bt: int = blocks[x_off + z_off + y]
 				if _is_greedy_solid(bt):
 					var nb: int = blocks[xp_off + z_off + y] if x + 1 < CHUNK_SIZE else 0
 					if not _is_greedy_solid(nb):
-						mask[z][iy] = bt
+						mask[zyr + iy] = bt
 						has_faces = true
 					else:
-						mask[z][iy] = -1
+						mask[zyr + iy] = -1
 				else:
-					mask[z][iy] = -1
+					mask[zyr + iy] = -1
 
 		if has_faces:
 			var quads = _run_greedy(mask, CHUNK_SIZE, y_range)
@@ -704,18 +702,19 @@ func _greedy_mesh_x_faces():
 		has_faces = false
 		for z in range(CHUNK_SIZE):
 			var z_off: int = z * 256
+			var zyr: int = z * y_range
 			for iy in range(y_range):
 				var y: int = y_min + iy
 				var bt: int = blocks[x_off + z_off + y]
 				if _is_greedy_solid(bt):
 					var nb: int = blocks[xm_off + z_off + y] if x - 1 >= 0 else 0
 					if not _is_greedy_solid(nb):
-						mask[z][iy] = bt
+						mask[zyr + iy] = bt
 						has_faces = true
 					else:
-						mask[z][iy] = -1
+						mask[zyr + iy] = -1
 				else:
-					mask[z][iy] = -1
+					mask[zyr + iy] = -1
 
 		if has_faces:
 			var quads = _run_greedy(mask, CHUNK_SIZE, y_range)
@@ -797,27 +796,24 @@ func _emit_cross_quad(x: int, y: int, z: int, bt: int):
 # ============================================================
 
 func _build_water_mesh():
-	# P2 — Pre-allocate mask once
-	var mask: Array = []
-	mask.resize(CHUNK_SIZE)
-	for i in range(CHUNK_SIZE):
-		mask[i] = []
-		mask[i].resize(CHUNK_SIZE)
-		for j in range(CHUNK_SIZE):
-			mask[i][j] = -1
+	# P-CHUNK-1 — Flat PackedInt32Array mask (CHUNK_SIZE x CHUNK_SIZE)
+	var mask := PackedInt32Array()
+	mask.resize(CHUNK_SIZE * CHUNK_SIZE)
+	mask.fill(-1)
 
 	for y in range(y_min, y_max + 1):
 		var has_faces: bool = false
 		for x in range(CHUNK_SIZE):
 			var x_off: int = x * 4096
+			var xcs: int = x * CHUNK_SIZE
 			for z in range(CHUNK_SIZE):
 				var idx: int = x_off + z * 256 + y
 				var bt: int = blocks[idx]
 				if bt == WATER_TYPE and (y + 1 >= CHUNK_HEIGHT or blocks[idx + 1] == 0):
-					mask[x][z] = bt
+					mask[xcs + z] = bt
 					has_faces = true
 				else:
-					mask[x][z] = -1
+					mask[xcs + z] = -1
 
 		if has_faces:
 			var quads = _run_greedy(mask, CHUNK_SIZE, CHUNK_SIZE)

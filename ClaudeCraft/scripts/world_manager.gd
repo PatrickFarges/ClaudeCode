@@ -167,6 +167,7 @@ const COLLISION_REMOVE_DISTANCE: int = 5  # Retirer au-delà
 #const LOD_FULL_DISTANCE: int = 4  # ancien — trop large, upgrade trop lent
 const LOD_FULL_DISTANCE: int = 3  # Distance ≤3 = LOD 0, >3 = LOD 1 (flora invisible de si loin)
 var _mob_glbs_preloaded: bool = false
+var _collision_dirty: bool = true  # P-WM-1 : recalcul collisions uniquement quand nécessaire
 
 func _ready():
 	# Générer un seed aléatoire si non défini
@@ -301,9 +302,10 @@ func _process(_delta):
 			player.visible = true
 			#print("WorldManager: joueur active (collision prete)")
 
-	# Collision différée : créer/supprimer selon distance joueur (1/frame)
-	if player:
+	# Collision différée : créer/supprimer selon distance joueur (seulement si dirty)
+	if player and _collision_dirty:
 		_update_chunk_collisions()
+		_collision_dirty = false
 
 	if player:
 		var current_chunk = _world_to_chunk(player.global_position)
@@ -311,6 +313,7 @@ func _process(_delta):
 		# Ne mettre à jour que si le joueur a changé de chunk
 		if current_chunk != last_player_chunk:
 			last_player_chunk = current_chunk
+			_collision_dirty = true
 			_update_chunks()
 
 		# Mob spawning timer (hostile at night + passive respawn)
@@ -419,7 +422,7 @@ func _process_pending_chunks():
 	"""Instancie max 2 chunks par frame depuis le buffer"""
 	var processed = 0
 	while processed < MAX_CHUNK_INSTANTIATE_PER_FRAME and _pending_chunk_data.size() > 0:
-		var chunk_data = _pending_chunk_data.pop_front()
+		var chunk_data = _pending_chunk_data.pop_back()  # P-WM-2 : O(1) vs O(n) pop_front
 		_instantiate_chunk(chunk_data)
 		processed += 1
 
@@ -468,6 +471,7 @@ func _instantiate_chunk(chunk_data: Dictionary):
 		chunk.lod_level = 0 if dist <= LOD_FULL_DISTANCE else 1
 	add_child(chunk)
 	chunks[chunk_pos] = chunk
+	_collision_dirty = true
 
 	# Lancer la construction du mesh en arrière-plan (thread dédié)
 	chunk.build_mesh_async()
@@ -509,6 +513,8 @@ func _unload_distant_chunks(player_chunk_pos: Vector3i):
 			saved_chunk_data[chunk_pos] = chunk.blocks.duplicate()
 		chunk.queue_free()
 		chunks.erase(chunk_pos)
+	if not chunks_to_remove.is_empty():
+		_collision_dirty = true
 
 	# Set pour lookup O(1) au lieu de Array.has() O(n)
 	var remove_set: Dictionary = {}
@@ -838,6 +844,9 @@ func free_all_chunks():
 # ============================================================
 
 func _try_spawn_village(chunk_pos: Vector3i, chunk_data: Dictionary):
+	# P-WM-3 : pas de village si NPC désactivés
+	if VILLAGE_NPC_COUNT == 0:
+		return
 	# Spawn le village seulement dans le chunk du joueur
 	var player_chunk = _world_to_chunk(player.global_position)
 	if chunk_pos != player_chunk:

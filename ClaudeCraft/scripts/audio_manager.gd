@@ -135,6 +135,10 @@ var cave_ambient_player: AudioStreamPlayer = null
 
 # ── Debug : log des derniers sons ambiants ──
 var _ambient_log: Array = []  # Array de String, max 20 entrées
+const DEBUG_AUDIO := false  # set true to enable print() in _log_ambient
+
+# Cached player reference
+var _cached_player = null
 
 func _log_ambient(category: String, description: String):
 	var timestamp = Time.get_ticks_msec() / 1000.0
@@ -142,7 +146,13 @@ func _log_ambient(category: String, description: String):
 	_ambient_log.append(entry)
 	if _ambient_log.size() > 20:
 		_ambient_log.pop_front()
-	print(entry)
+	if DEBUG_AUDIO:
+		print(entry)
+
+func _get_cached_player():
+	if _cached_player == null or not is_instance_valid(_cached_player):
+		_cached_player = get_tree().get_first_node_in_group("player")
+	return _cached_player
 
 # ============================================================
 # MUSIQUE D'AMBIANCE MC — Tracks aléatoires avec pauses
@@ -666,7 +676,7 @@ func _update_biome_ambient(delta: float):
 		return
 	biome_check_timer = 0.0
 
-	var player = get_tree().get_first_node_in_group("player")
+	var player = _get_cached_player()
 	if not player:
 		return
 
@@ -999,7 +1009,7 @@ func _update_cave_mood(delta: float):
 		return
 	cave_mood_timer = 0.0
 
-	var player = get_tree().get_first_node_in_group("player")
+	var player = _get_cached_player()
 	if not player:
 		return
 

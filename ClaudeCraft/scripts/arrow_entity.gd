@@ -2,6 +2,7 @@ extends Node3D
 
 ## Entité flèche — projectile tiré par l'arc
 ## Physique simplifiée : gravité + drag + collision raycast
+## Fix: trail particles now created in initialize() so is_critical color works
 
 const GC = preload("res://scripts/game_config.gd")
 
@@ -30,7 +31,6 @@ var trail_particles: CPUParticles3D = null
 
 func _ready():
 	_build_arrow_mesh()
-	_add_trail_particles()
 
 func initialize(origin: Vector3, dir: Vector3, charge_factor: float, shoot_node: Node = null):
 	# Spawn légèrement en avant de la caméra pour éviter l'auto-collision
@@ -40,6 +40,7 @@ func initialize(origin: Vector3, dir: Vector3, charge_factor: float, shoot_node:
 	speed = charge_factor * 40.0  # Vitesse réduite pour mieux voir la flèche
 	is_critical = charge_factor >= 1.0
 	shooter = shoot_node
+	_add_trail_particles()
 	_orient_to_direction()
 	#print("[Arrow] Spawned at %s dir=%s speed=%.1f factor=%.2f" % [str(global_position), str(direction), speed, charge_factor])
 

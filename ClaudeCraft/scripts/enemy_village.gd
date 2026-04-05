@@ -47,6 +47,7 @@ var army_ready: bool = false
 var _phase_timer: float = 0.0
 var _build_timer: float = 0.0
 var _production_timer: float = 0.0
+var _cached_dnc = null  # cached day_night_cycle reference
 
 # Vitesse de progression (secondes de jeu par unité de production)
 const PHASE_ADVANCE_TIME = 300.0   # 5 minutes pour avancer de phase
@@ -101,9 +102,10 @@ func _process(delta):
 		_try_advance_phase()
 
 func _get_game_speed() -> float:
-	var dnc = get_tree().get_first_node_in_group("day_night_cycle")
-	if dnc and dnc.has_method("get_speed_multiplier"):
-		return dnc.get_speed_multiplier()
+	if _cached_dnc == null or not is_instance_valid(_cached_dnc):
+		_cached_dnc = get_tree().get_first_node_in_group("day_night_cycle")
+	if _cached_dnc and _cached_dnc.has_method("get_speed_multiplier"):
+		return _cached_dnc.get_speed_multiplier()
 	return 1.0
 
 func _simulate_production():

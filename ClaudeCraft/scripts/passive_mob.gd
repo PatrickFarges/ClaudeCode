@@ -1,7 +1,7 @@
 extends CharacterBody3D
 class_name PassiveMob
 
-# === MOB SYSTEM v3.3.0 ===
+# === MOB SYSTEM v3.4.0 ===
 # Charge les donnees depuis data/mob_database.json
 # Comportements : passive (fuit), neutral (attaque si provoque), hostile (attaque)
 # Systemes : faim, brulure soleil, predation, pack behavior
@@ -14,6 +14,7 @@ enum Behavior { PASSIVE, NEUTRAL, HOSTILE }
 static var _mob_db: Dictionary = {}       # mob_id (String) -> data dict
 static var _db_loaded: bool = false
 static var _glb_cache: Dictionary = {}
+static var _audio_cache: Dictionary = {}
 
 # ── Tables de spawn precalculees (construites au chargement) ──
 static var BIOME_DAY_MOBS: Dictionary = {}    # biome_id -> [mob_id, ...]
@@ -1037,6 +1038,25 @@ func _creeper_damage_entities(center: Vector3):
 			var dmg_factor = 1.0 - (dist / CREEPER_DAMAGE_RADIUS)
 			mob.take_hit(ceili(CREEPER_DAMAGE * dmg_factor), (mob.global_position - center).normalized() * 8.0)
 
+static func _get_cached_audio(path: String) -> AudioStream:
+	if _audio_cache.has(path):
+		return _audio_cache[path]
+	if not FileAccess.file_exists(path):
+		return null
+	var bytes = FileAccess.get_file_as_bytes(path)
+	if bytes.is_empty():
+		return null
+	var stream: AudioStream
+	if path.ends_with(".mp3"):
+		stream = AudioStreamMP3.new()
+		stream.data = bytes
+	elif path.ends_with(".ogg"):
+		stream = AudioStreamOggVorbis.load_from_buffer(bytes)
+	else:
+		return null
+	_audio_cache[path] = stream
+	return stream
+
 func _flash_model_white():
 	if not _model_root: return
 	for child in _model_root.get_children():
@@ -1044,14 +1064,18 @@ func _flash_model_white():
 			var mi = child as MeshInstance3D
 			for i in range(mi.get_surface_override_material_count()):
 				var mat = mi.get_surface_override_material(i)
+				if not mat:
+					mat = mi.mesh.surface_get_material(i)
+					if mat:
+						mat = mat.duplicate()
+						mi.set_surface_override_material(i, mat)
 				if mat is StandardMaterial3D:
 					mat.albedo_color = Color(2, 2, 2, 1)
 
 func _play_fuse_sound():
 	var path = "res://assets/Audio/Minecraft/random/fuse.mp3"
-	if FileAccess.file_exists(path):
-		var stream = AudioStreamMP3.new()
-		stream.data = FileAccess.get_file_as_bytes(path)
+	var stream = _get_cached_audio(path)
+	if stream:
 		var asp = AudioStreamPlayer3D.new()
 		asp.stream = stream; asp.max_distance = 32.0; asp.bus = "Master"
 		add_child(asp); asp.play()
@@ -1060,9 +1084,8 @@ func _play_fuse_sound():
 func _play_explosion_sound(pos: Vector3):
 	var idx = randi_range(1, 4)
 	var path = "res://assets/Audio/Minecraft/random/explode%d.mp3" % idx
-	if FileAccess.file_exists(path):
-		var stream = AudioStreamMP3.new()
-		stream.data = FileAccess.get_file_as_bytes(path)
+	var stream = _get_cached_audio(path)
+	if stream:
 		var asp = AudioStreamPlayer3D.new()
 		asp.stream = stream; asp.max_distance = 64.0; asp.bus = "Master"
 		asp.position = pos
@@ -1170,9 +1193,8 @@ func _skeleton_shoot():
 
 func _play_bow_sound():
 	var path = "res://assets/Audio/Minecraft/random/bow.mp3"
-	if FileAccess.file_exists(path):
-		var stream = AudioStreamMP3.new()
-		stream.data = FileAccess.get_file_as_bytes(path)
+	var stream = _get_cached_audio(path)
+	if stream:
 		var asp = AudioStreamPlayer3D.new()
 		asp.stream = stream; asp.max_distance = 24.0; asp.bus = "Master"
 		add_child(asp); asp.play()

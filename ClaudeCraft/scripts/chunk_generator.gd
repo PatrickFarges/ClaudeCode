@@ -1,6 +1,8 @@
 extends Node
 class_name ChunkGenerator
 
+# v7.2 : Optimisation — Semaphore au lieu de OS.delay_msec(10) busy-wait dans les workers (zéro latence, zéro CPU idle)
+# v7.1 : Optimisation — PackedByteArray flat au lieu de Array 3D imbriqué (élimine ~270 allocs/chunk)
 # v7.0 : Bois par biome, nouveaux minerais, variantes pierre, blocs naturels
 # - Foret : chenes + chenes noirs
 # - Plaines : bouleaux (BIRCH_LOG + BIRCH_LEAVES)
@@ -20,6 +22,7 @@ var thread_pool: Array[Thread] = []
 var generation_queue: Array = []
 var active_generations: Dictionary = {}
 var queue_mutex: Mutex = Mutex.new()
+var _queue_semaphore: Semaphore = Semaphore.new()
 var should_exit: bool = false
 var world_seed: int = 0
 var _structure_placements: Array = []
@@ -204,6 +207,7 @@ func queue_chunk_generation(chunk_pos: Vector3i, priority: int = 0):
 		})
 		generation_queue.sort_custom(_sort_by_priority)
 	queue_mutex.unlock()
+	_queue_semaphore.post()  # Wake up a sleeping worker
 
 func _sort_by_priority(a: Dictionary, b: Dictionary) -> bool:
 	return a["priority"] < b["priority"]
@@ -227,15 +231,17 @@ func _thread_worker(thread_id: int):
 			active_generations.erase(chunk_data["position"])
 			queue_mutex.unlock()
 		else:
-			OS.delay_msec(10)
+			_queue_semaphore.wait()  # Sleep until signaled (zero CPU, zero latency)
+			if should_exit:
+				break
 
 func _smoothstep(edge0: float, edge1: float, x: float) -> float:
 	var t = clampf((x - edge0) / (edge1 - edge0), 0.0, 1.0)
 	return t * t * (3.0 - 2.0 * t)
 
 func _generate_chunk_data(chunk_pos: Vector3i, noises: Dictionary = {}) -> Dictionary:
-	var blocks = []
-	blocks.resize(CHUNK_SIZE)
+	var blocks := PackedByteArray()
+	blocks.resize(CHUNK_SIZE * CHUNK_SIZE * CHUNK_HEIGHT)  # 65536
 
 	# P3 — Reuse per-thread noise objects (no allocation per chunk)
 	var terrain_noise: FastNoiseLite = noises.get("terrain", null)
@@ -272,16 +278,12 @@ func _generate_chunk_data(chunk_pos: Vector3i, noises: Dictionary = {}) -> Dicti
 	var y_max: int = 0
 
 	for x in range(CHUNK_SIZE):
-		blocks[x] = []
-		blocks[x].resize(CHUNK_SIZE)
 		heightmap[x] = []
 		heightmap[x].resize(CHUNK_SIZE)
 		biome_map[x] = []
 		biome_map[x].resize(CHUNK_SIZE)
 
 		for z in range(CHUNK_SIZE):
-			blocks[x][z] = []
-			blocks[x][z].resize(CHUNK_HEIGHT)
 
 			var wx = chunk_pos.x * CHUNK_SIZE + x
 			var wz = chunk_pos.z * CHUNK_SIZE + z
@@ -318,7 +320,7 @@ func _generate_chunk_data(chunk_pos: Vector3i, noises: Dictionary = {}) -> Dicti
 					if y >= 8 and y < SEA_LEVEL - 2 and _is_cave(wx, y, wz, cave1, cave2, cave3):
 						block = BlockRegistry.BlockType.AIR
 
-				blocks[x][z][y] = block
+				blocks[x * 4096 + z * 256 + y] = block
 				if block != BlockRegistry.BlockType.AIR:
 					if y < y_min:
 						y_min = y
@@ -333,43 +335,45 @@ func _generate_chunk_data(chunk_pos: Vector3i, noises: Dictionary = {}) -> Dicti
 			var owx = chunk_pos.x * CHUNK_SIZE + ox
 			var owz = chunk_pos.z * CHUNK_SIZE + oz
 			for oy in range(2, 80):
-				if blocks[ox][oz][oy] != BlockRegistry.BlockType.STONE:
+				var _idx = ox * 4096 + oz * 256 + oy
+				if blocks[_idx] != BlockRegistry.BlockType.STONE:
 					continue
 
 				# Deepslate en profondeur (y < 16)
 				if oy < 16:
-					blocks[ox][oz][oy] = BlockRegistry.BlockType.DEEPSLATE
+					blocks[_idx] = BlockRegistry.BlockType.DEEPSLATE
 
 				# Variantes de pierre en veines (y < 80)
 				var sv = stone_var_noise.get_noise_3d(owx, oy, owz)
-				if oy < 80 and blocks[ox][oz][oy] == BlockRegistry.BlockType.STONE:
+				if oy < 80 and blocks[_idx] == BlockRegistry.BlockType.STONE:
 					if sv > 0.45 and sv < 0.55:
-						blocks[ox][oz][oy] = BlockRegistry.BlockType.ANDESITE
+						blocks[_idx] = BlockRegistry.BlockType.ANDESITE
 					elif sv > 0.6 and sv < 0.68:
-						blocks[ox][oz][oy] = BlockRegistry.BlockType.GRANITE
+						blocks[_idx] = BlockRegistry.BlockType.GRANITE
 					elif sv > 0.72 and sv < 0.78:
-						blocks[ox][oz][oy] = BlockRegistry.BlockType.DIORITE
+						blocks[_idx] = BlockRegistry.BlockType.DIORITE
 
 				# Minerais en veines dispersées dans la roche (indépendant des grottes)
 				# Simplex noise distribution : 90% entre [-0.5, 0.5], extrêmes très rares
 				# Seuils calibrés sur la distribution réelle (test 350k samples)
-				if blocks[ox][oz][oy] in [BlockRegistry.BlockType.STONE, BlockRegistry.BlockType.DEEPSLATE, BlockRegistry.BlockType.ANDESITE, BlockRegistry.BlockType.GRANITE, BlockRegistry.BlockType.DIORITE]:
+				var _bt = blocks[_idx]
+				if _bt in [BlockRegistry.BlockType.STONE, BlockRegistry.BlockType.DEEPSLATE, BlockRegistry.BlockType.ANDESITE, BlockRegistry.BlockType.GRANITE, BlockRegistry.BlockType.DIORITE]:
 					var ore_val = ore_noise.get_noise_3d(owx, oy, owz)
 					# Charbon : partout y < 80, ~6% (> 0.4)
 					if oy < 80 and ore_val > 0.40:
-						blocks[ox][oz][oy] = BlockRegistry.BlockType.COAL_ORE
+						blocks[_idx] = BlockRegistry.BlockType.COAL_ORE
 					# Fer : y < 55, ~5% (< -0.42) — critique pour progression village
 					elif oy < 55 and ore_val < -0.42:
-						blocks[ox][oz][oy] = BlockRegistry.BlockType.IRON_ORE
+						blocks[_idx] = BlockRegistry.BlockType.IRON_ORE
 					# Cuivre : y < 50, ~3% (0.35 à 0.40)
 					elif oy < 50 and ore_val > 0.35 and ore_val <= 0.40:
-						blocks[ox][oz][oy] = BlockRegistry.BlockType.COPPER_ORE
+						blocks[_idx] = BlockRegistry.BlockType.COPPER_ORE
 					# Or : y < 30, ~0.6% (< -0.55)
 					elif oy < 30 and ore_val > 0.50 and ore_val <= 0.55:
-						blocks[ox][oz][oy] = BlockRegistry.BlockType.GOLD_ORE
+						blocks[_idx] = BlockRegistry.BlockType.GOLD_ORE
 					# Diamant : y < 16, ~0.2% (< -0.6)
 					elif oy < 16 and ore_val > 0.55:
-						blocks[ox][oz][oy] = BlockRegistry.BlockType.DIAMOND_ORE
+						blocks[_idx] = BlockRegistry.BlockType.DIAMOND_ORE
 
 	# ============================================================
 	# PASSE 1.7 : Mousse sur les murs de grottes (rare)
@@ -379,15 +383,16 @@ func _generate_chunk_data(chunk_pos: Vector3i, noises: Dictionary = {}) -> Dicti
 			var owx = chunk_pos.x * CHUNK_SIZE + ox
 			var owz = chunk_pos.z * CHUNK_SIZE + oz
 			for oy in range(10, 50):
-				if blocks[ox][oz][oy] == BlockRegistry.BlockType.STONE and _hash_2d(owx + oy * 31, owz + oy * 17, 40) < 1:
+				var _idx = ox * 4096 + oz * 256 + oy
+				if blocks[_idx] == BlockRegistry.BlockType.STONE and _hash_2d(owx + oy * 31, owz + oy * 17, 40) < 1:
 					# Verifier adjacent a une grotte
 					var adj_air = false
-					if oy > 0 and blocks[ox][oz][oy - 1] == BlockRegistry.BlockType.AIR:
+					if oy > 0 and blocks[_idx - 1] == BlockRegistry.BlockType.AIR:
 						adj_air = true
-					elif oy < CHUNK_HEIGHT - 1 and blocks[ox][oz][oy + 1] == BlockRegistry.BlockType.AIR:
+					elif oy < CHUNK_HEIGHT - 1 and blocks[_idx + 1] == BlockRegistry.BlockType.AIR:
 						adj_air = true
 					if adj_air:
-						blocks[ox][oz][oy] = BlockRegistry.BlockType.MOSS_BLOCK
+						blocks[_idx] = BlockRegistry.BlockType.MOSS_BLOCK
 
 	# ============================================================
 	# PASSE 2 : Placer les arbres et vegetation (sur le chunk entier)
@@ -400,14 +405,15 @@ func _generate_chunk_data(chunk_pos: Vector3i, noises: Dictionary = {}) -> Dicti
 	for wx2 in range(CHUNK_SIZE):
 		for wz2 in range(CHUNK_SIZE):
 			var biome = biome_map[wx2][wz2]
+			var _base = wx2 * 4096 + wz2 * 256
 			for wy in range(SEA_LEVEL, 0, -1):
-				var existing = blocks[wx2][wz2][wy]
+				var existing = blocks[_base + wy]
 				if existing == BlockRegistry.BlockType.AIR or BlockRegistry.is_cross_mesh(existing):
 					# Remplacer air ET vegetation submergee par de l'eau
-					blocks[wx2][wz2][wy] = BlockRegistry.BlockType.WATER
+					blocks[_base + wy] = BlockRegistry.BlockType.WATER
 					# Glace en surface dans les biomes froids
 					if wy == SEA_LEVEL and biome == 2:
-						blocks[wx2][wz2][wy] = BlockRegistry.BlockType.ICE
+						blocks[_base + wy] = BlockRegistry.BlockType.ICE
 				elif existing != BlockRegistry.BlockType.WATER:
 					break
 
@@ -419,14 +425,16 @@ func _generate_chunk_data(chunk_pos: Vector3i, noises: Dictionary = {}) -> Dicti
 			var cwx = chunk_pos.x * CHUNK_SIZE + cx
 			var cwz = chunk_pos.z * CHUNK_SIZE + cz
 			# Argile sous les blocs adjacents a l'eau
+			var _base = cx * 4096 + cz * 256
 			for cy in range(SEA_LEVEL - 3, SEA_LEVEL):
-				if blocks[cx][cz][cy] in [BlockRegistry.BlockType.SAND, BlockRegistry.BlockType.DIRT]:
+				var _idx = _base + cy
+				if blocks[_idx] in [BlockRegistry.BlockType.SAND, BlockRegistry.BlockType.DIRT]:
 					# Verifier s'il y a de l'eau a proximite
 					var near_water = false
-					if cy < CHUNK_HEIGHT - 1 and blocks[cx][cz][cy + 1] == BlockRegistry.BlockType.WATER:
+					if cy < CHUNK_HEIGHT - 1 and blocks[_idx + 1] == BlockRegistry.BlockType.WATER:
 						near_water = true
 					if near_water and _hash_2d(cwx + cy * 7, cwz + cy * 13, 5) < 2:
-						blocks[cx][cz][cy] = BlockRegistry.BlockType.CLAY
+						blocks[_idx] = BlockRegistry.BlockType.CLAY
 
 	# ============================================================
 	# PASSE 4 : Appliquer les structures predefinies
@@ -444,23 +452,9 @@ func _generate_chunk_data(chunk_pos: Vector3i, noises: Dictionary = {}) -> Dicti
 	if y_max < SEA_LEVEL:
 		y_max = SEA_LEVEL
 
-	# ============================================================
-	# Convertir en PackedByteArray pour acces rapide dans le meshing
-	# ============================================================
-	var packed_blocks: PackedByteArray = PackedByteArray()
-	packed_blocks.resize(CHUNK_SIZE * CHUNK_SIZE * CHUNK_HEIGHT)
-	for bx in range(CHUNK_SIZE):
-		var x_off: int = bx * CHUNK_SIZE * CHUNK_HEIGHT
-		for bz in range(CHUNK_SIZE):
-			var xz_off: int = x_off + bz * CHUNK_HEIGHT
-			for by in range(y_min, y_max + 1):
-				var bt: int = blocks[bx][bz][by]
-				if bt != 0:
-					packed_blocks[xz_off + by] = bt
+	return {"position": chunk_pos, "blocks": blocks, "y_min": y_min, "y_max": y_max}
 
-	return {"position": chunk_pos, "blocks": packed_blocks, "y_min": y_min, "y_max": y_max}
-
-func _place_all_vegetation(blocks: Array, heightmap: Array, biome_map: Array, chunk_pos: Vector3i):
+func _place_all_vegetation(blocks: PackedByteArray, heightmap: Array, biome_map: Array, chunk_pos: Vector3i):
 	for x in range(CHUNK_SIZE):
 		for z in range(CHUNK_SIZE):
 			var height = heightmap[x][z]
@@ -471,19 +465,21 @@ func _place_all_vegetation(blocks: Array, heightmap: Array, biome_map: Array, ch
 			if height >= CHUNK_HEIGHT - 20 or height <= SEA_LEVEL:
 				continue
 
+			var _base = x * 4096 + z * 256
+
 			match biome:
 				0:  # DESERT — Cactus espacés + acacias rares + buissons morts
 					if _hash_2d(wx, wz, 150) < 1:  # ~0.7% — cactus bien espacés
 						var h = 1 + _hash_2d(wx, wz, 3)  # 1-3 blocs de haut
 						for i in range(h):
 							if height + i < CHUNK_HEIGHT:
-								blocks[x][z][height + i] = BlockRegistry.BlockType.CACTUS
+								blocks[_base + height + i] = BlockRegistry.BlockType.CACTUS
 					elif _hash_2d(wx, wz, 40) < 1:  # ~2.5% acacia (plus d'arbres)
 						_place_acacia_tree(blocks, x, z, height, wx, wz)
 					elif height < CHUNK_HEIGHT and _hash_2d(wx + 5, wz + 3, 12) < 1:
 						# Buisson mort sur sable (~8%)
-						if blocks[x][z][height - 1] == BlockRegistry.BlockType.SAND:
-							blocks[x][z][height] = BlockRegistry.BlockType.DEAD_BUSH
+						if blocks[_base + height - 1] == BlockRegistry.BlockType.SAND:
+							blocks[_base + height] = BlockRegistry.BlockType.DEAD_BUSH
 
 				1:  # FOREST — Chenes + chenes noirs + fougeres + fleurs
 					if _hash_2d(wx, wz, 9) < 1:  # ~11% density
@@ -491,26 +487,26 @@ func _place_all_vegetation(blocks: Array, heightmap: Array, biome_map: Array, ch
 							_place_dark_oak_tree(blocks, x, z, height, wx, wz)
 						else:
 							_place_oak_tree(blocks, x, z, height, wx, wz)
-					elif height < CHUNK_HEIGHT and blocks[x][z][height] == BlockRegistry.BlockType.AIR:
-						var surface = blocks[x][z][height - 1]
+					elif height < CHUNK_HEIGHT and blocks[_base + height] == BlockRegistry.BlockType.AIR:
+						var surface = blocks[_base + height - 1]
 						if surface == BlockRegistry.BlockType.DARK_GRASS or surface == BlockRegistry.BlockType.GRASS:
 							var flora_hash = _hash_2d(wx + 11, wz + 7, 100)
 							if flora_hash < 25:
 								# Herbe courte ~25%
-								blocks[x][z][height] = BlockRegistry.BlockType.SHORT_GRASS
+								blocks[_base + height] = BlockRegistry.BlockType.SHORT_GRASS
 							elif flora_hash < 33:
 								# Fougere ~8%
-								blocks[x][z][height] = BlockRegistry.BlockType.FERN
+								blocks[_base + height] = BlockRegistry.BlockType.FERN
 							elif flora_hash < 35:
 								# Coquelicot ~2%
-								blocks[x][z][height] = BlockRegistry.BlockType.POPPY
+								blocks[_base + height] = BlockRegistry.BlockType.POPPY
 							elif flora_hash < 37:
 								# Bleuet ~2%
-								blocks[x][z][height] = BlockRegistry.BlockType.CORNFLOWER
+								blocks[_base + height] = BlockRegistry.BlockType.CORNFLOWER
 					# Podzol en foret dense (~15%)
 					if height > SEA_LEVEL and _hash_2d(wx + 7, wz + 3, 20) < 3:
-						if blocks[x][z][height - 1] == BlockRegistry.BlockType.DARK_GRASS:
-							blocks[x][z][height - 1] = BlockRegistry.BlockType.PODZOL
+						if blocks[_base + height - 1] == BlockRegistry.BlockType.DARK_GRASS:
+							blocks[_base + height - 1] = BlockRegistry.BlockType.PODZOL
 
 				2:  # MOUNTAIN — Sapins (seulement sous la neige)
 					if height < 120 and _hash_2d(wx, wz, 15) < 1:
@@ -519,24 +515,24 @@ func _place_all_vegetation(blocks: Array, heightmap: Array, biome_map: Array, ch
 				3:  # PLAINS — Bouleaux epars + herbe + fleurs
 					if _hash_2d(wx, wz, 25) < 1:  # ~4% density
 						_place_birch_tree(blocks, x, z, height, wx, wz)
-					elif height < CHUNK_HEIGHT and blocks[x][z][height] == BlockRegistry.BlockType.AIR:
-						var surface = blocks[x][z][height - 1]
+					elif height < CHUNK_HEIGHT and blocks[_base + height] == BlockRegistry.BlockType.AIR:
+						var surface = blocks[_base + height - 1]
 						if surface == BlockRegistry.BlockType.GRASS:
 							var flora_hash = _hash_2d(wx + 11, wz + 7, 100)
 							if flora_hash < 30:
 								# Herbe courte ~30%
-								blocks[x][z][height] = BlockRegistry.BlockType.SHORT_GRASS
+								blocks[_base + height] = BlockRegistry.BlockType.SHORT_GRASS
 							elif flora_hash < 32:
 								# Pissenlit ~2%
-								blocks[x][z][height] = BlockRegistry.BlockType.DANDELION
+								blocks[_base + height] = BlockRegistry.BlockType.DANDELION
 							elif flora_hash < 34:
 								# Coquelicot ~2%
-								blocks[x][z][height] = BlockRegistry.BlockType.POPPY
+								blocks[_base + height] = BlockRegistry.BlockType.POPPY
 							elif flora_hash < 36:
 								# Marguerite (cornflower) ~2%
-								blocks[x][z][height] = BlockRegistry.BlockType.CORNFLOWER
+								blocks[_base + height] = BlockRegistry.BlockType.CORNFLOWER
 
-func _place_oak_tree(blocks: Array, x: int, z: int, ground_y: int, wx: int = 0, wz: int = 0):
+func _place_oak_tree(blocks: PackedByteArray, x: int, z: int, ground_y: int, wx: int = 0, wz: int = 0):
 	var trunk_height = 4 + _hash_2d(wx * 7, wz * 13, 3)  # 4-6
 
 	if x < TREE_MARGIN or x >= CHUNK_SIZE - TREE_MARGIN:
@@ -547,7 +543,7 @@ func _place_oak_tree(blocks: Array, x: int, z: int, ground_y: int, wx: int = 0, 
 		return
 
 	for i in range(trunk_height):
-		blocks[x][z][ground_y + i] = BlockRegistry.BlockType.WOOD
+		blocks[x * 4096 + z * 256 + ground_y + i] = BlockRegistry.BlockType.WOOD
 
 	var crown_base = ground_y + trunk_height - 2
 
@@ -562,8 +558,8 @@ func _place_oak_tree(blocks: Array, x: int, z: int, ground_y: int, wx: int = 0, 
 				if abs(dx) == 2 and abs(dz) == 2:
 					continue
 				if nx >= 0 and nx < CHUNK_SIZE and nz >= 0 and nz < CHUNK_SIZE:
-					if blocks[nx][nz][y] == BlockRegistry.BlockType.AIR:
-						blocks[nx][nz][y] = BlockRegistry.BlockType.LEAVES
+					if blocks[nx * 4096 + nz * 256 + y] == BlockRegistry.BlockType.AIR:
+						blocks[nx * 4096 + nz * 256 + y] = BlockRegistry.BlockType.LEAVES
 
 	for layer in range(2, 4):
 		var y = crown_base + layer
@@ -576,10 +572,10 @@ func _place_oak_tree(blocks: Array, x: int, z: int, ground_y: int, wx: int = 0, 
 				if layer == 3 and abs(dx) == 1 and abs(dz) == 1:
 					continue
 				if nx >= 0 and nx < CHUNK_SIZE and nz >= 0 and nz < CHUNK_SIZE:
-					if blocks[nx][nz][y] == BlockRegistry.BlockType.AIR:
-						blocks[nx][nz][y] = BlockRegistry.BlockType.LEAVES
+					if blocks[nx * 4096 + nz * 256 + y] == BlockRegistry.BlockType.AIR:
+						blocks[nx * 4096 + nz * 256 + y] = BlockRegistry.BlockType.LEAVES
 
-func _place_dark_oak_tree(blocks: Array, x: int, z: int, ground_y: int, wx: int = 0, wz: int = 0):
+func _place_dark_oak_tree(blocks: PackedByteArray, x: int, z: int, ground_y: int, wx: int = 0, wz: int = 0):
 	"""Chene noir — similaire au chene mais avec DARK_OAK_LOG + DARK_OAK_LEAVES"""
 	var trunk_height = 4 + _hash_2d(wx * 7, wz * 13, 3)
 
@@ -591,7 +587,7 @@ func _place_dark_oak_tree(blocks: Array, x: int, z: int, ground_y: int, wx: int 
 		return
 
 	for i in range(trunk_height):
-		blocks[x][z][ground_y + i] = BlockRegistry.BlockType.DARK_OAK_LOG
+		blocks[x * 4096 + z * 256 + ground_y + i] = BlockRegistry.BlockType.DARK_OAK_LOG
 
 	var crown_base = ground_y + trunk_height - 2
 
@@ -606,8 +602,8 @@ func _place_dark_oak_tree(blocks: Array, x: int, z: int, ground_y: int, wx: int 
 				var nx = x + dx
 				var nz = z + dz
 				if nx >= 0 and nx < CHUNK_SIZE and nz >= 0 and nz < CHUNK_SIZE:
-					if blocks[nx][nz][y] == BlockRegistry.BlockType.AIR:
-						blocks[nx][nz][y] = BlockRegistry.BlockType.DARK_OAK_LEAVES
+					if blocks[nx * 4096 + nz * 256 + y] == BlockRegistry.BlockType.AIR:
+						blocks[nx * 4096 + nz * 256 + y] = BlockRegistry.BlockType.DARK_OAK_LEAVES
 
 	for layer in range(2, 4):
 		var y = crown_base + layer
@@ -620,10 +616,10 @@ func _place_dark_oak_tree(blocks: Array, x: int, z: int, ground_y: int, wx: int 
 				var nx = x + dx
 				var nz = z + dz
 				if nx >= 0 and nx < CHUNK_SIZE and nz >= 0 and nz < CHUNK_SIZE:
-					if blocks[nx][nz][y] == BlockRegistry.BlockType.AIR:
-						blocks[nx][nz][y] = BlockRegistry.BlockType.DARK_OAK_LEAVES
+					if blocks[nx * 4096 + nz * 256 + y] == BlockRegistry.BlockType.AIR:
+						blocks[nx * 4096 + nz * 256 + y] = BlockRegistry.BlockType.DARK_OAK_LEAVES
 
-func _place_birch_tree(blocks: Array, x: int, z: int, ground_y: int, wx: int = 0, wz: int = 0):
+func _place_birch_tree(blocks: PackedByteArray, x: int, z: int, ground_y: int, wx: int = 0, wz: int = 0):
 	"""Bouleau (plaine) — BIRCH_LOG + BIRCH_LEAVES"""
 	var trunk_height = 5 + _hash_2d(wx * 11, wz * 7, 3)  # 5-7
 
@@ -635,7 +631,7 @@ func _place_birch_tree(blocks: Array, x: int, z: int, ground_y: int, wx: int = 0
 		return
 
 	for i in range(trunk_height):
-		blocks[x][z][ground_y + i] = BlockRegistry.BlockType.BIRCH_LOG
+		blocks[x * 4096 + z * 256 + ground_y + i] = BlockRegistry.BlockType.BIRCH_LOG
 
 	var crown_base = ground_y + trunk_height - 1
 
@@ -648,15 +644,15 @@ func _place_birch_tree(blocks: Array, x: int, z: int, ground_y: int, wx: int = 0
 				var nx = x + dx
 				var nz = z + dz
 				if nx >= 0 and nx < CHUNK_SIZE and nz >= 0 and nz < CHUNK_SIZE:
-					if blocks[nx][nz][y] == BlockRegistry.BlockType.AIR:
-						blocks[nx][nz][y] = BlockRegistry.BlockType.BIRCH_LEAVES
+					if blocks[nx * 4096 + nz * 256 + y] == BlockRegistry.BlockType.AIR:
+						blocks[nx * 4096 + nz * 256 + y] = BlockRegistry.BlockType.BIRCH_LEAVES
 
 	var top_y = crown_base + 2
 	if top_y < CHUNK_HEIGHT:
-		if blocks[x][z][top_y] == BlockRegistry.BlockType.AIR:
-			blocks[x][z][top_y] = BlockRegistry.BlockType.BIRCH_LEAVES
+		if blocks[x * 4096 + z * 256 + top_y] == BlockRegistry.BlockType.AIR:
+			blocks[x * 4096 + z * 256 + top_y] = BlockRegistry.BlockType.BIRCH_LEAVES
 
-func _place_pine_tree(blocks: Array, x: int, z: int, ground_y: int, wx: int = 0, wz: int = 0):
+func _place_pine_tree(blocks: PackedByteArray, x: int, z: int, ground_y: int, wx: int = 0, wz: int = 0):
 	"""Pin (montagne) — SPRUCE_LOG + SPRUCE_LEAVES, forme conique"""
 	var trunk_height = 6 + _hash_2d(wx * 5, wz * 17, 4)  # 6-9
 
@@ -668,7 +664,7 @@ func _place_pine_tree(blocks: Array, x: int, z: int, ground_y: int, wx: int = 0,
 		return
 
 	for i in range(trunk_height):
-		blocks[x][z][ground_y + i] = BlockRegistry.BlockType.SPRUCE_LOG
+		blocks[x * 4096 + z * 256 + ground_y + i] = BlockRegistry.BlockType.SPRUCE_LOG
 
 	var crown_start = ground_y + trunk_height - 4
 
@@ -680,10 +676,10 @@ func _place_pine_tree(blocks: Array, x: int, z: int, ground_y: int, wx: int = 0,
 
 	var tip_y = crown_start + 5
 	if tip_y < CHUNK_HEIGHT:
-		if blocks[x][z][tip_y] == BlockRegistry.BlockType.AIR:
-			blocks[x][z][tip_y] = BlockRegistry.BlockType.SPRUCE_LEAVES
+		if blocks[x * 4096 + z * 256 + tip_y] == BlockRegistry.BlockType.AIR:
+			blocks[x * 4096 + z * 256 + tip_y] = BlockRegistry.BlockType.SPRUCE_LEAVES
 
-func _place_acacia_tree(blocks: Array, x: int, z: int, ground_y: int, wx: int = 0, wz: int = 0):
+func _place_acacia_tree(blocks: PackedByteArray, x: int, z: int, ground_y: int, wx: int = 0, wz: int = 0):
 	"""Acacia (desert) — tronc penche, couronne plate"""
 	var trunk_height = 4 + _hash_2d(wx * 3, wz * 11, 3)  # 4-6
 
@@ -696,7 +692,7 @@ func _place_acacia_tree(blocks: Array, x: int, z: int, ground_y: int, wx: int = 
 
 	# Tronc droit
 	for i in range(trunk_height):
-		blocks[x][z][ground_y + i] = BlockRegistry.BlockType.ACACIA_LOG
+		blocks[x * 4096 + z * 256 + ground_y + i] = BlockRegistry.BlockType.ACACIA_LOG
 
 	# Couronne plate (2 couches, 5x5 puis 3x3)
 	var crown_y = ground_y + trunk_height
@@ -712,10 +708,10 @@ func _place_acacia_tree(blocks: Array, x: int, z: int, ground_y: int, wx: int = 
 				var nx = x + dx
 				var nz = z + dz
 				if nx >= 0 and nx < CHUNK_SIZE and nz >= 0 and nz < CHUNK_SIZE:
-					if blocks[nx][nz][y] == BlockRegistry.BlockType.AIR:
-						blocks[nx][nz][y] = BlockRegistry.BlockType.ACACIA_LEAVES
+					if blocks[nx * 4096 + nz * 256 + y] == BlockRegistry.BlockType.AIR:
+						blocks[nx * 4096 + nz * 256 + y] = BlockRegistry.BlockType.ACACIA_LEAVES
 
-func _place_leaf_layer_cross(blocks: Array, cx: int, cz: int, y: int, radius: int, leaf_type: int = BlockRegistry.BlockType.LEAVES):
+func _place_leaf_layer_cross(blocks: PackedByteArray, cx: int, cz: int, y: int, radius: int, leaf_type: int = BlockRegistry.BlockType.LEAVES):
 	if y < 0 or y >= CHUNK_HEIGHT:
 		return
 	for dx in range(-radius, radius + 1):
@@ -725,10 +721,10 @@ func _place_leaf_layer_cross(blocks: Array, cx: int, cz: int, y: int, radius: in
 			var nx = cx + dx
 			var nz = cz + dz
 			if nx >= 0 and nx < CHUNK_SIZE and nz >= 0 and nz < CHUNK_SIZE:
-				if blocks[nx][nz][y] == BlockRegistry.BlockType.AIR:
-					blocks[nx][nz][y] = leaf_type
+				if blocks[nx * 4096 + nz * 256 + y] == BlockRegistry.BlockType.AIR:
+					blocks[nx * 4096 + nz * 256 + y] = leaf_type
 
-func _place_leaf_layer_square(blocks: Array, cx: int, cz: int, y: int, radius: int, leaf_type: int = BlockRegistry.BlockType.LEAVES):
+func _place_leaf_layer_square(blocks: PackedByteArray, cx: int, cz: int, y: int, radius: int, leaf_type: int = BlockRegistry.BlockType.LEAVES):
 	if y < 0 or y >= CHUNK_HEIGHT:
 		return
 	for dx in range(-radius, radius + 1):
@@ -736,14 +732,14 @@ func _place_leaf_layer_square(blocks: Array, cx: int, cz: int, y: int, radius: i
 			var nx = cx + dx
 			var nz = cz + dz
 			if nx >= 0 and nx < CHUNK_SIZE and nz >= 0 and nz < CHUNK_SIZE:
-				if blocks[nx][nz][y] == BlockRegistry.BlockType.AIR:
-					blocks[nx][nz][y] = leaf_type
+				if blocks[nx * 4096 + nz * 256 + y] == BlockRegistry.BlockType.AIR:
+					blocks[nx * 4096 + nz * 256 + y] = leaf_type
 
 # ============================================================
 # STRUCTURES — Patch les blocs du chunk avec les structures placees
 # ============================================================
 
-func _apply_structures(blocks: Array, chunk_pos: Vector3i) -> Vector2i:
+func _apply_structures(blocks: PackedByteArray, chunk_pos: Vector3i) -> Vector2i:
 	var new_y_min: int = CHUNK_HEIGHT
 	var new_y_max: int = 0
 
@@ -786,7 +782,7 @@ func _apply_structures(blocks: Array, chunk_pos: Vector3i) -> Vector2i:
 					var block_val: int = s_blocks[struct_idx]
 					if block_val == 255:  # KEEP
 						continue
-					blocks[lx][lz][wy] = block_val
+					blocks[lx * 4096 + lz * 256 + wy] = block_val
 					if block_val != 0:
 						if wy < new_y_min:
 							new_y_min = wy
@@ -980,6 +976,9 @@ func clear_queue():
 
 func _exit_tree():
 	should_exit = true
+	# Wake all workers so they can see should_exit and terminate
+	for i in range(MAX_THREADS):
+		_queue_semaphore.post()
 	for thread in thread_pool:
 		if thread.is_started():
 			thread.wait_to_finish()

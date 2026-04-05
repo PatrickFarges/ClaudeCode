@@ -9,7 +9,7 @@ var render_label: Label
 var target_label: Label
 var weather_label: Label
 
-const VERSION = "v20.5.0"
+const VERSION = "v21.1.0"
 
 var audio_manager = null
 var player = null
@@ -18,6 +18,7 @@ var cloud_manager = null
 var weather_manager = null
 var _pending_preset: int = -1  # preset à appliquer après warmup
 var _warmup_frames: int = 0    # compteur de frames avant application
+var _hud_timer: float = 0.0    # throttle non-FPS HUD updates
 
 # === Render presets ===
 var _render_preset: int = 0
@@ -475,7 +476,7 @@ func _cycle_weather():
 	var next_w = (weather_manager.current_weather + 1) % 4
 	weather_manager.set_weather(next_w)
 
-func _process(_delta):
+func _process(delta):
 	# Appliquer le preset sauvegardé après warmup (le renderer a besoin de
 	# quelques frames avec de la géométrie pour que SSAO/SDFGI fonctionnent)
 	if _pending_preset >= 0 and _env:
@@ -493,7 +494,14 @@ func _process(_delta):
 			render_label.text = "Rendu : %s (F2)" % RENDER_NAMES[_render_preset]
 			render_label.add_theme_color_override("font_color", RENDER_COLORS[_render_preset])
 
+	# FPS — every frame
 	fps_label.text = Locale.tr_ui("fps") % Engine.get_frames_per_second()
+
+	# Throttle non-FPS updates to ~5 times/sec
+	_hud_timer += delta
+	if _hud_timer < 0.2:
+		return
+	_hud_timer = 0.0
 
 	# Biome
 	if audio_manager:

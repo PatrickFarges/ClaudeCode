@@ -1,6 +1,6 @@
 extends CanvasLayer
 
-# Menu Settings v1.1.0 — ouvert avec F3
+# Menu Settings v1.2.0 — ouvert avec F3
 # Permet de changer : vitesse du temps, style d'éclairage, seed du monde, volumes audio
 # Affiche un récap des contrôles
 #
@@ -15,6 +15,7 @@ var _render_buttons: Array = []
 var _seed_input: LineEdit
 var _saved_mouse_mode: int = 0
 var _volume_labels: Dictionary = {}  # key -> Label showing percentage
+var _ui_built: bool = false
 
 func _ready():
 	visible = false
@@ -33,19 +34,28 @@ func _input(event):
 
 func open_menu():
 	is_open = true
-	visible = true
 	_saved_mouse_mode = Input.mouse_mode
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	_build_ui()
+	if not _ui_built:
+		_build_ui()
+		_ui_built = true
+	else:
+		_refresh_ui_values()
+	visible = true
 
 func close_menu():
 	is_open = false
-	visible = true
-	# Nettoyer
-	for child in get_children():
-		child.queue_free()
 	visible = false
 	Input.mouse_mode = _saved_mouse_mode
+
+func _refresh_ui_values():
+	# Refresh speed/render buttons with current values
+	var day_night = get_tree().get_first_node_in_group("day_night_cycle")
+	var current_speed = day_night.speed_index if day_night else 1
+	_update_speed_buttons(current_speed)
+	var hud = get_tree().current_scene.get_node_or_null("VersionHUD")
+	var current_render = hud._render_preset if hud else 2
+	_update_render_buttons(current_render)
 
 func _make_panel_style() -> StyleBoxFlat:
 	var style = StyleBoxFlat.new()

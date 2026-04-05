@@ -1,4 +1,4 @@
-## BedrockAnimPlayer v1.0.0
+## BedrockAnimPlayer v1.1.0
 ## Moteur d'animation Bedrock pour ClaudeCraft.
 ## Charge les animations JSON Bedrock, évalue les expressions Molang par frame,
 ## et applique les transformations directement aux bones du Skeleton3D.
@@ -12,12 +12,13 @@
 ##   bap.play("animation.humanoid.move")
 ##
 ## Changelog:
+## v1.1.0 - Pré-tri des keyframe times au chargement (perf: évite sort() chaque frame par bone/canal)
 ## v1.0.0 - Implémentation initiale : chargement JSON, évaluateur Molang, machine à états
 
 class_name BedrockAnimPlayer
 extends Node
 
-const APP_VERSION := "1.0.0"
+const APP_VERSION := "1.1.0"
 
 # ─── Signals ─────────────────────────────────────────────────────────────────
 signal animation_started(anim_name: String)
@@ -86,6 +87,10 @@ class BoneAnimData:
 	var position = null    # Same
 	var scale = null       # Same
 	var relative_to_entity: bool = false
+	# Pre-sorted keyframe times (computed once at load, avoids sort() every frame)
+	var rotation_sorted_times: Array = []
+	var position_sorted_times: Array = []
+	var scale_sorted_times: Array = []
 
 class ControllerData:
 	var name: String
@@ -160,6 +165,14 @@ func load_animations(path: String) -> int:
 					var rel = bone_dict["relative_to"]
 					if rel is Dictionary and rel.get("rotation", "") == "entity":
 						bone_anim.relative_to_entity = true
+
+				# Pre-sort keyframe times for Dictionary timelines
+				if bone_anim.rotation is Dictionary:
+					bone_anim.rotation_sorted_times = _presort_timeline_keys(bone_anim.rotation)
+				if bone_anim.position is Dictionary:
+					bone_anim.position_sorted_times = _presort_timeline_keys(bone_anim.position)
+				if bone_anim.scale is Dictionary:
+					bone_anim.scale_sorted_times = _presort_timeline_keys(bone_anim.scale)
 
 				anim.bones[bone_name.to_lower()] = bone_anim
 
@@ -549,19 +562,19 @@ func _apply_animations_to_skeleton() -> void:
 
 			# ─── Rotation ────────────────────────────────────────────
 			if bone_anim.rotation != null:
-				var rot := _evaluate_channel(bone_anim.rotation, anim_time, anim.length, current_rot)
+				var rot := _evaluate_channel(bone_anim.rotation, anim_time, anim.length, current_rot, bone_anim.rotation_sorted_times)
 				acc["rot"] += rot * weight
 				acc["has_rot"] = true
 
 			# ─── Position ────────────────────────────────────────────
 			if bone_anim.position != null:
-				var pos := _evaluate_channel(bone_anim.position, anim_time, anim.length, current_pos)
+				var pos := _evaluate_channel(bone_anim.position, anim_time, anim.length, current_pos, bone_anim.position_sorted_times)
 				acc["pos"] += pos * weight
 				acc["has_pos"] = true
 
 			# ─── Scale ───────────────────────────────────────────────
 			if bone_anim.scale != null:
-				var scl := _evaluate_scale_channel(bone_anim.scale, anim_time, anim.length)
+				var scl := _evaluate_scale_channel(bone_anim.scale, anim_time, anim.length, bone_anim.scale_sorted_times)
 				acc["scl"] = acc["scl"] * scl  # Multiply scales
 				acc["has_scl"] = true
 
@@ -595,7 +608,7 @@ func _apply_animations_to_skeleton() -> void:
 ##   - Un tableau [x, y, z] (statique ou avec expressions)
 ##   - Un dict de keyframes { "0.0": [x,y,z], "0.5": [x,y,z], ... }
 ##   - Un nombre simple (uniform)
-func _evaluate_channel(channel, anim_time: float, anim_length: float, current: Vector3) -> Vector3:
+func _evaluate_channel(channel, anim_time: float, anim_length: float, current: Vector3, sorted_times: Array = []) -> Vector3:
 	if channel == null:
 		return Vector3.ZERO
 
@@ -610,7 +623,7 @@ func _evaluate_channel(channel, anim_time: float, anim_length: float, current: V
 
 	# Dictionary -> keyframe timeline
 	if channel is Dictionary:
-		return _evaluate_keyframe_timeline(channel, anim_time, anim_length, current)
+		return _evaluate_keyframe_timeline(channel, anim_time, anim_length, current, sorted_times)
 
 	# String -> single expression for all axes? Rare but handle it
 	if channel is String:
@@ -620,7 +633,7 @@ func _evaluate_channel(channel, anim_time: float, anim_length: float, current: V
 	return Vector3.ZERO
 
 
-func _evaluate_scale_channel(channel, anim_time: float, anim_length: float) -> Vector3:
+func _evaluate_scale_channel(channel, anim_time: float, anim_length: float, sorted_times: Array = []) -> Vector3:
 	if channel == null:
 		return Vector3.ONE
 
@@ -635,7 +648,7 @@ func _evaluate_scale_channel(channel, anim_time: float, anim_length: float) -> V
 
 	# Dictionary -> keyframes
 	if channel is Dictionary:
-		return _evaluate_keyframe_timeline(channel, anim_time, anim_length, Vector3.ONE)
+		return _evaluate_keyframe_timeline(channel, anim_time, anim_length, Vector3.ONE, sorted_times)
 
 	if channel is String:
 		var v := molang.evaluate(channel)
@@ -661,12 +674,16 @@ func _eval_vec3_array(arr: Array, current: Vector3) -> Vector3:
 	return result
 
 
-func _evaluate_keyframe_timeline(timeline: Dictionary, anim_time: float, anim_length: float, current: Vector3) -> Vector3:
-	# Sort keyframe times
-	var times: Array = []
-	for key in timeline:
-		times.append(float(key))
-	times.sort()
+func _evaluate_keyframe_timeline(timeline: Dictionary, anim_time: float, anim_length: float, current: Vector3, sorted_times: Array = []) -> Vector3:
+	# Use pre-sorted times if available, otherwise compute on the fly (fallback)
+	var times: Array
+	if not sorted_times.is_empty():
+		times = sorted_times
+	else:
+		times = []
+		for key in timeline:
+			times.append(float(key))
+		times.sort()
 
 	if times.is_empty():
 		return Vector3.ZERO
@@ -781,6 +798,16 @@ func _euler_deg_to_quat(x_deg: float, y_deg: float, z_deg: float) -> Quaternion:
 
 
 # ─── Utilities ───────────────────────────────────────────────────────────────
+
+## Pré-trie les clés d'un timeline Dictionary en Array[float] trié.
+## Appelé une seule fois au chargement, évite sort() chaque frame.
+func _presort_timeline_keys(timeline: Dictionary) -> Array:
+	var times: Array = []
+	for key in timeline:
+		times.append(float(key))
+	times.sort()
+	return times
+
 
 func _detect_anim_length(anim: AnimData) -> float:
 	var max_time := 0.0

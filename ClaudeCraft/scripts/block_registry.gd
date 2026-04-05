@@ -839,11 +839,41 @@ static func get_block_name(block_type: BlockType) -> String:
 static func get_block_hardness(block_type: BlockType) -> float:
 	return BLOCK_DATA[block_type]["hardness"]
 
+const FACE_NAMES := ["top", "bottom", "front", "back", "left", "right"]
+const _SIDE_FACES := {"front": true, "back": true, "left": true, "right": true}
+static var _face_tex_cache: Dictionary = {}
+static var _face_tex_cache_built: bool = false
+
+static func _build_face_tex_cache():
+	_face_tex_cache.clear()
+	for bt in BLOCK_DATA:
+		var faces: Dictionary = BLOCK_DATA[bt].get("faces", {})
+		for face in FACE_NAMES:
+			var key := int(bt) * 8 + FACE_NAMES.find(face)
+			if faces.has(face):
+				_face_tex_cache[key] = faces[face]
+			elif _SIDE_FACES.has(face) and faces.has("side"):
+				_face_tex_cache[key] = faces["side"]
+			elif faces.has("all"):
+				_face_tex_cache[key] = faces["all"]
+			else:
+				_face_tex_cache[key] = "dirt"
+	_face_tex_cache_built = true
+
 static func get_face_texture(block_type: BlockType, face: String) -> String:
+	if not _face_tex_cache_built:
+		_build_face_tex_cache()
+	var fi := FACE_NAMES.find(face)
+	if fi < 0:
+		fi = 0
+	var key := int(block_type) * 8 + fi
+	if _face_tex_cache.has(key):
+		return _face_tex_cache[key]
+	# Fallback for unknown block types
 	var faces: Dictionary = BLOCK_DATA[block_type].get("faces", {})
 	if faces.has(face):
 		return faces[face]
-	if face in ["front", "back", "left", "right"] and faces.has("side"):
+	if _SIDE_FACES.has(face) and faces.has("side"):
 		return faces["side"]
 	if faces.has("all"):
 		return faces["all"]

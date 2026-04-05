@@ -28,8 +28,12 @@ const KEEP_BLOCK: int = 255
 
 var _structures: Dictionary = {}  # name -> {size: Vector3i, blocks: PackedByteArray}
 var _placements: Array = []
+var _block_name_to_id: Dictionary = {}  # reverse lookup: block name -> int
 
 func _ready():
+	# Build reverse lookup once instead of iterating 98 keys per _resolve_block_type call
+	for key in BlockRegistry.BlockType.keys():
+		_block_name_to_id[key] = BlockRegistry.BlockType[key]
 	_load_all_structures()
 	_load_placements()
 
@@ -100,11 +104,8 @@ func _load_structure(sname: String, path: String):
 	#print("StructureManager: '%s' chargée (%dx%dx%d)" % [sname, size.x, size.y, size.z])
 
 func _resolve_block_type(block_name: String) -> int:
-	if block_name == "AIR":
-		return 0
-	for key in BlockRegistry.BlockType.keys():
-		if key == block_name:
-			return BlockRegistry.BlockType[key]
+	if _block_name_to_id.has(block_name):
+		return _block_name_to_id[block_name]
 	push_warning("StructureManager: type de bloc inconnu '%s', remplacé par AIR" % block_name)
 	return 0
 

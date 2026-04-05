@@ -1,7 +1,7 @@
 extends Node
 class_name CraftRegistry
 
-# Registre de toutes les recettes de crafting
+# Registre de toutes les recettes de crafting (v1.1 — cached)
 #
 # Chaque recette :
 #   name: nom affiche
@@ -13,8 +13,12 @@ class_name CraftRegistry
 # Tier hierarchy: hand(0) < wood_table(1) < stone_table(2) < iron_table(3) < gold_table(4)
 # Furnace is separate — accessible with tier 0 + furnace flag
 
+static var _cached_recipes: Array = []
+
 static func get_all_recipes() -> Array:
-	return [
+	if not _cached_recipes.is_empty():
+		return _cached_recipes
+	_cached_recipes = [
 		# ============================================================
 		# RECETTES A LA MAIN (tier 0)
 		# ============================================================
@@ -616,6 +620,7 @@ static func get_all_recipes() -> Array:
 			"station": "gold_table"
 		},
 	]
+	return _cached_recipes
 
 static func get_station_tier(station: String) -> int:
 	match station:

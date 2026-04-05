@@ -39,6 +39,7 @@ var enemy_attack_strength: int = 0
 # === TIMERS ===
 var _update_timer: float = 0.0
 const UPDATE_INTERVAL = 2.0  # évaluation toutes les 2 secondes
+var _cached_dnc = null  # cached day_night_cycle reference
 
 # === PHASE DE GUERRE ===
 enum WarPhase { PEACE, ESPIONAGE, PREPARATION, WAR, VICTORY, DEFEAT }
@@ -78,9 +79,10 @@ func _process(delta):
 		_evaluate_war_status()
 
 func _get_game_speed() -> float:
-	var dnc = get_tree().get_first_node_in_group("day_night_cycle")
-	if dnc and dnc.has_method("get_speed_multiplier"):
-		return dnc.get_speed_multiplier()
+	if _cached_dnc == null or not is_instance_valid(_cached_dnc):
+		_cached_dnc = get_tree().get_first_node_in_group("day_night_cycle")
+	if _cached_dnc and _cached_dnc.has_method("get_speed_multiplier"):
+		return _cached_dnc.get_speed_multiplier()
 	return 1.0
 
 # ============================================================

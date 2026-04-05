@@ -1,4 +1,4 @@
-# hotbar_ui.gd v2.1.0
+# hotbar_ui.gd v2.2.0
 # HUD Minecraft complet : hotbar + coeurs + faim + armure + bulles d'air + XP bar + crosshair
 # Utilise les textures Faithful32 GUI (sprites/hud/*)
 
@@ -44,6 +44,13 @@ var _air_icons: Array = []                 # [TextureRect x 10] — bulles d'oxy
 var _air_visible: bool = false             # bulles visibles seulement sous l'eau
 var _burst_timers: Array = []              # timer animation burst par bulle
 var _xp_bg: TextureRect = null
+
+# Dirty flags — evite les mises a jour redondantes chaque frame
+var _last_hp := -1
+var _last_selected_slot := -1
+var _last_hotbar_slots: Array = []
+var _last_hotbar_tools: Array = []
+var _last_hotbar_counts: Array = []
 var _xp_fill: TextureRect = null
 var _crosshair: TextureRect = null
 
@@ -278,65 +285,96 @@ func _process(delta):
 # HOTBAR UPDATE
 # ============================================================
 func _update_hotbar():
+	var current_slot = player.selected_slot
+	var slot_changed = current_slot != _last_selected_slot
+
+	# Build current state snapshot for dirty check
+	var cur_slots: Array = player.hotbar_slots.duplicate()
+	var cur_tools: Array = player.hotbar_tool_slots.duplicate() if player.hotbar_tool_slots.size() > 0 else []
+	var cur_counts: Array = []
+	for i in range(min(NUM_SLOTS, cur_slots.size())):
+		if player.is_hotbar_slot_empty(i):
+			cur_counts.append(0)
+		else:
+			var tool_type = cur_tools[i] if i < cur_tools.size() else ToolRegistry.ToolType.NONE
+			if tool_type != ToolRegistry.ToolType.NONE:
+				cur_counts.append(-1)  # tools have no count
+			else:
+				cur_counts.append(player.get_inventory_count(cur_slots[i]))
+
+	var contents_changed = cur_slots != _last_hotbar_slots or cur_tools != _last_hotbar_tools or cur_counts != _last_hotbar_counts
+
+	if not slot_changed and not contents_changed:
+		return
+
+	_last_selected_slot = current_slot
+	_last_hotbar_slots = cur_slots
+	_last_hotbar_tools = cur_tools
+	_last_hotbar_counts = cur_counts
+
 	# Selection highlight position
-	if _selection_rect and _hotbar_rect:
+	if _selection_rect and _hotbar_rect and slot_changed:
 		var slot_size = 40 * GUI_SCALE
 		var hw = 364 * GUI_SCALE
 		var sel_w = 48 * GUI_SCALE
 		var sel_h = 46 * GUI_SCALE
 		var slot_start_x = -hw / 2.0 + 6 * GUI_SCALE
-		var sel_x = slot_start_x + player.selected_slot * slot_size - (sel_w - slot_size) / 2.0
+		var sel_x = slot_start_x + current_slot * slot_size - (sel_w - slot_size) / 2.0
 		_selection_rect.offset_left = sel_x
 		_selection_rect.offset_right = sel_x + sel_w
 		var hh = 44 * GUI_SCALE
 		_selection_rect.offset_top = -hh - 2 - (sel_h - hh) / 2.0
 		_selection_rect.offset_bottom = _selection_rect.offset_top + sel_h
 
-	# Item name
-	if _name_label:
-		if player.is_hotbar_slot_empty(player.selected_slot):
+	# Item name (depends on selected slot + its content)
+	if _name_label and (slot_changed or contents_changed):
+		if player.is_hotbar_slot_empty(current_slot):
 			_name_label.text = ""
 		else:
 			var tool_type = player._get_selected_tool()
 			if tool_type != ToolRegistry.ToolType.NONE:
 				_name_label.text = ToolRegistry.get_tool_name(tool_type)
 			else:
-				var block_type = player.hotbar_slots[player.selected_slot]
+				var block_type = player.hotbar_slots[current_slot]
 				_name_label.text = BlockRegistry.get_block_name(block_type)
 
-	# Slot icons + counts
-	for i in range(min(_slot_icons.size(), player.hotbar_slots.size())):
-		var slot = _slot_icons[i]
+	# Slot icons + counts (only when contents changed)
+	if contents_changed:
+		for i in range(min(_slot_icons.size(), player.hotbar_slots.size())):
+			var slot = _slot_icons[i]
 
-		# Verifier si le slot est vide (SUPPR ou jamais assigne)
-		if player.is_hotbar_slot_empty(i):
-			slot["tex_rect"].texture = null
-			slot["count_label"].text = ""
-			continue
+			# Verifier si le slot est vide (SUPPR ou jamais assigne)
+			if player.is_hotbar_slot_empty(i):
+				slot["tex_rect"].texture = null
+				slot["count_label"].text = ""
+				continue
 
-		var tool_type = ToolRegistry.ToolType.NONE
-		if i < player.hotbar_tool_slots.size():
-			tool_type = player.hotbar_tool_slots[i]
+			var tool_type = ToolRegistry.ToolType.NONE
+			if i < player.hotbar_tool_slots.size():
+				tool_type = player.hotbar_tool_slots[i]
 
-		if tool_type != ToolRegistry.ToolType.NONE:
-			var tex = _load_item_icon(ToolRegistry.get_item_texture_path(tool_type))
-			slot["tex_rect"].texture = tex
-			slot["tex_rect"].modulate = Color.WHITE
-			slot["count_label"].text = ""
-		else:
-			var block_type = player.hotbar_slots[i]
-			var count = player.get_inventory_count(block_type)
-			var block_tex = _load_block_icon(block_type)
-			slot["tex_rect"].texture = block_tex
-			slot["tex_rect"].modulate = Color.WHITE
-			slot["count_label"].text = str(count) if count > 1 else ""
-			slot["count_label"].add_theme_color_override("font_color", Color.WHITE)
+			if tool_type != ToolRegistry.ToolType.NONE:
+				var tex = _load_item_icon(ToolRegistry.get_item_texture_path(tool_type))
+				slot["tex_rect"].texture = tex
+				slot["tex_rect"].modulate = Color.WHITE
+				slot["count_label"].text = ""
+			else:
+				var block_type = player.hotbar_slots[i]
+				var count = cur_counts[i]
+				var block_tex = _load_block_icon(block_type)
+				slot["tex_rect"].texture = block_tex
+				slot["tex_rect"].modulate = Color.WHITE
+				slot["count_label"].text = str(count) if count > 1 else ""
+				slot["count_label"].add_theme_color_override("font_color", Color.WHITE)
 
 # ============================================================
 # HEARTS UPDATE
 # ============================================================
 func _update_hearts():
 	var hp = player.current_health
+	if hp == _last_hp:
+		return
+	_last_hp = hp
 	for i in range(10):
 		var heart_val = hp - i * 2  # chaque coeur = 2 HP
 		if heart_val >= 2:
@@ -352,18 +390,9 @@ func _update_hearts():
 # FOOD UPDATE
 # ============================================================
 func _update_food():
-	# Pour l'instant air supply sous l'eau / toujours plein sinon
-	var food_val = 20  # Max = 20 (10 icons x 2)
-	if player.has_method("get") and "_air_supply" in player:
-		pass  # Futur systeme de faim
-	for i in range(10):
-		var val = food_val - i * 2
-		if val >= 2:
-			_food_icons[i].texture = _load_tex(TEX_FOOD_FULL)
-		elif val == 1:
-			_food_icons[i].texture = _load_tex(TEX_FOOD_HALF)
-		else:
-			_food_icons[i].texture = _load_tex(TEX_FOOD_EMPTY)
+	# TODO: Food system not yet implemented — always 20, skip recalculation each frame.
+	# Remove this early return when a hunger system is added.
+	return
 
 # ============================================================
 # AIR BUBBLES UPDATE

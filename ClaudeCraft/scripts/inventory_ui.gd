@@ -1,4 +1,4 @@
-# inventory_ui.gd v3.3.0
+# inventory_ui.gd v3.4.0
 # Inventaire MC drag & drop + grille craft 2x2
 # Rangee du bas = hotbar (reference, pas de stockage)
 # Rangees du haut = inventaire reel (27 slots, pagine)
@@ -405,9 +405,15 @@ func open_inventory():
 	_matched_recipe = {}
 	_refresh_preview_armor()
 	_build_inv_slots(); visible = true; _refresh_all()
+	set_process(true)
+	if _steve_viewport:
+		_steve_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 
 func close_inventory():
 	_return_items_to_inventory(); is_open = false; visible = false
+	set_process(false)
+	if _steve_viewport:
+		_steve_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
 
 # ============================================================
 # SLOT DATA
