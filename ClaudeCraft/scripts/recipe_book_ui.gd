@@ -37,7 +37,7 @@ const FILTER_H = 26
 const GRID_COLS = 5
 const GRID_ROWS = 4
 const GRID_MARGIN_LEFT = 12
-const GRID_MARGIN_TOP = 62  # sous la barre de recherche
+const GRID_MARGIN_TOP = 84  # sous la barre de recherche (tabs 8+24=32, label 38+16=54, search 56+24=80)
 const GRID_SPACING = 2
 
 const SLOTS_PER_PAGE = 20  # 5x4
@@ -101,9 +101,7 @@ var has_furnace: bool = false
 
 # UI nodes
 var _panel_bg: TextureRect = null
-var _tab_buttons: Array = []      # [{btn, icon, tab_bg}]
-var _tab_selected_tex: ImageTexture = null
-var _tab_normal_tex: ImageTexture = null
+var _tab_buttons: Array = []      # [{btn, icon}]
 var _category_label: Label = null
 var _filter_btn: Button = null
 var _filter_icon: TextureRect = null
@@ -190,36 +188,27 @@ func _build_ui():
 	size = Vector2(pw, ph)
 
 	# --- Load sprite textures ---
-	_tab_selected_tex = _load_sprite("tab_selected.png")
-	_tab_normal_tex = _load_sprite("tab.png")
 	_filter_enabled_tex = _load_sprite("filter_enabled.png")
 	_filter_disabled_tex = _load_sprite("filter_disabled.png")
 	_slot_craftable_tex = _load_sprite("slot_craftable.png")
 	_slot_uncraftable_tex = _load_sprite("slot_uncraftable.png")
 
-	# --- Tabs ---
+	# --- Tabs (petits boutons sombres DANS le panneau, près du haut) ---
 	_build_tabs()
 
-	# --- Category label (en haut du panneau, à gauche) ---
+	# --- Category label (sous les tabs, texte clair sur fond sombre) ---
 	_category_label = Label.new()
 	_category_label.text = CATEGORY_LABELS[0]
-	_category_label.position = Vector2(12 * GUI_SCALE, 8 * GUI_SCALE)
-	_category_label.size = Vector2(160 * GUI_SCALE, 18 * GUI_SCALE)
-	_category_label.add_theme_font_size_override("font_size", 14)
-	_category_label.add_theme_color_override("font_color", Color(0.25, 0.25, 0.25))
+	_category_label.position = Vector2(12 * GUI_SCALE, 38 * GUI_SCALE)
+	_category_label.size = Vector2(160 * GUI_SCALE, 16 * GUI_SCALE)
+	_category_label.add_theme_font_size_override("font_size", 13)
+	_category_label.add_theme_color_override("font_color", Color(0.85, 0.85, 0.82))
 	_category_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_category_label)
 
-	# --- Filter toggle (à droite du label catégorie) ---
-	var filter_x = pw - (FILTER_W + 10) * GUI_SCALE
-	var filter_y = 4 * GUI_SCALE
-	_filter_btn = Button.new()
-	_filter_btn.flat = true
-	_filter_btn.position = Vector2(filter_x, filter_y)
-	_filter_btn.size = Vector2(FILTER_W * GUI_SCALE, FILTER_H * GUI_SCALE)
-	_filter_btn.pressed.connect(_on_filter_toggle)
-	_filter_btn.tooltip_text = "Toutes / Fabricables"
-	add_child(_filter_btn)
+	# --- Filter toggle (à droite du label, sprites MC) ---
+	var filter_x = pw - (FILTER_W + 8) * GUI_SCALE
+	var filter_y = 36 * GUI_SCALE
 	_filter_icon = TextureRect.new()
 	_filter_icon.texture = _filter_disabled_tex
 	_filter_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -228,13 +217,32 @@ func _build_ui():
 	_filter_icon.stretch_mode = TextureRect.STRETCH_SCALE
 	_filter_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_filter_icon)
+	_filter_btn = Button.new()
+	_filter_btn.flat = true
+	_filter_btn.position = Vector2(filter_x, filter_y)
+	_filter_btn.size = Vector2(FILTER_W * GUI_SCALE, FILTER_H * GUI_SCALE)
+	_filter_btn.pressed.connect(_on_filter_toggle)
+	add_child(_filter_btn)
 
-	# --- Search input (sous le label catégorie) ---
+	# --- Search input (style sombre MC, sous le label) ---
 	_search_input = LineEdit.new()
 	_search_input.placeholder_text = "Rechercher..."
-	_search_input.position = Vector2(SEARCH_MARGIN * GUI_SCALE, SEARCH_Y * GUI_SCALE)
+	_search_input.position = Vector2(SEARCH_MARGIN * GUI_SCALE, 56 * GUI_SCALE)
 	_search_input.size = Vector2((PANEL_ATLAS_W - SEARCH_MARGIN * 2) * GUI_SCALE, SEARCH_H * GUI_SCALE)
-	_search_input.add_theme_font_size_override("font_size", 13)
+	_search_input.add_theme_font_size_override("font_size", 12)
+	_search_input.add_theme_color_override("font_color", Color(0.9, 0.9, 0.9))
+	_search_input.add_theme_color_override("font_placeholder_color", Color(0.5, 0.5, 0.5))
+	# Style sombre pour s'intégrer au panneau
+	var search_style = StyleBoxFlat.new()
+	search_style.bg_color = Color(0.15, 0.15, 0.15, 0.9)
+	search_style.border_color = Color(0.4, 0.4, 0.4, 0.8)
+	search_style.set_border_width_all(1)
+	search_style.set_corner_radius_all(2)
+	search_style.set_content_margin_all(4)
+	_search_input.add_theme_stylebox_override("normal", search_style)
+	var search_focus = search_style.duplicate()
+	search_focus.border_color = Color(0.6, 0.6, 0.5, 1.0)
+	_search_input.add_theme_stylebox_override("focus", search_focus)
 	_search_input.text_changed.connect(_on_search_changed)
 	add_child(_search_input)
 
@@ -249,31 +257,39 @@ func _build_ui():
 
 
 func _build_tabs():
-	var tw = TAB_W * GUI_SCALE
-	var th = TAB_H * GUI_SCALE
-	var ty = -th  # bord inférieur de l'onglet = bord supérieur du panneau (y=0)
+	# Onglets = petits boutons sombres avec icônes, DANS le panneau, en ligne près du haut
+	# Style MC Bedrock : fond sombre, sélection = bord clair subtil
+	var icon_sz = 18 * GUI_SCALE  # taille de l'icône
+	var tab_sz = 24 * GUI_SCALE   # taille du bouton (icône + padding)
+	var tab_y = 8 * GUI_SCALE     # Y dans le panneau
+	var tab_start_x = 12 * GUI_SCALE
+	var tab_gap = 6 * GUI_SCALE
 	var icons_list = _get_category_icons()
 
+	# Style pour l'onglet sélectionné
+	var style_selected = StyleBoxFlat.new()
+	style_selected.bg_color = Color(0.35, 0.33, 0.3, 0.9)
+	style_selected.border_color = Color(0.7, 0.65, 0.55, 0.8)
+	style_selected.set_border_width_all(1)
+	style_selected.set_corner_radius_all(2)
+
+	# Style pour l'onglet normal (hover)
+	var style_hover = StyleBoxFlat.new()
+	style_hover.bg_color = Color(0.25, 0.24, 0.22, 0.7)
+	style_hover.set_corner_radius_all(2)
+
+	# Style normal (transparent)
+	var style_normal = StyleBoxFlat.new()
+	style_normal.bg_color = Color(0, 0, 0, 0)
+
 	for i in range(TAB_COUNT):
-		var tx = (TAB_MARGIN_LEFT + i * (TAB_W + TAB_SPACING)) * GUI_SCALE
+		var tx = tab_start_x + i * (tab_sz + tab_gap)
 
-		# Tab background — utilise tab.png / tab_selected.png redimensionné
-		var tab_bg = TextureRect.new()
-		tab_bg.texture = _tab_selected_tex if i == 0 else _tab_normal_tex
-		tab_bg.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		tab_bg.position = Vector2(tx, ty)
-		tab_bg.size = Vector2(tw, th)
-		tab_bg.stretch_mode = TextureRect.STRETCH_SCALE
-		tab_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		add_child(tab_bg)
-
-		# Tab icon — taille uniforme pour tous les onglets
+		# Tab icon
 		var icon = TextureRect.new()
 		icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		var icon_sz = 16 * GUI_SCALE  # 16px Faithful32 = taille uniforme
-		var icon_pad_x = (tw - icon_sz) / 2.0
-		var icon_pad_y = (th - icon_sz) / 2.0
-		icon.position = Vector2(tx + icon_pad_x, ty + icon_pad_y)
+		var pad = (tab_sz - icon_sz) / 2.0
+		icon.position = Vector2(tx + pad, tab_y + pad)
 		icon.size = Vector2(icon_sz, icon_sz)
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -281,12 +297,10 @@ func _build_tabs():
 		# Charger l'icône de catégorie
 		var bt = icons_list[i]
 		if bt == -1:
-			# Onglet recherche (loupe) — dernier onglet à droite
-			# Utiliser la loupe du panneau atlas
+			# Onglet recherche — loupe depuis l'atlas
 			var loupe_img = Image.load_from_file(GUI_DIR + "recipe_book.png")
 			if loupe_img:
 				loupe_img.convert(Image.FORMAT_RGBA8)
-				# La loupe est en haut à gauche de l'atlas, environ (6,6) taille 16x16 en F32
 				var loupe_region = loupe_img.get_region(Rect2i(6, 6, 16, 16))
 				icon.texture = ImageTexture.create_from_image(loupe_region)
 		elif bt == BlockRegistry.BlockType.IRON_SWORD:
@@ -295,15 +309,17 @@ func _build_tabs():
 			icon.texture = _load_block_icon(bt)
 		add_child(icon)
 
-		# Tab button (clickable)
+		# Tab button (clickable, avec styles MC)
 		var btn = Button.new()
 		btn.flat = true
-		btn.position = Vector2(tx, ty)
-		btn.size = Vector2(tw, th)
+		btn.position = Vector2(tx, tab_y)
+		btn.size = Vector2(tab_sz, tab_sz)
+		btn.add_theme_stylebox_override("normal", style_selected.duplicate() if i == 0 else style_normal.duplicate())
+		btn.add_theme_stylebox_override("hover", style_hover.duplicate())
 		btn.pressed.connect(_on_tab_pressed.bind(i))
 		add_child(btn)
 
-		_tab_buttons.append({"btn": btn, "bg": tab_bg, "icon": icon})
+		_tab_buttons.append({"btn": btn, "icon": icon})
 
 
 func _build_recipe_grid():
@@ -559,9 +575,19 @@ func _refresh_grid():
 	# Update filter icon
 	_filter_icon.texture = _filter_enabled_tex if _filter_craftable else _filter_disabled_tex
 
-	# Update tab backgrounds
+	# Update tab styles (sélection = bord clair)
 	for i in range(TAB_COUNT):
-		_tab_buttons[i]["bg"].texture = _tab_selected_tex if i == _current_category else _tab_normal_tex
+		var style: StyleBoxFlat
+		if i == _current_category:
+			style = StyleBoxFlat.new()
+			style.bg_color = Color(0.35, 0.33, 0.3, 0.9)
+			style.border_color = Color(0.7, 0.65, 0.55, 0.8)
+			style.set_border_width_all(1)
+			style.set_corner_radius_all(2)
+		else:
+			style = StyleBoxFlat.new()
+			style.bg_color = Color(0, 0, 0, 0)
+		_tab_buttons[i]["btn"].add_theme_stylebox_override("normal", style)
 
 	# Search visibility
 	_search_input.visible = (_current_category == Category.SEARCH)
