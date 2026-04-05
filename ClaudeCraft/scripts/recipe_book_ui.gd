@@ -354,14 +354,17 @@ func _build_tabs():
 			icon.texture = _load_block_icon(bt)
 		add_child(icon)
 
-		# Tab button
+		# Tab button (flat=false pour que le StyleBox "normal" soit dessiné)
 		var btn = Button.new()
-		btn.flat = true
+		btn.flat = false
 		btn.position = Vector2(tx, tab_y)
 		btn.size = Vector2(tab_px, tab_px)
 		var is_default = (cat_idx == Category.SEARCH)  # default category
-		btn.add_theme_stylebox_override("normal", style_selected.duplicate() if is_default else style_normal.duplicate())
+		var s = style_selected.duplicate() if is_default else style_normal.duplicate()
+		btn.add_theme_stylebox_override("normal", s)
 		btn.add_theme_stylebox_override("hover", style_hover.duplicate())
+		btn.add_theme_stylebox_override("pressed", style_hover.duplicate())
+		btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 		btn.pressed.connect(_on_tab_pressed.bind(cat_idx))
 		add_child(btn)
 
@@ -370,11 +373,11 @@ func _build_tabs():
 
 
 func _build_loupe_button(pw: float):
-	# Separate loupe button at top-right corner, partially overlapping the border
+	# Loupe button — au-dessus du panneau à droite, à côté des tabs
 	var loupe_px = LOUPE_SZ * GUI_SCALE
 	_loupe_btn = Button.new()
-	_loupe_btn.flat = true
-	_loupe_btn.position = Vector2(pw - loupe_px - 2 * GUI_SCALE, 2 * GUI_SCALE)
+	_loupe_btn.flat = false
+	_loupe_btn.position = Vector2(pw - loupe_px - 4 * GUI_SCALE, TAB_MARGIN_TOP * GUI_SCALE)
 	_loupe_btn.size = Vector2(loupe_px, loupe_px)
 	var loupe_style = StyleBoxFlat.new()
 	loupe_style.bg_color = COLOR_TAB_BG
