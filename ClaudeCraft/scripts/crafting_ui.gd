@@ -1,4 +1,4 @@
-# crafting_ui.gd v3.3.0
+# crafting_ui.gd v3.4.0
 # Craft MC drag & drop — slots fixes, placement libre
 # Rangee du bas = hotbar (reference, pas de stockage)
 # Rangees du haut = inventaire reel (27 slots, pagine)
@@ -48,6 +48,12 @@ var _hint_label: Label = null
 var _page_label: Label = null
 var _prev_btn: Button = null
 var _next_btn: Button = null
+
+# Recipe book
+var _recipe_book: Control = null
+var _recipe_book_btn: Button = null
+var _recipe_book_icon: TextureRect = null
+const RB_DIR = GUI_DIR + "sprites/recipe_book/"
 
 const TEX_W = 352
 const TEX_H = 332
@@ -213,6 +219,42 @@ func _build_ui():
 	_hint_label.offset_top = disp_h / 2 + 6; _hint_label.offset_bottom = disp_h / 2 + 24
 	_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; add_child(_hint_label)
 
+	# --- Recipe book toggle button ---
+	var rb_btn_img = Image.load_from_file(RB_DIR + "button.png")
+	if rb_btn_img:
+		var rb_icon_tex = ImageTexture.create_from_image(rb_btn_img)
+		var rb_x = tex_left + 22 * GUI_SCALE
+		var rb_y = tex_top + 60 * GUI_SCALE
+		var rb_w = 40 * GUI_SCALE
+		var rb_h = 36 * GUI_SCALE
+		_recipe_book_icon = TextureRect.new()
+		_recipe_book_icon.texture = rb_icon_tex
+		_recipe_book_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		_recipe_book_icon.set_anchors_preset(Control.PRESET_CENTER)
+		_recipe_book_icon.offset_left = rb_x; _recipe_book_icon.offset_right = rb_x + rb_w
+		_recipe_book_icon.offset_top = rb_y; _recipe_book_icon.offset_bottom = rb_y + rb_h
+		_recipe_book_icon.stretch_mode = TextureRect.STRETCH_SCALE
+		_recipe_book_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(_recipe_book_icon)
+		_recipe_book_btn = Button.new()
+		_recipe_book_btn.flat = true
+		_recipe_book_btn.set_anchors_preset(Control.PRESET_CENTER)
+		_recipe_book_btn.offset_left = rb_x; _recipe_book_btn.offset_right = rb_x + rb_w
+		_recipe_book_btn.offset_top = rb_y; _recipe_book_btn.offset_bottom = rb_y + rb_h
+		_recipe_book_btn.pressed.connect(_on_recipe_book_toggle)
+		add_child(_recipe_book_btn)
+
+	# --- Recipe book panel ---
+	var RecipeBookUI = load("res://scripts/recipe_book_ui.gd")
+	_recipe_book = RecipeBookUI.new()
+	_recipe_book.set_anchors_preset(Control.PRESET_CENTER)
+	var rb_panel_w = 294 * GUI_SCALE
+	_recipe_book.offset_left = tex_left - rb_panel_w - 4
+	_recipe_book.offset_right = tex_left - 4
+	_recipe_book.offset_top = tex_top
+	_recipe_book.offset_bottom = tex_top + 332 * GUI_SCALE
+	add_child(_recipe_book)
+
 	# --- Curseur ---
 	_cursor_tex = TextureRect.new()
 	_cursor_tex.set_anchors_preset(Control.PRESET_TOP_LEFT)
@@ -292,12 +334,26 @@ func open_crafting(tier: int = 0, furnace: bool = false):
 			_available_recipes.append(recipe)
 	_build_inv_slots()
 	_update_station_label()
+	if _recipe_book:
+		_recipe_book.visible = false
 	visible = true
 	_refresh_all()
 
 func close_crafting():
 	_return_items_to_inventory()
 	is_open = false; visible = false
+	if _recipe_book:
+		_recipe_book.visible = false
+
+func _on_recipe_book_toggle():
+	if _recipe_book:
+		if not _recipe_book.visible:
+			_recipe_book.setup(player, current_tier, has_furnace, self, Callable(self, "_on_recipe_book_craft"))
+		_recipe_book.toggle()
+
+func _on_recipe_book_craft():
+	_build_inv_slots()
+	_refresh_all()
 
 func _update_station_label():
 	if has_furnace: _station_label.text = Locale.tr_ui("craft_furnace")

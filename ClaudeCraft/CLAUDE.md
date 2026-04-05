@@ -98,7 +98,7 @@ Certaines animations vanilla (`bow_and_arrow`, `charging`, `sleeping`) dépenden
 
 ## Direction du projet
 
-**Version actuelle : v21.1.0**
+**Version actuelle : v21.2.0**
 
 ### Phases terminées
 
@@ -113,11 +113,13 @@ Certaines animations vanilla (`bow_and_arrow`, `charging`, `sleeping`) dépenden
 | 22 | v21.0.0 | **Moteur animation Bedrock** : Molang, JSON Bedrock (83 anims, 51 controllers, 147 entity defs), character_viewer v2.1 + mob_gallery v2.0 |
 | - | v21.1.0 | **Optimisation massive** : PackedByteArray flat chunks, Semaphore workers, greedy mask flat, keyframe pre-sort, dirty flags UI, caches statiques (18 fichiers, 25+ fixes) |
 
+| - | v21.2.0 | **Fenêtre de recettes** : recipe_book_ui.gd, 5 onglets catégories, filtre fabricables, recherche, auto-craft, intégré inventaire+craft |
+
 ### À venir
 
 | Phase | Contenu |
 |-------|---------|
-| - | Fenêtre de recettes (recipe book), 1396 recettes JSON, UI catégories+recherche+fabricables |
+| - | Livre de recettes avancé (recettes JSON MC 1.21), comportements mobs, mini-boss, nouveaux biomes |
 | - | Livre de recettes, comportements mobs (creeper explosion, skeleton archer), mini-boss, nouveaux biomes |
 
 **Données MC disponibles :** 2390 blocs, 1283 items, 1396 recettes dans `minecraft_data/`

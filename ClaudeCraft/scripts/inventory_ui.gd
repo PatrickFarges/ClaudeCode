@@ -1,4 +1,4 @@
-# inventory_ui.gd v3.4.0
+# inventory_ui.gd v3.5.0
 # Inventaire MC drag & drop + grille craft 2x2
 # Rangee du bas = hotbar (reference, pas de stockage)
 # Rangees du haut = inventaire reel (27 slots, pagine)
@@ -58,6 +58,12 @@ const ARMOR_SLOTS_X = 15; const ARMOR_SLOTS = [15, 51, 87, 123]  # Y de chaque s
 const PREVIEW_X = 52; const PREVIEW_Y = 16; const PREVIEW_W = 98; const PREVIEW_H = 140
 const OFFHAND_X = 153; const OFFHAND_Y = 123
 static var _steve_packed: PackedScene = null
+
+# Recipe book
+var _recipe_book: Control = null
+var _recipe_book_btn: Button = null
+var _recipe_book_icon: TextureRect = null
+const RB_DIR = GUI_DIR + "sprites/recipe_book/"
 
 const TEX_W = 352
 const TEX_H = 332
@@ -201,6 +207,43 @@ func _build_ui():
 	_hint_label.offset_left = -disp_w / 2; _hint_label.offset_right = disp_w / 2
 	_hint_label.offset_top = disp_h / 2 + 6; _hint_label.offset_bottom = disp_h / 2 + 24
 	_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; add_child(_hint_label)
+
+	# --- Recipe book toggle button ---
+	var rb_btn_img = Image.load_from_file(RB_DIR + "button.png")
+	if rb_btn_img:
+		var rb_icon_tex = ImageTexture.create_from_image(rb_btn_img)
+		var rb_x = tex_left + 160 * GUI_SCALE
+		var rb_y = tex_top + 36 * GUI_SCALE
+		var rb_w = 40 * GUI_SCALE  # button.png is 40x36 Faithful32
+		var rb_h = 36 * GUI_SCALE
+		_recipe_book_icon = TextureRect.new()
+		_recipe_book_icon.texture = rb_icon_tex
+		_recipe_book_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		_recipe_book_icon.set_anchors_preset(Control.PRESET_CENTER)
+		_recipe_book_icon.offset_left = rb_x; _recipe_book_icon.offset_right = rb_x + rb_w
+		_recipe_book_icon.offset_top = rb_y; _recipe_book_icon.offset_bottom = rb_y + rb_h
+		_recipe_book_icon.stretch_mode = TextureRect.STRETCH_SCALE
+		_recipe_book_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(_recipe_book_icon)
+		_recipe_book_btn = Button.new()
+		_recipe_book_btn.flat = true
+		_recipe_book_btn.set_anchors_preset(Control.PRESET_CENTER)
+		_recipe_book_btn.offset_left = rb_x; _recipe_book_btn.offset_right = rb_x + rb_w
+		_recipe_book_btn.offset_top = rb_y; _recipe_book_btn.offset_bottom = rb_y + rb_h
+		_recipe_book_btn.pressed.connect(_on_recipe_book_toggle)
+		add_child(_recipe_book_btn)
+
+	# --- Recipe book panel (hidden by default) ---
+	var RecipeBookUI = load("res://scripts/recipe_book_ui.gd")
+	_recipe_book = RecipeBookUI.new()
+	_recipe_book.set_anchors_preset(Control.PRESET_CENTER)
+	# Position to the left of the inventory panel
+	var rb_panel_w = 294 * GUI_SCALE  # PANEL_ATLAS_W * GUI_SCALE
+	_recipe_book.offset_left = tex_left - rb_panel_w - 4
+	_recipe_book.offset_right = tex_left - 4
+	_recipe_book.offset_top = tex_top
+	_recipe_book.offset_bottom = tex_top + 332 * GUI_SCALE
+	add_child(_recipe_book)
 
 	_cursor_tex = TextureRect.new(); _cursor_tex.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_cursor_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -404,6 +447,8 @@ func open_inventory():
 	for i in range(GRID_SIZE): _grid_contents[i] = {}
 	_matched_recipe = {}
 	_refresh_preview_armor()
+	if _recipe_book:
+		_recipe_book.visible = false
 	_build_inv_slots(); visible = true; _refresh_all()
 	set_process(true)
 	if _steve_viewport:
@@ -414,6 +459,16 @@ func close_inventory():
 	set_process(false)
 	if _steve_viewport:
 		_steve_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
+
+func _on_recipe_book_toggle():
+	if _recipe_book:
+		if not _recipe_book.visible:
+			_recipe_book.setup(player, 0, false, self, Callable(self, "_on_recipe_book_craft"))
+		_recipe_book.toggle()
+
+func _on_recipe_book_craft():
+	_build_inv_slots()
+	_refresh_all()
 
 # ============================================================
 # SLOT DATA
