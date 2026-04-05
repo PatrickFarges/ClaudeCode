@@ -52,6 +52,7 @@ var _next_btn: Button = null
 # Recipe book
 var _recipe_book: Control = null
 var _recipe_book_btn: Button = null
+var _recipe_book_icon: TextureRect = null
 const RB_DIR = GUI_DIR + "sprites/recipe_book/"
 
 const TEX_W = 352
@@ -235,28 +236,33 @@ func _build_ui():
 		var rb_icon_tex = ImageTexture.create_from_image(rb_btn_img)
 		var rb_w = 40 * GUI_SCALE
 		var rb_h = 36 * GUI_SCALE
-		var rb_x = tex_left + (TEX_W - 44) * GUI_SCALE
-		var rb_y = tex_top - rb_h + 6 * GUI_SCALE
+		var rb_x = tex_left + (TEX_W - 46) * GUI_SCALE
+		var rb_y = tex_top + 2 * GUI_SCALE
+		_recipe_book_icon = TextureRect.new()
+		_recipe_book_icon.texture = rb_icon_tex
+		_recipe_book_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		_recipe_book_icon.set_anchors_preset(Control.PRESET_CENTER)
+		_recipe_book_icon.offset_left = rb_x; _recipe_book_icon.offset_right = rb_x + rb_w
+		_recipe_book_icon.offset_top = rb_y; _recipe_book_icon.offset_bottom = rb_y + rb_h
+		_recipe_book_icon.stretch_mode = TextureRect.STRETCH_SCALE
+		_recipe_book_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(_recipe_book_icon)
 		_recipe_book_btn = Button.new()
+		_recipe_book_btn.flat = true
 		_recipe_book_btn.set_anchors_preset(Control.PRESET_CENTER)
 		_recipe_book_btn.offset_left = rb_x; _recipe_book_btn.offset_right = rb_x + rb_w
 		_recipe_book_btn.offset_top = rb_y; _recipe_book_btn.offset_bottom = rb_y + rb_h
-		_recipe_book_btn.icon = rb_icon_tex
-		_recipe_book_btn.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		_recipe_book_btn.expand_icon = true
-		_recipe_book_btn.flat = true
 		_recipe_book_btn.mouse_filter = Control.MOUSE_FILTER_STOP
 		_recipe_book_btn.pressed.connect(_on_recipe_book_toggle)
 		add_child(_recipe_book_btn)
 
-	# --- Curseur drag&drop (dernier = toujours au-dessus, PAS de top_level) ---
+	# --- Curseur drag&drop (identique au code original qui fonctionnait) ---
 	_cursor_tex = TextureRect.new()
 	_cursor_tex.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_cursor_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_cursor_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_cursor_tex.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_cursor_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE; _cursor_tex.visible = false
-	_cursor_tex.z_index = 200
 	add_child(_cursor_tex)
 	_cursor_count = Label.new()
 	_cursor_count.set_anchors_preset(Control.PRESET_TOP_LEFT)
@@ -267,7 +273,6 @@ func _build_ui():
 	_cursor_count.add_theme_constant_override("shadow_offset_x", 2)
 	_cursor_count.add_theme_constant_override("shadow_offset_y", 2)
 	_cursor_count.mouse_filter = Control.MOUSE_FILTER_IGNORE; _cursor_count.visible = false
-	_cursor_count.z_index = 200
 	add_child(_cursor_count)
 
 # ============================================================
