@@ -98,7 +98,7 @@ Certaines animations vanilla (`bow_and_arrow`, `charging`, `sleeping`) dépenden
 
 ## Direction du projet
 
-**Version actuelle : v21.0.0**
+**Version actuelle : v21.1.0**
 
 ### Phases terminées
 
@@ -111,12 +111,13 @@ Certaines animations vanilla (`bow_and_arrow`, `charging`, `sleeping`) dépenden
 | 15-18 | v19.4-v20.0 | Fixes audit, GUI MC Faithful32, IA mobs pathfinding, craft drag & drop MC |
 | 19-21 | v20.1-v20.5 | Fix tints, nuages procéduraux, météo dynamique, LOD distant, collision lazy |
 | 22 | v21.0.0 | **Moteur animation Bedrock** : Molang, JSON Bedrock (83 anims, 51 controllers, 147 entity defs), character_viewer v2.1 + mob_gallery v2.0 |
+| - | v21.1.0 | **Optimisation massive** : PackedByteArray flat chunks, Semaphore workers, greedy mask flat, keyframe pre-sort, dirty flags UI, caches statiques (18 fichiers, 25+ fixes) |
 
 ### À venir
 
 | Phase | Contenu |
 |-------|---------|
-| 23 | Intégration AnimaTweaks sprint/walk dans le jeu (PNJ + joueur 3e personne) |
+| - | Fenêtre de recettes (recipe book), 1396 recettes JSON, UI catégories+recherche+fabricables |
 | - | Livre de recettes, comportements mobs (creeper explosion, skeleton archer), mini-boss, nouveaux biomes |
 
 **Données MC disponibles :** 2390 blocs, 1283 items, 1396 recettes dans `minecraft_data/`
