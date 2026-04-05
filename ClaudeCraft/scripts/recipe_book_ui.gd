@@ -12,8 +12,8 @@ const GUI_DIR = "res://TexturesPack/Faithful32/assets/minecraft/textures/gui/"
 const RB_DIR = GUI_DIR + "sprites/recipe_book/"
 const GUI_SCALE = 2
 
-# Panel dimensions (pre-scale, matches inventory panel height 332/2=166)
-const PANEL_W = 160
+# Panel dimensions (pre-scale — largeur ~60% de l'inventaire, même hauteur)
+const PANEL_W = 220
 const PANEL_H = 166
 
 # Tab layout — 5 tabs protruding ABOVE the panel (Bedrock style)
@@ -39,13 +39,13 @@ const SEARCH_MARGIN = 8
 const FILTER_W = 26        # pre-scale
 const FILTER_H = 13        # pre-scale
 
-const GRID_COLS = 5
+const GRID_COLS = 7
 const GRID_ROWS = 4
 const GRID_MARGIN_LEFT = 6
 const GRID_MARGIN_TOP = 42  # label(6+14=20) + search(22+12=34) + padding
 const GRID_SPACING = 2
 
-const SLOTS_PER_PAGE = 20  # 5x4
+const SLOTS_PER_PAGE = 28  # 7x4
 const PAGE_BTN_W = 12      # pre-scale
 const PAGE_BTN_H = 17      # pre-scale
 
@@ -150,6 +150,14 @@ func _ready():
 	visible = false
 	mouse_filter = Control.MOUSE_FILTER_IGNORE  # Ne bloque pas l'input quand invisible
 	clip_contents = false  # Allow tabs to protrude above the panel
+	set_process_input(true)
+
+func _input(event: InputEvent):
+	# Quand le champ recherche a le focus, consommer TOUTES les touches
+	# pour empêcher les raccourcis jeu (C=craft, I=inventaire, E=inventaire, etc.)
+	if _search_input and _search_input.has_focus():
+		if event is InputEventKey:
+			get_viewport().set_input_as_handled()
 
 
 func setup(p_player: CharacterBody3D, p_tier: int, p_furnace: bool, parent_ui = null, refresh_func: Callable = Callable()):
