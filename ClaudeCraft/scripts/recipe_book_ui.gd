@@ -131,7 +131,7 @@ static var _was_open: bool = false
 
 func _ready():
 	visible = false
-	mouse_filter = Control.MOUSE_FILTER_STOP
+	mouse_filter = Control.MOUSE_FILTER_IGNORE  # Ne bloque pas l'input quand invisible
 	clip_contents = false  # Allow tabs to protrude above the panel
 
 
@@ -160,6 +160,8 @@ func update_context(p_tier: int, p_furnace: bool):
 
 func toggle():
 	visible = not visible
+	# Bloquer l'input seulement quand visible
+	mouse_filter = Control.MOUSE_FILTER_STOP if visible else Control.MOUSE_FILTER_IGNORE
 	if visible:
 		_page = 0
 		_apply_filter()

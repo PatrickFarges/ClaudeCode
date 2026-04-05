@@ -207,16 +207,26 @@ func _build_ui():
 	_hint_label.offset_top = disp_h / 2 + 6; _hint_label.offset_bottom = disp_h / 2 + 24
 	_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; add_child(_hint_label)
 
-	# --- Recipe book toggle button ---
+	# --- Recipe book panel (AVANT le bouton pour que le bouton soit testé en premier pour l'input) ---
+	var RecipeBookUI = load("res://scripts/recipe_book_ui.gd")
+	_recipe_book = RecipeBookUI.new()
+	_recipe_book.set_anchors_preset(Control.PRESET_CENTER)
+	var rb_panel_w = 294 * GUI_SCALE
+	_recipe_book.offset_left = tex_left - rb_panel_w - 4
+	_recipe_book.offset_right = tex_left - 4
+	_recipe_book.offset_top = tex_top
+	_recipe_book.offset_bottom = tex_top + 332 * GUI_SCALE
+	add_child(_recipe_book)
+
+	# --- Recipe book toggle button (APRÈS le panel pour recevoir les clics en priorité) ---
 	var rb_btn_img = Image.load_from_file(RB_DIR + "button.png")
 	if rb_btn_img:
 		var rb_icon_tex = ImageTexture.create_from_image(rb_btn_img)
 		# Bouton livre vert — coin supérieur droit du panneau, sur le cadre
-		var rb_w = 20 * GUI_SCALE  # taille affichée
-		var rb_h = 18 * GUI_SCALE
-		# Position en haut à droite du panneau (dans la bordure)
-		var rb_x = tex_left + (TEX_W - 24) * GUI_SCALE
-		var rb_y = tex_top + 3 * GUI_SCALE
+		var rb_w = 40 * GUI_SCALE  # button.png = 40x36 Faithful32, affiché 1:1
+		var rb_h = 36 * GUI_SCALE
+		var rb_x = tex_left + (TEX_W - 44) * GUI_SCALE  # dans le coin droit du cadre
+		var rb_y = tex_top - rb_h + 6 * GUI_SCALE        # à cheval sur le bord supérieur
 		_recipe_book_btn = Button.new()
 		_recipe_book_btn.set_anchors_preset(Control.PRESET_CENTER)
 		_recipe_book_btn.offset_left = rb_x; _recipe_book_btn.offset_right = rb_x + rb_w
@@ -229,24 +239,13 @@ func _build_ui():
 		_recipe_book_btn.pressed.connect(_on_recipe_book_toggle)
 		add_child(_recipe_book_btn)
 
-	# --- Recipe book panel (hidden by default) ---
-	var RecipeBookUI = load("res://scripts/recipe_book_ui.gd")
-	_recipe_book = RecipeBookUI.new()
-	_recipe_book.set_anchors_preset(Control.PRESET_CENTER)
-	# Position to the left of the inventory panel
-	var rb_panel_w = 294 * GUI_SCALE  # PANEL_ATLAS_W * GUI_SCALE
-	_recipe_book.offset_left = tex_left - rb_panel_w - 4
-	_recipe_book.offset_right = tex_left - 4
-	_recipe_book.offset_top = tex_top
-	_recipe_book.offset_bottom = tex_top + 332 * GUI_SCALE
-	add_child(_recipe_book)
-
+	# --- Curseur drag&drop (dernier = toujours au-dessus, PAS de top_level) ---
 	_cursor_tex = TextureRect.new(); _cursor_tex.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_cursor_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_cursor_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_cursor_tex.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_cursor_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE; _cursor_tex.visible = false
-	_cursor_tex.z_index = 200; _cursor_tex.top_level = true
+	_cursor_tex.z_index = 200
 	add_child(_cursor_tex)
 	_cursor_count = Label.new(); _cursor_count.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_cursor_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -256,7 +255,7 @@ func _build_ui():
 	_cursor_count.add_theme_constant_override("shadow_offset_x", 2)
 	_cursor_count.add_theme_constant_override("shadow_offset_y", 2)
 	_cursor_count.mouse_filter = Control.MOUSE_FILTER_IGNORE; _cursor_count.visible = false
-	_cursor_count.z_index = 200; _cursor_count.top_level = true
+	_cursor_count.z_index = 200
 	add_child(_cursor_count)
 
 # ============================================================
