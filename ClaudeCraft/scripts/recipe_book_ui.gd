@@ -12,17 +12,17 @@ const GUI_DIR = "res://TexturesPack/Faithful32/assets/minecraft/textures/gui/"
 const RB_DIR = GUI_DIR + "sprites/recipe_book/"
 const GUI_SCALE = 2
 
-# Panel dimensions (display pixels before GUI_SCALE)
-const PANEL_W = 300
-const PANEL_H = 340
+# Panel dimensions (pre-scale, matches inventory panel height 332/2=166)
+const PANEL_W = 160
+const PANEL_H = 166
 
-# Tab layout — 5 large tabs inside the panel, top row (Bedrock style)
+# Tab layout — 5 tabs protruding ABOVE the panel (Bedrock style)
 const TAB_COUNT = 5
-const TAB_SZ = 21         # tab button size (pre-scale) — 42px at GUI_SCALE
-const TAB_ICON_SZ = 14    # icon size (pre-scale) — 28px at GUI_SCALE
-const TAB_MARGIN_LEFT = 8
-const TAB_MARGIN_TOP = 8
-const TAB_SPACING = 3
+const TAB_SZ = 22         # tab button size (pre-scale) — 44px at GUI_SCALE
+const TAB_ICON_SZ = 15    # icon size (pre-scale) — 30px at GUI_SCALE
+const TAB_MARGIN_LEFT = 4
+const TAB_MARGIN_TOP = -20  # négatif = AU-DESSUS du panneau
+const TAB_SPACING = 2
 
 # Visual tab order → Category enum mapping
 # Visual: Construction(0), Equipment(1), Items(2), Nature(3), Search(4)
@@ -41,8 +41,8 @@ const FILTER_H = 13        # pre-scale
 
 const GRID_COLS = 5
 const GRID_ROWS = 4
-const GRID_MARGIN_LEFT = 10
-const GRID_MARGIN_TOP = 72  # tabs(8+21=29) + label(32+14=46) + search(48+12=60) + padding
+const GRID_MARGIN_LEFT = 6
+const GRID_MARGIN_TOP = 42  # label(6+14=20) + search(22+12=34) + padding
 const GRID_SPACING = 2
 
 const SLOTS_PER_PAGE = 20  # 5x4

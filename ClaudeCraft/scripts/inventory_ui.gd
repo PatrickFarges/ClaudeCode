@@ -254,16 +254,14 @@ func _setup_recipe_book(tex_left: float, tex_top: float):
 		add_child(_recipe_book_btn)
 	# Panel recettes (à gauche de l'inventaire)
 	var rb_script = load("res://scripts/recipe_book_ui.gd")
-	print("[InventoryUI] recipe_book_ui.gd load: ", rb_script)
 	if rb_script:
 		_recipe_book = rb_script.new()
-		print("[InventoryUI] recipe_book instance: ", _recipe_book)
 		_recipe_book.set_anchors_preset(Control.PRESET_CENTER)
-		var rb_panel_w = 294 * GUI_SCALE
+		var rb_panel_w = 160 * GUI_SCALE  # match PANEL_W in recipe_book_ui.gd
 		_recipe_book.offset_left = tex_left - rb_panel_w - 4
 		_recipe_book.offset_right = tex_left - 4
 		_recipe_book.offset_top = tex_top
-		_recipe_book.offset_bottom = tex_top + 332 * GUI_SCALE
+		_recipe_book.offset_bottom = tex_top + disp_h
 		add_child(_recipe_book)
 
 # ============================================================
@@ -479,13 +477,10 @@ func close_inventory():
 		_steve_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
 
 func _on_recipe_book_toggle():
-	print("[InventoryUI] toggle called, _recipe_book=", _recipe_book)
 	if _recipe_book:
 		if not _recipe_book.visible:
 			_recipe_book.setup(player, 0, false, self, Callable(self, "_on_recipe_book_craft"))
 		_recipe_book.toggle()
-	else:
-		push_error("[InventoryUI] _recipe_book is null — recipe_book_ui.gd failed to load")
 
 func _on_recipe_book_craft():
 	_build_inv_slots()
