@@ -263,6 +263,7 @@ func _build_ui():
 	_cursor_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_cursor_tex.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_cursor_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE; _cursor_tex.visible = false
+	_cursor_tex.z_index = 200
 	add_child(_cursor_tex)
 	_cursor_count = Label.new()
 	_cursor_count.set_anchors_preset(Control.PRESET_TOP_LEFT)
@@ -273,6 +274,7 @@ func _build_ui():
 	_cursor_count.add_theme_constant_override("shadow_offset_x", 2)
 	_cursor_count.add_theme_constant_override("shadow_offset_y", 2)
 	_cursor_count.mouse_filter = Control.MOUSE_FILTER_IGNORE; _cursor_count.visible = false
+	_cursor_count.z_index = 200
 	add_child(_cursor_count)
 
 # ============================================================
