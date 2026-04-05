@@ -208,26 +208,33 @@ func _build_ui():
 	_hint_label.offset_top = disp_h / 2 + 6; _hint_label.offset_bottom = disp_h / 2 + 24
 	_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; add_child(_hint_label)
 
-	# --- Recipe book panel (AVANT le bouton pour que le bouton soit testé en premier pour l'input) ---
-	var RecipeBookUI = load("res://scripts/recipe_book_ui.gd")
-	_recipe_book = RecipeBookUI.new()
-	_recipe_book.set_anchors_preset(Control.PRESET_CENTER)
-	var rb_panel_w = 294 * GUI_SCALE
-	_recipe_book.offset_left = tex_left - rb_panel_w - 4
-	_recipe_book.offset_right = tex_left - 4
-	_recipe_book.offset_top = tex_top
-	_recipe_book.offset_bottom = tex_top + 332 * GUI_SCALE
-	add_child(_recipe_book)
+	# --- Curseur drag&drop (CRITIQUE — doit être créé quoi qu'il arrive) ---
+	_cursor_tex = TextureRect.new(); _cursor_tex.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_cursor_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_cursor_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_cursor_tex.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_cursor_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE; _cursor_tex.visible = false; add_child(_cursor_tex)
+	_cursor_count = Label.new(); _cursor_count.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_cursor_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_cursor_count.add_theme_font_size_override("font_size", 14)
+	_cursor_count.add_theme_color_override("font_color", Color.WHITE)
+	_cursor_count.add_theme_color_override("font_shadow_color", Color(0.2, 0.2, 0.2, 1))
+	_cursor_count.add_theme_constant_override("shadow_offset_x", 2)
+	_cursor_count.add_theme_constant_override("shadow_offset_y", 2)
+	_cursor_count.mouse_filter = Control.MOUSE_FILTER_IGNORE; _cursor_count.visible = false; add_child(_cursor_count)
 
-	# --- Recipe book toggle button (APRÈS le panel pour recevoir les clics en priorité) ---
+	# --- Recipe book (bouton + panel — protégé pour ne pas casser le curseur) ---
+	_setup_recipe_book(tex_left, tex_top)
+
+func _setup_recipe_book(tex_left: float, tex_top: float):
+	# Bouton livre vert — coin supérieur droit du panneau
 	var rb_btn_img = Image.load_from_file(RB_DIR + "button.png")
 	if rb_btn_img:
 		var rb_icon_tex = ImageTexture.create_from_image(rb_btn_img)
-		# Bouton livre vert — coin supérieur droit du panneau, DANS la bordure
 		var rb_w = 40 * GUI_SCALE
 		var rb_h = 36 * GUI_SCALE
-		var rb_x = tex_left + (TEX_W - 46) * GUI_SCALE  # 46px du bord droit en F32
-		var rb_y = tex_top + 2 * GUI_SCALE               # juste sous le bord supérieur
+		var rb_x = tex_left + (TEX_W - 46) * GUI_SCALE
+		var rb_y = tex_top + 2 * GUI_SCALE
 		_recipe_book_icon = TextureRect.new()
 		_recipe_book_icon.texture = rb_icon_tex
 		_recipe_book_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -245,21 +252,17 @@ func _build_ui():
 		_recipe_book_btn.mouse_filter = Control.MOUSE_FILTER_STOP
 		_recipe_book_btn.pressed.connect(_on_recipe_book_toggle)
 		add_child(_recipe_book_btn)
-
-	# --- Curseur drag&drop (identique au code original qui fonctionnait) ---
-	_cursor_tex = TextureRect.new(); _cursor_tex.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	_cursor_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_cursor_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_cursor_tex.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	_cursor_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE; _cursor_tex.visible = false; add_child(_cursor_tex)
-	_cursor_count = Label.new(); _cursor_count.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	_cursor_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_cursor_count.add_theme_font_size_override("font_size", 14)
-	_cursor_count.add_theme_color_override("font_color", Color.WHITE)
-	_cursor_count.add_theme_color_override("font_shadow_color", Color(0.2, 0.2, 0.2, 1))
-	_cursor_count.add_theme_constant_override("shadow_offset_x", 2)
-	_cursor_count.add_theme_constant_override("shadow_offset_y", 2)
-	_cursor_count.mouse_filter = Control.MOUSE_FILTER_IGNORE; _cursor_count.visible = false; add_child(_cursor_count)
+	# Panel recettes (à gauche de l'inventaire)
+	var rb_script = load("res://scripts/recipe_book_ui.gd")
+	if rb_script:
+		_recipe_book = rb_script.new()
+		_recipe_book.set_anchors_preset(Control.PRESET_CENTER)
+		var rb_panel_w = 294 * GUI_SCALE
+		_recipe_book.offset_left = tex_left - rb_panel_w - 4
+		_recipe_book.offset_right = tex_left - 4
+		_recipe_book.offset_top = tex_top
+		_recipe_book.offset_bottom = tex_top + 332 * GUI_SCALE
+		add_child(_recipe_book)
 
 # ============================================================
 # STEVE PREVIEW + ARMOR SLOTS
