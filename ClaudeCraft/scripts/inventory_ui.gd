@@ -212,11 +212,11 @@ func _build_ui():
 	var rb_btn_img = Image.load_from_file(RB_DIR + "button.png")
 	if rb_btn_img:
 		var rb_icon_tex = ImageTexture.create_from_image(rb_btn_img)
-		# Bouton livre vert — bord supérieur droit du panneau inventaire
+		# Bouton livre vert — bord supérieur droit, SUR le cadre du panneau
 		var rb_w = 40 * GUI_SCALE  # button.png is 40x36 Faithful32
 		var rb_h = 36 * GUI_SCALE
-		var rb_x = -tex_left - rb_w - 6 * GUI_SCALE  # bord droit - marge
-		var rb_y = tex_top + 4 * GUI_SCALE            # bord supérieur + petit offset
+		var rb_x = -tex_left - rb_w - 2 * GUI_SCALE  # bord droit du panneau
+		var rb_y = tex_top - rb_h / 2                 # à cheval sur le bord supérieur
 		_recipe_book_icon = TextureRect.new()
 		_recipe_book_icon.texture = rb_icon_tex
 		_recipe_book_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -225,6 +225,7 @@ func _build_ui():
 		_recipe_book_icon.offset_top = rb_y; _recipe_book_icon.offset_bottom = rb_y + rb_h
 		_recipe_book_icon.stretch_mode = TextureRect.STRETCH_SCALE
 		_recipe_book_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_recipe_book_icon.z_index = 150
 		add_child(_recipe_book_icon)
 		_recipe_book_btn = Button.new()
 		_recipe_book_btn.flat = true
@@ -232,6 +233,7 @@ func _build_ui():
 		_recipe_book_btn.offset_left = rb_x; _recipe_book_btn.offset_right = rb_x + rb_w
 		_recipe_book_btn.offset_top = rb_y; _recipe_book_btn.offset_bottom = rb_y + rb_h
 		_recipe_book_btn.pressed.connect(_on_recipe_book_toggle)
+		_recipe_book_btn.z_index = 150
 		add_child(_recipe_book_btn)
 
 	# --- Recipe book panel (hidden by default) ---
