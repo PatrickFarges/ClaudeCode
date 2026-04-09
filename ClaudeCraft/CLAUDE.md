@@ -100,7 +100,7 @@ Certaines animations vanilla (`bow_and_arrow`, `charging`, `sleeping`) dépenden
 
 ## Direction du projet
 
-**Version actuelle : v21.5.0**
+**Version actuelle : v21.5.1**
 
 ### Phases terminées
 
@@ -119,6 +119,7 @@ Certaines animations vanilla (`bow_and_arrow`, `charging`, `sleeping`) dépenden
 | - | v21.3.0 | **Shaders** : water shader (vagues, fresnel, UV scrolling, reflets), vent sur végétation cross |
 | - | v21.4.0 | **Eau Vivante Phase 1** : `fluid_flow_manager.gd` autoload, BFS tick-based 200ms, gravité + propagation horizontale max 7 blocs, anti-Waterworld (plaine 3x3), trigger sur break_block |
 | - | v21.5.0 | **Eau Vivante Phase 2 — Bucket** : ToolType BUCKET_EMPTY/WATER/LAVA, clic droit pour remplir depuis eau source ou verser (schedule_source sur FluidFlowManager), swap auto du ToolType dans le slot, hache de pierre du spawn remplacée par un seau vide (slot 5) pour tests rapides. Lave non implémentée (bloc LAVA absent du registry). |
+| - | v21.5.1 | **Fix anims walk mobs legacy (scripts.animate support)** : `bedrock_entity_loader.gd` lit désormais `desc.scripts.animate` (bloc Bedrock historique utilisé par cow/pig/sheep/chicken) et crée un controller synthétique `__auto.<entity>.move`. Flag `clamp_weight` ajouté dans `bedrock_anim_player.gd` pour clamper les conditions Molang continues (ex `query.modified_move_speed`) à [0,1] sans régresser les controllers existants (llama). |
 | - | v21.4.1 | **Eau Vivante Phase 1.1** : tick 0.4s + délai 0.8s avant fill (feel progressif), faces latérales + bottom du water mesh (colonnes/cascades visibles), overlay sous-marin 45% → 72% opacité |
 
 ### À venir

@@ -12,13 +12,16 @@
 ##   bap.play("animation.humanoid.move")
 ##
 ## Changelog:
+## v1.2.0 - Support flag `clamp_weight` sur entries d'animation (controllers synthétiques legacy) :
+##          clamp le résultat de la condition Molang à [0,1] pour éviter que `query.modified_move_speed`
+##          (valeur continue 0-5) multiplie l'amplitude. Fix walk cow/pig/sheep/chicken.
 ## v1.1.0 - Pré-tri des keyframe times au chargement (perf: évite sort() chaque frame par bone/canal)
 ## v1.0.0 - Implémentation initiale : chargement JSON, évaluateur Molang, machine à états
 
 class_name BedrockAnimPlayer
 extends Node
 
-const APP_VERSION := "1.1.0"
+const APP_VERSION := "1.2.0"
 
 # ─── Signals ─────────────────────────────────────────────────────────────────
 signal animation_started(anim_name: String)
@@ -456,6 +459,12 @@ func _evaluate_controllers() -> void:
 				weight = molang.evaluate(anim_entry["condition"])
 				if weight == 0.0:
 					continue
+				# Clamp pour les controllers synthétiques issus de `scripts.animate` :
+				# la condition Molang peut être une valeur continue (ex: query.modified_move_speed=3.0)
+				# qui, utilisée comme weight brut, multiplierait l'amplitude des keyframes.
+				# Le flag `clamp_weight` est posé par BedrockEntityLoader pour ces entries legacy.
+				if anim_entry.get("clamp_weight", false):
+					weight = clampf(weight, 0.0, 1.0)
 
 			# Don't add duplicates
 			var found := false

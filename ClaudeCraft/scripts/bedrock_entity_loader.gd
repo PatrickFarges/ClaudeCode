@@ -9,10 +9,13 @@
 ##
 ## Changelog:
 ## v1.0.0 - Implémentation initiale
+## v1.1.0 - Support de `desc.scripts.animate` (entités legacy cow/pig/sheep/chicken) :
+##          création d'un controller synthétique `__auto.<entity>.move` si absent,
+##          fix des animations walk des mobs quadrupèdes.
 
 class_name BedrockEntityLoader
 
-const APP_VERSION := "1.0.0"
+const APP_VERSION := "1.1.0"
 
 # Paths de base (relatifs à res://)
 const ANIM_DIR := "res://data/animations/"
@@ -79,6 +82,53 @@ static func configure_entity(bap: BedrockAnimPlayer, entity_id: String) -> bool:
 						ctrl_files_loaded[ctrl_file] = true
 				# Activate the controller
 				bap.activate_controller(ctrl_full)
+
+	# 4. Legacy `scripts.animate` bloc (cow, pig, sheep, chicken, etc.)
+	#    Format : Array d'entrées, chaque entrée est soit une String (alias joué
+	#    inconditionnellement), soit un Dict {alias: condition_molang}.
+	#    On crée un controller synthétique unique avec un seul état `default`,
+	#    sauf si l'entité a déjà déclaré un `animation_controllers` (llama, etc.)
+	var animate_list: Array = scripts.get("animate", [])
+	if not animate_list.is_empty() and ctrl_list.is_empty():
+		var synth_name := "controller.animation.__auto." + entity_id + ".move"
+		var synth_ctrl := BedrockAnimPlayer.ControllerData.new()
+		synth_ctrl.name = synth_name
+		synth_ctrl.initial_state = "default"
+		var state := BedrockAnimPlayer.StateData.new()
+
+		for entry in animate_list:
+			var alias_name := ""
+			var cond_expr := ""
+			if entry is String:
+				alias_name = entry
+			elif entry is Dictionary:
+				for k in entry:
+					alias_name = str(k)
+					var v = entry[k]
+					cond_expr = str(v) if v != null else ""
+					break
+			if alias_name.is_empty():
+				continue
+
+			# Résoudre l'alias → nom complet de l'animation via desc.animations
+			var full_anim: String = anim_map.get(alias_name, alias_name)
+			# Charger le fichier si pas déjà fait
+			var file := _guess_anim_file(full_anim)
+			if not file.is_empty() and not files_loaded.has(file):
+				var path := ANIM_DIR + file
+				if FileAccess.file_exists(path):
+					bap.load_animations(path)
+					files_loaded[file] = true
+
+			state.animations.append({
+				"name": full_anim,
+				"condition": cond_expr,
+				"clamp_weight": true,  # Les conditions scripts.animate sont booléennes/continues → clamp à 1.0
+			})
+
+		synth_ctrl.states["default"] = state
+		bap.controllers[synth_name] = synth_ctrl
+		bap._controller_states[synth_name] = "default"
 
 	return true
 
