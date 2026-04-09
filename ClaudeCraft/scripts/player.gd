@@ -305,7 +305,7 @@ func _init_tool_slots():
 		hotbar_food_slots.append(false)
 	# Outils sur les slots du milieu — 4 tiers de haches pour tester le minage
 	hotbar_tool_slots[3] = ToolRegistry.ToolType.WOOD_AXE
-	hotbar_tool_slots[4] = ToolRegistry.ToolType.STONE_AXE
+	hotbar_tool_slots[4] = ToolRegistry.ToolType.BUCKET_EMPTY
 	hotbar_tool_slots[5] = ToolRegistry.ToolType.IRON_AXE
 	hotbar_tool_slots[6] = ToolRegistry.ToolType.DIAMOND_AXE
 	hotbar_tool_slots[7] = ToolRegistry.ToolType.DIAMOND_PICKAXE
@@ -790,7 +790,8 @@ func _create_water_overlay():
 	_water_canvas.layer = 5
 	add_child(_water_canvas)
 	_water_overlay = ColorRect.new()
-	_water_overlay.color = Color(0.05, 0.15, 0.4, 0.45)
+	# Teinte bleue franche + opacité haute → impossible à confondre avec l'air libre
+	_water_overlay.color = Color(0.05, 0.22, 0.58, 0.72)
 	_water_overlay.anchor_right = 1.0
 	_water_overlay.anchor_bottom = 1.0
 	_water_overlay.visible = false
@@ -803,6 +804,84 @@ func _create_water_overlay():
 		_underwater_player.stream = water_snd
 		_underwater_player.volume_db = -8.0
 	add_child(_underwater_player)
+	# Son spatial cascade (3D positionnel)
+	_waterfall_player = AudioStreamPlayer3D.new()
+	var wf_snd = load("res://Audio/waterfall.ogg")
+	print("[WATERFALL] load res://Audio/waterfall.ogg = ", wf_snd)
+	if wf_snd:
+		if "loop" in wf_snd:
+			wf_snd.loop = true
+		_waterfall_player.stream = wf_snd
+		_waterfall_player.unit_size = 1.0
+		_waterfall_player.max_distance = 11.0
+		_waterfall_player.attenuation_model = AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE
+		_waterfall_player.volume_db = 0.0
+	add_child(_waterfall_player)
+	# Garantit le loop même si le flag n'est pas pris en compte par l'import
+	_waterfall_player.finished.connect(func():
+		if not is_head_underwater and _waterfall_player.stream != null:
+			_waterfall_player.play()
+	)
+
+# === Cascade audio (son spatial) ===
+var _waterfall_player: AudioStreamPlayer3D = null
+var _waterfall_scan_timer: float = 0.0
+const WATERFALL_SCAN_INTERVAL := 0.3
+const WATERFALL_RANGE := 11
+
+func _update_waterfall_audio(delta: float):
+	if _waterfall_player == null or world_manager == null:
+		return
+	# Couper net si on est sous l'eau (le son sous-marin prend le relais)
+	if is_head_underwater:
+		if _waterfall_player.playing:
+			_waterfall_player.stop()
+		return
+	_waterfall_scan_timer += delta
+	if _waterfall_scan_timer < WATERFALL_SCAN_INTERVAL:
+		return
+	_waterfall_scan_timer = 0.0
+	# Cherche le bloc d'eau "en chute" le plus proche (WATER avec WATER au-dessus)
+	var origin = global_position.floor()
+	var best_pos := Vector3.ZERO
+	var best_dist_sq := float(WATERFALL_RANGE * WATERFALL_RANGE + 1)
+	var found := false
+	for dx in range(-WATERFALL_RANGE, WATERFALL_RANGE + 1):
+		for dy in range(-WATERFALL_RANGE, WATERFALL_RANGE + 1):
+			for dz in range(-WATERFALL_RANGE, WATERFALL_RANGE + 1):
+				var d2 = dx * dx + dy * dy + dz * dz
+				if d2 >= best_dist_sq:
+					continue
+				var p = origin + Vector3(dx, dy, dz)
+				if world_manager.get_block_at_position(p) != BlockRegistry.BlockType.WATER:
+					continue
+				# Critère cascade : eau qui chute (eau au-dessus) OU source qui déverse (air en-dessous)
+				var above = world_manager.get_block_at_position(p + Vector3(0, 1, 0))
+				var below = world_manager.get_block_at_position(p + Vector3(0, -1, 0))
+				var falling = (above == BlockRegistry.BlockType.WATER) or (below == BlockRegistry.BlockType.AIR)
+				if not falling:
+					continue
+				# Au moins une face latérale visible (donne sur de l'air)
+				var visible := false
+				for off in [Vector3(1,0,0), Vector3(-1,0,0), Vector3(0,0,1), Vector3(0,0,-1)]:
+					var nb = world_manager.get_block_at_position(p + off)
+					if nb == BlockRegistry.BlockType.AIR:
+						visible = true
+						break
+				if not visible:
+					continue
+				best_dist_sq = d2
+				best_pos = p + Vector3(0.5, 0.5, 0.5)
+				found = true
+	if found:
+		_waterfall_player.global_position = best_pos
+		if not _waterfall_player.playing:
+			print("[WATERFALL] play at ", best_pos, " dist=", sqrt(best_dist_sq), " stream=", _waterfall_player.stream)
+			_waterfall_player.play()
+	else:
+		if _waterfall_player.playing:
+			print("[WATERFALL] stop (no candidate)")
+			_waterfall_player.stop()
 
 func _update_underwater(delta: float):
 	var head_underwater = false
@@ -908,6 +987,7 @@ func _physics_process(delta):
 
 	# Effet visuel + sonore sous l'eau + noyade
 	_update_underwater(delta)
+	_update_waterfall_audio(delta)
 
 	# Sécurité : forcer la collision du chunk sous les pieds du joueur
 	# (empêche de traverser le sol quand la collision n'est pas encore créée)
@@ -1204,6 +1284,14 @@ func _handle_block_interaction(delta: float):
 			return
 		# Nourriture — ne pas placer
 		if _is_food_slot():
+			return
+
+		# Seau (bucket) — remplissage/vidage
+		var cur_tool := _get_selected_tool()
+		if cur_tool == ToolRegistry.ToolType.BUCKET_EMPTY \
+				or cur_tool == ToolRegistry.ToolType.BUCKET_WATER \
+				or cur_tool == ToolRegistry.ToolType.BUCKET_LAVA:
+			_handle_bucket(cur_tool, break_pos, break_block_type, place_pos)
 			return
 
 		# Shift+clic droit : rotation de bloc (vitres, barreaux)
@@ -1560,6 +1648,58 @@ func _update_hand_display():
 		hand_renderer.update_held_item_sprite(tool_type)
 	else:
 		hand_renderer.update_held_item(selected_block_type)
+
+## Remplacer le ToolType du slot courant (utilisé par le seau)
+func _swap_current_tool(new_tool: ToolRegistry.ToolType):
+	var old_tool = hotbar_tool_slots[selected_slot]
+	hotbar_tool_slots[selected_slot] = new_tool
+	# Ajuster tool_inventory
+	if old_tool != ToolRegistry.ToolType.NONE:
+		tool_inventory[old_tool] = max(0, tool_inventory.get(old_tool, 1) - 1)
+	if new_tool != ToolRegistry.ToolType.NONE:
+		tool_inventory[new_tool] = tool_inventory.get(new_tool, 0) + 1
+	# Rafraîchir la main ; le hotbar_ui se resynchronise tout seul chaque frame
+	_update_hand_display()
+
+## Gère clic droit avec un seau : remplir depuis eau/lave, ou verser
+func _handle_bucket(tool: ToolRegistry.ToolType, target_pos: Vector3, target_type: int, place_pos: Vector3):
+	# Remplir un seau vide depuis un bloc d'eau/lave pointé
+	if tool == ToolRegistry.ToolType.BUCKET_EMPTY:
+		if target_type == BlockRegistry.BlockType.WATER:
+			world_manager.set_block_at_position(target_pos, BlockRegistry.BlockType.AIR)
+			_swap_current_tool(ToolRegistry.ToolType.BUCKET_WATER)
+			if hand_renderer:
+				hand_renderer.play_swing()
+			return
+		# Lave : pas encore de bloc LAVA dans le registry — no-op gracieux
+		return
+
+	# Seau rempli : verser dans l'air (ou dans une cross-mesh)
+	var fluid_type: int = -1
+	if tool == ToolRegistry.ToolType.BUCKET_WATER:
+		fluid_type = BlockRegistry.BlockType.WATER
+	elif tool == ToolRegistry.ToolType.BUCKET_LAVA:
+		# Pas encore de bloc LAVA dans le registry — no-op gracieux
+		return
+	if fluid_type < 0:
+		return
+
+	var dest_pos: Vector3 = place_pos
+	var dest_type: int = world_manager.get_block_at_position(dest_pos)
+	if dest_type != BlockRegistry.BlockType.AIR and not BlockRegistry.is_cross_mesh(dest_type):
+		# Si on vise directement un bloc air/flora, verser dedans ; sinon abandonner
+		if target_type == BlockRegistry.BlockType.AIR:
+			dest_pos = target_pos
+		else:
+			return
+	world_manager.set_block_at_position(dest_pos, fluid_type)
+	# Lancer la propagation
+	var fluid_mgr = get_node_or_null("/root/FluidFlowManager")
+	if fluid_mgr and fluid_mgr.has_method("schedule_source"):
+		fluid_mgr.schedule_source(Vector3i(int(floor(dest_pos.x)), int(floor(dest_pos.y)), int(floor(dest_pos.z))), fluid_type)
+	_swap_current_tool(ToolRegistry.ToolType.BUCKET_EMPTY)
+	if hand_renderer:
+		hand_renderer.play_swing()
 
 func _get_selected_tool() -> ToolRegistry.ToolType:
 	if selected_slot >= 0 and selected_slot < hotbar_tool_slots.size():

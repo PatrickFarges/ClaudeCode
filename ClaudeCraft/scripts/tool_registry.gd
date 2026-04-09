@@ -24,6 +24,9 @@ enum ToolType {
 	WOOD_AXE,
 	WOOD_PICKAXE,
 	IRON_AXE,
+	BUCKET_EMPTY,
+	BUCKET_WATER,
+	BUCKET_LAVA,
 }
 
 # ============================================================
@@ -217,6 +220,27 @@ static var TOOL_DATA = {
 		"item_texture": "bow",
 		"mining_speed": {},
 		"durability": 384,
+		"attack_damage": 1,
+	},
+	ToolType.BUCKET_EMPTY: {
+		"name": "Seau vide",
+		"item_texture": "bucket",
+		"mining_speed": {},
+		"durability": 64,
+		"attack_damage": 1,
+	},
+	ToolType.BUCKET_WATER: {
+		"name": "Seau d'eau",
+		"item_texture": "water_bucket",
+		"mining_speed": {},
+		"durability": 64,
+		"attack_damage": 1,
+	},
+	ToolType.BUCKET_LAVA: {
+		"name": "Seau de lave",
+		"item_texture": "lava_bucket",
+		"mining_speed": {},
+		"durability": 64,
 		"attack_damage": 1,
 	},
 	ToolType.SHIELD: {

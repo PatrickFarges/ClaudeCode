@@ -17,12 +17,14 @@ Jeu voxel type Minecraft en GDScript avec Godot 4.6+, style pastel. Évolue vers
 ### Monde et rendu
 - **`game_config.gd`** : config centrale (`const GC = preload()`). `ACTIVE_PACK` = "Faithful32"
 - **`block_registry.gd`** : 98 types de blocs (dont architecturaux 83-97), couleurs pastel, dureté, textures par face
-- **`chunk.gd`** : 16x16x256, greedy meshing, AO, collision ConcavePolygon, torches OmniLight3D (max 16/chunk), flora cross billboards, special shape mesh
+- **`chunk.gd`** : 16x16x256, greedy meshing, AO, collision ConcavePolygon, torches OmniLight3D (max 16/chunk), flora cross billboards, special shape mesh, water shader
 - **`chunk_generator.gd`** : génération threadée (4 workers), terrain MC 1.18 (continentalness + erosion + domain warping), grottes spaghetti, minerais
 - **`texture_manager.gd`** : Texture2DArray (102 layers), auto-détection résolution, fallback aliases
 - **`cloud_manager.gd`** : nuages procéduraux FBM 4 octaves, vent animé, presets par mode rendu
 - **`weather_manager.gd`** : météo dynamique 4 états (Clair/Nuageux/Pluie/Orage), GPUParticles3D, éclairs, F4 cycle
 - **`structure_manager.gd`** : Autoload, structures JSON RLE, thread-safe
+- **`fluid_flow_manager.gd`** : Autoload, moteur de propagation eau/lave BFS tick-based 200ms, gravité d'abord puis horizontal max 7 blocs, détection plaine 3x3 anti-Waterworld, hook sur break_block
+- **`shaders/`** : 5 shaders custom — `block_texture_array` (blocs solides), `block_texture_array_cross` (végétation + vent), `water` (unshaded bleu + shimmer), `clouds` (FBM), `rain` (étirement drops)
 
 ### Village autonome (The Settlers)
 - **`village_manager.gd`** : stockpile partagé, 4 phases progression, 11 blueprints, mine 3x3, forge, agriculture, construction parallèle, stockage coffres
@@ -98,7 +100,7 @@ Certaines animations vanilla (`bow_and_arrow`, `charging`, `sleeping`) dépenden
 
 ## Direction du projet
 
-**Version actuelle : v21.2.0**
+**Version actuelle : v21.5.0**
 
 ### Phases terminées
 
@@ -114,6 +116,10 @@ Certaines animations vanilla (`bow_and_arrow`, `charging`, `sleeping`) dépenden
 | - | v21.1.0 | **Optimisation massive** : PackedByteArray flat chunks, Semaphore workers, greedy mask flat, keyframe pre-sort, dirty flags UI, caches statiques (18 fichiers, 25+ fixes) |
 
 | - | v21.2.0 | **Fenêtre de recettes** : recipe_book_ui.gd, 5 onglets catégories, filtre fabricables, recherche, auto-craft, intégré inventaire+craft |
+| - | v21.3.0 | **Shaders** : water shader (vagues, fresnel, UV scrolling, reflets), vent sur végétation cross |
+| - | v21.4.0 | **Eau Vivante Phase 1** : `fluid_flow_manager.gd` autoload, BFS tick-based 200ms, gravité + propagation horizontale max 7 blocs, anti-Waterworld (plaine 3x3), trigger sur break_block |
+| - | v21.5.0 | **Eau Vivante Phase 2 — Bucket** : ToolType BUCKET_EMPTY/WATER/LAVA, clic droit pour remplir depuis eau source ou verser (schedule_source sur FluidFlowManager), swap auto du ToolType dans le slot, hache de pierre du spawn remplacée par un seau vide (slot 5) pour tests rapides. Lave non implémentée (bloc LAVA absent du registry). |
+| - | v21.4.1 | **Eau Vivante Phase 1.1** : tick 0.4s + délai 0.8s avant fill (feel progressif), faces latérales + bottom du water mesh (colonnes/cascades visibles), overlay sous-marin 45% → 72% opacité |
 
 ### À venir
 
