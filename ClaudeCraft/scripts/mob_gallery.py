@@ -34,7 +34,7 @@ Changelog:
              orbite camera, QPainter overlay pour noms
 """
 
-APP_VERSION = "2.0.0"
+APP_VERSION = "2.1.0"
 
 import sys
 import json
@@ -528,19 +528,26 @@ class MobGalleryWidget(QOpenGLWidget):
         self.show_bones = False
         self.hover_item = None  # (list_type, index) for panel hover
 
-        # Load all GLB files from directory
+        # Load all GLB files from directory — only mobs with Bedrock animations
         glb_files = sorted(Path(mob_dir).glob("*.glb"))
-        print(f"Chargement de {len(glb_files)} modeles depuis {mob_dir}...")
+        skipped = []
+        print(f"Scan de {len(glb_files)} modeles depuis {mob_dir}...")
         for p in glb_files:
             try:
                 entry = MobEntry(p)
+                # Filtrer : n'afficher que les mobs avec de vraies animations Bedrock
+                if not entry.animator.bedrock.has_bedrock_animations():
+                    skipped.append(entry.name)
+                    continue
                 self.models.append(entry)
-                print(f"  {entry.name} -- {len(entry.glb.positions)} verts, "
+                print(f"  OK  {entry.name} -- {len(entry.glb.positions)} verts, "
                       f"{len(entry.glb.animations)} anims, "
                       f"height={entry.cam_target_y*2:.2f}")
             except Exception as e:
                 print(f"  ERREUR {p.name}: {e}")
-        print(f"{len(self.models)} modeles charges")
+        if skipped:
+            print(f"  Ignores (pas d'anims Bedrock) : {', '.join(skipped)}")
+        print(f"{len(self.models)} modeles charges ({len(skipped)} ignores)")
 
         # Animation timer
         self._timer = QTimer(self)

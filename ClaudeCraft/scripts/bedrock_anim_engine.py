@@ -1,13 +1,16 @@
 """
-bedrock_anim_engine.py v1.0.0
+bedrock_anim_engine.py v1.1.0
 Moteur d'animation Bedrock en Python (pour character_viewer.py et mob_gallery.py).
 Contient l'evaluateur Molang et le chargeur/joueur d'animations Bedrock JSON.
 
 Changelog:
+    v1.1.0 - Entity defs versionnees (horse_v3 etc.), guess anim ameliore
+             (common.look_at_target, fichiers _v3), scripts.animate legacy,
+             has_bedrock_animations() pour filtrage galerie
     v1.0.0 - Implementation initiale : Molang parser + evaluator + animation player
 """
 
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 
 import math
 import json
@@ -472,20 +475,56 @@ class BedrockAnimPlayer:
             count += 1
         return count
 
+    @staticmethod
+    def _find_entity_def(entity_id, entity_dir):
+        """Trouve le fichier entity definition (direct ou versionné)."""
+        path = os.path.join(entity_dir, f"{entity_id}.entity.json")
+        if os.path.exists(path):
+            return path
+        for v in [3, 2, 1]:
+            vpath = os.path.join(entity_dir, f"{entity_id}_v{v}.entity.json")
+            if os.path.exists(vpath):
+                return vpath
+        return None
+
+    @staticmethod
+    def _guess_anim_file(full_name, anim_dir):
+        """Devine le fichier d'animation à charger depuis le nom complet."""
+        parts = full_name.split(".")
+        if len(parts) < 3 or parts[0] != "animation":
+            return None
+        entity = parts[1]
+        candidates = [entity + ".animation.json"]
+        if len(parts) >= 4:
+            candidates.append(entity + "_" + parts[2] + ".animation.json")
+        candidates.append(parts[2] + ".animation.json")
+        for v in [3, 2, 1]:
+            candidates.append(entity + f"_v{v}.animation.json")
+        for fname in candidates:
+            fpath = os.path.join(anim_dir, fname)
+            if os.path.exists(fpath):
+                return fpath
+        return None
+
     def load_entity(self, entity_id, data_dir):
         """Configure from entity definition files."""
         entity_dir = os.path.join(data_dir, "entity_definitions")
         anim_dir = os.path.join(data_dir, "animations")
 
-        # Try to load entity definition
-        entity_path = os.path.join(entity_dir, f"{entity_id}.entity.json")
-        if os.path.exists(entity_path):
-            with open(entity_path) as f:
-                edata = json.load(f)
+        # Try to load entity definition (direct or versioned)
+        entity_path = self._find_entity_def(entity_id, entity_dir)
+        if entity_path:
+            try:
+                with open(entity_path) as f:
+                    edata = json.load(f)
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                entity_path = None  # Fallback si JSON invalide
+        if entity_path:
             desc = edata.get("minecraft:client_entity", {}).get("description", {})
 
             # Pre-animation scripts
-            for script in desc.get("scripts", {}).get("pre_animation", []):
+            scripts = desc.get("scripts", {})
+            for script in scripts.get("pre_animation", []):
                 if script:
                     self.pre_animation.append(script)
 
@@ -493,14 +532,27 @@ class BedrockAnimPlayer:
             anim_map = desc.get("animations", {})
             loaded_files = set()
             for short_name, full_name in anim_map.items():
-                # Guess file from animation name
-                parts = full_name.split(".")
-                if len(parts) >= 3 and parts[0] == "animation":
-                    fname = parts[1] + ".animation.json"
-                    fpath = os.path.join(anim_dir, fname)
-                    if os.path.exists(fpath) and fpath not in loaded_files:
-                        self.load_animations_file(fpath)
-                        loaded_files.add(fpath)
+                fpath = self._guess_anim_file(full_name, anim_dir)
+                if fpath and fpath not in loaded_files:
+                    self.load_animations_file(fpath)
+                    loaded_files.add(fpath)
+
+            # scripts.animate legacy (cow, pig, chicken, horse...)
+            animate_list = scripts.get("animate", [])
+            if animate_list:
+                for entry in animate_list:
+                    alias = ""
+                    if isinstance(entry, str):
+                        alias = entry
+                    elif isinstance(entry, dict):
+                        alias = next(iter(entry), "")
+                    if alias and alias in anim_map:
+                        full_name = anim_map[alias]
+                        fpath = self._guess_anim_file(full_name, anim_dir)
+                        if fpath and fpath not in loaded_files:
+                            self.load_animations_file(fpath)
+                            loaded_files.add(fpath)
+
             return True
 
         # Fallback: load entity-specific + humanoid animation files
@@ -515,6 +567,16 @@ class BedrockAnimPlayer:
             "* query.modified_move_speed / variable.gliding_speed_value) * 57.3;"
         )
         return len(self.animations) > 0
+
+    def has_bedrock_animations(self):
+        """Retourne True si ce player a des animations Bedrock chargées (pas juste le fallback humanoid)."""
+        if not self.animations:
+            return False
+        # Si on a UNIQUEMENT des animations humanoid, c'est un fallback
+        humanoid_only = all(
+            name.startswith("animation.humanoid.") for name in self.animations
+        )
+        return not humanoid_only
 
     def play(self, anim_name, weight=1.0):
         """Start playing an animation."""
