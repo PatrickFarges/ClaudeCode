@@ -1323,9 +1323,9 @@ func _handle_block_interaction(delta: float):
 		# Seau (bucket) — remplissage/vidage
 		if _holding_bucket:
 			# Réutiliser la détection d'eau faite en amont (raywalk)
-			var bucket_break_pos := break_pos
-			var bucket_break_type := break_block_type
-			var bucket_place_pos := place_pos
+			var bucket_break_pos = break_pos
+			var bucket_break_type = break_block_type
+			var bucket_place_pos = place_pos
 			if _cur_tool_early == ToolRegistry.ToolType.BUCKET_EMPTY and _water_ray_pos.y > -9000:
 				bucket_break_pos = _water_ray_pos
 				bucket_break_type = BlockRegistry.BlockType.WATER
