@@ -1,4 +1,4 @@
-## BedrockAnimPlayer v1.1.0
+## BedrockAnimPlayer v1.2.0
 ## Moteur d'animation Bedrock pour ClaudeCraft.
 ## Charge les animations JSON Bedrock, évalue les expressions Molang par frame,
 ## et applique les transformations directement aux bones du Skeleton3D.
@@ -459,12 +459,11 @@ func _evaluate_controllers() -> void:
 				weight = molang.evaluate(anim_entry["condition"])
 				if weight == 0.0:
 					continue
-				# Clamp pour les controllers synthétiques issus de `scripts.animate` :
-				# la condition Molang peut être une valeur continue (ex: query.modified_move_speed=3.0)
-				# qui, utilisée comme weight brut, multiplierait l'amplitude des keyframes.
-				# Le flag `clamp_weight` est posé par BedrockEntityLoader pour ces entries legacy.
-				if anim_entry.get("clamp_weight", false):
-					weight = clampf(weight, 0.0, 1.0)
+				# Clamp universel à [0,1] : les conditions Molang comme
+				# query.modified_move_speed produisent des valeurs > 1 (vitesse brute),
+				# mais les blend weights Bedrock sont toujours dans [0,1].
+				# Ceci corrige les animations désarticulées (llama, cow, etc.)
+				weight = clampf(weight, 0.0, 1.0)
 
 			# Don't add duplicates
 			var found := false

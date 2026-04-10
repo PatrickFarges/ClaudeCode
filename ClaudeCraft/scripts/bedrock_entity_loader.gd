@@ -12,10 +12,13 @@
 ## v1.1.0 - Support de `desc.scripts.animate` (entités legacy cow/pig/sheep/chicken) :
 ##          création d'un controller synthétique `__auto.<entity>.move` si absent,
 ##          fix des animations walk des mobs quadrupèdes.
+## v1.2.0 - Entity defs versionnées (horse_v3, etc.), guess_anim/ctrl amélioré,
+##          chargement animation.common.* (look_at_target), clamp_weight retiré
+##          (déplacé en clamp universel dans BedrockAnimPlayer).
 
 class_name BedrockEntityLoader
 
-const APP_VERSION := "1.1.0"
+const APP_VERSION := "1.2.0"
 
 # Paths de base (relatifs à res://)
 const ANIM_DIR := "res://data/animations/"
@@ -123,7 +126,6 @@ static func configure_entity(bap: BedrockAnimPlayer, entity_id: String) -> bool:
 			state.animations.append({
 				"name": full_anim,
 				"condition": cond_expr,
-				"clamp_weight": true,  # Les conditions scripts.animate sont booléennes/continues → clamp à 1.0
 			})
 
 		synth_ctrl.states["default"] = state
@@ -165,14 +167,25 @@ static func _configure_fallback(bap: BedrockAnimPlayer, entity_id: String) -> bo
 
 
 ## Charge et cache une entity definition.
+## Essaie d'abord le nom direct (cow.entity.json), puis les versions
+## décroissantes (horse_v3, horse_v2, horse_v1) pour les entités Bedrock versionées.
 static func _load_entity_def(entity_id: String) -> Dictionary:
 	if _entity_cache.has(entity_id):
 		return _entity_cache[entity_id]
 
 	var path := ENTITY_DIR + entity_id + ".entity.json"
 	if not FileAccess.file_exists(path):
-		_entity_cache[entity_id] = {}
-		return {}
+		# Essayer les versions décroissantes (v3, v2, v1)
+		var found := false
+		for v in [3, 2, 1]:
+			var vpath := ENTITY_DIR + entity_id + "_v" + str(v) + ".entity.json"
+			if FileAccess.file_exists(vpath):
+				path = vpath
+				found = true
+				break
+		if not found:
+			_entity_cache[entity_id] = {}
+			return {}
 
 	var file := FileAccess.open(path, FileAccess.READ)
 	if not file:
@@ -203,12 +216,24 @@ static func _guess_anim_file(anim_name: String) -> String:
 		var fname := entity + ".animation.json"
 		if FileAccess.file_exists(ANIM_DIR + fname):
 			return fname
-		# Try with more parts
+		# Try with more parts (e.g. animation.horse.v3.walk → horse_v3)
 		if parts.size() >= 4:
 			var compound := entity + "_" + parts[2]
 			fname = compound + ".animation.json"
 			if FileAccess.file_exists(ANIM_DIR + fname):
 				return fname
+		# Try action name as filename (e.g. animation.common.look_at_target → look_at_target.animation.json)
+		if parts.size() >= 3:
+			var action := parts[2]
+			fname = action + ".animation.json"
+			if FileAccess.file_exists(ANIM_DIR + fname):
+				return fname
+		# Try versioned entity files (e.g. animation.horse.v3.walk → horse_v3)
+		if parts.size() >= 4:
+			for v in [3, 2, 1]:
+				fname = entity + "_v" + str(v) + ".animation.json"
+				if FileAccess.file_exists(ANIM_DIR + fname):
+					return fname
 	return ""
 
 
@@ -222,6 +247,17 @@ static func _guess_ctrl_file(ctrl_name: String) -> String:
 		var fname := entity + ".animation_controllers.json"
 		if FileAccess.file_exists(CTRL_DIR + fname):
 			return fname
+		# Try versioned files (e.g. controller.animation.horse.v3.move → horse_v3)
+		if parts.size() >= 5:
+			var compound := entity + "_" + parts[3]
+			fname = compound + ".animation_controllers.json"
+			if FileAccess.file_exists(CTRL_DIR + fname):
+				return fname
+		# Try versioned entity (horse → horse_v3, horse_v2, horse_v1)
+		for v in [3, 2, 1]:
+			fname = entity + "_v" + str(v) + ".animation_controllers.json"
+			if FileAccess.file_exists(CTRL_DIR + fname):
+				return fname
 	return ""
 
 

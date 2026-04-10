@@ -1291,7 +1291,18 @@ func _handle_block_interaction(delta: float):
 		if cur_tool == ToolRegistry.ToolType.BUCKET_EMPTY \
 				or cur_tool == ToolRegistry.ToolType.BUCKET_WATER \
 				or cur_tool == ToolRegistry.ToolType.BUCKET_LAVA:
-			_handle_bucket(cur_tool, break_pos, break_block_type, place_pos)
+			# L'eau n'a pas de collision physique, donc le raycast la traverse.
+			# Pour le seau vide, scanner les voxels le long du rayon pour trouver l'eau.
+			var bucket_break_pos := break_pos
+			var bucket_break_type := break_block_type
+			var bucket_place_pos := place_pos
+			if cur_tool == ToolRegistry.ToolType.BUCKET_EMPTY:
+				var water_pos := _find_water_along_ray()
+				if water_pos.y > -9000:
+					bucket_break_pos = water_pos
+					bucket_break_type = BlockRegistry.BlockType.WATER
+					bucket_place_pos = water_pos
+			_handle_bucket(cur_tool, bucket_break_pos, bucket_break_type, bucket_place_pos)
 			return
 
 		# Shift+clic droit : rotation de bloc (vitres, barreaux)
@@ -1407,6 +1418,25 @@ func _handle_block_interaction(delta: float):
 	# Arrêter de manger si clic droit relâché
 	if not Input.is_action_pressed("place_block") and is_eating:
 		_cancel_eating()
+
+func _find_water_along_ray() -> Vector3:
+	"""Raywalk manuel pour détecter les blocs d'eau le long du regard (pas de collision physique)."""
+	var origin = camera.global_position
+	var dir = -camera.global_basis.z
+	var last_block = Vector3i(-9999, -9999, -9999)
+	for i in range(int(reach_distance * 8)):
+		var t = i * 0.125
+		var pos = origin + dir * t
+		var block_pos = Vector3i(int(floor(pos.x)), int(floor(pos.y)), int(floor(pos.z)))
+		if block_pos == last_block:
+			continue
+		last_block = block_pos
+		var bt = world_manager.get_block_at_position(Vector3(block_pos))
+		if bt == BlockRegistry.BlockType.WATER:
+			return Vector3(block_pos)
+		if bt != BlockRegistry.BlockType.AIR and BlockRegistry.is_solid(bt):
+			break
+	return Vector3(-9999, -9999, -9999)
 
 func _find_cross_mesh_along_ray() -> Vector3:
 	"""Raywalk manuel pour detecter les cross-mesh le long du regard."""
