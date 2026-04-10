@@ -1,6 +1,7 @@
 extends CharacterBody3D
 
 const ArmorMgr = preload("res://scripts/armor_manager.gd")
+const GC = preload("res://scripts/game_config.gd")
 
 # Paramètres de mouvement
 @export var speed: float = 5.0
@@ -42,6 +43,12 @@ const STEVE_GLB = "res://assets/PlayerModel/steve.glb"
 const STEVE_SKIN = "res://assets/PlayerModel/steve_skin.png"
 static var _steve_packed: PackedScene = null
 var _player_skeleton: Skeleton3D = null
+
+# Outil/bloc tenu en 3e personne (BoneAttachment3D sur rightItem)
+var _tp_right_attachment: BoneAttachment3D = null
+var _tp_right_mesh: MeshInstance3D = null
+var _tp_current_tool: int = -1  # ToolType ou -1
+var _tp_current_block: int = -1  # BlockType ou -1
 
 # Armure equipee sur le joueur
 var equipped_armor: Dictionary = {}  # piece_name -> material_name
@@ -353,6 +360,8 @@ func _create_player_model():
 		#print("Player: modèle 3e personne prêt (%d anims)" % _player_anim.get_animation_list().size())
 	# Trouver le skeleton pour le systeme d'armure
 	_player_skeleton = NodeUtils.find_skeleton(_player_model)
+	# Préparer le BoneAttachment3D pour l'outil/bloc tenu en 3e personne
+	_setup_tp_held_item()
 
 func equip_armor_set(armor_material: String) -> void:
 	if not _player_skeleton:
@@ -418,16 +427,20 @@ func _cycle_camera_mode():
 				_player_model.visible = false
 			if hand_renderer:
 				hand_renderer.visible = true
+			if _tp_right_mesh:
+				_tp_right_mesh.visible = false
 		1:  # 3ème personne dos
 			if _player_model:
 				_player_model.visible = true
 			if hand_renderer:
 				hand_renderer.visible = false
+			_update_tp_held_item()
 		2:  # 3ème personne face
 			if _player_model:
 				_player_model.visible = true
 			if hand_renderer:
 				hand_renderer.visible = false
+			_update_tp_held_item()
 
 func _update_third_person_camera():
 	if camera_mode == 0:
@@ -1671,6 +1684,7 @@ func _update_hand_display():
 			hand_renderer.update_held_tool_node(node, Vector3(0, -45, 0), 0.20)
 		else:
 			hand_renderer.update_held_item(BlockRegistry.BlockType.AIR)
+		_update_tp_held_item()
 		return
 	# Outil ? → flat sprite depuis la texture d'item du pack
 	var tool_type = _get_selected_tool()
@@ -1678,6 +1692,8 @@ func _update_hand_display():
 		hand_renderer.update_held_item_sprite(tool_type)
 	else:
 		hand_renderer.update_held_item(selected_block_type)
+	# Mise à jour 3e personne
+	_update_tp_held_item()
 
 ## Remplacer le ToolType du slot courant (utilisé par le seau)
 func _swap_current_tool(new_tool: ToolRegistry.ToolType):
@@ -1861,6 +1877,154 @@ func _respawn():
 	velocity = Vector3.ZERO
 	_was_on_floor = true
 	damage_cooldown = DAMAGE_COOLDOWN_TIME
+
+# ============================================================
+# OUTIL/BLOC TENU EN 3E PERSONNE
+# ============================================================
+const TP_TOOL_SIZE = 0.70  # Même taille que NpcVillager.NPC_TOOL_SIZE (pour le positionnement)
+const TP_BLOCK_SIZE = 0.35  # Taille du cube bloc en main 3e personne
+
+func _setup_tp_held_item():
+	if not _player_skeleton:
+		return
+	var bone_idx = _player_skeleton.find_bone("rightItem")
+	if bone_idx < 0:
+		return
+	_tp_right_attachment = BoneAttachment3D.new()
+	_tp_right_attachment.bone_name = "rightItem"
+	_tp_right_attachment.bone_idx = bone_idx
+	_player_skeleton.add_child(_tp_right_attachment)
+	_tp_right_mesh = MeshInstance3D.new()
+	_tp_right_mesh.visible = false
+	_tp_right_mesh.extra_cull_margin = 100.0
+	_tp_right_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_tp_right_attachment.add_child(_tp_right_mesh)
+
+func _update_tp_held_item():
+	if not _tp_right_mesh:
+		return
+	# Invisible en 1e personne
+	if camera_mode == 0:
+		_tp_right_mesh.visible = false
+		return
+
+	var tool_type = _get_selected_tool()
+	var block_type = selected_block_type
+
+	# Nourriture → cacher (pas de modèle 3D food en main pour l'instant)
+	if _is_food_slot():
+		_tp_right_mesh.visible = false
+		_tp_current_tool = -1
+		_tp_current_block = -1
+		return
+
+	if tool_type != ToolRegistry.ToolType.NONE:
+		# Outil — vérifier si déjà le bon mesh
+		if _tp_current_tool == tool_type:
+			_tp_right_mesh.visible = true
+			return
+		var tex_path = ToolRegistry.get_item_texture_path(tool_type)
+		if tex_path.is_empty():
+			_tp_right_mesh.visible = false
+			return
+		# Réutiliser le mesh builder statique des PNJ
+		var mesh = NpcVillager._build_npc_tool_mesh(tex_path, Vector3(180, 90, 0))
+		if mesh:
+			_tp_right_mesh.mesh = mesh
+			_tp_right_mesh.position = Vector3(0.0, -TP_TOOL_SIZE * 0.5 - 0.1, 0.0)
+			_tp_right_mesh.rotation_degrees = Vector3(-45, 0, 0)
+			_tp_right_mesh.material_override = null
+			_tp_right_mesh.visible = true
+			_tp_current_tool = tool_type
+			_tp_current_block = -1
+		else:
+			_tp_right_mesh.visible = false
+	elif block_type != BlockRegistry.BlockType.AIR:
+		# Bloc — vérifier si déjà le bon mesh
+		if _tp_current_block == block_type:
+			_tp_right_mesh.visible = true
+			return
+		var mesh = _build_tp_block_cube(block_type)
+		if mesh:
+			_tp_right_mesh.mesh = mesh
+			_tp_right_mesh.position = Vector3(0.0, -TP_BLOCK_SIZE * 0.5, 0.0)
+			_tp_right_mesh.rotation_degrees = Vector3(0, 45, 0)
+			_tp_right_mesh.material_override = null
+			_tp_right_mesh.visible = true
+			_tp_current_block = block_type
+			_tp_current_tool = -1
+		else:
+			_tp_right_mesh.visible = false
+	else:
+		# Mains vides
+		_tp_right_mesh.visible = false
+		_tp_current_tool = -1
+		_tp_current_block = -1
+
+static var _tp_block_cache: Dictionary = {}  # cache par BlockType
+
+func _build_tp_block_cube(block_type: BlockRegistry.BlockType) -> ArrayMesh:
+	if _tp_block_cache.has(block_type):
+		return _tp_block_cache[block_type]
+	var mesh = ArrayMesh.new()
+	var s = TP_BLOCK_SIZE * 0.5
+	var face_defs = [
+		["top",    [Vector3(-s,s,-s), Vector3(s,s,-s), Vector3(s,s,s), Vector3(-s,s,s)],    Vector3(0,1,0)],
+		["bottom", [Vector3(-s,-s,s), Vector3(s,-s,s), Vector3(s,-s,-s), Vector3(-s,-s,-s)], Vector3(0,-1,0)],
+		["front",  [Vector3(-s,-s,-s), Vector3(s,-s,-s), Vector3(s,s,-s), Vector3(-s,s,-s)], Vector3(0,0,-1)],
+		["back",   [Vector3(s,-s,s), Vector3(-s,-s,s), Vector3(-s,s,s), Vector3(s,s,s)],     Vector3(0,0,1)],
+		["right",  [Vector3(s,-s,-s), Vector3(s,-s,s), Vector3(s,s,s), Vector3(s,s,-s)],     Vector3(1,0,0)],
+		["left",   [Vector3(-s,-s,s), Vector3(-s,-s,-s), Vector3(-s,s,-s), Vector3(-s,s,s)], Vector3(-1,0,0)],
+	]
+	var uvs = [Vector2(0,1), Vector2(1,1), Vector2(1,0), Vector2(0,0)]
+	for face_def in face_defs:
+		var face_name: String = face_def[0]
+		var verts: Array = face_def[1]
+		var normal: Vector3 = face_def[2]
+		var tex_name = BlockRegistry.get_face_texture(block_type, face_name)
+		var tint = BlockRegistry.get_block_tint(block_type, face_name)
+		var mat = _get_tp_face_material(tex_name, tint)
+		var st = SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		st.set_material(mat)
+		for idx in [0, 1, 2]:
+			st.set_normal(normal)
+			st.set_uv(uvs[idx])
+			st.add_vertex(verts[idx])
+		for idx in [0, 2, 3]:
+			st.set_normal(normal)
+			st.set_uv(uvs[idx])
+			st.add_vertex(verts[idx])
+		st.commit(mesh)
+	_tp_block_cache[block_type] = mesh
+	return mesh
+
+static var _tp_mat_cache: Dictionary = {}
+
+static func _get_tp_face_material(tex_name: String, tint: Color) -> StandardMaterial3D:
+	var cache_key = tex_name + str(tint)
+	if _tp_mat_cache.has(cache_key):
+		return _tp_mat_cache[cache_key]
+	var mat = StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	var abs_path = GC.resolve_block_texture(tex_name)
+	if not abs_path.is_empty():
+		var img = Image.new()
+		if img.load(abs_path) == OK:
+			img.convert(Image.FORMAT_RGBA8)
+			if tint != Color(1,1,1,1):
+				for y in range(img.get_height()):
+					for x in range(img.get_width()):
+						var c = img.get_pixel(x, y)
+						img.set_pixel(x, y, Color(c.r * tint.r, c.g * tint.g, c.b * tint.b, c.a))
+			var tex = ImageTexture.create_from_image(img)
+			mat.albedo_texture = tex
+			mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+			_tp_mat_cache[cache_key] = mat
+			return mat
+	mat.albedo_color = tint
+	_tp_mat_cache[cache_key] = mat
+	return mat
 
 func _notification(what):
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
