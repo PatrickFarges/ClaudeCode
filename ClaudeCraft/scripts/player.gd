@@ -1728,6 +1728,10 @@ func _handle_bucket(tool: ToolRegistry.ToolType, target_pos: Vector3, target_typ
 	if tool == ToolRegistry.ToolType.BUCKET_EMPTY:
 		if target_type == BlockRegistry.BlockType.WATER:
 			world_manager.set_block_at_position(target_pos, BlockRegistry.BlockType.AIR)
+			# Notifier FluidFlowManager pour que les voisins re-remplissent le trou
+			var fluid_mgr = get_node_or_null("/root/FluidFlowManager")
+			if fluid_mgr and fluid_mgr.has_method("schedule_break_fill_check"):
+				fluid_mgr.schedule_break_fill_check(Vector3i(int(floor(target_pos.x)), int(floor(target_pos.y)), int(floor(target_pos.z))))
 			_swap_current_tool(ToolRegistry.ToolType.BUCKET_WATER)
 			if hand_renderer:
 				hand_renderer.play_swing()
