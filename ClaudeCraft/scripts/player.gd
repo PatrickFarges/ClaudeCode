@@ -1186,7 +1186,23 @@ func _handle_block_interaction(delta: float):
 
 	raycast.force_raycast_update()
 
+	# Seau vide : détecter l'eau AVANT le return (l'eau n'a pas de collision)
+	var _water_ray_pos := Vector3(-9999, -9999, -9999)
+	var _holding_bucket := false
+	var _cur_tool_early := _get_selected_tool()
+	if _cur_tool_early == ToolRegistry.ToolType.BUCKET_EMPTY \
+			or _cur_tool_early == ToolRegistry.ToolType.BUCKET_WATER \
+			or _cur_tool_early == ToolRegistry.ToolType.BUCKET_LAVA:
+		_holding_bucket = true
+		if _cur_tool_early == ToolRegistry.ToolType.BUCKET_EMPTY:
+			_water_ray_pos = _find_water_along_ray()
+
 	if not raycast.is_colliding() and not hitting_cross:
+		# Même sans collision solide, le seau peut interagir avec l'eau
+		if _holding_bucket and Input.is_action_just_pressed("place_block") and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+			if _cur_tool_early == ToolRegistry.ToolType.BUCKET_EMPTY and _water_ray_pos.y > -9000:
+				_handle_bucket(_cur_tool_early, _water_ray_pos, BlockRegistry.BlockType.WATER, _water_ray_pos)
+				return
 		_cancel_mining()
 		look_block_type = BlockRegistry.BlockType.AIR
 		if block_highlighter:
@@ -1212,6 +1228,11 @@ func _handle_block_interaction(delta: float):
 
 	if not hitting_cross:
 		if not raycast.is_colliding():
+			# Bucket peut encore interagir avec l'eau détectée par raywalk
+			if _holding_bucket and Input.is_action_just_pressed("place_block") and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+				if _cur_tool_early == ToolRegistry.ToolType.BUCKET_EMPTY and _water_ray_pos.y > -9000:
+					_handle_bucket(_cur_tool_early, _water_ray_pos, BlockRegistry.BlockType.WATER, _water_ray_pos)
+					return
 			_cancel_mining()
 			if block_highlighter:
 				block_highlighter.hide_highlight()
@@ -1300,22 +1321,16 @@ func _handle_block_interaction(delta: float):
 			return
 
 		# Seau (bucket) — remplissage/vidage
-		var cur_tool := _get_selected_tool()
-		if cur_tool == ToolRegistry.ToolType.BUCKET_EMPTY \
-				or cur_tool == ToolRegistry.ToolType.BUCKET_WATER \
-				or cur_tool == ToolRegistry.ToolType.BUCKET_LAVA:
-			# L'eau n'a pas de collision physique, donc le raycast la traverse.
-			# Pour le seau vide, scanner les voxels le long du rayon pour trouver l'eau.
+		if _holding_bucket:
+			# Réutiliser la détection d'eau faite en amont (raywalk)
 			var bucket_break_pos := break_pos
 			var bucket_break_type := break_block_type
 			var bucket_place_pos := place_pos
-			if cur_tool == ToolRegistry.ToolType.BUCKET_EMPTY:
-				var water_pos := _find_water_along_ray()
-				if water_pos.y > -9000:
-					bucket_break_pos = water_pos
-					bucket_break_type = BlockRegistry.BlockType.WATER
-					bucket_place_pos = water_pos
-			_handle_bucket(cur_tool, bucket_break_pos, bucket_break_type, bucket_place_pos)
+			if _cur_tool_early == ToolRegistry.ToolType.BUCKET_EMPTY and _water_ray_pos.y > -9000:
+				bucket_break_pos = _water_ray_pos
+				bucket_break_type = BlockRegistry.BlockType.WATER
+				bucket_place_pos = _water_ray_pos
+			_handle_bucket(_cur_tool_early, bucket_break_pos, bucket_break_type, bucket_place_pos)
 			return
 
 		# Shift+clic droit : rotation de bloc (vitres, barreaux)
