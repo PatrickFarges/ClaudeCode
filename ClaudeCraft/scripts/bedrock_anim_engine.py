@@ -467,8 +467,11 @@ class BedrockAnimPlayer:
 
     def load_animations_file(self, path):
         """Load all animations from a Bedrock animation JSON file."""
-        with open(path) as f:
-            data = json.load(f)
+        try:
+            with open(path) as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return 0
         count = 0
         for anim_name, anim_data in data.get("animations", {}).items():
             self.animations[anim_name] = BedrockAnimation(anim_name, anim_data)

@@ -10,7 +10,7 @@
       "textures": {
         "default": "textures/entity/zombie_villager2/zombie-villager",
 
-        // Biome Layer
+        
         "desert": "textures/entity/zombie_villager2/biomes/biome-desert-zombie",
         "jungle": "textures/entity/zombie_villager2/biomes/biome-jungle-zombie",
         "plains": "textures/entity/zombie_villager2/biomes/biome-plains-zombie",
@@ -19,7 +19,7 @@
         "swamp": "textures/entity/zombie_villager2/biomes/biome-swamp-zombie",
         "taiga": "textures/entity/zombie_villager2/biomes/biome-taiga-zombie",
 
-        // Profession Layer
+        
         "armorer": "textures/entity/zombie_villager2/professions/armorer",
         "butcher": "textures/entity/zombie_villager2/professions/butcher",
         "cartographer": "textures/entity/zombie_villager2/professions/cartographer",
