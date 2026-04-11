@@ -1,10 +1,12 @@
 extends CharacterBody3D
 class_name PassiveMob
 
-# === MOB SYSTEM v3.4.0 ===
+# === MOB SYSTEM v3.5.0 ===
 # Charge les donnees depuis data/mob_database.json
 # Comportements : passive (fuit), neutral (attaque si provoque), hostile (attaque)
 # Systemes : faim, brulure soleil, predation, pack behavior
+# v3.5.0 : Anti-tourniquet — _force_idle_rest cherche une vraie issue (5 candidats)
+#          + nudge physique pour dégager le collider d'un obstacle (fix cheval/arbre)
 
 const GC = preload("res://scripts/game_config.gd")
 
@@ -844,19 +846,99 @@ func _is_real_wall(block: int) -> bool:
 	return block != 0 and not _is_passable(block)
 
 func _force_idle_rest(min_time: float, max_time: float):
-	"""Stop moving, turn around away from obstacle, and rest idle."""
+	"""Stop moving, find a real escape direction, physically nudge away from obstacle, then rest idle.
+
+	Fix v3.5.0 (anti-tourniquet) : la rotation sur place ne suffit pas — si le mob a la
+	tête/croupe coincée dans un tronc, tourner à 180° le laisse au même endroit avec le
+	collider toujours bloqué. On cherche maintenant une vraie direction libre parmi 5
+	candidats (opposé + perpendiculaires + variantes), puis on TÉLÉPORTE le mob de
+	~_mob_radius+0.6 dans cette direction pour dégager le collider physique.
+	"""
 	is_moving = false
 	velocity.x = 0
 	velocity.z = 0
-	# Demi-tour ~180° avec variance pour ne pas boucler
-	var turn = PI + randf_range(-0.8, 0.8)
-	rotation.y += turn
+
+	# Direction qui menait à l'obstacle = wander_direction actuel
+	var blocked_dir = wander_direction
+	if blocked_dir.length_squared() < 0.01:
+		blocked_dir = Vector3(-sin(rotation.y), 0, -cos(rotation.y))
+
+	var escape_dir = _find_escape_direction(blocked_dir)
+
+	if escape_dir != Vector3.ZERO:
+		# Nudge physique : dégage le collider du mob de l'obstacle
+		var nudge_dist = _mob_radius + 0.6
+		var nudge_target = global_position + escape_dir * nudge_dist
+		# Vérif sol présent à la nouvelle pos (ne pas téléporter dans le vide)
+		var feet_y = floori(global_position.y - 0.1)
+		if world_manager:
+			var ground_below = world_manager.get_block_at_position(Vector3(nudge_target.x, feet_y - 1, nudge_target.z).floor())
+			if not _is_passable(ground_below):
+				global_position.x = nudge_target.x
+				global_position.z = nudge_target.z
+		# Orienter le mob dans la direction de fuite
+		rotation.y = atan2(-escape_dir.x, -escape_dir.z)
+		wander_direction = escape_dir
+	else:
+		# Aucune issue trouvée → fallback rotation aléatoire (ancien comportement)
+		var turn = PI + randf_range(-0.8, 0.8)
+		rotation.y += turn
+		wander_direction = Vector3(-sin(rotation.y), 0, -cos(rotation.y))
+
 	wander_timer = randf_range(min_time, max_time)
-	# Pré-charger la direction du prochain wander
-	wander_direction = Vector3(-sin(rotation.y), 0, -cos(rotation.y))
 	_stuck_timer = 0.0
 	_last_xz_pos = global_position
 	_play_anim("idle")
+
+func _find_escape_direction(blocked_dir: Vector3) -> Vector3:
+	"""Cherche la meilleure direction d'évasion autour du mob.
+	Teste 5 candidats : opposé, perpendiculaires gauche/droite, et 2 variantes ±30° de l'opposé.
+	Score = nombre de cellules libres devant (1 à 3). Retourne Vector3.ZERO si aucune issue.
+	"""
+	if not world_manager:
+		return Vector3.ZERO
+
+	var bd = blocked_dir.normalized()
+	var opposite = -bd
+	var perp_left = Vector3(-bd.z, 0, bd.x)
+	var perp_right = Vector3(bd.z, 0, -bd.x)
+	var candidates = [
+		opposite,
+		perp_left,
+		perp_right,
+		opposite.rotated(Vector3.UP, 0.52),   # opposé +30°
+		opposite.rotated(Vector3.UP, -0.52),  # opposé -30°
+	]
+
+	var best_dir = Vector3.ZERO
+	var best_score = 0
+	var feet_y = floori(global_position.y - 0.1)
+
+	for cand in candidates:
+		var dir = cand.normalized()
+		var score = 0
+		# Compte les cellules libres en avant (1 à 3 blocs)
+		for d in range(1, 4):
+			var p = global_position + dir * float(d)
+			var b1 = world_manager.get_block_at_position(Vector3(p.x, feet_y + 1, p.z).floor())
+			var b2 = world_manager.get_block_at_position(Vector3(p.x, feet_y + 2, p.z).floor())
+			var b_below = world_manager.get_block_at_position(Vector3(p.x, feet_y - 1, p.z).floor())
+			var clear = _is_passable(b1) and _is_passable(b2) and not _is_passable(b_below)
+			# Mobs hauts (cheval, vache) : besoin d'espace au niveau +3
+			if clear and _mob_height > 1.5:
+				var b3 = world_manager.get_block_at_position(Vector3(p.x, feet_y + 3, p.z).floor())
+				clear = _is_passable(b3)
+			if clear:
+				score += 1
+			else:
+				break
+		if score > best_score:
+			best_score = score
+			best_dir = dir
+
+	if best_score >= 1:
+		return best_dir
+	return Vector3.ZERO
 
 func _try_auto_jump(move_dir: Vector3):
 	"""Step-up over 1-block walls when chasing/fleeing. Instant like MC."""

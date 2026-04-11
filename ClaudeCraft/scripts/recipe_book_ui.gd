@@ -1,9 +1,12 @@
-# recipe_book_ui.gd v2.0.0
+# recipe_book_ui.gd v2.1.0
 # Panneau de recettes MC Bedrock Edition — s'affiche à gauche de l'inventaire ou du craft
 # 5 onglets : Construction, Equipement, Objets, Nature, Recherche
 # Filtre fabricables, barre de recherche, grille paginée, auto-craft au clic
 # v2.0.0 — Refonte visuelle style Bedrock Edition : fond sombre programmatique,
 #           grands onglets colorés, loupe séparée, palette dark UI
+# v2.1.0 — Suppression du bouton loupe séparé en haut-droite (redondant avec l'onglet Recherche).
+#          Fix crop loupe atlas (Rect2i(21,29,26,26) au lieu de (6,6,16,16) qui tombait dans
+#          le coin vide du panneau gris → ne montrait qu'un carré blanc à coin noir).
 
 extends Control
 
@@ -28,9 +31,6 @@ const TAB_SPACING = 2
 # Visual: Construction(0), Equipment(1), Items(2), Nature(3), Search(4)
 const TAB_TO_CATEGORY = [1, 2, 3, 4, 0]  # Category.CONSTRUCTION, EQUIPMENT, ITEMS, NATURE, SEARCH
 const CATEGORY_TO_TAB = [4, 0, 1, 2, 3]  # inverse mapping
-
-# Loupe button (separate, top-right corner)
-const LOUPE_SZ = 20       # pre-scale — 40px at GUI_SCALE
 
 # Search bar sous le label catégorie
 const SEARCH_H = 12       # pre-scale
@@ -117,7 +117,6 @@ var has_furnace: bool = false
 
 # UI nodes
 var _panel_bg: Panel = null
-var _loupe_btn: Button = null
 var _tab_buttons: Array = []      # [{btn, icon}]
 var _category_label: Label = null
 var _filter_btn: Button = null
@@ -222,9 +221,6 @@ func _build_ui():
 
 	# --- Tabs (large dark buttons inside the panel, Bedrock style) ---
 	_build_tabs()
-
-	# --- Loupe button (separate, top-right corner, overlapping border) ---
-	_build_loupe_button(pw)
 
 	# --- Category label (below tabs, white text, right-aligned) ---
 	var label_y = (TAB_MARGIN_TOP + TAB_SZ + 3) * GUI_SCALE
@@ -356,10 +352,12 @@ func _build_tabs():
 		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var bt = icons_list[cat_idx]
 		if bt == -1:
+			# Loupe extraite de l'atlas recipe_book.png Faithful32 (512x512).
+			# Crop trouvé manuellement par scan des pixels colorés (zone bleue + manche orange).
 			var loupe_img = Image.load_from_file(GUI_DIR + "recipe_book.png")
 			if loupe_img:
 				loupe_img.convert(Image.FORMAT_RGBA8)
-				var loupe_region = loupe_img.get_region(Rect2i(6, 6, 16, 16))
+				var loupe_region = loupe_img.get_region(Rect2i(21, 29, 26, 26))
 				icon.texture = ImageTexture.create_from_image(loupe_region)
 		elif bt == BlockRegistry.BlockType.IRON_SWORD:
 			icon.texture = _load_tool_icon_static(bt)
@@ -370,31 +368,6 @@ func _build_tabs():
 		# Store by category index so _refresh_grid can use _tab_buttons[i] with i=category
 		_tab_buttons[cat_idx] = {"btn": btn, "icon": icon}
 
-
-func _build_loupe_button(pw: float):
-	# Loupe button — au-dessus du panneau à droite, à côté des tabs
-	var loupe_px = LOUPE_SZ * GUI_SCALE
-	_loupe_btn = Button.new()
-	_loupe_btn.flat = false
-	_loupe_btn.position = Vector2(pw - loupe_px - 4 * GUI_SCALE, TAB_MARGIN_TOP * GUI_SCALE)
-	_loupe_btn.size = Vector2(loupe_px, loupe_px)
-	var loupe_style = StyleBoxFlat.new()
-	loupe_style.bg_color = COLOR_TAB_BG
-	loupe_style.border_color = COLOR_BORDER
-	loupe_style.set_border_width_all(2)
-	loupe_style.set_corner_radius_all(0)
-	_loupe_btn.add_theme_stylebox_override("normal", loupe_style)
-	var loupe_hover = loupe_style.duplicate()
-	loupe_hover.bg_color = COLOR_TAB_SELECTED
-	_loupe_btn.add_theme_stylebox_override("hover", loupe_hover)
-	# Loupe icon
-	var loupe_img = Image.load_from_file(GUI_DIR + "recipe_book.png")
-	if loupe_img:
-		loupe_img.convert(Image.FORMAT_RGBA8)
-		var loupe_region = loupe_img.get_region(Rect2i(6, 6, 16, 16))
-		_loupe_btn.icon = ImageTexture.create_from_image(loupe_region)
-	_loupe_btn.pressed.connect(_on_tab_pressed.bind(Category.SEARCH))
-	add_child(_loupe_btn)
 
 
 func _build_recipe_grid():

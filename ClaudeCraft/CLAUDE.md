@@ -100,7 +100,7 @@ Certaines animations vanilla (`bow_and_arrow`, `charging`, `sleeping`) dépenden
 
 ## Direction du projet
 
-**Version actuelle : v21.6.0**
+**Version actuelle : v21.7.0**
 
 ### Phases terminées
 
@@ -122,6 +122,7 @@ Certaines animations vanilla (`bow_and_arrow`, `charging`, `sleeping`) dépenden
 | - | v21.5.1 | **Fix anims walk mobs legacy (scripts.animate support)** : `bedrock_entity_loader.gd` lit désormais `desc.scripts.animate` (bloc Bedrock historique utilisé par cow/pig/sheep/chicken) et crée un controller synthétique `__auto.<entity>.move`. Flag `clamp_weight` ajouté dans `bedrock_anim_player.gd` pour clamper les conditions Molang continues (ex `query.modified_move_speed`) à [0,1] sans régresser les controllers existants (llama). |
 | - | v21.4.1 | **Eau Vivante Phase 1.1** : tick 0.4s + délai 0.8s avant fill (feel progressif), faces latérales + bottom du water mesh (colonnes/cascades visibles), overlay sous-marin 45% → 72% opacité |
 | - | v21.6.0 | **Fix bucket + animations mobs** : bucket raywalk (eau sans collision → scan voxels), re-remplissage trou mer (schedule_break_fill_check), entity defs versionnées (horse_v3 etc.), 14 entity defs importées depuis Bedrock 1.21.130 (64/65 mobs complets), guess_anim/ctrl amélioré, clamp universel poids [0,1], outil/bloc tenu 3e personne (F5, BoneAttachment3D rightItem), mob_gallery filtre mobs sans anims. **Bugs restants** : animations walk cassées (moutons sans tête, boucs tête inversée, walk éclaté cheval/vache), pathfinding rotation 180° boucle |
+| - | v21.7.0 | **Fix anti-tourniquet pathfinding mobs** : `_force_idle_rest` ne se contente plus d'un demi-tour aveugle qui laisse le collider coincé dans le tronc. Nouvelle fonction `_find_escape_direction` qui teste 5 candidats (opposé + 2 perpendiculaires + 2 variantes ±30°) et score chaque direction par le nombre de cellules libres devant (1-3 blocs). Nudge physique de `_mob_radius+0.6` pour dégager le collider, avec validation sol présent (anti-falaise). Mobs hauts (cheval/vache) vérifient aussi b+3. Fallback rotation aléatoire si aucune issue trouvée (mob `_truly_stuck` après 4 échecs comme avant). **Bonus UI** : recipe_book_ui v2.1.0 — bouton loupe séparé en haut-droite supprimé (redondant avec l'onglet Recherche), fix crop loupe atlas `Rect2i(21,29,26,26)` (au lieu de `(6,6,16,16)` qui tombait dans le coin vide). |
 
 ### À venir
 
