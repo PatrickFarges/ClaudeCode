@@ -5,9 +5,14 @@ Application desktop Python 3 / Tkinter qui compare deux PDF de bulletins de paie
 ## Lancer
 
 ```bash
+cd /mnt/Raid4Tb/Program/ClaudeCode/ComparePDF
+python3 -m venv .venv
+source .venv/bin/activate
 pip install pypdf openpyxl
 python Compare_PDF_V4.py
 ```
+
+**Dépendances système Linux :** Tkinter via `sudo apt install python3-tk` si manquant.
 
 ## Architecture (fichier unique `Compare_PDF_V4.py`, ~800 lignes)
 

@@ -8,7 +8,9 @@ Projet d'analyse automatisée de tickets SAP liés à la **DSN** (Déclaration S
 
 ## Sources de données
 
-| Source | Chemin | Contenu |
+> **Note Linux :** les chemins ci-dessous sont les chemins Windows historiques sur lesquels le scan a été effectué. Les rapports `RAPPORT_DSN_ANALYSE.txt` et JSON associés sont déjà générés et committés dans le repo. Pour relancer un scan sous Linux, remonter les dossiers (clé USB / partition NTFS / sshfs) et adapter les chemins en tête des scripts `scan_dsn_tickets*.py`.
+
+| Source | Chemin (legacy Windows) | Contenu |
 |--------|--------|---------|
 | Julio (par année) | `E:\Dossier Manuel (CV, taf, dev etc)\NGA\Travail (NGA et autres)\Tous les TE de Julio` | 1887 fichiers, 5 ans (2019-2023), sous-dossiers par mois |
 | SAP Ticket (par client) | `E:\Dossier Manuel (CV, taf, dev etc)\NGA\Travail (NGA et autres)\SAP Ticket\SAP Ticket` | 1271 fichiers, 9 clients (Corning, Akzo Nobel, Astellas, Lonza, Leo Pharma, Alcon, Bunge, Abbvie, Reckitt) |
@@ -80,8 +82,15 @@ Regex pour capturer les noms de tables/vues : `V_T5F*`, `T5F*`, `V_T596*`, `V_T5
 
 ## Dépendances
 
-- Python 3.12 avec `openpyxl` (3.1.5)
-- Pas de virtualenv, pas de tests, pas de linting
+- Python 3.12+ avec `openpyxl` (3.1.5)
+- Sous Linux : créer le venv et installer `openpyxl` :
+  ```bash
+  cd /mnt/Raid4Tb/Program/ClaudeCode/SAP_DSN
+  python3 -m venv .venv
+  source .venv/bin/activate
+  pip install openpyxl
+  ```
+- Pas de tests, pas de linting
 
 ## Notes
 

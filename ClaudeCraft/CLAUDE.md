@@ -4,13 +4,15 @@ Jeu voxel type Minecraft en GDScript avec Godot 4.6+, style pastel. Évolue vers
 
 ## Lancer
 
-**Exécutable Godot :** `D:\Program\Godot\Godot_v4.6.1-stable_win64.exe`
+**Exécutable Godot (Linux) :** `/mnt/Raid4Tb/Program/Godot/Godot_v4.6.2-stable_linux.x86_64`
 
 1. Ouvrir le projet dans Godot 4.6+
 2. Ouvrir `scenes/main.tscn`
 3. F5 pour lancer
 
-**Config :** Godot 4.6.1, JoltPhysics3D, 1920x1080 fullscreen, 60 FPS.
+Lancement en ligne de commande : `/mnt/Raid4Tb/Program/Godot/Godot_v4.6.2-stable_linux.x86_64 --path /mnt/Raid4Tb/Program/ClaudeCode/ClaudeCraft`
+
+**Config :** Godot 4.6.2, JoltPhysics3D, 1920x1080 fullscreen, 60 FPS.
 
 ## Architecture GDScript (`scripts/`)
 
@@ -100,7 +102,7 @@ Certaines animations vanilla (`bow_and_arrow`, `charging`, `sleeping`) dépenden
 
 ## Direction du projet
 
-**Version actuelle : v21.7.0**
+**Version actuelle : v21.7.2**
 
 ### Phases terminées
 
@@ -114,26 +116,31 @@ Certaines animations vanilla (`bow_and_arrow`, `charging`, `sleeping`) dépenden
 | 19-21 | v20.1-v20.5 | Fix tints, nuages procéduraux, météo dynamique, LOD distant, collision lazy |
 | 22 | v21.0.0 | **Moteur animation Bedrock** : Molang, JSON Bedrock (83 anims, 51 controllers, 147 entity defs), character_viewer v2.1 + mob_gallery v2.0 |
 | - | v21.1.0 | **Optimisation massive** : PackedByteArray flat chunks, Semaphore workers, greedy mask flat, keyframe pre-sort, dirty flags UI, caches statiques (18 fichiers, 25+ fixes) |
-
 | - | v21.2.0 | **Fenêtre de recettes** : recipe_book_ui.gd, 5 onglets catégories, filtre fabricables, recherche, auto-craft, intégré inventaire+craft |
 | - | v21.3.0 | **Shaders** : water shader (vagues, fresnel, UV scrolling, reflets), vent sur végétation cross |
 | - | v21.4.0 | **Eau Vivante Phase 1** : `fluid_flow_manager.gd` autoload, BFS tick-based 200ms, gravité + propagation horizontale max 7 blocs, anti-Waterworld (plaine 3x3), trigger sur break_block |
+| - | v21.4.1 | **Eau Vivante Phase 1.1** : tick 0.4s + délai 0.8s avant fill (feel progressif), faces latérales + bottom du water mesh (colonnes/cascades visibles), overlay sous-marin 45% → 72% opacité |
 | - | v21.5.0 | **Eau Vivante Phase 2 — Bucket** : ToolType BUCKET_EMPTY/WATER/LAVA, clic droit pour remplir depuis eau source ou verser (schedule_source sur FluidFlowManager), swap auto du ToolType dans le slot, hache de pierre du spawn remplacée par un seau vide (slot 5) pour tests rapides. Lave non implémentée (bloc LAVA absent du registry). |
 | - | v21.5.1 | **Fix anims walk mobs legacy (scripts.animate support)** : `bedrock_entity_loader.gd` lit désormais `desc.scripts.animate` (bloc Bedrock historique utilisé par cow/pig/sheep/chicken) et crée un controller synthétique `__auto.<entity>.move`. Flag `clamp_weight` ajouté dans `bedrock_anim_player.gd` pour clamper les conditions Molang continues (ex `query.modified_move_speed`) à [0,1] sans régresser les controllers existants (llama). |
-| - | v21.4.1 | **Eau Vivante Phase 1.1** : tick 0.4s + délai 0.8s avant fill (feel progressif), faces latérales + bottom du water mesh (colonnes/cascades visibles), overlay sous-marin 45% → 72% opacité |
-| - | v21.6.0 | **Fix bucket + animations mobs** : bucket raywalk (eau sans collision → scan voxels), re-remplissage trou mer (schedule_break_fill_check), entity defs versionnées (horse_v3 etc.), 14 entity defs importées depuis Bedrock 1.21.130 (64/65 mobs complets), guess_anim/ctrl amélioré, clamp universel poids [0,1], outil/bloc tenu 3e personne (F5, BoneAttachment3D rightItem), mob_gallery filtre mobs sans anims. **Bugs restants** : animations walk cassées (moutons sans tête, boucs tête inversée, walk éclaté cheval/vache), pathfinding rotation 180° boucle |
-| - | v21.7.0 | **Fix anti-tourniquet pathfinding mobs** : `_force_idle_rest` ne se contente plus d'un demi-tour aveugle qui laisse le collider coincé dans le tronc. Nouvelle fonction `_find_escape_direction` qui teste 5 candidats (opposé + 2 perpendiculaires + 2 variantes ±30°) et score chaque direction par le nombre de cellules libres devant (1-3 blocs). Nudge physique de `_mob_radius+0.6` pour dégager le collider, avec validation sol présent (anti-falaise). Mobs hauts (cheval/vache) vérifient aussi b+3. Fallback rotation aléatoire si aucune issue trouvée (mob `_truly_stuck` après 4 échecs comme avant). **Bonus UI** : recipe_book_ui v2.1.0 — bouton loupe séparé en haut-droite supprimé (redondant avec l'onglet Recherche), fix crop loupe atlas `Rect2i(21,29,26,26)` (au lieu de `(6,6,16,16)` qui tombait dans le coin vide). |
+| - | v21.6.0 | **Fix bucket + animations mobs** : bucket raywalk, re-remplissage trou mer, entity defs versionnées (horse_v3 etc.), 14 entity defs importées Bedrock 1.21.130 (64/65 mobs complets), guess_anim/ctrl amélioré, clamp universel poids [0,1], outil/bloc tenu 3e personne (F5, BoneAttachment3D rightItem), mob_gallery filtre mobs sans anims. |
+| - | v21.7.0 | **Fix anti-tourniquet pathfinding mobs** : `_force_idle_rest` teste 5 candidats de direction (opposé + 2 perpendiculaires + 2 variantes ±30°) et score par nb cellules libres, nudge physique `_mob_radius+0.6`, validation sol (anti-falaise), mobs hauts vérifient b+3, fallback rotation aléatoire. **Bonus UI** : recipe_book_ui v2.1.0 — bouton loupe supprimé (redondant), fix crop atlas `Rect2i(21,29,26,26)`. |
+| - | v21.7.1 | **Fix WALK quadrupèdes (Python viewers)** : `bedrock_anim_engine.py` v1.2.0 évalue désormais `anim_time_update` chaque frame (sans ça, `entry.time` restait à 0 → `cos(0)=1` → pattes figées à 80°). `mob_gallery.py` v2.2.0 normalise `move_speed` à 1.0 au lieu de 4.0 (évitait l'amplification ×4 de `leg_x_rot_anim * move_speed` qui faisait flipper les pattes de cheval). Walk cow/sheep/pig/horse/chicken enfin fonctionnel dans le viewer. |
+| - | v21.7.2 | **Fix apesanteur walk quadrupèdes** : deux paramètres de tuning ajoutés aux moteurs Bedrock (Python v1.3.0 + GDScript v1.3.0). `distance_scale` (2.5 côté jeu) compense la vitesse des mobs ClaudeCraft (~1.5 b/s) vs MC vanilla (4 b/s) → cycle passe de 6.3s apesanteur à ~2.4s MC-like. `leg_amplitude_scale` (0.5 côté jeu + viewer) réduit le swing ±80° hardcodé de `quadruped.walk` à ±40° plus réaliste. `passive_mob.gd` v3.6.0 + `mob_gallery.py` v2.3.0 appliquent ces scales. |
 
 ### À venir
 
 | Phase | Contenu |
 |-------|---------|
-| - | Livre de recettes avancé (recettes JSON MC 1.21), comportements mobs, mini-boss, nouveaux biomes |
-| - | Livre de recettes, comportements mobs (creeper explosion, skeleton archer), mini-boss, nouveaux biomes |
+| - | Comportements mobs (creeper explosion, skeleton archer), mini-boss, nouveaux biomes |
 
 **Données MC disponibles :** 2390 blocs, 1283 items, 1396 recettes dans `minecraft_data/`
 
 ## Sources MC locales
 
+Sur le poste Linux Mint actuel, les sources Minecraft Java/Bedrock ne sont **pas réinstallées** (elles vivaient sur `D:\Games\` côté Windows). Pour réimporter des assets/données :
+- Java : récupérer un `client.jar` (ex. `~/.minecraft/versions/<ver>/<ver>.jar` après lancement du launcher officiel) puis pointer `scripts/minecraft_import.py` dessus.
+- Bedrock : récupérer le dossier `data/` (BehaviorPack/ResourcePack vanilla) depuis une install Bedrock Edition (Android APK ou copie Windows).
+
+Ancienne config Windows (pour mémoire) :
 - Java 1.21.11 : `D:\Games\Minecraft - 1.21.11\client.jar`
 - Bedrock : `D:\Games\Minecraft - Bedrock Edition\data\`

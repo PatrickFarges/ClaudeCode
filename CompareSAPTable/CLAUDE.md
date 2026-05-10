@@ -5,11 +5,14 @@ Application desktop Python 3 / Tkinter de comparaison de tables SAP et de schém
 ## Lancer
 
 ```bash
+cd /mnt/Raid4Tb/Program/ClaudeCode/CompareSAPTable
+python3 -m venv .venv
+source .venv/bin/activate
 pip install xlsxwriter
 python main.py
 ```
 
-**Dépendances :** xlsxwriter (obligatoire)
+**Dépendances :** xlsxwriter (obligatoire). Tkinter inclus dans le `python3-tk` du système (à installer via `sudo apt install python3-tk` si manquant).
 
 ## Architecture (4 fichiers Python, ~1700 lignes)
 
@@ -28,10 +31,11 @@ python main.py
 - **`excel_writer.py` (~186 lignes) :** Export XLSX via xlsxwriter
   - Classe `ComparisonResult` : conteneur (table_name, pre_lines, post_lines, is_pcr, keycut)
   - `write_excel()` : en-tête configurable (Table | Before | After | Comments), sous-en-têtes par table/schéma en orange, texte riche `write_rich_string()` pour les mots différents en rouge
-- **`win_dnd.py` (~244 lignes) :** Drag-and-drop natif Windows sans dépendance externe
+- **`win_dnd.py` (~244 lignes) :** Drag-and-drop natif Windows sans dépendance externe — **non utilisable sous Linux**
   - Trampoline en code machine x64 pur (VirtualAlloc PAGE_EXECUTE_READWRITE) qui intercepte `WM_DROPFILES` sans toucher au GIL Python
   - Polling toutes les 50ms via `tk.after()` depuis le thread principal — lecture sûre du handle HDROP stocké en mémoire partagée
   - Gestion UIPI (ChangeWindowMessageFilterEx) pour les processus élevés
+  - **Migration Linux :** soit désactiver le DnD, soit installer `tkinterdnd2` (`pip install tkinterdnd2`) et conditionner l'import de `win_dnd` sur `sys.platform == 'win32'`
 
 ## Données de test incluses
 
