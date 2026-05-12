@@ -4,6 +4,8 @@
 # Python
 __pycache__/
 *.pyc
+.venv/
+venv/
 
 # Minecraft extracted data (too large for git, regenerable via minecraft_import.py)
 ClaudeCraft/minecraft_data/

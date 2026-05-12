@@ -1,31 +1,30 @@
-"""ClocloWebUi - Interface web locale pour Claude Code."""
+"""ClocloWebUi - Interface web locale pour Claude Code (Linux).
+
+Changelog :
+- 2.0.0 (2026-05-12) : migration Linux Mint — ptyprocess remplace pywinpty,
+                       BASE_DIR détecté depuis __file__, _parse_claude_md adapté
+                       au format tableau Markdown du CLAUDE.md racine.
+- 1.0.0 (2026-02-13) : version initiale Windows (pywinpty).
+"""
 
 import asyncio
 import base64
 import json
 import os
 import re
-import signal
-import sys
 from pathlib import Path
 
 import aiohttp
 from aiohttp import web
+from ptyprocess import PtyProcessUnicode
 
-try:
-    from winpty import PtyProcess
-except ImportError:
-    PtyProcess = None
-    # Fallback: try pywinpty's other API
-    try:
-        import winpty as _winpty_mod
-    except ImportError:
-        _winpty_mod = None
+APP_VERSION = "2.0.0"
 
 HOST = "127.0.0.1"
 PORT = 8420
-BASE_DIR = Path(r"D:\Program\ClaudeCode")
-CLAUDE_EXE = "claude"
+# Le script vit dans <monorepo>/ClocloWebUi/server.py → parent.parent = monorepo
+BASE_DIR = Path(__file__).resolve().parent.parent
+CLAUDE_CMD = "claude"
 
 # ---------------------------------------------------------------------------
 # Project scanning
@@ -50,35 +49,26 @@ def scan_projects() -> list[dict]:
 
 
 def _parse_claude_md() -> dict[str, str]:
-    """Parse CLAUDE.md to extract one-line descriptions per project."""
+    """Parse le CLAUDE.md racine, format tableau Markdown.
+
+    Cible les lignes du type :
+        | **NomProjet** | `Dossier/` | Description ici |
+    """
     claude_md = BASE_DIR / "CLAUDE.md"
     if not claude_md.exists():
         return {}
 
     text = claude_md.read_text(encoding="utf-8", errors="replace")
-    descriptions = {}
-
-    # Match patterns like: ### ProjectName (`ProjectName/`)
-    # Then capture the next non-empty line as description
     pattern = re.compile(
-        r"^###\s+(\S+)\s+\(`([^`]+)/`\)\s*\n(.*?)(?=\n---|\n###|\Z)",
-        re.MULTILINE | re.DOTALL,
+        r"^\|\s*\*\*([^*|]+)\*\*\s*\|\s*`([^`]+?)/?`\s*\|\s*([^|]+?)\s*\|",
+        re.MULTILINE,
     )
+    out: dict[str, str] = {}
     for m in pattern.finditer(text):
-        folder = m.group(2)
-        block = m.group(3).strip()
-        # First non-empty line of the block
-        for line in block.split("\n"):
-            line = line.strip()
-            if line and not line.startswith("**") and not line.startswith("```"):
-                descriptions[folder] = line
-                break
-            elif line.startswith("**") and ":**" not in line:
-                # Likely not a section header
-                descriptions[folder] = line.strip("*").strip()
-                break
-
-    return descriptions
+        folder = m.group(2).strip()
+        desc = m.group(3).strip()
+        out[folder] = desc
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -102,20 +92,17 @@ class Session:
         self._output_buffer = bytearray()
 
     async def start(self):
-        """Spawn claude.exe in a PTY."""
+        """Spawn `claude` dans un PTY Linux via ptyprocess."""
         env = os.environ.copy()
-        # Remove CLAUDECODE to avoid nested session detection
-        env.pop("CLAUDE_CODE_SESSION", None)
-        env.pop("CLAUDECODE", None)
-        env.pop("CLAUDE_CODE", None)
-        # Also remove any env var that signals we're inside claude
+        # Retire toute variable contenant CLAUDE pour éviter la détection
+        # "nested session" — sauf CLAUDE_CONFIG_DIR qui reste légitime.
         for key in list(env.keys()):
             if "CLAUDE" in key.upper() and key.upper() != "CLAUDE_CONFIG_DIR":
                 env.pop(key, None)
 
         try:
-            self.process = PtyProcess.spawn(
-                CLAUDE_EXE,
+            self.process = PtyProcessUnicode.spawn(
+                [CLAUDE_CMD],
                 dimensions=(self.rows, self.cols),
                 cwd=self.project_path,
                 env=env,
@@ -123,7 +110,7 @@ class Session:
             self.alive = True
             self._read_task = asyncio.get_event_loop().create_task(self._read_pump())
         except Exception as e:
-            error_msg = f"\r\n\x1b[31mErreur demarrage PTY: {e}\x1b[0m\r\n"
+            error_msg = f"\r\n\x1b[31mErreur démarrage PTY: {e}\x1b[0m\r\n"
             await self._broadcast(error_msg)
             self.alive = False
 
@@ -233,7 +220,7 @@ class Session:
             self._read_task.cancel()
         if self.process:
             try:
-                self.process.terminate()
+                self.process.terminate(force=True)
             except Exception:
                 pass
 
@@ -396,12 +383,6 @@ async def on_cleanup(app: web.Application):
 
 
 def main():
-    # Verify pywinpty is available
-    if PtyProcess is None:
-        print("ERREUR: pywinpty n'est pas installe ou PtyProcess n'est pas disponible.")
-        print("  pip install pywinpty")
-        sys.exit(1)
-
     app = web.Application()
     app.on_startup.append(on_startup)
     app.on_cleanup.append(on_cleanup)
@@ -411,7 +392,7 @@ def main():
     app.router.add_get("/ws", handle_ws)
     app.router.add_static("/static", Path(__file__).parent / "static")
 
-    print(f"ClocloWebUi -- http://{HOST}:{PORT}")
+    print(f"ClocloWebUi v{APP_VERSION} -- http://{HOST}:{PORT}")
     web.run_app(app, host=HOST, port=PORT, print=None)
 
 

@@ -1,2 +1,2 @@
 aiohttp>=3.9
-pywinpty>=2.0
+ptyprocess>=0.7

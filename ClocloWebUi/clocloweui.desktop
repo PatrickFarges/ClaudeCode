@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=ClocloWebUi
+Comment=Interface web locale pour piloter plusieurs sessions Claude Code
+Exec=/mnt/Raid4Tb/Program/ClaudeCode/ClocloWebUi/run.sh
+Icon=utilities-terminal
+Terminal=false
+Categories=Development;
+X-GNOME-Autostart-enabled=true
+NoDisplay=true
