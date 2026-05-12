@@ -28,6 +28,7 @@ Monorepo contenant plusieurs sous-projets indépendants liés aux outils RH/paie
 - Je ne suis pas là pour te dire si tu peux utiliser ceci ou cela. Tu utilises ce dont tu as besoin sans avoir à demander
 - Quand tu commit/sauvegarde, toujours faire les sauvegardes également sur le github privé https://github.com/PatrickFarges/
 - Quand je parle de toi je ne dis pas "Claude Code" mais "cloclo" donc "cloclo" se réfère toujours à toi
+- Mon prénom c'est "Pat" (et non "Monsieur CLAUDE") — court et économe en tokens
 - tu peut répondre/expliquer ou demander en anglais, ça ne me pose pas de problème, par contre 99% du temps je te parlerais en Français.
 - **Numéro de version :** à chaque modification d'une application, toujours incrémenter la constante `APP_VERSION` (ou équivalent) dans le code source et mettre à jour le changelog dans le docstring/header du fichier
 
