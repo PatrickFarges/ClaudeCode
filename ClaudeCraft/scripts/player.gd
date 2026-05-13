@@ -874,13 +874,29 @@ func _update_waterfall_audio(delta: float):
 				var falling = (above == BlockRegistry.BlockType.WATER) or (below == BlockRegistry.BlockType.AIR)
 				if not falling:
 					continue
-				# Au moins une face latérale visible (donne sur de l'air)
+				# Au moins une face latérale visible (donne sur de l'air QUI N'EST PAS une
+				# poche sous-marine — on évite l'effet cascade en pleine mer / grottes ouvertes
+				# sous le niveau de l'eau).
 				var visible := false
 				for off in [Vector3(1,0,0), Vector3(-1,0,0), Vector3(0,0,1), Vector3(0,0,-1)]:
-					var nb = world_manager.get_block_at_position(p + off)
-					if nb == BlockRegistry.BlockType.AIR:
-						visible = true
-						break
+					var npos = p + off
+					var nb = world_manager.get_block_at_position(npos)
+					if nb != BlockRegistry.BlockType.AIR:
+						continue
+					# Si une colonne d'eau coiffe cette poche d'air (quelques blocs au-dessus),
+					# c'est une grotte sous-marine, pas une cascade.
+					var pocket_is_underwater := false
+					for dy_up in range(1, 7):
+						var up_bt = world_manager.get_block_at_position(npos + Vector3(0, dy_up, 0))
+						if up_bt == BlockRegistry.BlockType.WATER:
+							pocket_is_underwater = true
+							break
+						if up_bt != BlockRegistry.BlockType.AIR:
+							break  # solide → vraie cavité couverte, on garde le son
+					if pocket_is_underwater:
+						continue
+					visible = true
+					break
 				if not visible:
 					continue
 				best_dist_sq = d2

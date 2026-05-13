@@ -9,7 +9,7 @@ var render_label: Label
 var target_label: Label
 var weather_label: Label
 
-const VERSION = "v21.7.0"
+const VERSION = "v21.7.3"
 
 var audio_manager = null
 var player = null

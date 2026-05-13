@@ -1,6 +1,7 @@
 extends Node3D
 class_name Chunk
-## chunk.gd v21.1.0 — P-CHUNK-1 flat PackedInt32Array mask, P-CHUNK-3 face int constants
+## chunk.gd v21.7.3 — Skip faces latérales/bottom d'eau quand le voisin AIR est une poche sous-marine
+##                     (évite l'effet "cascade" sur les blocs solides immergés en pleine mer)
 
 const CHUNK_SIZE = 16
 const CHUNK_HEIGHT = 256
@@ -10,7 +11,7 @@ const FACE_INT := {"top": 0, "bottom": 1, "front": 2, "back": 3, "left": 4, "rig
 
 # Shared material (un seul pour tous les chunks)
 static var _shared_material: Material = null
-static var _shared_water_material: StandardMaterial3D = null
+static var _shared_water_material: Material = null
 static var _shared_cross_material: Material = null
 static var _shared_torch_handle_mat: StandardMaterial3D = null
 static var _shared_torch_flame_mat: StandardMaterial3D = null
@@ -131,27 +132,24 @@ static func _get_cross_material() -> Material:
 		_shared_cross_material = TextureManager.get_cross_material()
 	return _shared_cross_material
 
-static func _get_water_material() -> StandardMaterial3D:
+static func _get_water_material() -> Material:
 	if not _shared_water_material:
-		_shared_water_material = StandardMaterial3D.new()
-		_shared_water_material.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
-		_shared_water_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		_shared_water_material.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_ALWAYS
-		_shared_water_material.cull_mode = BaseMaterial3D.CULL_DISABLED
-		_shared_water_material.roughness = 0.2
-		# Texture d'eau Faithful32 (premier frame du spritesheet)
-		var GC = preload("res://scripts/game_config.gd")
-		var tex_path = GC.get_block_texture_path() + "water_still_frame0.png"
-		var img := Image.new()
-		if img.load(tex_path) == OK:
-			img.convert(Image.FORMAT_RGBA8)
-			var tex = ImageTexture.create_from_image(img)
-			tex.set_meta("sampling", 0)  # NEAREST
-			_shared_water_material.albedo_texture = tex
-			_shared_water_material.uv1_triplanar = false
-			_shared_water_material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-		# Teinte bleue appliquée sur la texture grise
-		_shared_water_material.albedo_color = Color(0.3, 0.5, 0.9, 0.65)
+		var shader := load("res://shaders/water.gdshader") as Shader
+		if shader != null:
+			var mat := ShaderMaterial.new()
+			mat.shader = shader
+			_shared_water_material = mat
+			print("[Water] Shader water.gdshader chargé OK")
+		else:
+			# FALLBACK : shader introuvable ou erreur de compile
+			# → on retombe sur un StandardMaterial3D bleu unshaded
+			push_warning("[Water] Impossible de charger water.gdshader — fallback StandardMaterial3D bleu")
+			var fb := StandardMaterial3D.new()
+			fb.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			fb.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			fb.cull_mode = BaseMaterial3D.CULL_DISABLED
+			fb.albedo_color = Color(0.15, 0.45, 0.78, 0.85)
+			_shared_water_material = fb
 	return _shared_water_material
 
 # ============================================================
@@ -792,10 +790,13 @@ func _emit_cross_quad(x: int, y: int, z: int, bt: int):
 		base + 4, base + 5, base + 6, base + 6, base + 7, base + 4])
 
 # ============================================================
-# WATER MESH — top faces only (greedy)
+# WATER MESH — top faces (greedy) + side/bottom faces (per-block)
 # ============================================================
 
 func _build_water_mesh():
+	# ────────────────────────────────────────────────
+	# Passe 1 : faces du DESSUS (greedy meshing)
+	# ────────────────────────────────────────────────
 	# P-CHUNK-1 — Flat PackedInt32Array mask (CHUNK_SIZE x CHUNK_SIZE)
 	var mask := PackedInt32Array()
 	mask.resize(CHUNK_SIZE * CHUNK_SIZE)
@@ -824,6 +825,97 @@ func _build_water_mesh():
 					Vector3(u, y + 0.85, v), Vector3(u + w, y + 0.85, v),
 					Vector3(u + w, y + 0.85, v + h), Vector3(u, y + 0.85, v + h),
 					Vector3.UP, color, w, h)
+
+	# ────────────────────────────────────────────────
+	# Passe 2 : faces LATÉRALES + DU DESSOUS
+	# (pour que les colonnes d'eau dans les grottes et
+	#  les cascades soient visibles)
+	# ────────────────────────────────────────────────
+	_build_water_side_and_bottom_faces()
+
+func _build_water_side_and_bottom_faces():
+	var water_color: Color = BlockRegistry.get_block_color(WATER_TYPE)
+
+	for x in range(CHUNK_SIZE):
+		var x_off: int = x * 4096
+		for z in range(CHUNK_SIZE):
+			var xz_off: int = x_off + z * 256
+			for y in range(y_min, y_max + 1):
+				var idx: int = xz_off + y
+				if blocks[idx] != WATER_TYPE:
+					continue
+
+				# La hauteur du haut du bloc dépend de ce qui est au-dessus :
+				#   - AIR au-dessus → surface inset à y+0.85 (cohérent avec la face top)
+				#   - WATER ou SOLIDE au-dessus → pleine hauteur y+1.0 (pas de seam)
+				var above_type: int = 0 if (y + 1 >= CHUNK_HEIGHT) else blocks[idx + 1]
+				var top_y: float = (y + 0.85) if above_type == 0 else (y + 1.0)
+				var base_y: float = float(y)
+
+				# +X face (east) — émise si le voisin +X est AIR (et dans le chunk)
+				if x + 1 < CHUNK_SIZE and blocks[idx + 4096] == 0 and not _air_neighbor_is_underwater_pocket(idx + 4096):
+					_emit_water_quad(
+						Vector3(x + 1, base_y, z),
+						Vector3(x + 1, base_y, z + 1),
+						Vector3(x + 1, top_y, z + 1),
+						Vector3(x + 1, top_y, z),
+						Vector3(1, 0, 0), water_color, 1, 1)
+
+				# -X face (west)
+				if x > 0 and blocks[idx - 4096] == 0 and not _air_neighbor_is_underwater_pocket(idx - 4096):
+					_emit_water_quad(
+						Vector3(x, base_y, z + 1),
+						Vector3(x, base_y, z),
+						Vector3(x, top_y, z),
+						Vector3(x, top_y, z + 1),
+						Vector3(-1, 0, 0), water_color, 1, 1)
+
+				# +Z face (south)
+				if z + 1 < CHUNK_SIZE and blocks[idx + 256] == 0 and not _air_neighbor_is_underwater_pocket(idx + 256):
+					_emit_water_quad(
+						Vector3(x + 1, base_y, z + 1),
+						Vector3(x, base_y, z + 1),
+						Vector3(x, top_y, z + 1),
+						Vector3(x + 1, top_y, z + 1),
+						Vector3(0, 0, 1), water_color, 1, 1)
+
+				# -Z face (north)
+				if z > 0 and blocks[idx - 256] == 0 and not _air_neighbor_is_underwater_pocket(idx - 256):
+					_emit_water_quad(
+						Vector3(x, base_y, z),
+						Vector3(x + 1, base_y, z),
+						Vector3(x + 1, top_y, z),
+						Vector3(x, top_y, z),
+						Vector3(0, 0, -1), water_color, 1, 1)
+
+				# -Y face (bottom) — si le voisin du dessous est AIR
+				if y > 0 and blocks[idx - 1] == 0 and not _air_neighbor_is_underwater_pocket(idx - 1):
+					_emit_water_quad(
+						Vector3(x, base_y, z),
+						Vector3(x, base_y, z + 1),
+						Vector3(x + 1, base_y, z + 1),
+						Vector3(x + 1, base_y, z),
+						Vector3(0, -1, 0), water_color, 1, 1)
+
+# Un bloc AIR voisin est une "poche sous-marine" si une colonne d'eau le coiffe
+# (eau directement au-dessus, ou eau au-dessus après quelques blocs d'air).
+# Dans ce cas la face latérale/bottom du bloc d'eau adjacent serait perçue
+# comme une "cascade" — visuellement faux en pleine mer. On scanne jusqu'à 6
+# blocs au-dessus pour aussi attraper les petites grottes sous-marines.
+func _air_neighbor_is_underwater_pocket(air_idx: int) -> bool:
+	var local_y: int = air_idx % 256
+	var scan_max: int = mini(local_y + 6, CHUNK_HEIGHT - 1)
+	var probe: int = air_idx + 1
+	var probe_y: int = local_y + 1
+	while probe_y <= scan_max:
+		var bt: int = blocks[probe]
+		if bt == WATER_TYPE:
+			return true
+		if bt != 0:
+			return false  # solide rencontré avant l'eau → ce n'est pas une poche immergée
+		probe += 1
+		probe_y += 1
+	return false
 
 func _emit_water_quad(v0: Vector3, v1: Vector3, v2: Vector3, v3: Vector3, normal: Vector3, color: Color, tile_w: int = 1, tile_h: int = 1):
 	var base: int = _water_vertices.size()

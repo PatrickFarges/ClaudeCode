@@ -1,6 +1,8 @@
 extends Node
 class_name ChunkGenerator
 
+# v7.3 : Sous-sol moins gruyère — _is_cave seuils 0.07/0.09 (au lieu de 0.15/0.18),
+#        large_cave 0.005 (au lieu de 0.03), plafond grotte = height-6 en mer
 # v7.2 : Optimisation — Semaphore au lieu de OS.delay_msec(10) busy-wait dans les workers (zéro latence, zéro CPU idle)
 # v7.1 : Optimisation — PackedByteArray flat au lieu de Array 3D imbriqué (élimine ~270 allocs/chunk)
 # v7.0 : Bois par biome, nouveaux minerais, variantes pierre, blocs naturels
@@ -317,7 +319,11 @@ func _generate_chunk_data(chunk_pos: Vector3i, noises: Dictionary = {}) -> Dicti
 				if y < height:
 					block = _get_block(y, height, biome)
 
-					if y >= 8 and y < SEA_LEVEL - 2 and _is_cave(wx, y, wz, cave1, cave2, cave3):
+					# Plafond de creusage : 2 blocs sous la surface en terre ferme,
+					# mais 6 blocs sous le sol marin si on est sous le niveau de la mer
+					# (évite les grottes qui débouchent dans l'eau → "cascades" indésirables)
+					var _cave_ceil: int = (SEA_LEVEL - 2) if height >= SEA_LEVEL else (height - 6)
+					if y >= 8 and y < _cave_ceil and _is_cave(wx, y, wz, cave1, cave2, cave3):
 						block = BlockRegistry.BlockType.AIR
 
 				blocks[x * 4096 + z * 256 + y] = block
@@ -878,19 +884,21 @@ func get_height_at(wx: int, wz: int) -> int:
 	return _get_terrain_height(n, c, e, rv)
 
 func _is_cave(x: int, y: int, z: int, n1: FastNoiseLite, n2: FastNoiseLite, n3: FastNoiseLite) -> bool:
-	# Grottes de type "spaghetti" — deux noises multipliés créent des tunnels fins
-	# quand les deux sont proches de zéro simultanément.
+	# Grottes de type "spaghetti" — tunnels fins là où deux noises sont proches
+	# de zéro simultanément (|v1| + |v2| sous un seuil).
+	#
+	# v21.7.3 — Seuils divisés par ~2-3 pour un sous-sol plus compact (Pat : "pire
+	# qu'un gruyère après attaque de rats"). On garde de quoi explorer mais on
+	# laisse beaucoup plus de roche pleine entre les tunnels.
 	var v1 = n1.get_noise_3d(x, y, z)
 	var v2 = n2.get_noise_3d(x, y, z)
-	var combined = abs(v1) + abs(v2)  # addition au lieu de multiplication → tunnels plus fins
-	# Seuil fixe et bas — ~5% du sous-sol sera creusé (petites grottes/tunnels)
-	var threshold = 0.15
-	# Légèrement plus de grottes en profondeur (y < 40)
+	var combined = abs(v1) + abs(v2)
+	var threshold = 0.07
 	if y < 40:
-		threshold = 0.18
-	# Grandes salles très rares — seulement quand v3 est très proche de zéro
+		threshold = 0.09  # un poil plus de tunnels en profondeur (zone minage)
+	# Grandes salles très rares — pour ménager les futurs dungeons placés
 	var v3 = n3.get_noise_3d(x, y, z)
-	var large_cave = abs(v3) < 0.03  # ~6% chance au lieu de 24%
+	var large_cave = abs(v3) < 0.005  # ~1% au lieu de ~6%
 	return combined < threshold or large_cave
 
 func _get_block(y: int, surface: int, biome: int) -> int:

@@ -1,4 +1,4 @@
-## BedrockAnimPlayer v1.2.0
+## BedrockAnimPlayer v1.3.0
 ## Moteur d'animation Bedrock pour ClaudeCraft.
 ## Charge les animations JSON Bedrock, évalue les expressions Molang par frame,
 ## et applique les transformations directement aux bones du Skeleton3D.
@@ -12,6 +12,12 @@
 ##   bap.play("animation.humanoid.move")
 ##
 ## Changelog:
+## v1.3.0 - Fix apesanteur walk quadrupèdes :
+##          - `distance_scale` (défaut 1.0) multiplie query.modified_distance_moved
+##            pour compenser la vitesse plus lente des mobs ClaudeCraft vs MC vanilla
+##            (cycle walk était 6.3s au lieu de 2.4s → apesanteur).
+##          - `leg_amplitude_scale` (défaut 1.0) scale les rotations des bones 'leg*'
+##            pour réduire le swing ±80° hardcodé des anims Bedrock (0.5 → ±40°).
 ## v1.2.0 - Support flag `clamp_weight` sur entries d'animation (controllers synthétiques legacy) :
 ##          clamp le résultat de la condition Molang à [0,1] pour éviter que `query.modified_move_speed`
 ##          (valeur continue 0-5) multiplie l'amplitude. Fix walk cow/pig/sheep/chicken.
@@ -21,7 +27,7 @@
 class_name BedrockAnimPlayer
 extends Node
 
-const APP_VERSION := "1.2.0"
+const APP_VERSION := "1.3.0"
 
 # ─── Signals ─────────────────────────────────────────────────────────────────
 signal animation_started(anim_name: String)
@@ -70,6 +76,12 @@ var paused: bool = false
 
 ## Speed multiplier
 var speed_scale: float = 1.0
+
+## Multiplie query.modified_distance_moved (compense vitesse lente des mobs vs MC vanilla)
+var distance_scale: float = 1.0
+
+## Scale rotations des bones dont le nom contient 'leg' (réduit swing ±80° → ±40°)
+var leg_amplitude_scale: float = 1.0
 
 ## Entity state queries (set by the game code)
 var entity_queries: Dictionary = {}
@@ -144,7 +156,15 @@ func load_animations(path: String) -> int:
 		var anim_dict: Dictionary = data["animations"][anim_name]
 		var anim := AnimData.new()
 		anim.name = anim_name
-		anim.loop = anim_dict.get("loop", false)
+		# Bedrock peut donner "loop": true | false | "hold_on_last_frame" (String).
+		# On normalise en bool : seul `true` (bool ou "true") loop ; tout le reste = false.
+		var loop_raw = anim_dict.get("loop", false)
+		if loop_raw is bool:
+			anim.loop = loop_raw
+		elif loop_raw is String:
+			anim.loop = (loop_raw == "true")
+		else:
+			anim.loop = bool(loop_raw)
 		anim.length = anim_dict.get("animation_length", 0.0)
 		anim.override_previous = anim_dict.get("override_previous_animation", false)
 		if anim_dict.has("anim_time_update"):
@@ -362,11 +382,12 @@ func _update_molang_context(dt: float) -> void:
 	molang.context["query.life_time"] = fmod(_life_time, 1000.0)
 	molang.context["query.delta_time"] = dt
 
-	# Movement
-	molang.context["query.modified_distance_moved"] = _distance_moved
+	# Movement (distance_scale compense la vitesse lente des mobs ClaudeCraft vs MC vanilla)
+	var scaled_dist: float = _distance_moved * distance_scale
+	molang.context["query.modified_distance_moved"] = scaled_dist
 	molang.context["query.modified_move_speed"] = _move_speed
 	molang.context["query.ground_speed"] = _move_speed
-	molang.context["query.walk_distance"] = _distance_moved
+	molang.context["query.walk_distance"] = scaled_dist
 
 	# Entity queries
 	for key in entity_queries:
@@ -571,6 +592,9 @@ func _apply_animations_to_skeleton() -> void:
 			# ─── Rotation ────────────────────────────────────────────
 			if bone_anim.rotation != null:
 				var rot := _evaluate_channel(bone_anim.rotation, anim_time, anim.length, current_rot, bone_anim.rotation_sorted_times)
+				# Scale amplitude sur les bones 'leg*' (swing ±80° hardcode → ±40°)
+				if leg_amplitude_scale != 1.0 and bone_name.to_lower().contains("leg"):
+					rot *= leg_amplitude_scale
 				acc["rot"] += rot * weight
 				acc["has_rot"] = true
 
