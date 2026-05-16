@@ -1,0 +1,11 @@
+# WTC Absences — Développement / Debug
+# (en plus de requirements.txt)
+#
+# Installer après requirements.txt :
+#   pip install -r requirements-dev.txt
+
+-r requirements.txt
+
+xlrd==2.0.1              # lecture du .xls legacy GFK Original (pour debug/inspection
+                         # ; le script de production utilise le .xlsx pré-converti)
+pdfplumber>=0.11.0       # inspection PDF (Standardized) pour debug

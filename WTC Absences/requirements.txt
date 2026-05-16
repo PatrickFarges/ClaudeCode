@@ -1,0 +1,9 @@
+# WTC Absences — Production (Windows 11 / Linux)
+# Compatibles Python 3.9+ — installer dans un virtualenv :
+#   python -m venv .venv
+#   .venv\Scripts\activate            # Windows
+#   source .venv/bin/activate          # Linux/Mac
+#   pip install -r requirements.txt
+
+openpyxl>=3.1.0          # lecture/écriture .xlsx (tables AKN + sortie)
+Pillow>=10.0.0           # gestion des images (logo Strada) - requis par openpyxl pour XLImage
