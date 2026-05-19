@@ -1,0 +1,46 @@
+*Les numeros correspondent à ceux de la colonne I nommée "UnT", de la table T511, et représentes les unités àprès le signe =
+*Ce sont ces unitées (heures, minutes etc.) qui doivent être indiqué dans le "Wagetype catalog Absence"
+
+001=Heures
+002=Minutes
+010=Jours
+011=Semaines
+012=Mois
+013=Années
+014=Semestre
+015=Cours
+016=Pér. de paye
+017=Trimestres
+018=Salaire biennal
+020=Pièces
+021=Points
+022=Taux LU
+025=Niveau
+030=Pourcent
+040=Jours SI
+041=Allocations
+042=20,000
+043=10,000
+050=Litres
+051=Kilom.
+052=Livre(s)
+053=Mile(s)
+055=& par personne
+060=Enfants
+061=Stocks
+062=Personnes
+063=Actions
+070=Flag
+080=Zones
+E11=Semaine ent.
+Q01=IJ
+Q02=Billets
+R10=Jour cal
+R12=Mois cal
+R13=Année cal
+S10=Jour anc
+S11=Semain anc
+S12=Mois anc
+S13=Année sen
+SK1=SK1
+

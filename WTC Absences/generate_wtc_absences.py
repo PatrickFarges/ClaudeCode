@@ -25,10 +25,15 @@ Changelog :
                        "Absences-Présences" (remplace les données GFK)
                        Utilise désormais le template .xlsx pré-converti
                        (plus besoin de LibreOffice côté Windows)
+  v0.4.0 — Phase 2.2 : remplissage des colonnes D, E, F, G, H, I via jointure
+                       T554S → T554C (1ère/2ème rubrique = Paiement/Retenue)
+                       → T512T (libellés FR) + T511 (UnT → unité de temps).
+                       Lit désormais depuis AKN_17.05.2026/ (tables fraîches
+                       du 2026-05-17, avec T511, T512T, T508A en plus).
 """
 from __future__ import annotations
 
-APP_VERSION = "0.3.0"
+APP_VERSION = "0.4.0"
 
 import shutil
 import subprocess
@@ -50,12 +55,18 @@ GFK_XLS_LEGACY = ROOT / "GFK Original Absence Catalog.xls"
 LOGO_STRADA = ROOT / "logo_strada.png"
 OUTPUT = ROOT / "AKN France Absences-Presences Catalogue.xlsx"
 
-# Tables SAP AKN
-AKN_DIR = ROOT / "AKN"
-T554S = AKN_DIR / "T554S.XLSX"
-T554T = AKN_DIR / "T554T.XLSX"
-T554C = AKN_DIR / "T554C.XLSX"
-Y00BA = AKN_DIR / "Y00BA_TAB_COMPAN.XLSX"
+# Tables SAP AKN — version 2026-05-17 (tables fraîches retéléchargées par Pat)
+AKN_DIR = ROOT / "AKN_17.05.2026"
+T554S = AKN_DIR / "T554S.xlsx"
+T554T = AKN_DIR / "T554T.xlsx"
+T554C = AKN_DIR / "T554C.xlsx"
+T511 = AKN_DIR / "T511.xlsx"
+T512T = AKN_DIR / "T512T.xlsx"
+T508A = AKN_DIR / "T508A.xlsx"
+Y00BA = AKN_DIR / "Y00BA_TAB_COMPAN.xlsx"
+
+# Mapping numéros → libellés d'unités de temps (T511 col "UnT" → humain)
+UNITS_MAP_FILE = ROOT / "numeros_vs_unités"
 
 # Clés AKN
 AKN_GRSDP = "6"   # Groupe subdivisions personnel AKN
@@ -220,6 +231,162 @@ def replace_logos(wb, logo_path: Path) -> int:
     return replaced
 
 
+def load_units_map() -> dict[str, str]:
+    """Lit numeros_vs_unités → dict { '001': 'Heures', '010': 'Jours', ... }.
+    Ignore les 2 premières lignes d'en-tête explicatives (préfixées par '*')."""
+    print(f"[4/5 c] Chargement mapping unités de temps ({UNITS_MAP_FILE.name})…")
+    out: dict[str, str] = {}
+    for raw in UNITS_MAP_FILE.read_text(encoding='utf-8').splitlines():
+        line = raw.strip()
+        if not line or line.startswith('*') or '=' not in line:
+            continue
+        # format possible "<n>\t<code>=<libellé>" ou "<code>=<libellé>"
+        parts = line.split('\t', 1)
+        kv = parts[-1].strip()
+        code, _, label = kv.partition('=')
+        code = code.strip()
+        label = label.strip()
+        if code and label:
+            out[code] = label
+    print(f"      → {len(out)} unités mappées")
+    return out
+
+
+def load_t511(mdt: str = '984', lhcm: str = '06') -> dict[str, str]:
+    """Charge T511 → dict { rubrique: UnT_code }.
+    Filtre Mdt + L.HCM. Garde la version la plus récente (Fin max) pour chaque rubrique.
+    """
+    print(f"[4/5 d] Chargement T511 (Mdt={mdt}, L.HCM={lhcm})…")
+    wb = openpyxl.load_workbook(T511, data_only=True, read_only=True)
+    ws = wb.active
+    rows = ws.iter_rows(values_only=True)
+    hdr = next(rows)
+    iM = hdr.index('Mdt')
+    iL = hdr.index('L.HCM')
+    iR = hdr.index('Rubrique')
+    iU = hdr.index('UnT')
+    iF = hdr.index('Fin')
+    by_rub: dict[str, tuple] = {}
+    for r in rows:
+        if r[iM] != mdt or r[iL] != lhcm:
+            continue
+        rub = r[iR]
+        if not rub:
+            continue
+        fin = r[iF]
+        unt = r[iU] or ''
+        prev = by_rub.get(rub)
+        if prev is None or (fin and (not prev[1] or fin > prev[1])):
+            by_rub[rub] = (unt, fin)
+    wb.close()
+    out = {k: v[0] for k, v in by_rub.items()}
+    print(f"      → {len(out)} rubriques T511 trouvées")
+    return out
+
+
+def load_t512t(mdt: str = '984', lhcm: str = '06', lang: str = 'F') -> dict[str, str]:
+    """Charge T512T → dict { rubrique: libellé FR }."""
+    print(f"[4/5 e] Chargement T512T (Langue={lang}, L.HCM={lhcm})…")
+    wb = openpyxl.load_workbook(T512T, data_only=True, read_only=True)
+    ws = wb.active
+    rows = ws.iter_rows(values_only=True)
+    hdr = next(rows)
+    iM = hdr.index('Mdt')
+    iL = hdr.index('Langue')
+    iH = hdr.index('L.HCM')
+    iR = hdr.index('Rubrique')
+    iT = hdr.index('Libellé de rubrique')
+    out: dict[str, str] = {}
+    for r in rows:
+        if r[iM] != mdt or r[iL] != lang or r[iH] != lhcm:
+            continue
+        rub = r[iR]
+        if not rub:
+            continue
+        out[rub] = r[iT] or ''
+    wb.close()
+    print(f"      → {len(out)} libellés FR trouvés")
+    return out
+
+
+def _classify_rubrique(rub: str, libelle: str) -> str:
+    """Renvoie 'paiement', 'retenue' ou '' selon le libellé T512T.
+    L'ordre des sous-blocs dans T554C n'est pas fiable (parfois retenue en
+    premier), donc on s'appuie sur la convention de nommage des libellés AKN :
+       - 'Paiement…', 'Paiem.…' → paiement
+       - 'Retenue…', 'Ret.…', 'Reten…' → retenue
+    """
+    if not libelle:
+        return ''
+    low = libelle.lower().lstrip()
+    if low.startswith(('paiement', 'paiem.', 'paiem ', 'pay.', 'pay ')):
+        return 'paiement'
+    if low.startswith(('retenue', 'ret.', 'ret ', 'reten')):
+        return 'retenue'
+    return ''
+
+
+def load_t554c_rules(t512t: dict[str, str], mdt: str = '984',
+                     lhcm: str = '06', grpe: str = '06') -> dict[str, dict]:
+    """Charge T554C → dict { règle_valorisation: {'paiement': rub, 'retenue': rub} }.
+
+    T554C contient 15 sous-blocs (DH, Pourc., Tp, RB, Rubrique, RègleJourn). Pour
+    chaque règle de valorisation on extrait les 2 premières rubriques non vides,
+    puis on les classe en Paiement/Retenue via les libellés T512T (les libellés
+    AKN commencent par 'Paiement…' ou 'Retenue…' — fiable).
+    Si plusieurs lignes existent pour la même règle (versions par dates), on garde
+    celle dont la date Fin est la plus haute.
+    """
+    print(f"[4/5 f] Chargement T554C (L.HCM={lhcm}, Grpe={grpe})…")
+    wb = openpyxl.load_workbook(T554C, data_only=True, read_only=True)
+    ws = wb.active
+    rows = list(ws.iter_rows(values_only=True))
+    hdr = rows[0]
+    iM = hdr.index('Mdt')
+    iL = hdr.index('L.HCM')
+    iG = hdr.index('Grpe')
+    iR = hdr.index('Règle de valorisat.')
+    iF = hdr.index('Fin')
+
+    # Indices des 15 colonnes "Rubrique" dans la 2e moitié de la table.
+    rubrique_cols = [i for i, h in enumerate(hdr) if h == 'Rubrique']
+
+    by_rule: dict[str, tuple] = {}
+    n_swapped = 0
+    for r in rows[1:]:
+        if r[iM] != mdt or r[iL] != lhcm or r[iG] != grpe:
+            continue
+        rule = r[iR]
+        if not rule:
+            continue
+        fin = r[iF]
+        rubriques = [r[i] for i in rubrique_cols if r[i]]
+        first = rubriques[0] if rubriques else ''
+        second = rubriques[1] if len(rubriques) >= 2 else ''
+
+        # Classification par libellé (T512T) — l'ordre dans T554C n'est pas fiable
+        c1 = _classify_rubrique(first, t512t.get(first, ''))
+        c2 = _classify_rubrique(second, t512t.get(second, ''))
+        paiement, retenue = first, second
+        if c1 == 'retenue' and c2 == 'paiement':
+            paiement, retenue = second, first
+            n_swapped += 1
+        elif c1 == 'retenue' and not c2:
+            paiement, retenue = '', first
+        elif c1 == 'paiement' and c2 == 'paiement':
+            # Cas rare — on garde l'ordre
+            pass
+
+        prev = by_rule.get(rule)
+        if prev is None or (fin and (not prev[2] or fin > prev[2])):
+            by_rule[rule] = (paiement, retenue, fin)
+    wb.close()
+    out = {k: {'paiement': v[0], 'retenue': v[1]} for k, v in by_rule.items()}
+    print(f"      → {len(out)} règles de valorisation indexées "
+          f"({n_swapped} swaps Paiement/Retenue corrigés)")
+    return out
+
+
 def load_akn_data() -> list[dict]:
     """Charge les catégories d'absences AKN depuis T554S + T554T.
 
@@ -273,18 +440,49 @@ def load_akn_data() -> list[dict]:
         labels[r[iT['CatAbsP']]] = r[iT['Texte cat. prés./abs.']]
     print(f"      → {len(labels)} libellés FR trouvés")
 
+    # Charge les ressources nécessaires pour enrichir les colonnes D-I
+    units_map = load_units_map()
+    t511 = load_t511()
+    t512t = load_t512t()
+    t554c = load_t554c_rules(t512t)
+
+    def lookup_unit(rub: str) -> str:
+        """rubrique → libellé d'unité humain via T511 + numeros_vs_unités."""
+        if not rub:
+            return ''
+        unt = t511.get(rub, '')
+        return units_map.get(unt, unt) if unt else ''
+
     # Combine et tri
     out = []
+    n_paiement = 0
+    n_retenue = 0
     for cat in sorted(by_cat.keys()):
         rec = by_cat[cat]
+        rule = rec['RegleValorisat']
+        rubs = t554c.get(rule, {'paiement': '', 'retenue': ''})
+        rub_p = rubs['paiement']
+        rub_r = rubs['retenue']
+        if rub_p:
+            n_paiement += 1
+        if rub_r:
+            n_retenue += 1
         out.append({
             'CatAbsP': cat,
             'Libelle': labels.get(cat, '(libellé FR manquant)'),
-            'RegleValorisat': rec['RegleValorisat'],
+            'RegleValorisat': rule,
             'Classe': rec['Classe'],
             'TypAb': rec['TypAb'],
             'Categorie': cat[:2] + 'xx' if len(cat) >= 2 else cat,
+            # Enrichissement v0.4.0
+            'RubPaiement': rub_p,
+            'LibPaiement': t512t.get(rub_p, '') if rub_p else '',
+            'UnitPaiement': lookup_unit(rub_p),
+            'RubRetenue': rub_r,
+            'LibRetenue': t512t.get(rub_r, '') if rub_r else '',
+            'UnitRetenue': lookup_unit(rub_r),
         })
+    print(f"      → {n_paiement} rub. Paiement / {n_retenue} rub. Retenue résolues")
     return out
 
 
@@ -459,8 +657,25 @@ def populate_main_sheet(wb, data: list[dict]) -> int:
             c_c.fill = data_fill
             c_c.alignment = used_align
             c_c.border = blank_border
-            # Colonnes D-O : laissées vides mais avec fond jaune cohérent
-            for col in range(4, 16):
+            # Cols D-I : Paiement (D, E, F) puis Retenue (G, H, I)
+            #   D = Rubrique Paiement / E = Libellé rubrique / F = Unité de temps
+            #   G = Rubrique Retenue  / H = Libellé rubrique / I = Unité de temps
+            paiement_retenue_vals = [
+                (4, rec['RubPaiement'], code_align),
+                (5, rec['LibPaiement'], label_align),
+                (6, rec['UnitPaiement'], code_align),
+                (7, rec['RubRetenue'], code_align),
+                (8, rec['LibRetenue'], label_align),
+                (9, rec['UnitRetenue'], code_align),
+            ]
+            for col_idx, val, align in paiement_retenue_vals:
+                cx = ws.cell(row=cur_row, column=col_idx, value=val or None)
+                cx.font = data_font
+                cx.fill = data_fill
+                cx.alignment = align
+                cx.border = blank_border
+            # Colonnes J-O : laissées vides (métier) avec fond jaune cohérent
+            for col in range(10, 16):
                 cd = ws.cell(row=cur_row, column=col)
                 cd.fill = data_fill
                 cd.border = blank_border
