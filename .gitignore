@@ -10,6 +10,14 @@ venv/
 # Minecraft extracted data (too large for git, regenerable via minecraft_import.py)
 ClaudeCraft/minecraft_data/
 
+# WTC Absences — dumps de tables SAP (Pat les a déjà en backup, jamais commit)
+WTC Absences/AKN/
+WTC Absences/AKN_*/
+WTC Absences/ABV/
+WTC Absences/ABV_*/
+WTC Absences/GFK/
+WTC Absences/GFK_*/
+
 # System
 .DS_Store
 Thumbs.db
