@@ -39,10 +39,19 @@ Changelog :
            Paiement (col D), avec fallback sur la rubrique Retenue (col G).
            La col A (CatAbsP) n'est PAS utilisée ici puisque L est dans la zone
            Pilotage Paie — basée uniquement sur les rubriques de paie.
+  v0.9.0 — Cols P/Q/R/S (pénalisants) via les 10 colonnes CLABS de T554C.
+           Pour chaque règle de valorisation, on lit la liste des CLABS et on
+           coche ■ dans la col WTC correspondante si la classe figure dedans :
+             P = CLABS 30 (Pénalisant 13ème mois)
+             Q = CLABS 40 (Pénalisant Prime de Vacances)
+             R = CLABS 50 (Pénalisant Prime d'ancienneté)
+             S = CLABS 70 (Pénalisant RATP → transport)
+           T554E sert seulement de référentiel CLABS → libellé (non utilisée
+           pour la jointure, qui se fait via Règle de valorisat. dans T554C).
 """
 from __future__ import annotations
 
-APP_VERSION = "0.8.0"
+APP_VERSION = "0.9.0"
 
 import argparse
 import shutil
@@ -438,8 +447,10 @@ def load_t554c_rules(cfg: dict, t512t: dict[str, str]) -> dict[str, dict]:
     iR = hdr.index('Règle de valorisat.')
     iF = hdr.index('Fin')
 
-    # Indices des 15 colonnes "Rubrique" dans la 2e moitié de la table.
+    # Indices des 15 colonnes "Rubrique" (2e moitié) et des 10 colonnes "CLABS"
+    # (1re moitié — sous-blocs de pénalisation).
     rubrique_cols = [i for i, h in enumerate(hdr) if h == 'Rubrique']
+    clabs_cols = [i for i, h in enumerate(hdr) if h == 'CLABS']
 
     by_rule: dict[str, tuple] = {}
     n_swapped = 0
@@ -469,11 +480,16 @@ def load_t554c_rules(cfg: dict, t512t: dict[str, str]) -> dict[str, dict]:
             # Cas rare — on garde l'ordre
             pass
 
+        # Liste des CLABS pénalisées (ignore '0' qui veut dire "pas pénalisant")
+        clabs = {str(r[i]) for i in clabs_cols
+                 if r[i] not in (None, '', '0')}
+
         prev = by_rule.get(rule)
-        if prev is None or (fin and (not prev[2] or fin > prev[2])):
-            by_rule[rule] = (paiement, retenue, fin)
+        if prev is None or (fin and (not prev[3] or fin > prev[3])):
+            by_rule[rule] = (paiement, retenue, clabs, fin)
     wb.close()
-    out = {k: {'paiement': v[0], 'retenue': v[1]} for k, v in by_rule.items()}
+    out = {k: {'paiement': v[0], 'retenue': v[1], 'clabs': v[2]}
+           for k, v in by_rule.items()}
     print(f"      → {len(out)} règles de valorisation indexées "
           f"({n_swapped} swaps Paiement/Retenue corrigés)")
     return out
@@ -577,12 +593,14 @@ def load_client_data(cfg: dict) -> list[dict]:
     n_paiement = 0
     n_retenue = 0
     n_jk = 0
+    n_pen = {'30': 0, '40': 0, '50': 0, '70': 0}
     for cat in sorted(by_cat.keys()):
         rec = by_cat[cat]
         rule = rec['RegleValorisat']
-        rubs = t554c.get(rule, {'paiement': '', 'retenue': ''})
+        rubs = t554c.get(rule, {'paiement': '', 'retenue': '', 'clabs': set()})
         rub_p = rubs['paiement']
         rub_r = rubs['retenue']
+        clabs = rubs.get('clabs', set())
         if rub_p:
             n_paiement += 1
         if rub_r:
@@ -590,6 +608,9 @@ def load_client_data(cfg: dict) -> list[dict]:
         jk_nombre, jk_montant = lookup_nombre_montant(cat, rub_p, rub_r)
         if jk_nombre or jk_montant:
             n_jk += 1
+        for k in n_pen:
+            if k in clabs:
+                n_pen[k] += 1
         out.append({
             'CatAbsP': cat,
             'Libelle': labels.get(cat, '(libellé FR manquant)'),
@@ -610,9 +631,17 @@ def load_client_data(cfg: dict) -> list[dict]:
             # Enrichissement v0.8.0 — col L (Pilotage Paie : unité de temps)
             # Basée sur rub Paiement (D) prioritaire, sinon rub Retenue (G).
             'UnitL': lookup_unit(rub_p) or lookup_unit(rub_r),
+            # Enrichissement v0.9.0 — cols P/Q/R/S (pénalisants)
+            # via les 10 cols CLABS de T554C pour la règle de valorisation.
+            'Pen13eMois':    '30' in clabs,
+            'PenPrimeVac':   '40' in clabs,
+            'PenPrimeAnc':   '50' in clabs,
+            'PenRATP':       '70' in clabs,
         })
     print(f"      → {n_paiement} rub. Paiement / {n_retenue} rub. Retenue résolues")
     print(f"      → {n_jk} lignes avec textes Nombre/Montant remplis depuis T511.C")
+    print(f"      → pénalisants : 13ème mois={n_pen['30']}, Prime vac={n_pen['40']}, "
+          f"Prime anc={n_pen['50']}, RATP={n_pen['70']}")
     return out
 
 
@@ -817,6 +846,20 @@ def populate_main_sheet(wb, data: list[dict], cfg: dict) -> int:
                 cd = ws.cell(row=cur_row, column=col)
                 cd.fill = data_fill
                 cd.border = blank_border
+            # Cols P/Q/R/S (16-19) = pénalisants : ■ si CLABS 30/40/50/70 dans
+            # la liste, □ sinon — issus de T554C.CLABS pour la règle de valorisat.
+            pen_vals = [
+                (16, rec['Pen13eMois']),
+                (17, rec['PenPrimeVac']),
+                (18, rec['PenPrimeAnc']),
+                (19, rec['PenRATP']),
+            ]
+            for col_idx, on in pen_vals:
+                cp = ws.cell(row=cur_row, column=col_idx, value='■' if on else '□')
+                cp.font = used_font
+                cp.fill = data_fill
+                cp.alignment = used_align
+                cp.border = blank_border
             ws.row_dimensions[cur_row].height = 16
             cur_row += 1
             n_data_rows += 1
