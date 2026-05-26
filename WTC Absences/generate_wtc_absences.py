@@ -1,8 +1,8 @@
 """
-generate_wtc_absences.py — Générateur du Wagetype Catalog Absences (client AKN)
+generate_wtc_absences.py — Générateur du Wagetype Catalog Absences (multi-clients)
 
 Modèle : `GFK Original Absence Catalog.xls` (catalogue NGA pour le client GFK)
-Cible : `AKN France Absences-Presences Catalogue.xlsx` (catalogue STRADA pour le client AKN)
+Cibles : un fichier .xlsx par client (AKN, ABV, …) configuré dans CLIENT_CONFIGS.
 
 Branding NGA → STRADA :
   - Logo NGA + Human Resources → logo Strada (logo_strada.png)
@@ -11,30 +11,35 @@ Branding NGA → STRADA :
   - Violet       FF800080 → vert clair Strada FF18D878
 
 Phases :
-  Phase 1 (cette version) : Copie du GFK + substitution logo + substitution couleurs
-                            (les DONNÉES GFK sont conservées pour validation visuelle)
-  Phase 2 (à venir)        : Remplacement des données par celles d'AKN (GrSdP=6, langue=F)
-                             via les tables T554S / T554T / T554C / Y00BA_TAB_COMPAN
+  Phase 1 — Copie du GFK + substitution logo + substitution couleurs
+  Phase 2.1 — Injection des vraies données client (T554S + T554T, langue F)
+  Phase 2.2 — Remplissage cols D-I via T554C → T512T + T511 (unités)
 
 Changelog :
   v0.1.0 — Phase 1 : copie + rebranding visuel Strada
-  v0.2.0 — Phase 2.0 : ajout d'un onglet "AKN_Data" avec les 122 catégories
-                       d'absences AKN (Code + Libellé FR + Règle valorisat. + TypAb)
-                       extraites des tables T554S et T554T (GrSdP='6', Langue='F')
-  v0.3.0 — Phase 2.1 : injection des vraies données AKN dans l'onglet principal
-                       "Absences-Présences" (remplace les données GFK)
-                       Utilise désormais le template .xlsx pré-converti
-                       (plus besoin de LibreOffice côté Windows)
-  v0.4.0 — Phase 2.2 : remplissage des colonnes D, E, F, G, H, I via jointure
-                       T554S → T554C (1ère/2ème rubrique = Paiement/Retenue)
-                       → T512T (libellés FR) + T511 (UnT → unité de temps).
-                       Lit désormais depuis AKN_17.05.2026/ (tables fraîches
-                       du 2026-05-17, avec T511, T512T, T508A en plus).
+  v0.2.0 — Phase 2.0 : onglet <CLIENT>_Data avec les catégories d'absences
+  v0.3.0 — Phase 2.1 : injection des vraies données dans l'onglet principal
+  v0.4.0 — Phase 2.2 : remplissage cols D, E, F, G, H, I via T554C/T512T/T511
+  v0.5.0 — Multi-clients : refactoring pour supporter ABV en plus de AKN.
+           CLI `--client AKN|ABV`. Gestion de la colonne 'L.HCM' (AKN)
+           OU 'GrPay' (ABV) selon la version de dump SAP. Tous les paramètres
+           (GrSdP, GrPay, dossier, fichiers, sortie) sont dans CLIENT_CONFIGS.
+  v0.6.0 — Remplissage cols J (Nombre) et K (Montant) via T511 col J ('C').
+           Logique : rubrique recherchée dans T511.C = WTC col A → D → G ;
+           la valeur trouvée en T511 col J (caractère ' ', 'A', '0'..'9') est
+           traduite via NOMBRE_MONTANT_MAP en texte 'soit nbr / aucun nbr /
+           oblig. / facult. / ou nbr' et symétrique côté montant.
+  v0.7.0 — Inversion ordre de lookup : D → G → A (les CatAbsP en col A peuvent
+           collisionner par hasard avec des rubriques de paie dans T511, donc on
+           privilégie les vraies rubriques Paiement/Retenue). Si T511 col C est
+           vide sur la ligne trouvée → cols J et K du WTC laissées vides (cas
+           fréquent sur rubriques 9000+ chez certains clients).
 """
 from __future__ import annotations
 
-APP_VERSION = "0.4.0"
+APP_VERSION = "0.7.0"
 
+import argparse
 import shutil
 import subprocess
 from pathlib import Path
@@ -43,7 +48,7 @@ import openpyxl
 from openpyxl.drawing.image import Image as XLImage
 from openpyxl.styles import PatternFill, Font
 
-# ---- Chemins ---------------------------------------------------------------
+# ---- Chemins communs ------------------------------------------------------
 
 ROOT = Path(__file__).resolve().parent
 # Template .xlsx pré-converti depuis GFK Original Absence Catalog.xls
@@ -53,25 +58,44 @@ ROOT = Path(__file__).resolve().parent
 GFK_TEMPLATE = ROOT / "GFK Original Absence Catalog.xlsx"
 GFK_XLS_LEGACY = ROOT / "GFK Original Absence Catalog.xls"
 LOGO_STRADA = ROOT / "logo_strada.png"
-OUTPUT = ROOT / "AKN France Absences-Presences Catalogue.xlsx"
-
-# Tables SAP AKN — version 2026-05-17 (tables fraîches retéléchargées par Pat)
-AKN_DIR = ROOT / "AKN_17.05.2026"
-T554S = AKN_DIR / "T554S.xlsx"
-T554T = AKN_DIR / "T554T.xlsx"
-T554C = AKN_DIR / "T554C.xlsx"
-T511 = AKN_DIR / "T511.xlsx"
-T512T = AKN_DIR / "T512T.xlsx"
-T508A = AKN_DIR / "T508A.xlsx"
-Y00BA = AKN_DIR / "Y00BA_TAB_COMPAN.xlsx"
 
 # Mapping numéros → libellés d'unités de temps (T511 col "UnT" → humain)
 UNITS_MAP_FILE = ROOT / "numeros_vs_unités"
 
-# Clés AKN
-AKN_GRSDP = "6"   # Groupe subdivisions personnel AKN
-AKN_LANG_FR = "F"  # Code langue français
-AKN_GRPAY = "06"   # Groupe de paie AKN
+# ---- Configurations clients -----------------------------------------------
+
+# Chaque client a son dossier de dumps SAP. Les noms de fichiers peuvent varier
+# en casse (T554S.xlsx vs t554s.XLSX) selon la version du dump.
+CLIENT_CONFIGS: dict[str, dict] = {
+    "AKN": {
+        "dir": ROOT / "AKN_17.05.2026",
+        "tables": {  # case-insensitive lookup via _resolve_table()
+            "T554S": "T554S.xlsx", "T554T": "T554T.xlsx", "T554C": "T554C.xlsx",
+            "T511": "T511.xlsx", "T512T": "T512T.xlsx",
+            "T508A": "T508A.xlsx", "Y00BA": "Y00BA_TAB_COMPAN.xlsx",
+        },
+        "grsdp": "6",       # Groupe subdivisions personnel
+        "lang_fr": "F",     # Code langue français
+        "grpay": "06",      # Groupe de paie / L.HCM
+        "mdt": "984",       # Mandant SAP
+        "output": ROOT / "AKN France Absences-Presences Catalogue.xlsx",
+        "title_replace": ("FR Absences", "AKN Absences"),
+    },
+    "ABV": {
+        "dir": ROOT / "ABV",
+        "tables": {
+            "T554S": "t554s.XLSX", "T554T": "t554t.XLSX", "T554C": "t554c.XLSX",
+            "T511": "t511.XLSX", "T512T": "T512T.XLSX",
+            "T508A": "t508a.XLSX", "Y00BA": "Y00BA_TAB_COMPAN.XLSX",
+        },
+        "grsdp": "6",       # France (LCC=FR1)
+        "lang_fr": "F",
+        "grpay": "06",      # ABV mappé à GrPay=06 dans Y00BA
+        "mdt": None,        # ABV : pas de filtre Mdt (dumps sans colonne fiable)
+        "output": ROOT / "ABV WTC.xlsx",
+        "title_replace": ("FR Absences", "ABV Absences"),
+    },
+}
 
 # Palette Strada (déjà utilisée dans patch_colors)
 STRADA_DARK = "FF084028"   # vert très foncé (logo + bandeau titre)
@@ -93,6 +117,26 @@ MAIN_COL_COUNT = 25       # colonnes utiles A-Y
 # Fichier intermédiaire (conversion .xls → .xlsx via libreoffice)
 TMP_DIR = ROOT / ".tmp_build"
 GFK_XLSX = TMP_DIR / "GFK Original Absence Catalog.xlsx"
+
+# ---- Mapping T511.C → texte (Nombre, Montant) -----------------------------
+# Le caractère trouvé en T511 col J (entête 'C') sur la ligne dont la rubrique
+# correspond donne le couple (texte_Nombre, texte_Montant) à écrire dans les
+# cols J et K du WTC. Référence : fichier 'nombre_montant' (racine projet).
+# Note : un T511.C vide → J et K du WTC laissés vides (géré en amont).
+NOMBRE_MONTANT_MAP: dict[str, tuple[str, str]] = {
+    'A': ('soit nbr',  'soit mnt'),
+    '0': ('aucun nbr', 'aucun mnt'),
+    '1': ('aucun nbr', 'oblig.'),
+    '2': ('oblig.',    'aucun mnt'),
+    '3': ('ou nbr',    'au moins le mnt'),
+    '4': ('facult.',   'oblig.'),
+    '5': ('oblig.',    'facult.'),
+    '6': ('oblig.',    'oblig.'),
+    '7': ('facult.',   'facult.'),
+    '8': ('aucun nbr', 'aucun mnt'),
+    '9': ('aucun nbr', 'facult.'),
+}
+
 
 # ---- Palette de substitution NGA → STRADA ----------------------------------
 # Format hex AARRGGBB (alpha = FF). openpyxl utilise des hex en argb.
@@ -252,53 +296,94 @@ def load_units_map() -> dict[str, str]:
     return out
 
 
-def load_t511(mdt: str = '984', lhcm: str = '06') -> dict[str, str]:
-    """Charge T511 → dict { rubrique: UnT_code }.
-    Filtre Mdt + L.HCM. Garde la version la plus récente (Fin max) pour chaque rubrique.
+def _resolve_table(cfg: dict, table_name: str) -> Path:
+    """Renvoie le chemin de la table en gérant la casse (T554S.xlsx vs t554s.XLSX)."""
+    p = cfg["dir"] / cfg["tables"][table_name]
+    if p.exists():
+        return p
+    target = cfg["tables"][table_name].lower()
+    for f in cfg["dir"].iterdir():
+        if f.name.lower() == target:
+            return f
+    raise FileNotFoundError(f"Table {table_name} introuvable dans {cfg['dir']}")
+
+
+def _idx(hdr, *names) -> int | None:
+    """Renvoie l'index de la première colonne trouvée parmi 'names', ou None."""
+    for n in names:
+        if n in hdr:
+            return hdr.index(n)
+    return None
+
+
+def _row_matches(r, idx_mdt, mdt_val, idx_grpay, grpay_val) -> bool:
+    """Helper de filtrage Mdt + L.HCM/GrPay (chacun optionnel)."""
+    if idx_mdt is not None and mdt_val is not None and r[idx_mdt] != mdt_val:
+        return False
+    if idx_grpay is not None and r[idx_grpay] != grpay_val:
+        return False
+    return True
+
+
+def load_t511(cfg: dict) -> dict[str, dict]:
+    """Charge T511 → dict { rubrique: {'unt': ..., 'c': ...} }.
+
+    Filtre Mdt (si présent et défini) + L.HCM ou GrPay (selon la version du
+    dump). Garde la version la plus récente (date Fin la plus haute).
+
+    Le champ 'c' (entête T511 col J = 'C') sert au remplissage des cols J et K
+    du WTC via NOMBRE_MONTANT_MAP. Espace et chaîne vide y sont normalisés à ' '.
     """
-    print(f"[4/5 d] Chargement T511 (Mdt={mdt}, L.HCM={lhcm})…")
-    wb = openpyxl.load_workbook(T511, data_only=True, read_only=True)
+    table = _resolve_table(cfg, "T511")
+    print(f"[4/5 d] Chargement T511 ({table.name})…")
+    wb = openpyxl.load_workbook(table, data_only=True, read_only=True)
     ws = wb.active
     rows = ws.iter_rows(values_only=True)
     hdr = next(rows)
-    iM = hdr.index('Mdt')
-    iL = hdr.index('L.HCM')
+    iM = _idx(hdr, 'Mdt')
+    iG = _idx(hdr, 'L.HCM', 'GrPay')
     iR = hdr.index('Rubrique')
     iU = hdr.index('UnT')
+    iC = hdr.index('C')
     iF = hdr.index('Fin')
     by_rub: dict[str, tuple] = {}
     for r in rows:
-        if r[iM] != mdt or r[iL] != lhcm:
+        if not _row_matches(r, iM, cfg["mdt"], iG, cfg["grpay"]):
             continue
         rub = r[iR]
         if not rub:
             continue
         fin = r[iF]
         unt = r[iU] or ''
+        c_raw = r[iC]
+        c = c_raw if isinstance(c_raw, str) and c_raw != '' else ' '
         prev = by_rub.get(rub)
-        if prev is None or (fin and (not prev[1] or fin > prev[1])):
-            by_rub[rub] = (unt, fin)
+        if prev is None or (fin and (not prev[2] or fin > prev[2])):
+            by_rub[rub] = (unt, c, fin)
     wb.close()
-    out = {k: v[0] for k, v in by_rub.items()}
+    out = {k: {'unt': v[0], 'c': v[1]} for k, v in by_rub.items()}
     print(f"      → {len(out)} rubriques T511 trouvées")
     return out
 
 
-def load_t512t(mdt: str = '984', lhcm: str = '06', lang: str = 'F') -> dict[str, str]:
+def load_t512t(cfg: dict) -> dict[str, str]:
     """Charge T512T → dict { rubrique: libellé FR }."""
-    print(f"[4/5 e] Chargement T512T (Langue={lang}, L.HCM={lhcm})…")
-    wb = openpyxl.load_workbook(T512T, data_only=True, read_only=True)
+    table = _resolve_table(cfg, "T512T")
+    print(f"[4/5 e] Chargement T512T ({table.name}, Langue={cfg['lang_fr']})…")
+    wb = openpyxl.load_workbook(table, data_only=True, read_only=True)
     ws = wb.active
     rows = ws.iter_rows(values_only=True)
     hdr = next(rows)
-    iM = hdr.index('Mdt')
+    iM = _idx(hdr, 'Mdt')
     iL = hdr.index('Langue')
-    iH = hdr.index('L.HCM')
+    iH = _idx(hdr, 'L.HCM', 'GrPay')
     iR = hdr.index('Rubrique')
     iT = hdr.index('Libellé de rubrique')
     out: dict[str, str] = {}
     for r in rows:
-        if r[iM] != mdt or r[iL] != lang or r[iH] != lhcm:
+        if not _row_matches(r, iM, cfg["mdt"], iH, cfg["grpay"]):
+            continue
+        if r[iL] != cfg["lang_fr"]:
             continue
         rub = r[iR]
         if not rub:
@@ -326,8 +411,7 @@ def _classify_rubrique(rub: str, libelle: str) -> str:
     return ''
 
 
-def load_t554c_rules(t512t: dict[str, str], mdt: str = '984',
-                     lhcm: str = '06', grpe: str = '06') -> dict[str, dict]:
+def load_t554c_rules(cfg: dict, t512t: dict[str, str]) -> dict[str, dict]:
     """Charge T554C → dict { règle_valorisation: {'paiement': rub, 'retenue': rub} }.
 
     T554C contient 15 sous-blocs (DH, Pourc., Tp, RB, Rubrique, RègleJourn). Pour
@@ -337,13 +421,14 @@ def load_t554c_rules(t512t: dict[str, str], mdt: str = '984',
     Si plusieurs lignes existent pour la même règle (versions par dates), on garde
     celle dont la date Fin est la plus haute.
     """
-    print(f"[4/5 f] Chargement T554C (L.HCM={lhcm}, Grpe={grpe})…")
-    wb = openpyxl.load_workbook(T554C, data_only=True, read_only=True)
+    table = _resolve_table(cfg, "T554C")
+    print(f"[4/5 f] Chargement T554C ({table.name}, Grpe={cfg['grpay']})…")
+    wb = openpyxl.load_workbook(table, data_only=True, read_only=True)
     ws = wb.active
     rows = list(ws.iter_rows(values_only=True))
     hdr = rows[0]
-    iM = hdr.index('Mdt')
-    iL = hdr.index('L.HCM')
+    iM = _idx(hdr, 'Mdt')
+    iL = _idx(hdr, 'L.HCM', 'GrPay')
     iG = hdr.index('Grpe')
     iR = hdr.index('Règle de valorisat.')
     iF = hdr.index('Fin')
@@ -354,7 +439,9 @@ def load_t554c_rules(t512t: dict[str, str], mdt: str = '984',
     by_rule: dict[str, tuple] = {}
     n_swapped = 0
     for r in rows[1:]:
-        if r[iM] != mdt or r[iL] != lhcm or r[iG] != grpe:
+        if not _row_matches(r, iM, cfg["mdt"], iL, cfg["grpay"]):
+            continue
+        if r[iG] != cfg["grpay"]:
             continue
         rule = r[iR]
         if not rule:
@@ -387,19 +474,18 @@ def load_t554c_rules(t512t: dict[str, str], mdt: str = '984',
     return out
 
 
-def load_akn_data() -> list[dict]:
-    """Charge les catégories d'absences AKN depuis T554S + T554T.
+def load_client_data(cfg: dict) -> list[dict]:
+    """Charge les catégories d'absences pour le client depuis T554S + T554T.
 
     Filtre :
-      - T554S : GrSdP = '6'
-      - T554T : GrSdP = '6' ET Langue = 'F'
+      - T554S : GrSdP = cfg['grsdp']
+      - T554T : GrSdP = cfg['grsdp'] ET Langue = cfg['lang_fr']
 
-    Renvoie une liste de dicts ordonnée par CatAbsP :
-      {'CatAbsP': '0100', 'Libelle': 'Congés payés acquis',
-       'RegleValorisat': '01', 'TypAb': '', 'Classe': '1', 'Categorie': '01xx'}
+    Renvoie une liste de dicts ordonnée par CatAbsP.
     """
-    print(f"[4/5 a] Chargement T554S (GrSdP={AKN_GRSDP})…")
-    wb554s = openpyxl.load_workbook(T554S, data_only=True, read_only=False)
+    table_s = _resolve_table(cfg, "T554S")
+    print(f"[4/5 a] Chargement T554S ({table_s.name}, GrSdP={cfg['grsdp']})…")
+    wb554s = openpyxl.load_workbook(table_s, data_only=True, read_only=False)
     ws = wb554s.active
     rows = list(ws.iter_rows(values_only=True))
     hdr = rows[0]
@@ -409,7 +495,7 @@ def load_akn_data() -> list[dict]:
     # celle dont la date Fin est la plus haute (la plus récente / 9999-12-31).
     by_cat = {}
     for r in rows[1:]:
-        if r[iS['GrSdP']] != AKN_GRSDP:
+        if r[iS['GrSdP']] != cfg["grsdp"]:
             continue
         cat = r[iS['CatAbsP']]
         if not cat:
@@ -424,10 +510,12 @@ def load_akn_data() -> list[dict]:
                 'TypAb': r[iS['TypAb']] or '',
                 '_fin': fin,
             }
-    print(f"      → {len(by_cat)} catégories AKN trouvées")
+    print(f"      → {len(by_cat)} catégories trouvées")
 
-    print(f"[4/5 b] Chargement T554T (Langue={AKN_LANG_FR}, GrSdP={AKN_GRSDP})…")
-    wb554t = openpyxl.load_workbook(T554T, data_only=True, read_only=False)
+    table_t = _resolve_table(cfg, "T554T")
+    print(f"[4/5 b] Chargement T554T ({table_t.name}, Langue={cfg['lang_fr']}, "
+          f"GrSdP={cfg['grsdp']})…")
+    wb554t = openpyxl.load_workbook(table_t, data_only=True, read_only=False)
     ws2 = wb554t.active
     rows2 = list(ws2.iter_rows(values_only=True))
     hdr2 = rows2[0]
@@ -435,28 +523,55 @@ def load_akn_data() -> list[dict]:
           ('Langue', 'GrSdP', 'CatAbsP', 'Texte cat. prés./abs.')}
     labels = {}
     for r in rows2[1:]:
-        if r[iT['Langue']] != AKN_LANG_FR or r[iT['GrSdP']] != AKN_GRSDP:
+        if r[iT['Langue']] != cfg["lang_fr"] or r[iT['GrSdP']] != cfg["grsdp"]:
             continue
         labels[r[iT['CatAbsP']]] = r[iT['Texte cat. prés./abs.']]
     print(f"      → {len(labels)} libellés FR trouvés")
 
     # Charge les ressources nécessaires pour enrichir les colonnes D-I
     units_map = load_units_map()
-    t511 = load_t511()
-    t512t = load_t512t()
-    t554c = load_t554c_rules(t512t)
+    t511 = load_t511(cfg)
+    t512t = load_t512t(cfg)
+    t554c = load_t554c_rules(cfg, t512t)
 
     def lookup_unit(rub: str) -> str:
         """rubrique → libellé d'unité humain via T511 + numeros_vs_unités."""
         if not rub:
             return ''
-        unt = t511.get(rub, '')
+        info = t511.get(rub)
+        unt = info['unt'] if info else ''
         return units_map.get(unt, unt) if unt else ''
+
+    def lookup_nombre_montant(cat: str, rub_p: str, rub_r: str) -> tuple[str, str]:
+        """Détermine les textes (Nombre, Montant) à écrire en cols J/K du WTC.
+
+        Ordre de recherche dans T511.C (Rubrique) :
+          1. rub_p (col D = Rubrique Paiement) — vraie rubrique de paie
+          2. rub_r (col G = Rubrique Retenue)  — vraie rubrique de paie
+          3. cat   (col A = CatAbsP)           — fallback (peut collisionner par
+             hasard avec une rubrique de paie sans rapport)
+        Le 1er candidat trouvé dans T511 donne le caractère 'c' qui sert de
+        clé dans NOMBRE_MONTANT_MAP. Si le 'c' trouvé est vide (espace), on
+        laisse J et K du WTC vides (cas fréquent sur rubriques 9000+).
+        Si aucun candidat n'est trouvé dans T511, J et K restent aussi vides.
+        """
+        for candidate in (rub_p, rub_r, cat):
+            if not candidate:
+                continue
+            info = t511.get(candidate)
+            if info is None:
+                continue
+            c = info['c']
+            if not c or c == ' ':
+                return ('', '')
+            return NOMBRE_MONTANT_MAP.get(c, ('', ''))
+        return ('', '')
 
     # Combine et tri
     out = []
     n_paiement = 0
     n_retenue = 0
+    n_jk = 0
     for cat in sorted(by_cat.keys()):
         rec = by_cat[cat]
         rule = rec['RegleValorisat']
@@ -467,6 +582,9 @@ def load_akn_data() -> list[dict]:
             n_paiement += 1
         if rub_r:
             n_retenue += 1
+        jk_nombre, jk_montant = lookup_nombre_montant(cat, rub_p, rub_r)
+        if jk_nombre or jk_montant:
+            n_jk += 1
         out.append({
             'CatAbsP': cat,
             'Libelle': labels.get(cat, '(libellé FR manquant)'),
@@ -481,31 +599,36 @@ def load_akn_data() -> list[dict]:
             'RubRetenue': rub_r,
             'LibRetenue': t512t.get(rub_r, '') if rub_r else '',
             'UnitRetenue': lookup_unit(rub_r),
+            # Enrichissement v0.6.0 — cols J + K via T511.C
+            'Nombre': jk_nombre,
+            'Montant': jk_montant,
         })
     print(f"      → {n_paiement} rub. Paiement / {n_retenue} rub. Retenue résolues")
+    print(f"      → {n_jk} lignes avec textes Nombre/Montant remplis depuis T511.C")
     return out
 
 
-def add_akn_data_sheet(wb, data: list[dict]) -> None:
-    """Ajoute un onglet 'AKN_Data' au classeur avec les 122 catégories AKN.
-    Mise en forme cohérente avec la palette Strada."""
-    print(f"[5/5 a] Ajout de l'onglet 'AKN_Data' ({len(data)} lignes)…")
-    if 'AKN_Data' in wb.sheetnames:
-        del wb['AKN_Data']
-    ws = wb.create_sheet('AKN_Data')
+def add_data_sheet(wb, data: list[dict], client: str, cfg: dict) -> None:
+    """Ajoute un onglet '<CLIENT>_Data' au classeur avec les catégories du client."""
+    sheet_name = f"{client}_Data"
+    print(f"[5/5 a] Ajout de l'onglet '{sheet_name}' ({len(data)} lignes)…")
+    if sheet_name in wb.sheetnames:
+        del wb[sheet_name]
+    ws = wb.create_sheet(sheet_name)
 
     from openpyxl.styles import Alignment, Border, Side
 
     # Titre
-    ws['A1'] = "Données AKN — Catégories d'absences/présences"
+    ws['A1'] = f"Données {client} — Catégories d'absences/présences"
     ws['A1'].font = Font(name='Arial', size=14, bold=True, color=WHITE)
     ws['A1'].fill = PatternFill('solid', fgColor=STRADA_DARK)
     ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
     ws.merge_cells('A1:F1')
     ws.row_dimensions[1].height = 28
 
-    ws['A2'] = (f"Source : T554S + T554T  |  GrSdP={AKN_GRSDP}  |  "
-                f"Langue={AKN_LANG_FR}  |  GrPay={AKN_GRPAY}  |  Customer Code=AKN")
+    ws['A2'] = (f"Source : T554S + T554T  |  GrSdP={cfg['grsdp']}  |  "
+                f"Langue={cfg['lang_fr']}  |  GrPay={cfg['grpay']}  |  "
+                f"Customer Code={client}")
     ws['A2'].font = Font(name='Arial', size=9, italic=True, color="FF333333")
     ws['A2'].alignment = Alignment(horizontal='center')
     ws.merge_cells('A2:F2')
@@ -551,31 +674,24 @@ def add_akn_data_sheet(wb, data: list[dict]) -> None:
         ws.column_dimensions[col].width = w
 
     ws.freeze_panes = 'A5'
-    print(f"      → onglet AKN_Data créé")
+    print(f"      → onglet {sheet_name} créé")
 
 
-def populate_main_sheet(wb, data: list[dict]) -> int:
+def populate_main_sheet(wb, data: list[dict], cfg: dict) -> int:
     """Remplace les données du sheet principal 'Absences-Présences' par
-    les vraies données AKN, groupées par catégorie '(0Xxx)'.
-
-    - Conserve les entêtes (lignes 1-7) et le titre (modifié pour AKN).
-    - Vide les lignes 8-156 (valeurs + styles), supprime les merges concernés.
-    - Insère une ligne d'entête de catégorie + N lignes de données par catégorie.
-    - Remplit uniquement colonnes A (Code), B (Libellé), C (Used '□' par défaut).
-      Les autres colonnes (D-O) restent vides — données absentes des 4 tables AKN
-      fournies (cf. CLAUDE.md "Tables potentiellement manquantes").
-    """
+    les vraies données client, groupées par catégorie '(0Xxx)'."""
     from openpyxl.styles import Alignment, Border, Side
 
-    print(f"[5/5 b] Injection données AKN dans onglet '{MAIN_SHEET}'…")
+    print(f"[5/5 b] Injection données dans onglet '{MAIN_SHEET}'…")
     ws = wb[MAIN_SHEET]
 
-    # 1. Mettre à jour le titre G3 ("FR" → "AKN")
+    # 1. Mettre à jour le titre (ex. "FR Absences" → "AKN Absences")
+    old, new = cfg["title_replace"]
     for r in range(1, HEADER_ROW_END + 1):
         for c in range(1, MAIN_COL_COUNT + 1):
             cell = ws.cell(row=r, column=c)
             if cell.value and isinstance(cell.value, str) and "Absences/Présences Catalogue" in cell.value:
-                cell.value = cell.value.replace("FR Absences", "AKN Absences")
+                cell.value = cell.value.replace(old, new)
 
     # 2. Supprimer toutes les fusions dans la zone de données
     to_remove = [mr for mr in list(ws.merged_cells.ranges)
@@ -674,8 +790,15 @@ def populate_main_sheet(wb, data: list[dict]) -> int:
                 cx.fill = data_fill
                 cx.alignment = align
                 cx.border = blank_border
-            # Colonnes J-O : laissées vides (métier) avec fond jaune cohérent
-            for col in range(10, 16):
+            # Col J (10) = Nombre / Col K (11) = Montant — issus de T511.C
+            for col_idx, val in ((10, rec['Nombre']), (11, rec['Montant'])):
+                cj = ws.cell(row=cur_row, column=col_idx, value=val or None)
+                cj.font = data_font
+                cj.fill = data_fill
+                cj.alignment = code_align
+                cj.border = blank_border
+            # Colonnes L-O : laissées vides (métier) avec fond jaune cohérent
+            for col in range(12, 16):
                 cd = ws.cell(row=cur_row, column=col)
                 cd.fill = data_fill
                 cd.border = blank_border
@@ -700,10 +823,12 @@ def populate_main_sheet(wb, data: list[dict]) -> int:
     return n_data_rows
 
 
-def main() -> None:
-    print(f"=== generate_wtc_absences.py v{APP_VERSION} ===")
+def generate(client: str) -> None:
+    cfg = CLIENT_CONFIGS[client]
+    output = cfg["output"]
+    print(f"=== generate_wtc_absences.py v{APP_VERSION} — client {client} ===")
     print(f"Template : {GFK_TEMPLATE.name}")
-    print(f"Cible    : {OUTPUT.name}")
+    print(f"Cible    : {output.name}")
 
     # 1. Charger le template (.xlsx pré-converti, ou conversion .xls si nécessaire sous Linux)
     wb = load_template(GFK_TEMPLATE, GFK_XLS_LEGACY)
@@ -714,26 +839,42 @@ def main() -> None:
     # 3. Patcher les couleurs (mauve NGA → vert Strada)
     n_fill, n_font = patch_colors(wb)
 
-    # 4. Charger les données AKN
-    akn_data = load_akn_data()
+    # 4. Charger les données client
+    data = load_client_data(cfg)
 
-    # 5a. Onglet AKN_Data (vue à plat de référence)
-    add_akn_data_sheet(wb, akn_data)
+    # 5a. Onglet <CLIENT>_Data (vue à plat de référence)
+    add_data_sheet(wb, data, client, cfg)
 
-    # 5b. Injecter les données AKN dans l'onglet principal
-    n_inj = populate_main_sheet(wb, akn_data)
+    # 5b. Injecter les données dans l'onglet principal
+    n_inj = populate_main_sheet(wb, data, cfg)
 
     # 6. Sauvegarder
-    print(f"[6/6] Sauvegarde → {OUTPUT.name}")
-    wb.save(OUTPUT)
+    print(f"[6/6] Sauvegarde → {output.name}")
+    wb.save(output)
 
     # Nettoyer le dossier temporaire (cas conversion .xls fallback)
     shutil.rmtree(TMP_DIR, ignore_errors=True)
 
     print()
     print(f"=== Terminé : {n_imgs} images, {n_fill} fills, {n_font} fontes, "
-          f"{len(akn_data)} catégories AKN ({n_inj} lignes injectées) ===")
-    print(f"Sortie : {OUTPUT}")
+          f"{len(data)} catégories {client} ({n_inj} lignes injectées) ===")
+    print(f"Sortie : {output}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Générateur Wagetype Catalog Absences (multi-clients)")
+    parser.add_argument("--client", choices=sorted(CLIENT_CONFIGS.keys()),
+                        default="AKN", help="Client à traiter (défaut : AKN)")
+    parser.add_argument("--all", action="store_true",
+                        help="Génère le fichier pour tous les clients configurés")
+    args = parser.parse_args()
+
+    clients = sorted(CLIENT_CONFIGS.keys()) if args.all else [args.client]
+    for c in clients:
+        generate(c)
+        if len(clients) > 1:
+            print()
 
 
 if __name__ == "__main__":

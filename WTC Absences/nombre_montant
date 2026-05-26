@@ -1,0 +1,17 @@
+Les colonnes J et K du WTC Absence  doivent être remplis à partir de la colonne J de la table T511
+La colonne C de la table T511 est le numero de rubrique correspondant à celui du numero de la rubrique de la colonne A. Si aucune correspondance de numero de rubrique d'absence est trouvée, on utilisent les rubriques des colonnes D, ou G (si la colonne D n'a pas de numero de rubrique) du "Wagetype Catalog Absence"
+Si la colonne A, D ou G non pas de numero de rubrique, alors la colonne J (Nombre) et la colonne K (Montant) du "wagetype Catalog Absence" seront laissé vide.
+Suivant le numero de la colonne J de la table T511, correspondant à la rubrique trouvé dans le "wagetype Catalog Absence" (soit les colonnes A, D, G), les colonnes J et K du "wagetype Catalog Absence" seront remplis avec le texte correspondant, entre guillemet, ci dessous,
+
+un espace= colonne J "soit nbr" colonne K "soit mnt"
+A=colonne J "soit nbr" colonne K "soit mnt"
+0=colonne J "aucun nbr" colonne K "aucun mnt"
+1=colonne J "aucun nbr" colonne K "oblig."
+2=colonne J "oblig." colonne K "aucun mnt"
+3=colonne J "ou nbr" colonne K "au moins le mnt"
+4=colonne J "facult." colonne K "oblig."
+5=colonne J "oblig." colonne K "facult."
+6=colonne J "oblig." colonne K "oblig."
+7=colonne J "facult." colonne K "facult."
+8=colonne J "aucun nbr" colonne K "aucun mnt"
+9=colonne J "aucun nbr" colonne K "facult."
