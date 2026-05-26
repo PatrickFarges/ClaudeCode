@@ -34,10 +34,15 @@ Changelog :
            privilégie les vraies rubriques Paiement/Retenue). Si T511 col C est
            vide sur la ligne trouvée → cols J et K du WTC laissées vides (cas
            fréquent sur rubriques 9000+ chez certains clients).
+  v0.8.0 — Remplissage col L (Unité de temps — sous-section "Pilotage Paie") :
+           même lookup que F et I (via T511.UnT) mais en partant de la rubrique
+           Paiement (col D), avec fallback sur la rubrique Retenue (col G).
+           La col A (CatAbsP) n'est PAS utilisée ici puisque L est dans la zone
+           Pilotage Paie — basée uniquement sur les rubriques de paie.
 """
 from __future__ import annotations
 
-APP_VERSION = "0.7.0"
+APP_VERSION = "0.8.0"
 
 import argparse
 import shutil
@@ -602,6 +607,9 @@ def load_client_data(cfg: dict) -> list[dict]:
             # Enrichissement v0.6.0 — cols J + K via T511.C
             'Nombre': jk_nombre,
             'Montant': jk_montant,
+            # Enrichissement v0.8.0 — col L (Pilotage Paie : unité de temps)
+            # Basée sur rub Paiement (D) prioritaire, sinon rub Retenue (G).
+            'UnitL': lookup_unit(rub_p) or lookup_unit(rub_r),
         })
     print(f"      → {n_paiement} rub. Paiement / {n_retenue} rub. Retenue résolues")
     print(f"      → {n_jk} lignes avec textes Nombre/Montant remplis depuis T511.C")
@@ -797,8 +805,15 @@ def populate_main_sheet(wb, data: list[dict], cfg: dict) -> int:
                 cj.fill = data_fill
                 cj.alignment = code_align
                 cj.border = blank_border
-            # Colonnes L-O : laissées vides (métier) avec fond jaune cohérent
-            for col in range(12, 16):
+            # Col L (12) = Unité de temps (Pilotage Paie) — issue de T511.UnT
+            # via rub Paiement (D) avec fallback rub Retenue (G)
+            cl = ws.cell(row=cur_row, column=12, value=rec['UnitL'] or None)
+            cl.font = data_font
+            cl.fill = data_fill
+            cl.alignment = code_align
+            cl.border = blank_border
+            # Colonnes M-O : laissées vides (métier) avec fond jaune cohérent
+            for col in range(13, 16):
                 cd = ws.cell(row=cur_row, column=col)
                 cd.fill = data_fill
                 cd.border = blank_border
