@@ -155,7 +155,34 @@ Les cols D + G (Rubrique Paiement / Retenue) peuvent en théorie se déduire ave
 
 Les cols M, N, O (Formule de calcul, Taux horaire, Taux jour) sont du **paramétrage métier** (référence à l'onglet "Taux de valorisation" : TH1-TH3, TJ1-TJ10) et ne sortent d'aucune table SAP — remplissage manuel.
 
+## Interface graphique (HRO)
+
+`wtc_absences_gui.py` — interface Tkinter destinée à un HRO (utilisateur non
+technique). Elle ne contient **aucune logique métier** : elle construit une
+config via `generate_wtc_absences.build_dir_config()` puis appelle
+`generate_from_config()`, en capturant le stdout pour l'afficher dans un journal.
+
+L'HRO renseigne uniquement :
+1. **Dossier des tables SAP** (détection auto des fichiers, casse libre — voir
+   `scan_tables_dir()`). Obligatoires : T554S, T554T, T554C, T511, T512T.
+   Recommandée : T554E (sinon repli sur les 11 classes standard).
+2. **Dossier de sortie** + **nom du fichier** `.xlsx`.
+3. Case **« fichier WTC antérieur à réviser »** → `cfg['revise_previous']`.
+   **Réservée, sans effet pour le moment** : prévue pour reprendre plus tard les
+   2-3 colonnes remplies manuellement par l'HRO (ex. Used) depuis l'ancien
+   fichier. La place (case + libellé + sélecteur de fichier) est déjà en place.
+
+Les paramètres France (GrSdP=6, GrPay=06, langue=F, pas de filtre Mdt) sont des
+**defaults cachés** : l'HRO n'a pas à les connaître.
+
 ## Installation et lancement
+
+`./run.sh` (Linux) et `run.bat` (Windows) lancent désormais **l'interface
+graphique**. Le générateur en ligne de commande reste accessible pour le dev :
+
+```bash
+.venv/bin/python generate_wtc_absences.py --client ABV   # ou --client AKN / --all
+```
 
 ### Linux (poste de dev)
 
@@ -163,7 +190,15 @@ Les cols M, N, O (Formule de calcul, Taux horaire, Taux jour) sont du **paramét
 ./run.sh
 ```
 
-Le script crée automatiquement `.venv/`, installe les libs et lance `generate_wtc_absences.py`.
+Crée `.venv/`, installe les libs (`requirements.txt`) et lance la GUI.
+⚠ **Tkinter** n'est pas livré avec Python sous Linux : si `run.sh` affiche
+qu'il manque, installer une fois le paquet système :
+
+```bash
+sudo apt install python3-tk
+```
+
+(Inutile de recréer le venv ensuite : il partage la stdlib du Python système.)
 
 ### Windows 11 (poste entreprise)
 
@@ -171,10 +206,11 @@ Le script crée automatiquement `.venv/`, installe les libs et lance `generate_w
 run.bat
 ```
 
-Idem côté Windows. Le `run.bat` :
+Idem côté Windows (Tkinter est **livré avec Python** → aucune installation
+système requise). Le `run.bat` :
 1. Crée `.venv\` avec `python -m venv` (Python doit être dans le PATH)
 2. Installe les libs depuis `requirements.txt`
-3. Lance le script
+3. Lance `wtc_absences_gui.py`
 
 #### Libs Python nécessaires (production)
 

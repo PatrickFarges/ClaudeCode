@@ -1,6 +1,7 @@
 @echo off
-REM Lance le générateur du Wagetype Catalog Absences sous Windows
-REM Crée le venv au premier lancement, sinon réutilise.
+REM Lance l'interface graphique HRO du Wagetype Catalog Absence sous Windows.
+REM Cree le venv au premier lancement, sinon reutilise.
+REM Generateur en ligne de commande : .venv\Scripts\python.exe generate_wtc_absences.py --client ABV
 
 cd /d "%~dp0"
 
@@ -11,4 +12,5 @@ if not exist ".venv\Scripts\python.exe" (
     .venv\Scripts\pip.exe install --quiet -r requirements.txt
 )
 
-.venv\Scripts\python.exe generate_wtc_absences.py %*
+REM Tkinter est livre avec Python sous Windows (aucune installation systeme requise).
+.venv\Scripts\python.exe wtc_absences_gui.py %*

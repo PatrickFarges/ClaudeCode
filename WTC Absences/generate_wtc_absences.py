@@ -81,10 +81,20 @@ Changelog :
              - col G (Rubrique Retenue) recopiée du code source 1200 (3170) +
                libellé/unité, pour 1201-1209 quand la retenue est vide.
            Sans config (ex. AKN) → aucun effet.
+  v1.2.0 — Refactor pour l'interface HRO (wtc_absences_gui.py, Tkinter) :
+             - generate_from_config(cfg) : cœur réutilisable, renvoie des stats ;
+               generate(client) n'est plus qu'un wrapper CLI ;
+             - build_dir_config(input_dir, output_path) + scan_tables_dir() :
+               config dynamique depuis un dossier de tables choisi par l'HRO
+               (params France par défaut, détection auto des fichiers de tables) ;
+             - add_data_sheet utilise cfg['label'] (nom d'onglet assaini) ;
+             - generate_from_config crée le dossier de sortie au besoin.
+           La case 'fichier WTC antérieur à réviser' (cfg['revise_previous']) est
+           prévue mais sans effet (reprise des colonnes manuelles HRO à venir).
 """
 from __future__ import annotations
 
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 
 import argparse
 import shutil
@@ -129,6 +139,7 @@ CLIENT_CONFIGS: dict[str, dict] = {
         "mdt": "984",       # Mandant SAP
         "output": ROOT / "AKN France Absences-Presences Catalogue.xlsx",
         "title_replace": ("FR Absences", "AKN Absences"),
+        "label": "AKN",     # nom de l'onglet Data + titre
     },
     "ABV": {
         "dir": ROOT / "ABV",
@@ -144,6 +155,7 @@ CLIENT_CONFIGS: dict[str, dict] = {
         "mdt": None,        # ABV : pas de filtre Mdt (dumps sans colonne fiable)
         "output": ROOT / "ABV WTC.xlsx",
         "title_replace": ("FR Absences", "ABV Absences"),
+        "label": "ABV",     # nom de l'onglet Data + titre
         # Override métier ABVIE — "Temps partiel thérapeutique" (CatAbsP 1200-1209) :
         #   col D = 'IT 2010' (rubriques de paie dans l'infotype 2010, envoyées
         #           par le client → HRO ne veut PAS de n° de rubrique) ;
@@ -801,9 +813,20 @@ def load_client_data(cfg: dict) -> list[dict]:
     return out
 
 
-def add_data_sheet(wb, data: list[dict], client: str, cfg: dict) -> None:
-    """Ajoute un onglet '<CLIENT>_Data' au classeur avec les catégories du client."""
-    sheet_name = f"{client}_Data"
+def _safe_sheet_name(label: str, suffix: str = "_Data") -> str:
+    """Nom d'onglet Excel valide : retire les caractères interdits (:\\/?*[])
+    et borne la longueur à 31 caractères (suffixe inclus)."""
+    cleaned = ''.join('_' if ch in r':\/?*[]' else ch for ch in (label or 'WTC')).strip()
+    cleaned = cleaned or 'WTC'
+    return cleaned[:31 - len(suffix)] + suffix
+
+
+def add_data_sheet(wb, data: list[dict], cfg: dict) -> None:
+    """Ajoute un onglet '<label>_Data' au classeur avec les catégories du client.
+    Le libellé vient de cfg['label'] (code client en CLI, nom du fichier de
+    sortie via l'interface dossier)."""
+    client = cfg.get("label", "WTC")
+    sheet_name = _safe_sheet_name(client)
     print(f"[5/5 a] Ajout de l'onglet '{sheet_name}' ({len(data)} lignes)…")
     if sheet_name in wb.sheetnames:
         del wb[sheet_name]
@@ -1150,46 +1173,111 @@ def populate_main_sheet(wb, data: list[dict], cfg: dict,
     return n_data_rows
 
 
-def generate(client: str) -> None:
-    cfg = CLIENT_CONFIGS[client]
-    output = cfg["output"]
-    print(f"=== generate_wtc_absences.py v{APP_VERSION} — client {client} ===")
+# ---- Interface dossier (HRO) : config dynamique depuis un répertoire ----------
+
+# Tables SAP attendues par l'interface dossier.
+REQUIRED_DIR_TABLES = ["T554S", "T554T", "T554C", "T511", "T512T"]
+RECOMMENDED_DIR_TABLES = ["T554E"]          # sinon repli DEFAULT_PEN_CLASSES
+OPTIONAL_DIR_TABLES = ["T508A", "Y00BA"]    # non utilisées aujourd'hui
+
+
+def scan_tables_dir(input_dir) -> dict[str, str]:
+    """Repère dans input_dir le fichier .xlsx/.xls de chaque table SAP connue.
+    Match insensible à la casse sur le nom de fichier (stem == nom de table ;
+    Y00BA matche tout fichier commençant par 'y00ba'). Renvoie {table: fichier}."""
+    input_dir = Path(input_dir)
+    found: dict[str, str] = {}
+    if not input_dir.is_dir():
+        return found
+    known = REQUIRED_DIR_TABLES + RECOMMENDED_DIR_TABLES + OPTIONAL_DIR_TABLES
+    for f in sorted(input_dir.iterdir()):
+        if not f.is_file() or f.suffix.lower() not in ('.xlsx', '.xls'):
+            continue
+        stem = f.stem.lower()
+        for t in known:
+            if t in found:
+                continue
+            if t == "Y00BA":
+                if stem.startswith("y00ba"):
+                    found[t] = f.name
+            elif stem == t.lower():
+                found[t] = f.name
+    return found
+
+
+def build_dir_config(input_dir, output_path, *, revise_previous: bool = False) -> dict:
+    """Construit une config de génération depuis un dossier de tables choisi par
+    l'utilisateur (interface HRO). Paramètres France par défaut (GrSdP=6,
+    GrPay=06, langue=F, pas de filtre Mdt). Tables détectées automatiquement
+    (casse libre) via scan_tables_dir().
+
+    revise_previous : réservé (case 'fichier WTC antérieur à réviser') — sans
+    effet pour le moment.
+    """
+    input_dir = Path(input_dir)
+    output_path = Path(output_path)
+    return {
+        "dir": input_dir,
+        "tables": scan_tables_dir(input_dir),
+        "grsdp": "6",
+        "lang_fr": "F",
+        "grpay": "06",
+        "mdt": None,
+        "output": output_path,
+        "label": output_path.stem,
+        "title_replace": ("FR Absences", "FR Absences"),  # no-op générique
+        # Override standard "Temps partiel thérapeutique" (codes SAP 1200-1209).
+        "therapeutic_partial": {
+            "codes": [str(c) for c in range(1200, 1210)],
+            "retenue_source": "1200",
+            "payment_label": "IT 2010",
+        },
+        "revise_previous": revise_previous,  # réservé — sans effet (à venir)
+    }
+
+
+def generate_from_config(cfg: dict) -> dict:
+    """Génère le Wagetype Catalog Absence depuis une config (CLIENT_CONFIGS ou
+    build_dir_config). Renvoie un dict de statistiques. Les messages de
+    progression sont imprimés sur stdout (capturés par la GUI)."""
+    output = Path(cfg["output"])
+    label = cfg.get("label", "WTC")
+    print(f"=== generate_wtc_absences.py v{APP_VERSION} — {label} ===")
     print(f"Template : {GFK_TEMPLATE.name}")
     print(f"Cible    : {output.name}")
 
-    # 1. Charger le template (.xlsx pré-converti, ou conversion .xls si nécessaire sous Linux)
+    # 1. Template (.xlsx pré-converti, ou conversion .xls si nécessaire sous Linux)
     wb = load_template(GFK_TEMPLATE, GFK_XLS_LEGACY)
-
-    # 2. Remplacer les images (logos NGA → logo Strada)
+    # 2. Images (logos NGA → logo Strada)
     n_imgs = replace_logos(wb, LOGO_STRADA)
-
-    # 3. Patcher les couleurs (mauve NGA → vert Strada)
+    # 3. Couleurs (mauve NGA → vert Strada)
     n_fill, n_font = patch_colors(wb)
-
-    # 4. Charger les données client
+    # 4. Données client
     data = load_client_data(cfg)
-
-    # 4b. Classes d'absences (T554E) → structure du bloc pénalisant. Repli sur
-    #     les 11 classes standard si le client n'a pas dumpé T554E (ex. AKN).
+    # 4b. Classes d'absences (T554E) ; repli 11 classes standard si T554E absente
     pen_classes = load_t554e(cfg) or DEFAULT_PEN_CLASSES
-
-    # 5a. Onglet <CLIENT>_Data (vue à plat de référence)
-    add_data_sheet(wb, data, client, cfg)
-
-    # 5b. Injecter les données dans l'onglet principal
+    # 5a. Onglet <label>_Data (vue à plat de référence)
+    add_data_sheet(wb, data, cfg)
+    # 5b. Injection dans l'onglet principal
     n_inj = populate_main_sheet(wb, data, cfg, pen_classes)
 
-    # 6. Sauvegarder
+    # 6. Sauvegarde (crée le dossier de sortie au besoin)
     print(f"[6/6] Sauvegarde → {output.name}")
+    output.parent.mkdir(parents=True, exist_ok=True)
     wb.save(output)
-
-    # Nettoyer le dossier temporaire (cas conversion .xls fallback)
     shutil.rmtree(TMP_DIR, ignore_errors=True)
 
     print()
     print(f"=== Terminé : {n_imgs} images, {n_fill} fills, {n_font} fontes, "
-          f"{len(data)} catégories {client} ({n_inj} lignes injectées) ===")
+          f"{len(data)} catégories ({n_inj} lignes injectées) ===")
     print(f"Sortie : {output}")
+    return {"images": n_imgs, "fills": n_fill, "fonts": n_font,
+            "categories": len(data), "rows": n_inj, "output": str(output)}
+
+
+def generate(client: str) -> None:
+    """Génère pour un client pré-configuré dans CLIENT_CONFIGS (usage CLI)."""
+    generate_from_config(CLIENT_CONFIGS[client])
 
 
 def main() -> None:
