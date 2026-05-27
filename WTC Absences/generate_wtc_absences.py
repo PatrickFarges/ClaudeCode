@@ -48,19 +48,46 @@ Changelog :
              S = CLABS 70 (Pénalisant RATP → transport)
            T554E sert seulement de référentiel CLABS → libellé (non utilisée
            pour la jointure, qui se fait via Règle de valorisat. dans T554C).
+  v1.0.0 — TOUTES les classes d'absences de T554E (demande client ABVIE).
+           Le bloc pénalisant passe de 4 colonnes (P-S) à 1 colonne par classe
+           T554E, dans l'ordre des CLABS (1,10,20,30,40,50,60,70,80,90,91) :
+             P=1 (Congé)        Q=10 (Maternité/Pat.)  R=20 (Maladie)
+             S=30 (Pén.13ème)   T=40 (Pén.Pr.Vac.)     U=50 (Pén.Pr.Anc.)
+             V=60 (Base Stag.)  W=70 (abs n.payée RATP) X=80 (abs payée RATP)
+             Y=90 (Base Appr.)  Z=91 (Abs n.payées DSN)
+           Les colonnes historiques à droite des pénalisants (Additional
+           Comments, WD absence name, Customizing…) ne sont PAS écrasées mais
+           DÉCALÉES de +N colonnes (N = nb classes − 4) vers la droite, avec
+           leurs valeurs/styles/largeurs/fusions. Les entêtes ligne 7 reprennent
+           le libellé 'Classe' de T554E. T554E est désormais chargée et pilote
+           la structure du bloc (clé : GrPay). Clients dont T554E n'a pas été
+           dumpée (ex. AKN) → repli sur DEFAULT_PEN_CLASSES (les 11 classes,
+           identiques pour tous les clients GrPay=06).
+  v1.0.1 — Fix : dé-masquage des lignes du template. Le template GFK hérite de
+           ~93 lignes masquées (plan Excel du catalogue GFK d'origine, lignes
+           12-156). Les lignes d'absence injectées tombant dessus étaient
+           invisibles à l'écran (ex. CatAbsP 1202-1206 cachées entre 1201 et
+           1207) bien que présentes dans le fichier.
+  v1.0.2 — On ne reconduit AUCUN masquage du template : toutes les lignes de
+           l'onglet principal sont rendues visibles (hidden=False sur tout
+           ws.row_dimensions, pas seulement les lignes remplies). Le masquage
+           HRO d'origine cachait des codes d'absence valides ; si le client veut
+           masquer des codes inutilisés, ce sera à lui de le faire.
 """
 from __future__ import annotations
 
-APP_VERSION = "0.9.0"
+APP_VERSION = "1.0.2"
 
 import argparse
 import shutil
 import subprocess
+from copy import copy
 from pathlib import Path
 
 import openpyxl
 from openpyxl.drawing.image import Image as XLImage
 from openpyxl.styles import PatternFill, Font
+from openpyxl.utils import get_column_letter
 
 # ---- Chemins communs ------------------------------------------------------
 
@@ -99,6 +126,7 @@ CLIENT_CONFIGS: dict[str, dict] = {
         "dir": ROOT / "ABV",
         "tables": {
             "T554S": "t554s.XLSX", "T554T": "t554t.XLSX", "T554C": "t554c.XLSX",
+            "T554E": "T554E.XLSX",
             "T511": "t511.XLSX", "T512T": "T512T.XLSX",
             "T508A": "t508a.XLSX", "Y00BA": "Y00BA_TAB_COMPAN.XLSX",
         },
@@ -126,7 +154,32 @@ MAIN_SHEET = "Absences-Présences"
 HEADER_ROW_END = 7        # lignes 1-7 = entêtes (à conserver)
 DATA_ROW_START = 8        # première ligne de données
 DATA_ROW_END = 156        # dernière ligne potentielle de données
-MAIN_COL_COUNT = 25       # colonnes utiles A-Y
+MAIN_COL_COUNT = 25       # colonnes utiles A-Y dans le template GFK d'origine
+
+# Géométrie du bloc "pénalisants" / classes d'absences (T554E)
+PEN_START_COL = 16        # P — 1re colonne de classe d'absence
+PEN_TEMPLATE_COUNT = 4    # le template GFK a 4 colonnes pénalisantes (P-S)
+TRAILING_END_COL = 25     # Y — dernière colonne "trailing" à décoler du template
+                          # (T..Y : Additional Comments, WD absence name, Customizing…)
+
+# Repli pour les clients dont T554E n'a pas été dumpée (ex. AKN). Les classes
+# d'absences sont les MÊMES pour tous les clients GrPay=06 (confirmé par Pat),
+# donc on reproduit ici les 11 classes T554E. Si un client fournit son T554E,
+# load_t554e() prime (libellés exacts du dump). Ordre = CLABS croissants.
+# Format identique à load_t554e() : liste ordonnée de {'clabs', 'label'}.
+DEFAULT_PEN_CLASSES = [
+    {'clabs': '1',  'label': 'Congé'},
+    {'clabs': '10', 'label': 'Maternité/Paternité'},
+    {'clabs': '20', 'label': 'Maladie'},
+    {'clabs': '30', 'label': 'Pénalisant 13ème mois'},
+    {'clabs': '40', 'label': 'Pénalisant Prime Vacances'},
+    {'clabs': '50', 'label': 'Pénalisant Prime Ancienneté'},
+    {'clabs': '60', 'label': 'Pénalisant Base Stagiaire'},
+    {'clabs': '70', 'label': 'abs non payée Impact  RATP'},
+    {'clabs': '80', 'label': 'abs  payée Impact  RATP'},
+    {'clabs': '90', 'label': 'Pénalisant Base Apprenti'},
+    {'clabs': '91', 'label': 'Absences non payées DSN'},
+]
 
 # Fichier intermédiaire (conversion .xls → .xlsx via libreoffice)
 TMP_DIR = ROOT / ".tmp_build"
@@ -408,6 +461,53 @@ def load_t512t(cfg: dict) -> dict[str, str]:
     return out
 
 
+def load_t554e(cfg: dict) -> list[dict] | None:
+    """Charge T554E → liste ordonnée [{'clabs': '1', 'label': 'Congé'}, …].
+
+    T554E est le référentiel des classes d'absences (CLABS → libellé). Chaque
+    classe devient une colonne du bloc pénalisant dans le WTC, dans l'ordre
+    croissant des CLABS (1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 91).
+
+    Filtre : GrPay = cfg['grpay']. On NE filtre PAS sur Mdt : dans les dumps,
+    le Mdt de T554E (référentiel) peut différer du Mdt paie.
+
+    Renvoie None si la table n'est pas configurée / introuvable pour le client
+    (ex. AKN) → l'appelant retombe sur DEFAULT_PEN_CLASSES (11 classes).
+    """
+    if "T554E" not in cfg["tables"]:
+        return None
+    try:
+        table = _resolve_table(cfg, "T554E")
+    except FileNotFoundError:
+        return None
+    print(f"[4/5 g] Chargement T554E ({table.name}, GrPay={cfg['grpay']})…")
+    wb = openpyxl.load_workbook(table, data_only=True, read_only=True)
+    ws = wb.active
+    rows = ws.iter_rows(values_only=True)
+    hdr = next(rows)
+    iG = _idx(hdr, 'GrPay', 'L.HCM')
+    iC = hdr.index('CLABS')
+    iL = hdr.index('Classe')
+    out: list[dict] = []
+    seen: set[str] = set()
+    for r in rows:
+        if iG is not None and r[iG] != cfg["grpay"]:
+            continue
+        clabs = r[iC]
+        if clabs in (None, ''):
+            continue
+        clabs = str(clabs)
+        if clabs in seen:
+            continue
+        seen.add(clabs)
+        out.append({'clabs': clabs, 'label': r[iL] or clabs})
+    wb.close()
+    # Ordre croissant des CLABS (1, 10, 20, …, 91) → mappe P, Q, R, … Z
+    out.sort(key=lambda d: int(d['clabs']) if d['clabs'].isdigit() else 1_000_000)
+    print(f"      → {len(out)} classes d'absences")
+    return out
+
+
 def _classify_rubrique(rub: str, libelle: str) -> str:
     """Renvoie 'paiement', 'retenue' ou '' selon le libellé T512T.
     L'ordre des sous-blocs dans T554C n'est pas fiable (parfois retenue en
@@ -593,7 +693,6 @@ def load_client_data(cfg: dict) -> list[dict]:
     n_paiement = 0
     n_retenue = 0
     n_jk = 0
-    n_pen = {'30': 0, '40': 0, '50': 0, '70': 0}
     for cat in sorted(by_cat.keys()):
         rec = by_cat[cat]
         rule = rec['RegleValorisat']
@@ -608,9 +707,6 @@ def load_client_data(cfg: dict) -> list[dict]:
         jk_nombre, jk_montant = lookup_nombre_montant(cat, rub_p, rub_r)
         if jk_nombre or jk_montant:
             n_jk += 1
-        for k in n_pen:
-            if k in clabs:
-                n_pen[k] += 1
         out.append({
             'CatAbsP': cat,
             'Libelle': labels.get(cat, '(libellé FR manquant)'),
@@ -631,17 +727,13 @@ def load_client_data(cfg: dict) -> list[dict]:
             # Enrichissement v0.8.0 — col L (Pilotage Paie : unité de temps)
             # Basée sur rub Paiement (D) prioritaire, sinon rub Retenue (G).
             'UnitL': lookup_unit(rub_p) or lookup_unit(rub_r),
-            # Enrichissement v0.9.0 — cols P/Q/R/S (pénalisants)
-            # via les 10 cols CLABS de T554C pour la règle de valorisation.
-            'Pen13eMois':    '30' in clabs,
-            'PenPrimeVac':   '40' in clabs,
-            'PenPrimeAnc':   '50' in clabs,
-            'PenRATP':       '70' in clabs,
+            # Enrichissement v1.0.0 — ensemble brut des CLABS pénalisées de la
+            # règle de valorisation. Le mapping CLABS → colonne (P..Z) est fait
+            # dans populate_main_sheet à partir des classes T554E.
+            'ClabsSet': clabs,
         })
     print(f"      → {n_paiement} rub. Paiement / {n_retenue} rub. Retenue résolues")
     print(f"      → {n_jk} lignes avec textes Nombre/Montant remplis depuis T511.C")
-    print(f"      → pénalisants : 13ème mois={n_pen['30']}, Prime vac={n_pen['40']}, "
-          f"Prime anc={n_pen['50']}, RATP={n_pen['70']}")
     return out
 
 
@@ -714,7 +806,99 @@ def add_data_sheet(wb, data: list[dict], client: str, cfg: dict) -> None:
     print(f"      → onglet {sheet_name} créé")
 
 
-def populate_main_sheet(wb, data: list[dict], cfg: dict) -> int:
+def restructure_penalisant_block(ws, pen_classes: list[dict]) -> int:
+    """Étend le bloc des classes d'absences de PEN_TEMPLATE_COUNT colonnes (P-S
+    dans le template GFK) à len(pen_classes) colonnes, en DÉCALANT vers la droite
+    les colonnes "trailing" (Additional Comments, WD absence name, Customizing…)
+    au lieu de les écraser, puis réécrit les entêtes ligne 7 avec les libellés
+    'Classe' de T554E.
+
+    shift = len(pen_classes) − PEN_TEMPLATE_COUNT. Si shift == 0 (client sans
+    T554E → 4 pénalisants), aucune colonne n'est déplacée : on se contente de
+    réécrire les 4 entêtes. Renvoie le shift appliqué.
+    """
+    n = len(pen_classes)
+    shift = n - PEN_TEMPLATE_COUNT
+    pen_start = PEN_START_COL                          # 16 = P
+    trailing_start = pen_start + PEN_TEMPLATE_COUNT    # 20 = T (1re col à décaler)
+    trailing_end = TRAILING_END_COL                    # 25 = Y
+    pilotage_end = pen_start + PEN_TEMPLATE_COUNT - 1   # 19 = S (fin merge J6:S6)
+
+    if shift > 0:
+        # 1. Snapshot des entêtes trailing (lignes 6-7) : valeur, styles, largeur.
+        snap = []  # (old_col, width, {row: (value, font, fill, border, align, numfmt)})
+        for col in range(trailing_start, trailing_end + 1):
+            L = get_column_letter(col)
+            dim = ws.column_dimensions.get(L)
+            cells = {}
+            for r in (6, 7):
+                c = ws.cell(row=r, column=col)
+                cells[r] = (c.value, copy(c.font), copy(c.fill),
+                            copy(c.border), copy(c.alignment), c.number_format)
+            snap.append((col, dim.width if dim else None, cells))
+
+        # 2. Repérer les fusions d'entête concernées :
+        #    - "Pilotage Paie" J6:S6 (cols 10..pilotage_end) → à étendre
+        #    - fusions entièrement dans la zone trailing (ex. V6:Y6) → à décaler
+        pilotage = None
+        shifted_merges = []
+        for mr in list(ws.merged_cells.ranges):
+            if mr.min_row > HEADER_ROW_END:
+                continue
+            if mr.min_col == 10 and mr.max_col == pilotage_end:
+                pilotage = (mr.min_row, mr.min_col, mr.max_row, mr.max_col)
+            elif mr.min_col >= trailing_start and mr.max_col <= trailing_end:
+                shifted_merges.append((mr.min_row, mr.min_col, mr.max_row, mr.max_col))
+        if pilotage is not None:
+            ws.unmerge_cells(start_row=pilotage[0], start_column=pilotage[1],
+                             end_row=pilotage[2], end_column=pilotage[3])
+        for (r0, c0, r1, c1) in shifted_merges:
+            ws.unmerge_cells(start_row=r0, start_column=c0, end_row=r1, end_column=c1)
+
+        # 3. Effacer les anciennes cellules trailing (lignes 6-7).
+        for col in range(trailing_start, trailing_end + 1):
+            for r in (6, 7):
+                ws.cell(row=r, column=col).value = None
+
+        # 4. Réécrire le contenu trailing décalé de +shift (valeurs/styles/largeurs).
+        for (old_col, width, cells) in snap:
+            new_col = old_col + shift
+            if width is not None:
+                ws.column_dimensions[get_column_letter(new_col)].width = width
+            for r, (val, font, fill, border, align, numfmt) in cells.items():
+                nc = ws.cell(row=r, column=new_col, value=val)
+                nc.font = font
+                nc.fill = fill
+                nc.border = border
+                nc.alignment = align
+                nc.number_format = numfmt
+
+        # 5. Recréer les fusions trailing décalées (V6:Y6 → AC6:AF6).
+        for (r0, c0, r1, c1) in shifted_merges:
+            ws.merge_cells(start_row=r0, start_column=c0 + shift,
+                           end_row=r1, end_column=c1 + shift)
+
+        # 6. Étendre "Pilotage Paie" pour englober tout le bloc de classes.
+        if pilotage is not None:
+            ws.merge_cells(start_row=6, start_column=10,
+                           end_row=6, end_column=pen_start + n - 1)
+
+    # 7. (Ré)écrire les entêtes ligne 7 du bloc, libellés = 'Classe' T554E.
+    #    Style de référence = ancien entête pénalisant (S7 : orange, gras, centré).
+    ref = ws.cell(row=7, column=pilotage_end)          # S7
+    ref_style = (copy(ref.font), copy(ref.fill), copy(ref.border), copy(ref.alignment))
+    ref_dim = ws.column_dimensions.get(get_column_letter(pilotage_end))
+    ref_width = ref_dim.width if ref_dim else None
+    for i, pc in enumerate(pen_classes):
+        col = pen_start + i
+        c = ws.cell(row=7, column=col, value=pc['label'])
+        c.font, c.fill, c.border, c.alignment = (copy(s) for s in ref_style)
+        ws.column_dimensions[get_column_letter(col)].width = ref_width or 11.55
+    return shift
+
+
+def populate_main_sheet(wb, data: list[dict], cfg: dict,
+                        pen_classes: list[dict]) -> int:
     """Remplace les données du sheet principal 'Absences-Présences' par
     les vraies données client, groupées par catégorie '(0Xxx)'."""
     from openpyxl.styles import Alignment, Border, Side
@@ -722,10 +906,20 @@ def populate_main_sheet(wb, data: list[dict], cfg: dict) -> int:
     print(f"[5/5 b] Injection données dans onglet '{MAIN_SHEET}'…")
     ws = wb[MAIN_SHEET]
 
+    # 0. Restructurer le bloc des classes d'absences (P..) selon T554E, en
+    #    décalant les colonnes "trailing" vers la droite. Renvoie le décalage.
+    shift = restructure_penalisant_block(ws, pen_classes)
+    n_pen = len(pen_classes)
+    pen_end = PEN_START_COL + n_pen - 1            # ex. 26 = Z pour 11 classes
+    # Largeur utile totale = anciennes colonnes (jusqu'à Y=25) + décalage.
+    full_width = TRAILING_END_COL + shift          # ex. 32 = AF pour shift=7
+    print(f"      → {n_pen} classes d'absences (cols {get_column_letter(PEN_START_COL)}"
+          f"-{get_column_letter(pen_end)}), trailing décalé de +{shift}")
+
     # 1. Mettre à jour le titre (ex. "FR Absences" → "AKN Absences")
     old, new = cfg["title_replace"]
     for r in range(1, HEADER_ROW_END + 1):
-        for c in range(1, MAIN_COL_COUNT + 1):
+        for c in range(1, full_width + 1):
             cell = ws.cell(row=r, column=c)
             if cell.value and isinstance(cell.value, str) and "Absences/Présences Catalogue" in cell.value:
                 cell.value = cell.value.replace(old, new)
@@ -742,7 +936,7 @@ def populate_main_sheet(wb, data: list[dict], cfg: dict) -> int:
     thin = Side(border_style="thin", color="FF888888")
     blank_border = Border(left=thin, right=thin, top=thin, bottom=thin)
     for r in range(DATA_ROW_START, DATA_ROW_END + 1):
-        for c in range(1, MAIN_COL_COUNT + 1):
+        for c in range(1, full_width + 1):
             cell = ws.cell(row=r, column=c)
             cell.value = None
             cell.fill = blank_fill
@@ -784,7 +978,7 @@ def populate_main_sheet(wb, data: list[dict], cfg: dict) -> int:
         ws.cell(row=cur_row, column=1, value=cat_title).font = cat_font
         ws.cell(row=cur_row, column=1).fill = cat_fill
         ws.cell(row=cur_row, column=1).alignment = cat_align
-        for c in range(2, MAIN_COL_COUNT + 1):
+        for c in range(2, full_width + 1):
             ws.cell(row=cur_row, column=c).fill = cat_fill
         ws.merge_cells(start_row=cur_row, start_column=1, end_row=cur_row, end_column=2)
         ws.row_dimensions[cur_row].height = 22
@@ -846,15 +1040,12 @@ def populate_main_sheet(wb, data: list[dict], cfg: dict) -> int:
                 cd = ws.cell(row=cur_row, column=col)
                 cd.fill = data_fill
                 cd.border = blank_border
-            # Cols P/Q/R/S (16-19) = pénalisants : ■ si CLABS 30/40/50/70 dans
-            # la liste, □ sinon — issus de T554C.CLABS pour la règle de valorisat.
-            pen_vals = [
-                (16, rec['Pen13eMois']),
-                (17, rec['PenPrimeVac']),
-                (18, rec['PenPrimeAnc']),
-                (19, rec['PenRATP']),
-            ]
-            for col_idx, on in pen_vals:
+            # Cols P.. = classes d'absences (T554E) : ■ si la CLABS de la classe
+            # figure dans la liste CLABS de la règle de valorisation, □ sinon.
+            clabs_set = rec['ClabsSet']
+            for i, pc in enumerate(pen_classes):
+                col_idx = PEN_START_COL + i
+                on = pc['clabs'] in clabs_set
                 cp = ws.cell(row=cur_row, column=col_idx, value='■' if on else '□')
                 cp.font = used_font
                 cp.fill = data_fill
@@ -871,13 +1062,27 @@ def populate_main_sheet(wb, data: list[dict], cfg: dict) -> int:
             gap_cell.font = Font(name='Arial', size=9, italic=True, color=STRADA_DARK)
             gap_cell.fill = data_fill
             gap_cell.alignment = Alignment(horizontal='center', vertical='center')
-            for c in range(2, MAIN_COL_COUNT + 1):
+            for c in range(2, full_width + 1):
                 ws.cell(row=cur_row, column=c).fill = data_fill
             ws.merge_cells(start_row=cur_row, start_column=1, end_row=cur_row, end_column=15)
             ws.row_dimensions[cur_row].height = 14
             cur_row += 1
 
-    print(f"      → {len(cat_order)} catégories, {n_data_rows} lignes d'absence injectées")
+    # Rendre TOUTES les lignes de l'onglet visibles. Le template GFK hérite de
+    # ~93 lignes masquées (plan/groupement Excel HRO du catalogue GFK d'origine,
+    # lignes 12-156). On ne reconduit pas ce masquage : il cache des codes
+    # d'absence valides et ne génère que des questions inutiles côté client. Si
+    # HRO ou le client veut masquer des codes non utilisés, ce sera à eux de le
+    # faire. On démasque donc toutes les lignes (pas seulement celles remplies,
+    # pour couvrir aussi les clients aux données plus courtes type AKN).
+    n_unhidden = 0
+    for rd in ws.row_dimensions.values():
+        if rd.hidden:
+            rd.hidden = False
+            n_unhidden += 1
+
+    print(f"      → {len(cat_order)} catégories, {n_data_rows} lignes d'absence injectées"
+          f" ({n_unhidden} lignes du template démasquées)")
     return n_data_rows
 
 
@@ -900,11 +1105,15 @@ def generate(client: str) -> None:
     # 4. Charger les données client
     data = load_client_data(cfg)
 
+    # 4b. Classes d'absences (T554E) → structure du bloc pénalisant. Repli sur
+    #     les 11 classes standard si le client n'a pas dumpé T554E (ex. AKN).
+    pen_classes = load_t554e(cfg) or DEFAULT_PEN_CLASSES
+
     # 5a. Onglet <CLIENT>_Data (vue à plat de référence)
     add_data_sheet(wb, data, client, cfg)
 
     # 5b. Injecter les données dans l'onglet principal
-    n_inj = populate_main_sheet(wb, data, cfg)
+    n_inj = populate_main_sheet(wb, data, cfg, pen_classes)
 
     # 6. Sauvegarder
     print(f"[6/6] Sauvegarde → {output.name}")
