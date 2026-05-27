@@ -73,10 +73,18 @@ Changelog :
            ws.row_dimensions, pas seulement les lignes remplies). Le masquage
            HRO d'origine cachait des codes d'absence valides ; si le client veut
            masquer des codes inutilisés, ce sera à lui de le faire.
+  v1.1.0 — Override métier ABVIE "Temps partiel thérapeutique" (CatAbsP
+           1200-1209), piloté par cfg['therapeutic_partial'] :
+             - col D (Rubrique Paiement) = texte fixe 'IT 2010' (rubriques de
+               paie dans l'infotype 2010, envoyées par le client ; HRO ne veut
+               pas de n° qui laisserait croire à un déclenchement auto) ;
+             - col G (Rubrique Retenue) recopiée du code source 1200 (3170) +
+               libellé/unité, pour 1201-1209 quand la retenue est vide.
+           Sans config (ex. AKN) → aucun effet.
 """
 from __future__ import annotations
 
-APP_VERSION = "1.0.2"
+APP_VERSION = "1.1.0"
 
 import argparse
 import shutil
@@ -136,6 +144,16 @@ CLIENT_CONFIGS: dict[str, dict] = {
         "mdt": None,        # ABV : pas de filtre Mdt (dumps sans colonne fiable)
         "output": ROOT / "ABV WTC.xlsx",
         "title_replace": ("FR Absences", "ABV Absences"),
+        # Override métier ABVIE — "Temps partiel thérapeutique" (CatAbsP 1200-1209) :
+        #   col D = 'IT 2010' (rubriques de paie dans l'infotype 2010, envoyées
+        #           par le client → HRO ne veut PAS de n° de rubrique) ;
+        #   col G = recopie de la rubrique de retenue du code 1200 (3170) pour
+        #           1201-1209 si vide (retenue déclenchée automatiquement).
+        "therapeutic_partial": {
+            "codes": [str(c) for c in range(1200, 1210)],  # 1200..1209
+            "retenue_source": "1200",
+            "payment_label": "IT 2010",
+        },
     },
 }
 
@@ -595,6 +613,46 @@ def load_t554c_rules(cfg: dict, t512t: dict[str, str]) -> dict[str, dict]:
     return out
 
 
+def apply_therapeutic_partial_override(data: list[dict], cfg: dict) -> int:
+    """Override métier ABVIE pour les absences "Temps partiel thérapeutique"
+    (CatAbsP 1200-1209), piloté par cfg['therapeutic_partial'].
+
+    - Col D (Rubrique Paiement) = texte fixe 'IT 2010' : les rubriques de
+      paiement de ces absences sont dans l'infotype 2010 (envoyé par le client).
+      HRO refuse d'afficher un n° de rubrique qui laisserait croire à un
+      déclenchement automatique → on n'affiche que 'IT 2010' (pas de libellé E
+      ni d'unité F, qui n'auraient pas de sens sans rubrique).
+    - Col G (Rubrique Retenue) : si vide, recopie la rubrique de retenue du code
+      source (1200, généralement 3170) + son libellé (H) et son unité (I). Cette
+      retenue se déclenche automatiquement mais n'est pas indiquée dans le dump.
+
+    Sans clé 'therapeutic_partial' dans cfg (ex. AKN), ne fait rien. Renvoie le
+    nombre de codes modifiés.
+    """
+    ov = cfg.get("therapeutic_partial")
+    if not ov:
+        return 0
+    codes = set(ov["codes"])
+    src_code = ov["retenue_source"]
+    pay_label = ov["payment_label"]
+    src = next((r for r in data if r['CatAbsP'] == src_code), None)
+    src_retenue = ((src['RubRetenue'], src['LibRetenue'], src['UnitRetenue'])
+                   if src else ('', '', ''))
+    n = 0
+    for rec in data:
+        if rec['CatAbsP'] not in codes:
+            continue
+        # Col D : texte fixe (pas de rubrique → on neutralise libellé/unité paie)
+        rec['RubPaiement'] = pay_label
+        rec['LibPaiement'] = ''
+        rec['UnitPaiement'] = ''
+        # Col G : recopie de la retenue du code source si la retenue est vide
+        if not rec['RubRetenue'] and rec['CatAbsP'] != src_code:
+            rec['RubRetenue'], rec['LibRetenue'], rec['UnitRetenue'] = src_retenue
+        n += 1
+    return n
+
+
 def load_client_data(cfg: dict) -> list[dict]:
     """Charge les catégories d'absences pour le client depuis T554S + T554T.
 
@@ -734,6 +792,12 @@ def load_client_data(cfg: dict) -> list[dict]:
         })
     print(f"      → {n_paiement} rub. Paiement / {n_retenue} rub. Retenue résolues")
     print(f"      → {n_jk} lignes avec textes Nombre/Montant remplis depuis T511.C")
+
+    # Override métier ABVIE — "Temps partiel thérapeutique" (D='IT 2010', G recopié de 1200)
+    n_ov = apply_therapeutic_partial_override(out, cfg)
+    if n_ov:
+        print(f"      → override 'Temps partiel théra' appliqué sur {n_ov} codes "
+              f"(D='IT 2010', G recopié du code source)")
     return out
 
 
