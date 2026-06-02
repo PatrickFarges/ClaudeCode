@@ -138,28 +138,6 @@ Flux de `generate_from_config(cfg)` :
   "Taux de valorisation". À recréer côté template (source de liste + repointage)
   si l'HRO veut ces menus déroulants.
 
-## Tables manquantes pour compléter le fichier
-
-Les 4 tables fournies dans `AKN/` (T554S, T554T, T554C, Y00BA_TAB_COMPAN) permettent de remplir :
-- ✅ Col A — Code Absences/Présences (`CatAbsP`)
-- ✅ Col B — Libellé Absences (`Texte cat. prés./abs.` langue F)
-- ⚠ Col C — Used : checkbox manuelle (`□` par défaut)
-
-Pour remplir le reste, il manque ces tables SAP côté AKN :
-
-| Table | Permet de remplir | Priorité |
-|-------|------------------|----------|
-| **T512T** | Cols **E + H** (libellés rubriques de paiement euHReka pour Paiement et Retenue) | 🔴 Haute |
-| **T512W** | Cols **F + I + L** (unité de temps de chaque rubrique : "Jours de paie", "Jours calendrier", "Jour") | 🟡 Moyenne (peut aussi se déduire de T554C.CLABS) |
-| **T508A** ou **T508P** | Onglet `Calendrier` (codes calendrier de paie) | 🟢 Basse (onglet secondaire) |
-
-Les cols D + G (Rubrique Paiement / Retenue) peuvent en théorie se déduire avec les 4 tables actuelles via la jointure :
-- `T554S.Règle de valorisat.` → `T554C.Règle de valorisat.` → `T554C.Rubrique[paiement]` ou `T554C.Rubrique[retenue]`
-
-…mais c'est complexe (T554C a 9 sous-blocs CLABS/Payé × 15 blocs DH/Tp/RB/Rubrique répétés). À faire en Phase 2.2 si Pat valide.
-
-Les cols M, N, O (Formule de calcul, Taux horaire, Taux jour) sont du **paramétrage métier** (référence à l'onglet "Taux de valorisation" : TH1-TH3, TJ1-TJ10) et ne sortent d'aucune table SAP — remplissage manuel.
-
 ## Interface graphique (HRO)
 
 `wtc_absences_gui.py` — interface Tkinter destinée à un HRO (utilisateur non
