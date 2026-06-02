@@ -1,19 +1,27 @@
 """
 generate_wtc_absences.py — Générateur du Wagetype Catalog Absences (multi-clients)
 
-Modèle : `GFK Original Absence Catalog.xls` (catalogue NGA pour le client GFK)
-Cibles : un fichier .xlsx par client (AKN, ABV, …) configuré dans CLIENT_CONFIGS.
+Modèle : `WTCA reference.xlsx` — template Strada déjà finalisé (logo + couleurs
+Strada en place, bloc des 11 classes d'absences P→Z déployé, onglets dans l'ordre
+voulu : Absences-Présences / Parameter (masqué) / Wagetype Catalog Absence_Data /
+Calendrier / Aide remplissage). Le code ne fait plus AUCUN rebranding visuel : il
+se contente de vider les données d'exemple et d'injecter celles du client.
+Cibles : un fichier .xlsx par client (AKN, ABV, …) configuré dans CLIENT_CONFIGS,
+ou un fichier choisi par l'HRO via l'interface dossier (build_dir_config).
 
-Branding NGA → STRADA :
-  - Logo NGA + Human Resources → logo Strada (logo_strada.png)
-  - Mauve foncé  FF660066 → vert foncé Strada FF084028
-  - Mauve moyen  FF993366 → vert moyen Strada FF207F4F
-  - Violet       FF800080 → vert clair Strada FF18D878
+Le template `WTCA reference.xlsx` a lui-même été généré par une version antérieure
+de ce script (branding NGA→Strada appliqué une fois pour toutes) puis nettoyé à la
+main par Pat (onglets "Taux de valorisation" et "Sheet1" supprimés). Les anciens
+fichiers `GFK Original Absence Catalog.xls/.xlsx` ne sont plus utilisés ; les
+fonctions de rebranding (replace_logos, patch_colors, convert_xls_to_xlsx,
+load_template) sont conservées en réserve mais ne sont plus appelées par le flux
+de génération — elles ne resservent qu'à régénérer un template depuis zéro.
 
 Phases :
-  Phase 1 — Copie du GFK + substitution logo + substitution couleurs
   Phase 2.1 — Injection des vraies données client (T554S + T554T, langue F)
   Phase 2.2 — Remplissage cols D-I via T554C → T512T + T511 (unités)
+  Phase 2.3 — Ré-application des listes déroulantes (data validations) aux
+              vraies lignes de données
 
 Changelog :
   v0.1.0 — Phase 1 : copie + rebranding visuel Strada
@@ -91,10 +99,29 @@ Changelog :
              - generate_from_config crée le dossier de sortie au besoin.
            La case 'fichier WTC antérieur à réviser' (cfg['revise_previous']) est
            prévue mais sans effet (reprise des colonnes manuelles HRO à venir).
+  v1.3.0 — Bascule du template GFK vers `WTCA reference.xlsx` (template Strada
+           déjà finalisé) :
+             - plus d'appel replace_logos / patch_colors (template déjà brandé ;
+               évite aussi d'écraser par erreur les captures de "Aide remplissage") ;
+             - bloc des classes d'absences déjà à 11 colonnes dans le template →
+               PEN_TEMPLATE_COUNT 4→11, TRAILING_END_COL Y(25)→AF(32),
+               DATA_ROW_END 156→232 (vide toutes les données d'exemple) ;
+             - l'onglet de données à plat est désormais peuplé EN PLACE sous son
+               nom fixe 'Wagetype Catalog Absence_Data' (position conservée :
+               3e onglet) au lieu de créer un onglet '<label>_Data' en fin de
+               classeur ;
+             - ré-application des listes déroulantes (data validations) du template
+               aux vraies lignes de données (col C=Used ■/□, F/I=unité de temps,
+               L=Heure/Jour, P→Z=■/□). Les listes TH (Taux horaire, col N) et TJ
+               (Taux jour, col O) sont IGNORÉES car leurs named ranges pointent sur
+               #REF! dans le template (l'onglet 'Taux de valorisation' qui les
+               définissait a été supprimé) — à recréer côté template si besoin.
+           Les onglets Parameter (masqué), Calendrier et Aide remplissage sont
+           recopiés tels quels (jamais modifiés).
 """
 from __future__ import annotations
 
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.3.0"
 
 import argparse
 import shutil
@@ -110,10 +137,12 @@ from openpyxl.utils import get_column_letter
 # ---- Chemins communs ------------------------------------------------------
 
 ROOT = Path(__file__).resolve().parent
-# Template .xlsx pré-converti depuis GFK Original Absence Catalog.xls
-# (la conversion .xls→.xlsx est faite une fois pour toutes côté Linux/LibreOffice
-#  et le résultat est commit dans le projet pour être utilisable sous Windows
-#  sans dépendance externe)
+# Template de référence actuel : déjà brandé Strada (logo + couleurs), bloc des
+# 11 classes d'absences déployé (P→Z), onglets dans l'ordre voulu. C'est le point
+# de départ de toute génération depuis la v1.3.0.
+WTCA_TEMPLATE = ROOT / "WTCA reference.xlsx"
+# Anciens modèles GFK — conservés pour mémoire / régénération éventuelle d'un
+# template depuis zéro, mais PLUS utilisés par le flux de génération courant.
 GFK_TEMPLATE = ROOT / "GFK Original Absence Catalog.xlsx"
 GFK_XLS_LEGACY = ROOT / "GFK Original Absence Catalog.xls"
 LOGO_STRADA = ROOT / "logo_strada.png"
@@ -181,16 +210,21 @@ BLACK = "FF000000"
 
 # Mise en forme onglet principal
 MAIN_SHEET = "Absences-Présences"
+DATA_SHEET = "Wagetype Catalog Absence_Data"  # onglet de données à plat (nom fixe)
 HEADER_ROW_END = 7        # lignes 1-7 = entêtes (à conserver)
 DATA_ROW_START = 8        # première ligne de données
-DATA_ROW_END = 156        # dernière ligne potentielle de données
-MAIN_COL_COUNT = 25       # colonnes utiles A-Y dans le template GFK d'origine
+DATA_ROW_END = 232        # dernière ligne d'exemple à vider dans WTCA reference
+MAIN_COL_COUNT = 32       # colonnes utiles A-AF dans le template WTCA reference
 
-# Géométrie du bloc "pénalisants" / classes d'absences (T554E)
+# Géométrie du bloc "pénalisants" / classes d'absences (T554E).
+# Le template WTCA reference a DÉJÀ 11 colonnes de classes (P→Z) ; pour un client
+# France (11 classes), shift = 0 → restructure_penalisant_block ne fait que
+# réécrire les libellés d'entête (no-op si identiques). Un client à N≠11 classes
+# décalerait les colonnes "trailing" comme avant.
 PEN_START_COL = 16        # P — 1re colonne de classe d'absence
-PEN_TEMPLATE_COUNT = 4    # le template GFK a 4 colonnes pénalisantes (P-S)
-TRAILING_END_COL = 25     # Y — dernière colonne "trailing" à décoler du template
-                          # (T..Y : Additional Comments, WD absence name, Customizing…)
+PEN_TEMPLATE_COUNT = 11   # le template WTCA reference a 11 colonnes (P→Z)
+TRAILING_END_COL = 32     # AF — dernière colonne "trailing" à décaler du template
+                          # (AA..AF : Additional Comments, WD absence name, Customizing…)
 
 # Repli pour les clients dont T554E n'a pas été dumpée (ex. AKN). Les classes
 # d'absences sont les MÊMES pour tous les clients GrPay=06 (confirmé par Pat),
@@ -822,15 +856,23 @@ def _safe_sheet_name(label: str, suffix: str = "_Data") -> str:
 
 
 def add_data_sheet(wb, data: list[dict], cfg: dict) -> None:
-    """Ajoute un onglet '<label>_Data' au classeur avec les catégories du client.
-    Le libellé vient de cfg['label'] (code client en CLI, nom du fichier de
-    sortie via l'interface dossier)."""
+    """Peuple l'onglet de données à plat 'Wagetype Catalog Absence_Data' avec les
+    catégories du client. L'onglet du template est réutilisé EN PLACE (sa position
+    — 3e onglet, juste après Parameter (masqué) — est conservée) ; on le vide
+    d'abord de ses données d'exemple. S'il n'existe pas (template inhabituel), on
+    le crée."""
     client = cfg.get("label", "WTC")
-    sheet_name = _safe_sheet_name(client)
-    print(f"[5/5 a] Ajout de l'onglet '{sheet_name}' ({len(data)} lignes)…")
+    sheet_name = DATA_SHEET
+    print(f"[5/5 a] Peuplement de l'onglet '{sheet_name}' ({len(data)} lignes)…")
     if sheet_name in wb.sheetnames:
-        del wb[sheet_name]
-    ws = wb.create_sheet(sheet_name)
+        ws = wb[sheet_name]
+        # Vider les données d'exemple en conservant la position de l'onglet.
+        for mr in list(ws.merged_cells.ranges):
+            ws.unmerge_cells(str(mr))
+        if ws.max_row >= 1:
+            ws.delete_rows(1, ws.max_row)
+    else:
+        ws = wb.create_sheet(sheet_name)
 
     from openpyxl.styles import Alignment, Border, Side
 
@@ -890,7 +932,115 @@ def add_data_sheet(wb, data: list[dict], cfg: dict) -> None:
         ws.column_dimensions[col].width = w
 
     ws.freeze_panes = 'A5'
-    print(f"      → onglet {sheet_name} créé")
+    print(f"      → onglet {sheet_name} peuplé ({len(data)} lignes)")
+
+
+# ---- Listes déroulantes (data validations) -----------------------------------
+
+def _dv_kind(formula1: str) -> str | None:
+    """Identifie le 'genre' d'une data validation d'après sa formule source.
+    Renvoie une clé interne ('us', 'unit', 'L', 'th', 'tj') ou None."""
+    f = (formula1 or '').strip()
+    if f == 'Us':
+        return 'us'
+    if f == 'TH':
+        return 'th'
+    if f == 'TJ':
+        return 'tj'
+    if 'Jours calendrier' in f:
+        return 'unit'
+    if f.strip('"') == 'Heure,Jour':
+        return 'L'
+    return None
+
+
+def _broken_named_ranges(wb) -> set[str]:
+    """Renvoie l'ensemble des named ranges dont la cible est cassée (#REF!).
+    Dans WTCA reference, TH et TJ sont #REF! (l'onglet 'Taux de valorisation'
+    qui les définissait a été supprimé) → on ne ré-applique pas ces listes."""
+    broken: set[str] = set()
+    try:
+        items = list(wb.defined_names.items())
+    except AttributeError:           # openpyxl < 3.1
+        items = [(n, wb.defined_names[n]) for n in wb.defined_names]
+    for name, dn in items:
+        if dn is not None and '#REF!' in str(getattr(dn, 'value', '')):
+            broken.add(name)
+    return broken
+
+
+def capture_data_validations(ws) -> dict[str, tuple]:
+    """Photographie les définitions de listes déroulantes du template, indexées
+    par genre (_dv_kind). Renvoie {kind: (type, formula1, allow_blank)}."""
+    defs: dict[str, tuple] = {}
+    for dv in ws.data_validations.dataValidation:
+        kind = _dv_kind(dv.formula1)
+        if kind and kind not in defs:
+            defs[kind] = (dv.type, dv.formula1, dv.allow_blank)
+    return defs
+
+
+def _col_ranges(col: int, rows: list[int]) -> str:
+    """Compacte une liste de lignes en plages Excel pour une colonne donnée :
+    col=3, rows=[9,10,11,13] → 'C9:C11 C13:C13'."""
+    if not rows:
+        return ''
+    L = get_column_letter(col)
+    rows = sorted(rows)
+    out = []
+    i = 0
+    while i < len(rows):
+        j = i
+        while j + 1 < len(rows) and rows[j + 1] == rows[j] + 1:
+            j += 1
+        out.append(f"{L}{rows[i]}:{L}{rows[j]}")
+        i = j + 1
+    return ' '.join(out)
+
+
+def reapply_data_validations(ws, defs: dict[str, tuple], data_rows: list[int],
+                             n_pen: int, broken: set[str]) -> int:
+    """Ré-applique les listes déroulantes du template aux vraies lignes de données.
+
+    Le template définit les validations sur les lignes d'exemple (9-156) ; après
+    réécriture des données, on remet chaque liste sur les lignes réellement
+    occupées (data_rows, hors entêtes de catégorie). Mapping colonnes → genre :
+       - 'us'  → C (Used) + P..Z (classes d'absences) : liste ■/□
+       - 'unit'→ F + I (unité de temps Paiement / Retenue)
+       - 'L'   → L (unité de temps Pilotage Paie : Heure/Jour)
+       - 'th'  → N (Taux horaire)   ← IGNORÉ si #REF!
+       - 'tj'  → O (Taux jour)      ← IGNORÉ si #REF!
+    Renvoie le nombre de validations ré-appliquées.
+    """
+    from openpyxl.worksheet.datavalidation import DataValidation
+
+    # Colonnes 'us' : Used (C=3) + bloc des classes (P.. = 16..15+n_pen).
+    # NB : on n'applique PAS ■/□ aux colonnes J/K (Nombre/Montant) — le template
+    # le faisait mais leur contenu est du texte ('oblig.', 'facult.'…), pas ■/□.
+    groups = {
+        'us':   [3] + list(range(PEN_START_COL, PEN_START_COL + n_pen)),
+        'unit': [6, 9],
+        'L':    [12],
+        'th':   [14],
+        'tj':   [15],
+    }
+    ws.data_validations.dataValidation = []
+    applied = 0
+    for kind, cols in groups.items():
+        d = defs.get(kind)
+        if not d:
+            continue
+        dtype, formula1, allow_blank = d
+        if (formula1 or '').strip() in broken:
+            continue  # source #REF! (TH/TJ) → on n'ajoute pas de liste cassée
+        sqref = ' '.join(filter(None, (_col_ranges(c, data_rows) for c in cols)))
+        if not sqref:
+            continue
+        dv = DataValidation(type=dtype, formula1=formula1, allow_blank=allow_blank)
+        dv.sqref = sqref
+        ws.add_data_validation(dv)
+        applied += 1
+    return applied
 
 
 def restructure_penalisant_block(ws, pen_classes: list[dict]) -> int:
@@ -993,6 +1143,12 @@ def populate_main_sheet(wb, data: list[dict], cfg: dict,
     print(f"[5/5 b] Injection données dans onglet '{MAIN_SHEET}'…")
     ws = wb[MAIN_SHEET]
 
+    # Photographier les listes déroulantes du template AVANT d'écrire (les ranges
+    # du template visent les lignes d'exemple ; on les remettra sur les vraies
+    # lignes en fin de fonction). On note aussi les named ranges cassés (#REF!).
+    dv_defs = capture_data_validations(ws)
+    broken_names = _broken_named_ranges(wb)
+
     # 0. Restructurer le bloc des classes d'absences (P..) selon T554E, en
     #    décalant les colonnes "trailing" vers la droite. Renvoie le décalage.
     shift = restructure_penalisant_block(ws, pen_classes)
@@ -1052,6 +1208,7 @@ def populate_main_sheet(wb, data: list[dict], cfg: dict,
 
     cur_row = DATA_ROW_START
     n_data_rows = 0
+    data_rows: list[int] = []   # lignes réellement occupées (hors entêtes catégorie)
     for cat in cat_order:
         recs = by_category[cat]
         # Heuristique du nom : libellé du 1er code dont le libellé existe
@@ -1139,6 +1296,7 @@ def populate_main_sheet(wb, data: list[dict], cfg: dict,
                 cp.alignment = used_align
                 cp.border = blank_border
             ws.row_dimensions[cur_row].height = 16
+            data_rows.append(cur_row)
             cur_row += 1
             n_data_rows += 1
 
@@ -1170,6 +1328,14 @@ def populate_main_sheet(wb, data: list[dict], cfg: dict,
 
     print(f"      → {len(cat_order)} catégories, {n_data_rows} lignes d'absence injectées"
           f" ({n_unhidden} lignes du template démasquées)")
+
+    # Ré-appliquer les listes déroulantes sur les vraies lignes de données.
+    n_dv = reapply_data_validations(ws, dv_defs, data_rows, n_pen, broken_names)
+    skipped = sorted(broken_names & {'TH', 'TJ'})
+    msg = f"      → {n_dv} listes déroulantes ré-appliquées sur {len(data_rows)} lignes"
+    if skipped:
+        msg += f" (ignorées car #REF! : {', '.join(skipped)})"
+    print(msg)
     return n_data_rows
 
 
@@ -1243,36 +1409,41 @@ def generate_from_config(cfg: dict) -> dict:
     output = Path(cfg["output"])
     label = cfg.get("label", "WTC")
     print(f"=== generate_wtc_absences.py v{APP_VERSION} — {label} ===")
-    print(f"Template : {GFK_TEMPLATE.name}")
+    print(f"Template : {WTCA_TEMPLATE.name}")
     print(f"Cible    : {output.name}")
 
-    # 1. Template (.xlsx pré-converti, ou conversion .xls si nécessaire sous Linux)
-    wb = load_template(GFK_TEMPLATE, GFK_XLS_LEGACY)
-    # 2. Images (logos NGA → logo Strada)
-    n_imgs = replace_logos(wb, LOGO_STRADA)
-    # 3. Couleurs (mauve NGA → vert Strada)
-    n_fill, n_font = patch_colors(wb)
-    # 4. Données client
+    # Garde-fou : ne jamais écraser le template de référence lui-même.
+    if output.resolve() == WTCA_TEMPLATE.resolve():
+        raise ValueError(
+            f"Le fichier de sortie est le template de référence "
+            f"({WTCA_TEMPLATE.name}) — choisissez un autre nom de sortie.")
+
+    # 1. Template Strada déjà finalisé (logo + couleurs + 11 classes en place).
+    #    Plus aucun rebranding visuel à faire (cf. v1.3.0).
+    if not WTCA_TEMPLATE.exists():
+        raise FileNotFoundError(f"Template introuvable : {WTCA_TEMPLATE}")
+    print(f"[Template] Chargement {WTCA_TEMPLATE.name}…")
+    wb = openpyxl.load_workbook(WTCA_TEMPLATE)
+    # 2. Données client (T554S + T554T + enrichissement T554C/T512T/T511)
     data = load_client_data(cfg)
-    # 4b. Classes d'absences (T554E) ; repli 11 classes standard si T554E absente
+    # 2b. Classes d'absences (T554E) ; repli 11 classes standard si T554E absente
     pen_classes = load_t554e(cfg) or DEFAULT_PEN_CLASSES
-    # 5a. Onglet <label>_Data (vue à plat de référence)
+    # 3. Onglet de données à plat 'Wagetype Catalog Absence_Data' (peuplé en place)
     add_data_sheet(wb, data, cfg)
-    # 5b. Injection dans l'onglet principal
+    # 4. Injection dans l'onglet principal + ré-application des listes déroulantes
     n_inj = populate_main_sheet(wb, data, cfg, pen_classes)
 
-    # 6. Sauvegarde (crée le dossier de sortie au besoin)
-    print(f"[6/6] Sauvegarde → {output.name}")
+    # 5. Sauvegarde (crée le dossier de sortie au besoin)
+    print(f"[Sauvegarde] → {output.name}")
     output.parent.mkdir(parents=True, exist_ok=True)
     wb.save(output)
-    shutil.rmtree(TMP_DIR, ignore_errors=True)
 
     print()
-    print(f"=== Terminé : {n_imgs} images, {n_fill} fills, {n_font} fontes, "
-          f"{len(data)} catégories ({n_inj} lignes injectées) ===")
+    print(f"=== Terminé : {len(data)} catégories ({n_inj} lignes injectées), "
+          f"{len(pen_classes)} classes d'absences ===")
     print(f"Sortie : {output}")
-    return {"images": n_imgs, "fills": n_fill, "fonts": n_font,
-            "categories": len(data), "rows": n_inj, "output": str(output)}
+    return {"categories": len(data), "rows": n_inj,
+            "classes": len(pen_classes), "output": str(output)}
 
 
 def generate(client: str) -> None:

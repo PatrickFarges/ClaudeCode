@@ -4,24 +4,27 @@ Génération du **Wagetype Catalog Absences** (catalogue des rubriques d'absence
 
 ## Objectif
 
-Produire un fichier Excel équivalent à `GFK Original Absence Catalog.xls` (le modèle de référence, créé pour le client GFK) mais pour le client **AKN**, en :
-1. Récupérant les données depuis les 4 tables SAP fournies dans `AKN/`
-2. Gardant la structure, colonnes, polices, couleurs (jaune/gris/blanc/etc.) du GFK Original
-3. **Substituant le branding NGA par STRADA** : logo + couleurs mauves → vertes
+Produire un fichier Excel à partir du template Strada `WTCA reference.xlsx` (déjà
+brandé, structure finalisée), en y injectant les données d'un client (AKN, ABV, …
+ou un dossier de tables choisi par l'HRO) :
+1. Récupérant les données depuis les tables SAP du client (T554S/T/C/E, T511, T512T)
+2. Vidant les données d'exemple du template et injectant celles du client
+3. Conservant tel quel le branding Strada (logo + couleurs) et les onglets
+
+> **Depuis v1.3.0** le template de référence est `WTCA reference.xlsx` (déjà aux
+> couleurs/logo Strada, bloc des 11 classes d'absences P→Z en place, onglets dans
+> l'ordre voulu). L'ancienne stratégie « copier GFK + rebrander NGA→Strada » est
+> **abandonnée** : plus aucun `replace_logos`/`patch_colors` dans le flux. Les
+> fonctions de rebranding restent dans le code (réserve) mais ne sont plus appelées.
 
 ## Fichiers du projet
 
 | Fichier | Rôle |
 |---------|------|
-| `GFK Original Absence Catalog.xls` | **Modèle de référence** — structure et formatage à reproduire (données GFK à NE PAS conserver) |
-| `AKN/T554S.XLSX` (+ `.txt`) | Catégories Absences/Présences (subtypes) — table principale |
-| `AKN/T554T.XLSX` (+ `.txt`) | Textes multilingues des catégories d'absences |
-| `AKN/T554C.XLSX` (+ `.txt`) | Règles de valorisation des absences (lien vers rubriques) |
-| `AKN/Y00BA_TAB_COMPAN.XLSX` (+ `.txt`) | Configuration société (mapping Customer Code → GrPay) |
-| `GFK/*.XLSX` + `.txt` | Mêmes tables côté GFK — utile comme témoin (pas obligatoire) |
-| `absences.xlsx` | Doc STRADA mal structurée — quelques infos sur les modèles maintien |
-| `Absence WageType Catalog Standardized.pdf` | Captures d'écran montrant le lien tables ↔ colonnes Excel |
-| `logo_strada.png` | Nouveau logo (496×103 px, vert foncé `#084028`) |
+| `WTCA reference.xlsx` | **Template de référence actuel (v1.3.0+)** — Strada finalisé : logo + couleurs, 11 classes P→Z, listes déroulantes, 5 onglets (`Absences-Présences` / `Parameter` masqué / `Wagetype Catalog Absence_Data` / `Calendrier` / `Aide remplissage`). Données d'exemple à vider/remplacer. |
+| `<dossier client>/` (ex. `ABV/`) | **Dumps de tables SAP du client** : `T554S/T/C/E`, `T511`, `T512T` (+ `T512W`, `T508A`, `Y00BA_TAB_COMPAN`). Dossier choisi par l'HRO dans la GUI. **Jamais commit** (gitignore — Pat les régénère depuis SAP à la demande). |
+| `logo_strada.png` | Logo Strada (496×103 px, vert foncé `#084028`) — inséré au runtime |
+| `numeros_vs_unités` | Table de correspondance code → unité de temps (`001=Heures`, `010=Jours`…). **Lue au runtime** par le générateur (cols F/I/L). |
 
 ## Clés d'identification AKN
 
@@ -113,25 +116,27 @@ Y00BA_TAB_COMPAN (paramétrage société)
 | `Sheet1` | Notes (orange) |
 | `Aide remplissage` | Légendes + captures d'écran |
 
-## Stratégie de génération
+## Stratégie de génération (v1.3.0)
 
-### Phase 1 — Squelette (LIVRABLE IMMÉDIAT)
-1. Copier `GFK Original Absence Catalog.xls` → `AKN France Absences-Presences Catalogue.xlsx`
-2. Remplacer les 2 images du logo par `logo_strada.png`
-3. Patcher toutes les couleurs mauves NGA (`FF660066`, `FF993366`, `FF800080`) → palette verte Strada
-4. Conserver toutes les données GFK telles quelles (preview du rendu)
+Flux de `generate_from_config(cfg)` :
+1. **Charger** le template `WTCA reference.xlsx` (déjà brandé, aucun rebranding).
+2. **Charger les données client** (`load_client_data`) : T554S + T554T (GrSdP, langue F)
+   puis enrichissement cols D-L via T554C → T512T + T511 ; classes via T554E
+   (`load_t554e`, repli sur les 11 classes standard si absente).
+3. **Peupler en place** l'onglet `Wagetype Catalog Absence_Data` (vue à plat,
+   position conservée — vidé puis réécrit).
+4. **Injecter** dans l'onglet principal (`populate_main_sheet`) : vide les données
+   d'exemple (lignes 8-232), réécrit par catégorie `(0Xxx)`, puis **ré-applique les
+   listes déroulantes** du template aux vraies lignes (col C=Used, F/I=unité,
+   L=Heure/Jour, P→Z=■/□ ; TH/TJ ignorées car `#REF!`).
+5. **Sauvegarder** vers le fichier de sortie (garde-fou : refuse d'écraser le template).
 
-### Phase 2 — Données AKN (à valider après Phase 1)
-1. Vider les lignes de données (lignes 8-156, hors entêtes catégorie)
-2. Pour chaque catégorie `(0Xxx)` :
-   - Filtrer T554S sur GrSdP=`6` et CatAbsP commençant par `0X`
-   - Joindre T554T (Langue=`F`) pour le libellé
-   - Écrire les lignes (Code, Libellé)
-   - Optionnel : remplir D/E/F via T554C → T512T
-
-### Phase 3 — Compléments (manuel-assisté)
-- Compléter "Used", "Formule de calcul", "Taux horaire/jour" (données métier non auto)
-- Vérifier les libellés des rubriques de paiement (besoin de table T512T qui n'est pas fournie pour AKN)
+### Compléments restant manuels (non auto)
+- "Used" (col C), "Formule de calcul" (M), "Taux horaire/jour" (N/O) = paramétrage métier.
+- ⚠ Les listes déroulantes **TH** (col N) et **TJ** (col O) sont mortes dans le template :
+  leurs named ranges pointent sur `#REF!` depuis la suppression de l'onglet
+  "Taux de valorisation". À recréer côté template (source de liste + repointage)
+  si l'HRO veut ces menus déroulants.
 
 ## Tables manquantes pour compléter le fichier
 
@@ -218,16 +223,16 @@ Listées dans `requirements.txt` — **2 libs au total** :
 
 | Lib | Version | Rôle |
 |-----|---------|------|
-| `openpyxl` | ≥ 3.1 | Lecture/écriture des fichiers `.xlsx` (template GFK + tables AKN + sortie) |
+| `openpyxl` | ≥ 3.1 | Lecture/écriture des fichiers `.xlsx` (template `WTCA reference` + tables client + sortie) |
 | `Pillow` | ≥ 10.0 | Manipulation d'images (logo Strada, requis par openpyxl pour `XLImage`) |
 
-> Plus de dépendance LibreOffice côté Windows : le template `GFK Original Absence Catalog.xlsx` est commit dans le projet (pré-converti depuis le `.xls` historique côté Linux).
+> Plus de dépendance LibreOffice côté Windows : le template `WTCA reference.xlsx` est commit dans le projet, prêt à l'emploi.
 
 #### Libs dev (optionnelles)
 
 Listées dans `requirements-dev.txt` :
-- `xlrd==2.0.1` — pour lire directement le `.xls` historique GFK (debug uniquement)
-- `pdfplumber` — pour inspecter le PDF `Absence WageType Catalog Standardized.pdf`
+- `xlrd==2.0.1` — lecture des `.xls` historiques (debug uniquement ; les anciens modèles GFK ne sont plus dans le repo)
+- `pdfplumber` — inspection de PDF (les captures `Absence WageType Catalog Standardized.pdf` ne sont plus dans le repo)
 
 ## Conventions
 
