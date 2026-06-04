@@ -48,6 +48,7 @@ Monorepo contenant plusieurs sous-projets indépendants liés aux outils RH/paie
 | **CompareSAPTable** | `CompareSAPTable/` | Comparaison de tables SAP et schémas PCR → rapport Excel (Python/Tkinter) |
 | **ClaudeLauncher** | `ClaudeLauncher/` | Lanceur de jeux/applications style Steam/Playnite (Python/PyQt6) |
 | **ClaudeCraft** | `ClaudeCraft/` | Jeu voxel type Minecraft en GDScript/Godot 4.6+, style pastel, évoluant vers The Settlers |
+| **ClaudeCAD** | `ClaudeCAD/` | Outil de dessin architectural filaire 2D/3D type "ARC+ like" (lignes/arcs, lignes d'aide, snap), look rétro 90s/2000s — Python/PySide6, projection 3D float64 maison + rendu QPainter, fichiers .cca, DXF via ezdxf |
 | **WagetypeCatalog** | `WagetypeCatalog/` | Catalogage des rubriques de paie SAP EuHReka (données uniquement) |
 | **WTC Absences** | `WTC Absences/` | Génération du Wagetype Catalog Absences SAP EuHReka client AKN — équivalent du WTC pour les absences (Python/openpyxl) |
 | **ClocloWebUi** | `ClocloWebUi/` | Interface web pour piloter plusieurs sessions Claude Code en parallèle (Python/aiohttp) |
