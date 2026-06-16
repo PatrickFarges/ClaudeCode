@@ -132,10 +132,16 @@ Changelog :
            Calendrier : c'était une fausse piste (son col 'ID cal. jours fériés'
            contient des codes pays type AT/CH qui ressemblent par hasard aux
            codes TypAb).
+  v1.4.1 — Détection des tables (scan_tables_dir) plus robuste : insensible à la
+           casse (déjà le cas) ET tolérante aux noms de dump réels où le code de
+           table est suivi d'un séparateur ('T554S_984.xlsx', 'T554T 16.06.XLSX',
+           'Y00BA_TAB_COMPAN.XLSX'). Helper _stem_matches_table (code exact, ou
+           code + séparateur non alphanumérique → évite les faux positifs comme
+           't554sc'/'t5110'). Matches exacts prioritaires sur les préfixés.
 """
 from __future__ import annotations
 
-APP_VERSION = "1.4.0"
+APP_VERSION = "1.4.1"
 
 import argparse
 import shutil
@@ -1477,27 +1483,49 @@ OPTIONAL_DIR_TABLES = ["Y00BA"]             # non utilisée aujourd'hui
 # avec le Calendrier (généré depuis T554S.TypAb). N'est plus ni scannée ni requise.
 
 
+def _stem_matches_table(stem_lower: str, code_lower: str) -> bool:
+    """True si un stem (déjà en minuscules) correspond au code de table.
+
+    Correspondance insensible à la casse, tolérante aux noms de dump réels :
+      - égalité stricte ('t554s' == 't554s') ;
+      - code suivi d'un séparateur NON alphanumérique ('t554s_984', 't554s 16.06',
+        't554s-fr', 'y00ba_tab_compan'…).
+    Le séparateur évite les faux positifs ('t554sc' ne matche PAS 't554s' ;
+    't5110' ne matche PAS 't511')."""
+    if stem_lower == code_lower:
+        return True
+    if stem_lower.startswith(code_lower):
+        rest = stem_lower[len(code_lower):]
+        return bool(rest) and not rest[0].isalnum()
+    return False
+
+
 def scan_tables_dir(input_dir) -> dict[str, str]:
     """Repère dans input_dir le fichier .xlsx/.xls de chaque table SAP connue.
-    Match insensible à la casse sur le nom de fichier (stem == nom de table ;
-    Y00BA matche tout fichier commençant par 'y00ba'). Renvoie {table: fichier}."""
+
+    Détection **insensible à la casse** (nom ET extension) et tolérante aux noms
+    de dump réels (code de table suivi d'un séparateur : 'T554S_984.xlsx',
+    'T554T 16.06.2026.XLSX', 'Y00BA_TAB_COMPAN.XLSX'…) — voir _stem_matches_table.
+    Les correspondances EXACTES (stem == code) sont prioritaires sur les
+    correspondances préfixées. Renvoie {table: nom_de_fichier}."""
     input_dir = Path(input_dir)
     found: dict[str, str] = {}
     if not input_dir.is_dir():
         return found
     known = REQUIRED_DIR_TABLES + RECOMMENDED_DIR_TABLES + OPTIONAL_DIR_TABLES
-    for f in sorted(input_dir.iterdir()):
-        if not f.is_file() or f.suffix.lower() not in ('.xlsx', '.xls'):
+    files = [f for f in sorted(input_dir.iterdir())
+             if f.is_file() and f.suffix.lower() in ('.xlsx', '.xls')]
+    for t in known:
+        code = t.lower()
+        claimed = set(found.values())
+        candidates = [f for f in files
+                      if f.name not in claimed
+                      and _stem_matches_table(f.stem.lower(), code)]
+        if not candidates:
             continue
-        stem = f.stem.lower()
-        for t in known:
-            if t in found:
-                continue
-            if t == "Y00BA":
-                if stem.startswith("y00ba"):
-                    found[t] = f.name
-            elif stem == t.lower():
-                found[t] = f.name
+        # Priorité au match exact du stem (sinon 1er nom trié = déterministe).
+        exact = [f for f in candidates if f.stem.lower() == code]
+        found[t] = (exact[0] if exact else candidates[0]).name
     return found
 
 

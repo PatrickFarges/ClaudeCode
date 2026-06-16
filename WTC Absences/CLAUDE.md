@@ -157,9 +157,12 @@ config via `generate_wtc_absences.build_dir_config()` puis appelle
 `generate_from_config()`, en capturant le stdout pour l'afficher dans un journal.
 
 L'HRO renseigne uniquement :
-1. **Dossier des tables SAP** (détection auto des fichiers, casse libre — voir
-   `scan_tables_dir()`). Obligatoires : T554S, T554T, T554C, T511, T512T.
-   Recommandée : T554E (sinon repli sur les 11 classes standard).
+1. **Dossier des tables SAP** (détection auto des fichiers — voir
+   `scan_tables_dir()`). Insensible à la casse **et** tolérante aux noms de dump
+   réels : le code de table peut être suivi d'un séparateur (`T554S_984.xlsx`,
+   `T554T 16.06.2026.XLSX`, `Y00BA_TAB_COMPAN.XLSX`) — cf. `_stem_matches_table`,
+   les matches exacts primant sur les préfixés. Obligatoires : T554S, T554T,
+   T554C, T511, T512T. Recommandée : T554E (sinon repli sur les 11 classes standard).
 2. **Dossier de sortie** + **nom du fichier** `.xlsx`.
 3. Case **« fichier WTC antérieur à réviser »** → `cfg['revise_previous']`.
    **Réservée, sans effet pour le moment** : prévue pour reprendre plus tard les
