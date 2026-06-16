@@ -350,10 +350,13 @@ class WtcAbsencesApp:
         self.btn_open.configure(state="normal")
         cats = stats.get("categories", "?")
         rows = stats.get("rows", "?")
-        self._set_status(f"Terminé : {cats} catégories, {rows} lignes. → {self._last_output}")
+        cal = stats.get("calendar", "?")
+        self._set_status(f"Terminé : {cats} catégories, {rows} lignes, "
+                         f"{cal} codes calendrier. → {self._last_output}")
         messagebox.showinfo("Terminé",
                             f"Catalogue généré avec succès.\n\n"
-                            f"{cats} catégories, {rows} lignes d'absence.\n\n"
+                            f"{cats} catégories, {rows} lignes d'absence, "
+                            f"{cal} codes calendrier.\n\n"
                             f"{self._last_output}")
 
     def _on_fail(self) -> None:

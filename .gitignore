@@ -18,6 +18,10 @@ WTC Absences/ABV_*/
 WTC Absences/GFK/
 WTC Absences/GFK_*/
 
+# WTC Absences — catalogues .xlsx générés (sorties clients), sauf le template suivi
+WTC Absences/*.xlsx
+!WTC Absences/WTCA reference.xlsx
+
 # System
 .DS_Store
 Thumbs.db

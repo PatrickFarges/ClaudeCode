@@ -116,12 +116,26 @@ Changelog :
                (Taux jour, col O) sont IGNORÉES car leurs named ranges pointent sur
                #REF! dans le template (l'onglet 'Taux de valorisation' qui les
                définissait a été supprimé) — à recréer côté template si besoin.
-           Les onglets Parameter (masqué), Calendrier et Aide remplissage sont
-           recopiés tels quels (jamais modifiés).
+           Les onglets Parameter (masqué) et Aide remplissage sont recopiés tels
+           quels (jamais modifiés). L'onglet Calendrier était lui aussi recopié
+           tel quel jusqu'en v1.3.0 ; depuis v1.4.0 il est généré (voir ci-dessous).
+  v1.4.0 — Génération automatique de l'onglet 'Calendrier' depuis T554S.
+           Le Calendrier liste les TYPES d'absence : champ T554S.TypAb (code à
+           2 lettres : AI, MA, CP, RT…) + libellé (T554S 'Texte cat. prés./abs.').
+           TypAb n'est renseigné que sur certaines lignes "représentatives" de
+           T554S → on ne garde que les lignes où TypAb ≠ vide. Filtre GrSdP =
+           cfg['grsdp'] (libellés alors dans la langue du grouping, FR pour
+           GrSdP=6). Dédup sur la 1ʳᵉ occurrence, tri alphabétique par code.
+           Le bloc vert clair 'Entrées spécifiques' (saisie manuelle HRO) est
+           conservé et réinséré juste sous les données.
+           ⚠ T508A (règles de plan de roulement) n'a RIEN à voir avec le
+           Calendrier : c'était une fausse piste (son col 'ID cal. jours fériés'
+           contient des codes pays type AT/CH qui ressemblent par hasard aux
+           codes TypAb).
 """
 from __future__ import annotations
 
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.4.0"
 
 import argparse
 import shutil
@@ -160,7 +174,7 @@ CLIENT_CONFIGS: dict[str, dict] = {
         "tables": {  # case-insensitive lookup via _resolve_table()
             "T554S": "T554S.xlsx", "T554T": "T554T.xlsx", "T554C": "T554C.xlsx",
             "T511": "T511.xlsx", "T512T": "T512T.xlsx",
-            "T508A": "T508A.xlsx", "Y00BA": "Y00BA_TAB_COMPAN.xlsx",
+            "Y00BA": "Y00BA_TAB_COMPAN.xlsx",
         },
         "grsdp": "6",       # Groupe subdivisions personnel
         "lang_fr": "F",     # Code langue français
@@ -176,7 +190,7 @@ CLIENT_CONFIGS: dict[str, dict] = {
             "T554S": "t554s.XLSX", "T554T": "t554t.XLSX", "T554C": "t554c.XLSX",
             "T554E": "T554E.XLSX",
             "T511": "t511.XLSX", "T512T": "T512T.XLSX",
-            "T508A": "t508a.XLSX", "Y00BA": "Y00BA_TAB_COMPAN.XLSX",
+            "Y00BA": "Y00BA_TAB_COMPAN.XLSX",
         },
         "grsdp": "6",       # France (LCC=FR1)
         "lang_fr": "F",
@@ -211,6 +225,9 @@ BLACK = "FF000000"
 # Mise en forme onglet principal
 MAIN_SHEET = "Absences-Présences"
 DATA_SHEET = "Wagetype Catalog Absence_Data"  # onglet de données à plat (nom fixe)
+CALENDAR_SHEET = "Calendrier"      # onglet des types d'absence (T554S.TypAb)
+CAL_EXTRA_ROWS = 7                 # lignes vides "Entrées spécifiques" sous les données
+CAL_GREEN = "FFCCFFCC"             # vert clair du bloc de saisie manuelle (réf. template)
 HEADER_ROW_END = 7        # lignes 1-7 = entêtes (à conserver)
 DATA_ROW_START = 8        # première ligne de données
 DATA_ROW_END = 232        # dernière ligne d'exemple à vider dans WTCA reference
@@ -569,6 +586,61 @@ def load_t554e(cfg: dict) -> list[dict] | None:
     # Ordre croissant des CLABS (1, 10, 20, …, 91) → mappe P, Q, R, … Z
     out.sort(key=lambda d: int(d['clabs']) if d['clabs'].isdigit() else 1_000_000)
     print(f"      → {len(out)} classes d'absences")
+    return out
+
+
+def load_calendar(cfg: dict) -> list[dict]:
+    """Charge les codes de l'onglet 'Calendrier' depuis T554S.
+
+    Le Calendrier liste les TYPES d'absence — champ T554S.TypAb (code à 2 lettres :
+    AI, MA, CP, RT…) — avec leur libellé (T554S 'Texte cat. prés./abs.'). TypAb
+    n'est renseigné par SAP que sur certaines lignes "représentatives" de T554S
+    (la même CatAbsP peut avoir plusieurs lignes, dont une seule porte le code) ;
+    on ne garde donc QUE les lignes où TypAb ≠ vide.
+
+    Filtre : GrSdP = cfg['grsdp']. Le texte inline de T554S est dans la langue du
+    grouping → français pour GrSdP=6 (pas de filtre langue séparé : T554S n'a pas
+    de colonne Langue, contrairement à T554T).
+
+    Dédup : 1ʳᵉ occurrence (ordre des lignes du dump). Le CODE est fixé à sa 1ʳᵉ
+    occurrence ; le LIBELLÉ prend la 1ʳᵉ occurrence NON VIDE (certaines lignes
+    "représentatives" de T554S portent le TypAb mais ont un texte vide, alors
+    qu'une ligne suivante du même code en a un — ex. EF). Les codes dont aucune
+    occurrence n'a de texte (ex. MD/SF/PT/FT chez ABV) restent sans libellé.
+    Tri final alphabétique par code (comme le template de référence).
+
+    Renvoie une liste ordonnée de dicts {'code': 'AI', 'label': 'Absence injustifiée'}.
+    """
+    table = _resolve_table(cfg, "T554S")
+    print(f"[5/5 c] Chargement Calendrier depuis T554S "
+          f"({table.name}, GrSdP={cfg['grsdp']})…")
+    wb = openpyxl.load_workbook(table, data_only=True, read_only=True)
+    ws = wb.active
+    rows = ws.iter_rows(values_only=True)
+    hdr = next(rows)
+    iG = hdr.index('GrSdP')
+    iTy = hdr.index('TypAb')
+    iTx = hdr.index('Texte cat. prés./abs.')
+    seen: dict[str, str] = {}
+    for r in rows:
+        if r[iG] != cfg["grsdp"]:
+            continue
+        code = r[iTy]
+        if not (isinstance(code, str) and code.strip()):
+            continue
+        code = code.strip()
+        label = (r[iTx] or '').strip()
+        if code not in seen:
+            seen[code] = label              # 1ʳᵉ occurrence : fixe le code
+        elif not seen[code] and label:
+            seen[code] = label              # complète un libellé resté vide
+    wb.close()
+    out = [{'code': c, 'label': seen[c]} for c in sorted(seen)]
+    empties = [c for c in sorted(seen) if not seen[c]]
+    print(f"      → {len(out)} codes calendrier (TypAb) extraits")
+    if empties:
+        print(f"      ⚠ {len(empties)} code(s) sans libellé dans T554S "
+              f"(à compléter à la main) : {', '.join(empties)}")
     return out
 
 
@@ -933,6 +1005,62 @@ def add_data_sheet(wb, data: list[dict], cfg: dict) -> None:
 
     ws.freeze_panes = 'A5'
     print(f"      → onglet {sheet_name} peuplé ({len(data)} lignes)")
+
+
+def populate_calendar_sheet(wb, calendar: list[dict]) -> int:
+    """Peuple l'onglet 'Calendrier' avec les types d'absence (T554S.TypAb).
+
+    Réécrit l'onglet EN PLACE : la ligne d'en-tête (1) est conservée, toutes les
+    lignes en dessous sont supprimées puis réécrites — d'abord les codes
+    (col A = code, col B = libellé), puis le bloc vert clair 'Entrées spécifiques'
+    (zone de saisie manuelle de l'HRO) réinséré juste sous les données.
+
+    Les styles (police/bordure/alignement des cellules de données, fond vert clair
+    du bloc 'Entrées spécifiques') sont capturés sur le template puis ré-appliqués,
+    pour que le rendu reste identique quel que soit le nombre de codes du client.
+
+    Renvoie le nombre de codes écrits."""
+    if CALENDAR_SHEET not in wb.sheetnames:
+        print(f"      ⚠ onglet '{CALENDAR_SHEET}' absent du template — ignoré")
+        return 0
+    ws = wb[CALENDAR_SHEET]
+    print(f"[5/5 d] Peuplement de l'onglet '{CALENDAR_SHEET}' "
+          f"({len(calendar)} codes)…")
+
+    # Styles de référence capturés AVANT nettoyage (A2/B2 = données, A32 = bloc vert,
+    # E34 = libellé flottant 'Entrées spécifiques').
+    code_font, code_border, code_align = (
+        copy(ws['A2'].font), copy(ws['A2'].border), copy(ws['A2'].alignment))
+    label_font, label_border, label_align = (
+        copy(ws['B2'].font), copy(ws['B2'].border), copy(ws['B2'].alignment))
+    green_font, green_fill, green_border = (
+        copy(ws['A32'].font), copy(ws['A32'].fill), copy(ws['A32'].border))
+    extra_val = ws['E34'].value
+    extra_font = copy(ws['E34'].font)
+
+    # Nettoyage : supprimer toutes les lignes sous l'en-tête.
+    if ws.max_row >= 2:
+        ws.delete_rows(2, ws.max_row - 1)
+
+    # Données (déjà triées alpha par load_calendar).
+    for i, rec in enumerate(calendar, start=2):
+        a = ws.cell(row=i, column=1, value=rec['code'])
+        a.font, a.border, a.alignment = copy(code_font), copy(code_border), copy(code_align)
+        b = ws.cell(row=i, column=2, value=rec['label'])
+        b.font, b.border, b.alignment = copy(label_font), copy(label_border), copy(label_align)
+
+    # Bloc 'Entrées spécifiques' (vert clair) sous les données.
+    start = 2 + len(calendar)
+    for r in range(start, start + CAL_EXTRA_ROWS):
+        for c in (1, 2):
+            cell = ws.cell(row=r, column=c, value=None)
+            cell.font, cell.fill, cell.border = copy(green_font), copy(green_fill), copy(green_border)
+    # Libellé flottant en col E, au milieu du bloc.
+    lbl = ws.cell(row=start + CAL_EXTRA_ROWS // 2, column=5, value=extra_val)
+    lbl.font = copy(extra_font)
+
+    print(f"      → onglet {CALENDAR_SHEET} peuplé ({len(calendar)} codes)")
+    return len(calendar)
 
 
 # ---- Listes déroulantes (data validations) -----------------------------------
@@ -1344,7 +1472,9 @@ def populate_main_sheet(wb, data: list[dict], cfg: dict,
 # Tables SAP attendues par l'interface dossier.
 REQUIRED_DIR_TABLES = ["T554S", "T554T", "T554C", "T511", "T512T"]
 RECOMMENDED_DIR_TABLES = ["T554E"]          # sinon repli DEFAULT_PEN_CLASSES
-OPTIONAL_DIR_TABLES = ["T508A", "Y00BA"]    # non utilisées aujourd'hui
+OPTIONAL_DIR_TABLES = ["Y00BA"]             # non utilisée aujourd'hui
+# T508A retirée (v1.4.0) : table des règles de plan de roulement, AUCUN rapport
+# avec le Calendrier (généré depuis T554S.TypAb). N'est plus ni scannée ni requise.
 
 
 def scan_tables_dir(input_dir) -> dict[str, str]:
@@ -1428,10 +1558,14 @@ def generate_from_config(cfg: dict) -> dict:
     data = load_client_data(cfg)
     # 2b. Classes d'absences (T554E) ; repli 11 classes standard si T554E absente
     pen_classes = load_t554e(cfg) or DEFAULT_PEN_CLASSES
+    # 2c. Codes calendrier (types d'absence) depuis T554S.TypAb
+    calendar = load_calendar(cfg)
     # 3. Onglet de données à plat 'Wagetype Catalog Absence_Data' (peuplé en place)
     add_data_sheet(wb, data, cfg)
     # 4. Injection dans l'onglet principal + ré-application des listes déroulantes
     n_inj = populate_main_sheet(wb, data, cfg, pen_classes)
+    # 4b. Onglet 'Calendrier' (peuplé en place depuis T554S.TypAb)
+    n_cal = populate_calendar_sheet(wb, calendar)
 
     # 5. Sauvegarde (crée le dossier de sortie au besoin)
     print(f"[Sauvegarde] → {output.name}")
@@ -1440,10 +1574,11 @@ def generate_from_config(cfg: dict) -> dict:
 
     print()
     print(f"=== Terminé : {len(data)} catégories ({n_inj} lignes injectées), "
-          f"{len(pen_classes)} classes d'absences ===")
+          f"{len(pen_classes)} classes d'absences, {n_cal} codes calendrier ===")
     print(f"Sortie : {output}")
     return {"categories": len(data), "rows": n_inj,
-            "classes": len(pen_classes), "output": str(output)}
+            "classes": len(pen_classes), "calendar": n_cal,
+            "output": str(output)}
 
 
 def generate(client: str) -> None:

@@ -22,7 +22,7 @@ ou un dossier de tables choisi par l'HRO) :
 | Fichier | Rôle |
 |---------|------|
 | `WTCA reference.xlsx` | **Template de référence actuel (v1.3.0+)** — Strada finalisé : logo + couleurs, 11 classes P→Z, listes déroulantes, 5 onglets (`Absences-Présences` / `Parameter` masqué / `Wagetype Catalog Absence_Data` / `Calendrier` / `Aide remplissage`). Données d'exemple à vider/remplacer. |
-| `<dossier client>/` (ex. `ABV/`) | **Dumps de tables SAP du client** : `T554S/T/C/E`, `T511`, `T512T` (+ `T512W`, `T508A`, `Y00BA_TAB_COMPAN`). Dossier choisi par l'HRO dans la GUI. **Jamais commit** (gitignore — Pat les régénère depuis SAP à la demande). |
+| `<dossier client>/` (ex. `ABV/`) | **Dumps de tables SAP du client** : `T554S/T/C/E`, `T511`, `T512T` (+ `Y00BA_TAB_COMPAN`). Dossier choisi par l'HRO dans la GUI. **Jamais commit** (gitignore — Pat les régénère depuis SAP à la demande). `T508A` peut être présente dans le dump mais **n'est plus utilisée** (cf. génération du Calendrier depuis T554S, v1.4.0). |
 | `logo_strada.png` | Logo Strada (496×103 px, vert foncé `#084028`) — inséré au runtime |
 | `numeros_vs_unités` | Table de correspondance code → unité de temps (`001=Heures`, `010=Jours`…). **Lue au runtime** par le générateur (cols F/I/L). |
 
@@ -112,7 +112,7 @@ Y00BA_TAB_COMPAN (paramétrage société)
 |--------|---------|
 | `Parameter` | Listes de valeurs (Tax, Freq, Sign, etc.) — **ne pas modifier** |
 | `Taux de valorisation` | Codes TH1-TH3, TJ1-TJ10 + formules (Modif char 06VL1-7) |
-| `Calendrier` | Codes calendrier (vert clair) |
+| `Calendrier` | **Types d'absence** : code 2 lettres (`T554S.TypAb`) + libellé. **Généré depuis v1.4.0** (`load_calendar` + `populate_calendar_sheet`) — voir stratégie ci-dessous. Bloc vert clair "Entrées spécifiques" = saisie manuelle HRO, conservé. |
 | `Sheet1` | Notes (orange) |
 | `Aide remplissage` | Légendes + captures d'écran |
 
@@ -129,10 +129,21 @@ Flux de `generate_from_config(cfg)` :
    d'exemple (lignes 8-232), réécrit par catégorie `(0Xxx)`, puis **ré-applique les
    listes déroulantes** du template aux vraies lignes (col C=Used, F/I=unité,
    L=Heure/Jour, P→Z=■/□ ; TH/TJ ignorées car `#REF!`).
+4b. **Peupler l'onglet `Calendrier`** (`load_calendar` + `populate_calendar_sheet`,
+   v1.4.0) depuis `T554S.TypAb` filtré GrSdP : codes 2 lettres distincts + libellé.
+   Dédup 1ʳᵉ occurrence pour le code, 1ʳᵉ occurrence **non vide** pour le libellé,
+   tri alpha. En-tête (ligne 1) et bloc vert clair "Entrées spécifiques" préservés.
+   ⚠ **T508A n'est PAS utilisée** (table des règles de plan de roulement — fausse
+   piste : sa col "ID cal. jours fériés" contient des codes pays type AT/CH qui
+   ressemblent par hasard aux codes TypAb).
 5. **Sauvegarder** vers le fichier de sortie (garde-fou : refuse d'écraser le template).
 
 ### Compléments restant manuels (non auto)
 - "Used" (col C), "Formule de calcul" (M), "Taux horaire/jour" (N/O) = paramétrage métier.
+- Onglet `Calendrier` : `TypAb` regroupe plusieurs `CatAbsP`, le libellé auto est
+  donc une ligne "représentative" (pas forcément le libellé court idéal du modèle
+  historique) ; et quelques codes n'ont **aucun** texte dans T554S (ex. ABV :
+  FT/MD/PT/SF, signalés dans le log avec un ⚠) → libellé à compléter à la main.
 - ⚠ Les listes déroulantes **TH** (col N) et **TJ** (col O) sont mortes dans le template :
   leurs named ranges pointent sur `#REF!` depuis la suppression de l'onglet
   "Taux de valorisation". À recréer côté template (source de liste + repointage)
