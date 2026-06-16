@@ -22,6 +22,10 @@ WTC Absences/GFK_*/
 WTC Absences/*.xlsx
 !WTC Absences/WTCA reference.xlsx
 
+# WTC Absences — artefacts PyInstaller (générés par build_windows.bat)
+WTC Absences/build/
+WTC Absences/dist/
+
 # System
 .DS_Store
 Thumbs.db
