@@ -138,10 +138,18 @@ Changelog :
            'Y00BA_TAB_COMPAN.XLSX'). Helper _stem_matches_table (code exact, ou
            code + séparateur non alphanumérique → évite les faux positifs comme
            't554sc'/'t5110'). Matches exacts prioritaires sur les préfixés.
+  v1.4.2 — Ménage : retrait de la table Y00BA_TAB_COMPAN (jamais lue — le GrPay
+           est un paramètre fixe) des configs clients et des listes de tables.
+           Onglet principal : colonnes AC-AF (déjà vides) supprimées du template
+           de référence → MAIN_COL_COUNT/TRAILING_END_COL 32→28, la largeur utile
+           du nettoyage/fond passe donc d'AF à AB (full_width = TRAILING_END_COL +
+           shift, borne fixe — ws.max_column vaut 56 à cause de cellules parasites).
+           Commentaires de géométrie remis à jour (T→AA, Y→AB, S→Z) — étaient
+           restés à l'ère GFK 4 classes.
 """
 from __future__ import annotations
 
-APP_VERSION = "1.4.1"
+APP_VERSION = "1.4.2"
 
 import argparse
 import shutil
@@ -180,7 +188,6 @@ CLIENT_CONFIGS: dict[str, dict] = {
         "tables": {  # case-insensitive lookup via _resolve_table()
             "T554S": "T554S.xlsx", "T554T": "T554T.xlsx", "T554C": "T554C.xlsx",
             "T511": "T511.xlsx", "T512T": "T512T.xlsx",
-            "Y00BA": "Y00BA_TAB_COMPAN.xlsx",
         },
         "grsdp": "6",       # Groupe subdivisions personnel
         "lang_fr": "F",     # Code langue français
@@ -196,11 +203,10 @@ CLIENT_CONFIGS: dict[str, dict] = {
             "T554S": "t554s.XLSX", "T554T": "t554t.XLSX", "T554C": "t554c.XLSX",
             "T554E": "T554E.XLSX",
             "T511": "t511.XLSX", "T512T": "T512T.XLSX",
-            "Y00BA": "Y00BA_TAB_COMPAN.XLSX",
         },
         "grsdp": "6",       # France (LCC=FR1)
         "lang_fr": "F",
-        "grpay": "06",      # ABV mappé à GrPay=06 dans Y00BA
+        "grpay": "06",      # ABV → GrPay=06 (mapping connu ; Y00BA plus utilisée)
         "mdt": None,        # ABV : pas de filtre Mdt (dumps sans colonne fiable)
         "output": ROOT / "ABV WTC.xlsx",
         "title_replace": ("FR Absences", "ABV Absences"),
@@ -237,7 +243,7 @@ CAL_GREEN = "FFCCFFCC"             # vert clair du bloc de saisie manuelle (réf
 HEADER_ROW_END = 7        # lignes 1-7 = entêtes (à conserver)
 DATA_ROW_START = 8        # première ligne de données
 DATA_ROW_END = 232        # dernière ligne d'exemple à vider dans WTCA reference
-MAIN_COL_COUNT = 32       # colonnes utiles A-AF dans le template WTCA reference
+MAIN_COL_COUNT = 28       # colonnes utiles A-AB (informatif ; AC-AF supprimées v1.4.2)
 
 # Géométrie du bloc "pénalisants" / classes d'absences (T554E).
 # Le template WTCA reference a DÉJÀ 11 colonnes de classes (P→Z) ; pour un client
@@ -246,8 +252,12 @@ MAIN_COL_COUNT = 32       # colonnes utiles A-AF dans le template WTCA reference
 # décalerait les colonnes "trailing" comme avant.
 PEN_START_COL = 16        # P — 1re colonne de classe d'absence
 PEN_TEMPLATE_COUNT = 11   # le template WTCA reference a 11 colonnes (P→Z)
-TRAILING_END_COL = 32     # AF — dernière colonne "trailing" à décaler du template
-                          # (AA..AF : Additional Comments, WD absence name, Customizing…)
+TRAILING_END_COL = 28     # AB — dernière colonne utile/"trailing" du template
+                          # (AA = Additional Comments, AB = WD absence name).
+                          # AC-AF (29-32) sont vides et supprimées du template
+                          # (v1.4.2). Borne le nettoyage via full_width=TRAILING_END_COL
+                          # +shift (PAS ws.max_column, qui vaut 56 à cause de
+                          # cellules parasites au-delà d'AB).
 
 # Repli pour les clients dont T554E n'a pas été dumpée (ex. AKN). Les classes
 # d'absences sont les MÊMES pour tous les clients GrPay=06 (confirmé par Pat),
@@ -1191,9 +1201,9 @@ def restructure_penalisant_block(ws, pen_classes: list[dict]) -> int:
     n = len(pen_classes)
     shift = n - PEN_TEMPLATE_COUNT
     pen_start = PEN_START_COL                          # 16 = P
-    trailing_start = pen_start + PEN_TEMPLATE_COUNT    # 20 = T (1re col à décaler)
-    trailing_end = TRAILING_END_COL                    # 25 = Y
-    pilotage_end = pen_start + PEN_TEMPLATE_COUNT - 1   # 19 = S (fin merge J6:S6)
+    trailing_start = pen_start + PEN_TEMPLATE_COUNT    # 27 = AA (1re col à décaler)
+    trailing_end = TRAILING_END_COL                    # 28 = AB
+    pilotage_end = pen_start + PEN_TEMPLATE_COUNT - 1   # 26 = Z (fin merge J6:Z6)
 
     if shift > 0:
         # 1. Snapshot des entêtes trailing (lignes 6-7) : valeur, styles, largeur.
@@ -1288,8 +1298,11 @@ def populate_main_sheet(wb, data: list[dict], cfg: dict,
     shift = restructure_penalisant_block(ws, pen_classes)
     n_pen = len(pen_classes)
     pen_end = PEN_START_COL + n_pen - 1            # ex. 26 = Z pour 11 classes
-    # Largeur utile totale = anciennes colonnes (jusqu'à Y=25) + décalage.
-    full_width = TRAILING_END_COL + shift          # ex. 32 = AF pour shift=7
+    # Largeur utile = colonnes A..AB (dernière colonne avec un entête) + décalage
+    # éventuel des colonnes trailing. Borne FIXE volontaire : ws.max_column vaut
+    # 56 (cellules parasites au-delà d'AB), on ne veut PAS étendre le nettoyage /
+    # le fond vert jusque-là. AC-AF (29-32) sont vides → hors zone.
+    full_width = TRAILING_END_COL + shift          # 28 = AB pour shift=0
     print(f"      → {n_pen} classes d'absences (cols {get_column_letter(PEN_START_COL)}"
           f"-{get_column_letter(pen_end)}), trailing décalé de +{shift}")
 
@@ -1478,9 +1491,12 @@ def populate_main_sheet(wb, data: list[dict], cfg: dict,
 # Tables SAP attendues par l'interface dossier.
 REQUIRED_DIR_TABLES = ["T554S", "T554T", "T554C", "T511", "T512T"]
 RECOMMENDED_DIR_TABLES = ["T554E"]          # sinon repli DEFAULT_PEN_CLASSES
-OPTIONAL_DIR_TABLES = ["Y00BA"]             # non utilisée aujourd'hui
-# T508A retirée (v1.4.0) : table des règles de plan de roulement, AUCUN rapport
-# avec le Calendrier (généré depuis T554S.TypAb). N'est plus ni scannée ni requise.
+OPTIONAL_DIR_TABLES: list[str] = []         # aucune table optionnelle aujourd'hui
+# Tables retirées du flux (plus ni scannées ni requises) :
+#   - T508A (v1.4.0) : règles de plan de roulement, AUCUN rapport avec le
+#     Calendrier (généré depuis T554S.TypAb) — fausse piste.
+#   - Y00BA_TAB_COMPAN (v1.4.2) : mappait Customer Code → GrPay ; le GrPay est
+#     désormais un paramètre fixe (06 pour les clients France), jamais relu.
 
 
 def _stem_matches_table(stem_lower: str, code_lower: str) -> bool:
@@ -1489,7 +1505,7 @@ def _stem_matches_table(stem_lower: str, code_lower: str) -> bool:
     Correspondance insensible à la casse, tolérante aux noms de dump réels :
       - égalité stricte ('t554s' == 't554s') ;
       - code suivi d'un séparateur NON alphanumérique ('t554s_984', 't554s 16.06',
-        't554s-fr', 'y00ba_tab_compan'…).
+        't554s-fr', 't554c_export'…).
     Le séparateur évite les faux positifs ('t554sc' ne matche PAS 't554s' ;
     't5110' ne matche PAS 't511')."""
     if stem_lower == code_lower:
@@ -1505,7 +1521,7 @@ def scan_tables_dir(input_dir) -> dict[str, str]:
 
     Détection **insensible à la casse** (nom ET extension) et tolérante aux noms
     de dump réels (code de table suivi d'un séparateur : 'T554S_984.xlsx',
-    'T554T 16.06.2026.XLSX', 'Y00BA_TAB_COMPAN.XLSX'…) — voir _stem_matches_table.
+    'T554T 16.06.2026.XLSX', 't554c_export.xlsx'…) — voir _stem_matches_table.
     Les correspondances EXACTES (stem == code) sont prioritaires sur les
     correspondances préfixées. Renvoie {table: nom_de_fichier}."""
     input_dir = Path(input_dir)

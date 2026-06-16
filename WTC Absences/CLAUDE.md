@@ -22,7 +22,7 @@ ou un dossier de tables choisi par l'HRO) :
 | Fichier | Rôle |
 |---------|------|
 | `WTCA reference.xlsx` | **Template de référence actuel (v1.3.0+)** — Strada finalisé : logo + couleurs, 11 classes P→Z, listes déroulantes, 5 onglets (`Absences-Présences` / `Parameter` masqué / `Wagetype Catalog Absence_Data` / `Calendrier` / `Aide remplissage`). Données d'exemple à vider/remplacer. |
-| `<dossier client>/` (ex. `ABV/`) | **Dumps de tables SAP du client** : `T554S/T/C/E`, `T511`, `T512T` (+ `Y00BA_TAB_COMPAN`). Dossier choisi par l'HRO dans la GUI. **Jamais commit** (gitignore — Pat les régénère depuis SAP à la demande). `T508A` peut être présente dans le dump mais **n'est plus utilisée** (cf. génération du Calendrier depuis T554S, v1.4.0). |
+| `<dossier client>/` (ex. `ABV/`) | **Dumps de tables SAP du client** : `T554S/T/C/E`, `T511`, `T512T`. Dossier choisi par l'HRO dans la GUI. **Jamais commit** (gitignore — Pat les régénère depuis SAP à la demande). `T508A` (v1.4.0) et `Y00BA_TAB_COMPAN` (v1.4.2) peuvent traîner dans le dump mais **ne sont plus utilisées** par le générateur. |
 | `logo_strada.png` | Logo Strada (496×103 px, vert foncé `#084028`) — inséré au runtime |
 | `numeros_vs_unités` | Table de correspondance code → unité de temps (`001=Heures`, `010=Jours`…). **Lue au runtime** par le générateur (cols F/I/L). |
 
@@ -50,11 +50,11 @@ T554S (catégories d'absences/présences)
   └── T554C (règles de valorisation détaillées)
         Clé : (GrPay, Grpe, Règle de valorisat.)
         Contient : rubriques de paiement (jusqu'à 15 par règle), pourcentages
-        
-Y00BA_TAB_COMPAN (paramétrage société)
-  Clé : (GrPay, ID paramètre)
-  Mappe le Customer Code (AKN) au GrPay (06)
 ```
+
+> **Y00BA_TAB_COMPAN** (paramétrage société, mappait Customer Code → GrPay) :
+> **plus utilisée depuis v1.4.2** — le GrPay est un paramètre fixe (06 France),
+> jamais relu. Retirée des configs clients et des listes de tables.
 
 ## Structure du fichier Excel cible
 
@@ -160,7 +160,7 @@ L'HRO renseigne uniquement :
 1. **Dossier des tables SAP** (détection auto des fichiers — voir
    `scan_tables_dir()`). Insensible à la casse **et** tolérante aux noms de dump
    réels : le code de table peut être suivi d'un séparateur (`T554S_984.xlsx`,
-   `T554T 16.06.2026.XLSX`, `Y00BA_TAB_COMPAN.XLSX`) — cf. `_stem_matches_table`,
+   `T554T 16.06.2026.XLSX`, `t554c_export.xlsx`) — cf. `_stem_matches_table`,
    les matches exacts primant sur les préfixés. Obligatoires : T554S, T554T,
    T554C, T511, T512T. Recommandée : T554E (sinon repli sur les 11 classes standard).
 2. **Dossier de sortie** + **nom du fichier** `.xlsx`.
