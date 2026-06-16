@@ -155,10 +155,14 @@ Changelog :
                AppUserModelID Windows (évite l'icône Python/Tk générique).
              - Ajout de 'WTC Absences.spec' + build_windows.bat + app.ico.
            (Le .exe se construit SUR Windows : PyInstaller ne cross-compile pas.)
+  v1.4.4 — Icône visible AUSSI sous Linux (run.sh / lancement Python direct) :
+           iconbitmap+.ico ne marche que sous Windows → sous Linux/macOS on
+           utilise iconphoto + app.png (Tk 8.6+), réf gardée sur root pour
+           éviter le ramasse-miettes. Ajout de app.png (même design que app.ico).
 """
 from __future__ import annotations
 
-APP_VERSION = "1.4.3"
+APP_VERSION = "1.4.4"
 
 import argparse
 import shutil

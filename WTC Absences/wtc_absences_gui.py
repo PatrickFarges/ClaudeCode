@@ -399,15 +399,23 @@ def main() -> None:
 
     root = tk.Tk()
 
-    # Icône de la fenêtre + barre des tâches. `default=` l'applique aussi aux
-    # boîtes de dialogue. gen.ROOT pointe vers le dossier des ressources (ou
-    # sys._MEIPASS dans l'exe PyInstaller, où app.ico est embarqué via --add-data).
-    # iconbitmap attend un .ico (OK sous Windows ; peut échouer sous Linux en dev
-    # → try/except sans conséquence).
+    # Icône de la fenêtre + barre des tâches — l'API diffère selon l'OS :
+    #  - Windows : iconbitmap + .ico (multi-résolution, meilleur rendu barre des
+    #    tâches ; `default=` l'applique aussi aux boîtes de dialogue).
+    #  - Linux/macOS : iconbitmap NE lit PAS les .ico → on passe par iconphoto +
+    #    un PNG (Tk 8.6+). La réf à la PhotoImage doit être GARDÉE (sinon le
+    #    ramasse-miettes la supprime et l'icône disparaît) → stockée sur root.
+    # gen.ROOT = dossier des ressources (ou sys._MEIPASS dans l'exe PyInstaller).
     try:
-        ico = gen.ROOT / "app.ico"
-        if ico.exists():
-            root.iconbitmap(default=str(ico))
+        if sys.platform.startswith("win"):
+            ico = gen.ROOT / "app.ico"
+            if ico.exists():
+                root.iconbitmap(default=str(ico))
+        else:
+            png = gen.ROOT / "app.png"
+            if png.exists():
+                root._app_icon = tk.PhotoImage(file=str(png))   # garder la réf
+                root.iconphoto(True, root._app_icon)
     except Exception:
         pass
 
