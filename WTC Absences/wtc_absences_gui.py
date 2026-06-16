@@ -386,7 +386,31 @@ class WtcAbsencesApp:
 
 
 def main() -> None:
+    # Windows : définir un AppUserModelID explicite AVANT toute fenêtre, sinon la
+    # barre des tâches regroupe l'app sous l'icône générique de Python/Tk au lieu
+    # de la nôtre. Sans effet (et silencieux) hors Windows.
+    if sys.platform.startswith("win"):
+        try:
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                "Strada.WTCAbsences")
+        except Exception:
+            pass
+
     root = tk.Tk()
+
+    # Icône de la fenêtre + barre des tâches. `default=` l'applique aussi aux
+    # boîtes de dialogue. gen.ROOT pointe vers le dossier des ressources (ou
+    # sys._MEIPASS dans l'exe PyInstaller, où app.ico est embarqué via --add-data).
+    # iconbitmap attend un .ico (OK sous Windows ; peut échouer sous Linux en dev
+    # → try/except sans conséquence).
+    try:
+        ico = gen.ROOT / "app.ico"
+        if ico.exists():
+            root.iconbitmap(default=str(ico))
+    except Exception:
+        pass
+
     WtcAbsencesApp(root)
     root.mainloop()
 

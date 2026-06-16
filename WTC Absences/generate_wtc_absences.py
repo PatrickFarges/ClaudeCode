@@ -146,14 +146,24 @@ Changelog :
            shift, borne fixe — ws.max_column vaut 56 à cause de cellules parasites).
            Commentaires de géométrie remis à jour (T→AA, Y→AB, S→Z) — étaient
            restés à l'ère GFK 4 classes.
+  v1.4.3 — Support de l'empaquetage en exécutable Windows (PyInstaller) :
+             - _resource_root() : ROOT pointe vers sys._MEIPASS dans l'exe (où
+               sont extraits les fichiers --add-data : template + numeros_vs_unités
+               + app.ico), sinon dossier du script (dev). Comportement identique
+               en dev. La GUI continue d'écrire la sortie dans le dossier HRO.
+             - GUI (main) : icône fenêtre/barre des tâches (iconbitmap app.ico) +
+               AppUserModelID Windows (évite l'icône Python/Tk générique).
+             - Ajout de 'WTC Absences.spec' + build_windows.bat + app.ico.
+           (Le .exe se construit SUR Windows : PyInstaller ne cross-compile pas.)
 """
 from __future__ import annotations
 
-APP_VERSION = "1.4.2"
+APP_VERSION = "1.4.3"
 
 import argparse
 import shutil
 import subprocess
+import sys
 from copy import copy
 from pathlib import Path
 
@@ -164,7 +174,20 @@ from openpyxl.utils import get_column_letter
 
 # ---- Chemins communs ------------------------------------------------------
 
-ROOT = Path(__file__).resolve().parent
+def _resource_root() -> Path:
+    """Dossier des ressources en lecture seule (template `WTCA reference.xlsx`,
+    mapping `numeros_vs_unités`, icône `app.ico`).
+
+    Dans un exécutable PyInstaller, les fichiers passés en `--add-data` sont
+    extraits dans `sys._MEIPASS` ; en développement (script .py normal), c'est
+    le dossier du script. NE PAS confondre avec le dossier de SORTIE : la GUI
+    écrit toujours dans le dossier choisi par l'HRO (cf. build_dir_config)."""
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS)
+    return Path(__file__).resolve().parent
+
+
+ROOT = _resource_root()
 # Template de référence actuel : déjà brandé Strada (logo + couleurs), bloc des
 # 11 classes d'absences déployé (P→Z), onglets dans l'ordre voulu. C'est le point
 # de départ de toute génération depuis la v1.3.0.
