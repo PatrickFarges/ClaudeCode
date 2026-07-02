@@ -16,6 +16,14 @@ Usage:
     python mob_converter.py zombie --output path/to/output.glb
 
 Changelog:
+    v3.1.0 — Portage Linux (sources = clone sparse Mojang/bedrock-samples au lieu
+             de l'install Bedrock Windows D:\Games, packs versionnés fusionnés),
+             support per-face UV (dict {"north": {...}}, requis pour ghast),
+             support rotation/pivot per-cube (chicken, frog, goat, camel,
+             armadillo, bogged, breeze — cubes plaqués droits avant),
+             résolution héritage géométrie "geometry.X:geometry.Y" cross-fichier
+             (witch → villager.geo.json — la witch n'avait ni tête ni corps),
+             lecture texture_width/height depuis description (format 1.12+)
     v2.5.0 — Fix oreilles cheval (EarL/EarR offset Z-5 au lieu de Z-7,
              aligné avec Head — les oreilles étaient enfoncées dans la tête)
     v2.4.0 — Fix wolf corps décalé (CUBE_OFFSET_OVERRIDES body/upperBody Z-4,
@@ -37,7 +45,7 @@ Changelog:
     v1.0.0 — Création : parsing .geo.json, bind_pose_rotation, Molang -> keyframes
 """
 
-APP_VERSION = "3.0.0"
+APP_VERSION = "3.1.0"
 
 import json
 import struct
@@ -57,10 +65,31 @@ except ImportError:
 
 # ─── Configuration ────────────────────────────────────────────────────────────
 
-BEDROCK_BASE = Path(r"D:\Games\Minecraft - Bedrock Edition\data\resource_packs")
-BEDROCK_PATH = BEDROCK_BASE / "vanilla"
-OUTPUT_DIR = Path(r"D:\Program\ClaudeCode\ClaudeCraft\assets\Mobs\Bedrock")
+# Sources vanilla : clone sparse du repo officiel Mojang/bedrock-samples
+# (git clone --sparse, resource_pack/models + resource_pack/textures/entity).
+# Contrairement à une install Bedrock, tous les packs versionnés (vanilla_1.21.0
+# etc.) y sont fusionnés dans un seul resource_pack/.
+BEDROCK_BASE = Path("/mnt/Raid4Tb/Games/Minecraft-Bedrock-samples")
+BEDROCK_PATH = BEDROCK_BASE / "resource_pack"
+OUTPUT_DIR = Path(__file__).resolve().parent.parent / "assets" / "Mobs" / "Bedrock"
 SCALE = 1.0 / 16.0   # 16 Bedrock units = 1 Godot unit (≈ 1 block)
+
+
+def resolve_bedrock_path(pack, rel_path):
+    """Résout un chemin de ressource Bedrock.
+
+    Essaie d'abord le pack versionné (layout install Bedrock : vanilla_1.21.0/...)
+    puis le resource_pack fusionné de bedrock-samples. Retourne le premier qui
+    existe, sinon le chemin bedrock-samples (pour un message d'erreur parlant).
+    """
+    candidates = [
+        BEDROCK_BASE / pack / rel_path,      # layout install Bedrock (Windows)
+        BEDROCK_PATH / rel_path,             # layout bedrock-samples (fusionné)
+    ]
+    for cand in candidates:
+        if cand.exists():
+            return cand
+    return candidates[-1]
 
 # ─── Mob Registry ─────────────────────────────────────────────────────────────
 # Maps mob name -> { geo, texture, animations, tex_size }
@@ -753,6 +782,40 @@ def mat4_inverse_rigid(m):
 
 # ─── Model Parsing ───────────────────────────────────────────────────────────
 
+def _find_geometry_by_key(data, wanted_key, geo_path):
+    """Cherche une géométrie par clé, dans le fichier courant puis les voisins.
+
+    Utilisé pour résoudre l'héritage v1.8 "geometry.enfant:geometry.parent" :
+    le parent peut vivre dans un autre .geo.json du même dossier (ex. witch
+    hérite de geometry.villager.v1.8 qui vit dans villager.geo.json).
+    """
+    # 1. Fichier courant
+    for key in data:
+        if key == wanted_key or key.startswith(wanted_key + ":"):
+            return data[key]
+    if "minecraft:geometry" in data:
+        for geo in data["minecraft:geometry"]:
+            if geo.get("description", {}).get("identifier", "") == wanted_key:
+                return geo
+    # 2. Fichiers voisins (même dossier models/entity/)
+    for sibling in sorted(geo_path.parent.glob("*.geo.json")):
+        if sibling == geo_path:
+            continue
+        try:
+            with open(sibling, "r", encoding="utf-8") as f:
+                sib_data = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            continue
+        for key in sib_data:
+            if key == wanted_key or key.startswith(wanted_key + ":"):
+                return sib_data[key]
+        if "minecraft:geometry" in sib_data:
+            for geo in sib_data["minecraft:geometry"]:
+                if geo.get("description", {}).get("identifier", "") == wanted_key:
+                    return geo
+    return None
+
+
 def parse_geo_json(mob_info, mob_name=None):
     """Parse a .geo.json or mobs.json file for a specific geometry key.
 
@@ -760,7 +823,7 @@ def parse_geo_json(mob_info, mob_name=None):
     If mob_name is given, applies PARENT_OVERRIDES for mobs with missing hierarchy.
     """
     pack = mob_info.get("pack", "vanilla")
-    geo_path = BEDROCK_BASE / pack / mob_info["geo"]
+    geo_path = resolve_bedrock_path(pack, mob_info["geo"])
     with open(geo_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
@@ -769,9 +832,11 @@ def parse_geo_json(mob_info, mob_name=None):
 
     # Find the geometry data — try exact match, then prefix match
     geo_data = None
+    matched_key = None
     for key in data:
         if key == geo_key or key.startswith(geo_key + ".") or key.startswith(geo_key + ":"):
             geo_data = data[key]
+            matched_key = key
             break
 
     if geo_data is None:
@@ -786,27 +851,41 @@ def parse_geo_json(mob_info, mob_name=None):
     if geo_data is None:
         raise RuntimeError(f"Geometry '{geo_key}' introuvable dans {geo_path}")
 
-    # Handle parent geometry (inheritance)
-    parent_key = None
-    if ":" in geo_key:
-        parent_key = geo_key.split(":")[0]
+    # Résolution héritage v1.8 : "geometry.enfant:geometry.parent"
+    # Les bones du parent sont mergés, l'enfant override par nom.
+    # Le parent peut vivre dans un autre fichier (witch → villager.geo.json).
+    parent_bones_map = {}
+    inherit_key = matched_key
+    depth = 0
+    while inherit_key and ":" in inherit_key and depth < 4:
+        parent_key = inherit_key.split(":", 1)[1]
+        parent_geo = _find_geometry_by_key(data, parent_key, geo_path)
+        if parent_geo is None:
+            print(f"  ATTENTION: parent geometry '{parent_key}' introuvable "
+                  f"(héritage de {inherit_key})")
+            break
+        for b in parent_geo.get("bones", []):
+            parent_bones_map.setdefault(b["name"], b)
+        # Héritage chaîné éventuel (parent qui hérite lui-même)
+        inherit_key = None
+        for key in data:
+            if key.startswith(parent_key + ":"):
+                inherit_key = key
+                break
+        depth += 1
 
     # Check for inheritance in mobs.json
-    parent_bones_map = {}
     if mob_info["geo"].endswith("mobs.json"):
-        # Look for parent geometries
-        for key in data:
-            if key != geo_key and not key.startswith(geo_key):
-                # Check if our geo inherits from this
-                pass
         # For zombie/skeleton: they inherit from geometry.humanoid
         if "geometry.humanoid" in data and geo_key != "geometry.humanoid":
             for b in data["geometry.humanoid"].get("bones", []):
                 parent_bones_map[b["name"]] = b
 
     # Get texture dimensions from geometry or override
-    tex_w = geo_data.get("texturewidth", tex_w)
-    tex_h = geo_data.get("textureheight", tex_h)
+    # (format 1.12+ : dans description ; format 1.8 : à la racine de la geo)
+    desc = geo_data.get("description", {})
+    tex_w = int(desc.get("texture_width", geo_data.get("texturewidth", tex_w)))
+    tex_h = int(desc.get("texture_height", geo_data.get("textureheight", tex_h)))
 
     raw_bones = geo_data.get("bones", [])
 
@@ -828,15 +907,19 @@ def parse_geo_json(mob_info, mob_name=None):
         }
         for cube in b.get("cubes", []):
             uv = cube.get("uv")
-            # Skip cubes without UV (some have "uv" as dict for per-face UV)
-            if uv is None or isinstance(uv, dict):
+            # Skip cubes without any UV (very rare)
+            if uv is None:
                 continue
             bone["cubes"].append({
                 "origin": cube["origin"],
                 "size": cube["size"],
+                # liste [u,v] (box UV) OU dict per-face {"north": {"uv": ...}}
                 "uv": uv,
                 "inflate": cube.get("inflate", 0.0),
                 "mirror": cube.get("mirror", bone["mirror"]),
+                # Rotation per-cube autour du pivot du cube (degrés Bedrock)
+                "rotation": cube.get("rotation", [0, 0, 0]),
+                "pivot": cube.get("pivot"),
             })
         bones.append(bone)
 
@@ -903,14 +986,29 @@ def parse_geo_json(mob_info, mob_name=None):
 
 # ─── Mesh Generation ─────────────────────────────────────────────────────────
 
-def generate_cube_faces(cube, tex_w, tex_h):
-    """Generate vertex data for one cube (6 faces, 24 vertices, 36 indices).
+# Correspondance face géométrique -> nom de face Bedrock (per-face UV)
+# front = -Z = north, back = +Z = south, right = -X = west, left = +X = east
+BEDROCK_FACE_NAMES = {
+    "front": "north", "back": "south", "right": "west",
+    "left": "east", "top": "up", "bottom": "down",
+}
 
-    Uses Bedrock box UV layout. tex_w/tex_h define texture dimensions.
+
+def generate_cube_faces(cube, tex_w, tex_h):
+    """Generate vertex data for one cube (up to 6 faces, 24 vertices, 36 indices).
+
+    Supporte le box UV layout Bedrock ([u, v]) ET le per-face UV
+    ({"north": {"uv": [u, v], "uv_size": [w, h]}, ...}) — les faces absentes
+    du dict per-face ne sont pas émises. Applique la rotation per-cube
+    autour du pivot du cube si présente.
     """
     ox, oy, oz = cube["origin"]
     cw, ch, cd = cube["size"]
-    u0, v0 = cube["uv"]
+    per_face = isinstance(cube["uv"], dict)
+    if per_face:
+        u0, v0 = 0, 0  # non utilisé en mode per-face
+    else:
+        u0, v0 = cube["uv"]
     inflate = cube.get("inflate", 0.0)
     mirror = cube.get("mirror", False)
 
@@ -945,14 +1043,30 @@ def generate_cube_faces(cube, tex_w, tex_h):
          [0, -1, 0], [u0 + cd + cw, v0, cw, cd]),
     ]
 
+    # Dimensions UV par défaut de chaque face (mode per-face sans uv_size)
+    default_uv_size = {
+        "front": [cw, ch], "back": [cw, ch],
+        "right": [cd, ch], "left": [cd, ch],
+        "top": [cw, cd], "bottom": [cw, cd],
+    }
+
     for face_name, verts, normal, uv_rect in face_defs:
+        if per_face:
+            entry = cube["uv"].get(BEDROCK_FACE_NAMES[face_name])
+            if entry is None or "uv" not in entry:
+                continue  # face absente du dict per-face -> non rendue
+            fu, fv = entry["uv"]
+            fw, fh = entry.get("uv_size", default_uv_size[face_name])
+        else:
+            fu, fv, fw, fh = uv_rect
+
         base = len(positions)
         for v in verts:
             positions.append(v)
             normals_out.append(normal)
 
-        fu, fv, fw, fh = uv_rect
-        if mirror:
+        # Le flag mirror ne s'applique qu'au box UV (per-face = coords explicites)
+        if mirror and not per_face:
             face_uvs = [
                 uv(fu + fw, fv + fh), uv(fu + fw, fv),
                 uv(fu, fv),           uv(fu, fv + fh),
@@ -968,6 +1082,23 @@ def generate_cube_faces(cube, tex_w, tex_h):
             indices.extend([base, base + 2, base + 1, base, base + 3, base + 2])
         else:
             indices.extend([base, base + 1, base + 2, base, base + 2, base + 3])
+
+    # Rotation per-cube autour du pivot du cube (chicken, frog, goat, camel,
+    # armadillo, bogged, breeze...). Convention d'angles alignée sur le baking
+    # bind_pose_rotation (négation, cf. build_skeleton_and_mesh).
+    rot = cube.get("rotation") or [0, 0, 0]
+    if any(abs(a) > 0.001 for a in rot):
+        piv = cube.get("pivot")
+        if piv is None:
+            # Défaut Bedrock : centre du cube
+            piv = [ox + cw / 2.0, oy + ch / 2.0, oz + cd / 2.0]
+        piv = [p * SCALE for p in piv]
+        rot_quat = euler_to_quat(-rot[0], -rot[1], -rot[2])
+        for i in range(len(positions)):
+            v_rel = [positions[i][j] - piv[j] for j in range(3)]
+            v_rot = rotate_vec_by_quat(rot_quat, v_rel)
+            positions[i] = [v_rot[j] + piv[j] for j in range(3)]
+            normals_out[i] = rotate_vec_by_quat(rot_quat, normals_out[i])
 
     return positions, normals_out, uvs, indices
 
@@ -1911,7 +2042,7 @@ def main():
 
         # 4. Texture
         tex_pack = mob_info.get("pack_texture", mob_info.get("pack", "vanilla"))
-        tex_path = BEDROCK_BASE / tex_pack / mob_info["texture"]
+        tex_path = resolve_bedrock_path(tex_pack, mob_info["texture"])
         if tex_path.exists():
             print(f"Texture : {tex_path}")
             # Copy texture alongside GLB (convert TGA to PNG if needed)

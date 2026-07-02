@@ -90,6 +90,7 @@ Certaines animations vanilla (`bow_and_arrow`, `charging`, `sleeping`) dépenden
 - **`scripts/character_viewer.py`** (v2.1.0) : visualiseur GLB, skin swap, armures, animations Bedrock. Touches : N=toggle rotation X, 1-4=vues preset, F=flèche direction faciale
 - **`scripts/mob_gallery.py`** : galerie 3D mobs, rotation auto, animations Bedrock
 - **`scripts/minecraft_import.py`** / **`scripts/download_mc_sounds.py`** : extracteur client.jar, téléchargeur sons MC
+- **`scripts/mob_converter.py`** (v3.1.0) : convertisseur geo.json Bedrock → GLB skinné des 65 mobs (`--all`, `--list`). Sources = clone sparse `Mojang/bedrock-samples`. Supporte box UV + per-face UV, rotation/pivot per-cube, héritage géométrie v1.8 cross-fichier, overrides hiérarchie/BPR/offsets par mob
 
 ## Packs de textures (`TexturesPack/`)
 
@@ -102,7 +103,7 @@ Certaines animations vanilla (`bow_and_arrow`, `charging`, `sleeping`) dépenden
 
 ## Direction du projet
 
-**Version actuelle : v21.7.3**
+**Version actuelle : v21.8.0**
 
 ### Phases terminées
 
@@ -126,6 +127,7 @@ Certaines animations vanilla (`bow_and_arrow`, `charging`, `sleeping`) dépenden
 | - | v21.7.0 | **Fix anti-tourniquet pathfinding mobs** : `_force_idle_rest` teste 5 candidats de direction (opposé + 2 perpendiculaires + 2 variantes ±30°) et score par nb cellules libres, nudge physique `_mob_radius+0.6`, validation sol (anti-falaise), mobs hauts vérifient b+3, fallback rotation aléatoire. **Bonus UI** : recipe_book_ui v2.1.0 — bouton loupe supprimé (redondant), fix crop atlas `Rect2i(21,29,26,26)`. |
 | - | v21.7.1 | **Fix WALK quadrupèdes (Python viewers)** : `bedrock_anim_engine.py` v1.2.0 évalue désormais `anim_time_update` chaque frame (sans ça, `entry.time` restait à 0 → `cos(0)=1` → pattes figées à 80°). `mob_gallery.py` v2.2.0 normalise `move_speed` à 1.0 au lieu de 4.0 (évitait l'amplification ×4 de `leg_x_rot_anim * move_speed` qui faisait flipper les pattes de cheval). Walk cow/sheep/pig/horse/chicken enfin fonctionnel dans le viewer. |
 | - | v21.7.2 | **Fix apesanteur walk quadrupèdes** : deux paramètres de tuning ajoutés aux moteurs Bedrock (Python v1.3.0 + GDScript v1.3.0). `distance_scale` (2.5 côté jeu) compense la vitesse des mobs ClaudeCraft (~1.5 b/s) vs MC vanilla (4 b/s) → cycle passe de 6.3s apesanteur à ~2.4s MC-like. `leg_amplitude_scale` (0.5 côté jeu + viewer) réduit le swing ±80° hardcodé de `quadruped.walk` à ±40° plus réaliste. `passive_mob.gd` v3.6.0 + `mob_gallery.py` v2.3.0 appliquent ces scales. |
+| - | v21.8.0 | **Opération Sauvetage des Animaux — mob_converter v3.1.0 + 65 GLB reconvertis** : sources vanilla = clone sparse `Mojang/bedrock-samples` (`/mnt/Raid4Tb/Games/Minecraft-Bedrock-samples/`, plus besoin de l'install Bedrock Windows). 4 fixes convertisseur : (1) per-face UV (dict `{"north": ...}`) — requis pour ghast (10/10 cubes skippés avant) ; (2) rotation/pivot per-cube — chicken, frog, goat, camel, armadillo, bogged, breeze avaient leurs cubes plaqués droits ; (3) héritage géométrie v1.8 `geometry.X:geometry.Y` cross-fichier — la witch (héritant de villager.geo.json) n'avait ni tête ni corps, juste nez + chapeaux ; (4) lecture `texture_width/height` depuis description (format 1.12+). Validation : scan binaire GLB avant/après (witch +192 verts tête retrouvée, zéro régression — vex -24 verts = nouveau modèle vanilla 1.19.3), wireframes comparatifs, réimport Godot headless OK. |
 | - | v21.7.3 | **Démarrage Linux Mint OK + 3 fixes** : (1) `bedrock_anim_player.gd` ligne 159 coerce `loop` String→bool (Bedrock peut renvoyer `"hold_on_last_frame"`) — fini le spam `SCRIPT ERROR: Invalid assignment of property or key 'loop'`. (2) Cascades sous-marines : `chunk.gd` `_air_neighbor_is_underwater_pocket()` skip les faces latérales/bottom d'eau quand le voisin AIR est coiffé par une colonne d'eau (≤6 blocs), mêmes filtres côté son dans `player.gd` `_update_waterfall_audio()`. (3) Sous-sol moins gruyère : `_is_cave` seuils 0.07/0.09 (au lieu de 0.15/0.18), `large_cave` 0.005 (au lieu de 0.03), plafond grottes = `height-6` quand on est sous le niveau de la mer. |
 
 ### À venir
@@ -140,7 +142,7 @@ Certaines animations vanilla (`bow_and_arrow`, `charging`, `sleeping`) dépenden
 
 Sur le poste Linux Mint actuel, les sources Minecraft Java/Bedrock ne sont **pas réinstallées** (elles vivaient sur `D:\Games\` côté Windows). Pour réimporter des assets/données :
 - Java : récupérer un `client.jar` (ex. `~/.minecraft/versions/<ver>/<ver>.jar` après lancement du launcher officiel) puis pointer `scripts/minecraft_import.py` dessus.
-- Bedrock : récupérer le dossier `data/` (BehaviorPack/ResourcePack vanilla) depuis une install Bedrock Edition (Android APK ou copie Windows).
+- **Bedrock : PAS besoin d'installer le jeu** — clone sparse du repo officiel `Mojang/bedrock-samples` dans `/mnt/Raid4Tb/Games/Minecraft-Bedrock-samples/` (fait le 2026-07-02, ~30 Mo : `resource_pack/models` + `resource_pack/textures/entity`). Tous les packs versionnés (`vanilla_1.21.0` etc.) y sont fusionnés dans un seul `resource_pack/`. `mob_converter.py` pointe dessus via `resolve_bedrock_path()`. Pour élargir le sparse (sons, autres textures) : `git -C /mnt/Raid4Tb/Games/Minecraft-Bedrock-samples sparse-checkout add resource_pack/<dossier>`.
 
 Ancienne config Windows (pour mémoire) :
 - Java 1.21.11 : `D:\Games\Minecraft - 1.21.11\client.jar`
