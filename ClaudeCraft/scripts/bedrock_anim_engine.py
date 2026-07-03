@@ -1,20 +1,43 @@
 """
-bedrock_anim_engine.py v1.1.0
+bedrock_anim_engine.py v1.3.0
 Moteur d'animation Bedrock en Python (pour character_viewer.py et mob_gallery.py).
 Contient l'evaluateur Molang et le chargeur/joueur d'animations Bedrock JSON.
 
 Changelog:
+    v1.4.0 - Chantier B animations (aligne sur bedrock_anim_player.gd v1.4.0) :
+             - Interpolation catmull-rom ("lerp_mode": "catmullrom") : spline
+               Hermite a tangentes differences finies — camel/armadillo fluides.
+             - Coercion loop String→bool ("hold_on_last_frame" ne loop plus,
+               deja fixe cote GDScript en v21.7.3).
+             - Warning one-shot sur les queries Molang inconnues (stderr),
+               desactivable via molang.warn_unknown = False.
+             - query.all_animations_finished / any_animation_finished exposees.
+    v1.3.0 - Fix effet apesanteur sur walk quadrupedes :
+             - `distance_scale` (defaut 1.0) : multiplie modified_distance_moved
+               pour compenser la difference de vitesse avec MC vanilla
+               (MC cow=4 blocs/s, ClaudeCraft=1.5 blocs/s → scale 2.5 aligne
+               le cycle sur MC ~2.4s au lieu de 6.3s apesanteur).
+             - `leg_amplitude_scale` (defaut 1.0) : scale les rotations des
+               bones dont le nom contient 'leg', pour reduire le swing ±80°
+               hardcode des anims Bedrock (0.5 donne ±40° plus realiste).
+    v1.2.0 - Fix WALK quadrupedes : evaluation de anim_time_update
+             (cow/sheep/pig utilisent animation.quadruped.walk avec
+             anim_time_update = query.modified_distance_moved). Sans
+             evaluation, entry.time restait a 0 et cos(0) = pattes figees
+             a 80 degres. Maintenant l'expression est evaluee chaque frame
+             pour piloter query.anim_time.
     v1.1.0 - Entity defs versionnees (horse_v3 etc.), guess anim ameliore
              (common.look_at_target, fichiers _v3), scripts.animate legacy,
              has_bedrock_animations() pour filtrage galerie
     v1.0.0 - Implementation initiale : Molang parser + evaluator + animation player
 """
 
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.4.0"
 
 import math
 import json
 import os
+import sys
 import random
 from pathlib import Path
 
@@ -36,6 +59,13 @@ class MolangEvaluator:
         self.context = {}       # All variables/queries
         self.this_value = 0.0   # Current 'this' value
         self._cache = {}        # expr string -> AST
+        self.warn_unknown = True    # Warning one-shot sur query.* absente du context
+        self._warned_unknown = set()
+
+    def _warn_once(self, name, kind="query"):
+        if self.warn_unknown and name not in self._warned_unknown:
+            self._warned_unknown.add(name)
+            print(f"[Molang] {kind} inconnue '{name}' -> 0.0", file=sys.stderr)
 
     def set_var(self, key, value):
         self.context[key] = float(value)
@@ -292,7 +322,13 @@ class MolangEvaluator:
         t = node[0]
         if t == N_NUMBER: return node[1]
         if t == N_THIS: return self.this_value
-        if t == N_VAR: return self.context.get(node[1], 0.0)
+        if t == N_VAR:
+            name = node[1]
+            if name in self.context:
+                return self.context[name]
+            if name.startswith('query.'):
+                self._warn_once(name)
+            return 0.0
         if t == N_UNOP:
             v = self._eval(node[2])
             return -v if node[1] == '-' else (0.0 if v != 0.0 else 1.0)
@@ -382,9 +418,39 @@ class MolangEvaluator:
                 if name.startswith('query.') or name.startswith('context.'):
                     if args:
                         key = name + '.' + str(int(a(0)))
-                        return self.context.get(key, self.context.get(name, 0.0))
-                    return self.context.get(name, 0.0)
+                        if key in self.context:
+                            return self.context[key]
+                    if name in self.context:
+                        return self.context[name]
+                    self._warn_once(name, "query-fonction")
+                    return 0.0
+                self._warn_once(name, "fonction")
                 return 0.0
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Interpolation Catmull-Rom
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def _catmull_rom(vp, v0, v1, vn, tp, t0, t1, tn, lt):
+    """Spline Hermite a tangentes differences finies (espacement non uniforme).
+
+    vp/vn = valeurs des keyframes voisins (clampees aux extremites = tangente
+    naturelle). Aligne sur bedrock_anim_player.gd _catmull_rom().
+    """
+    dt10 = t1 - t0
+    if dt10 <= 0.0:
+        return list(v1)
+    d0, d1 = t1 - tp, tn - t0
+    m0 = [(v1[i] - vp[i]) / d0 * dt10 if d0 > 0.0 else 0.0 for i in range(3)]
+    m1 = [(vn[i] - v0[i]) / d1 * dt10 if d1 > 0.0 else 0.0 for i in range(3)]
+    lt2 = lt * lt
+    lt3 = lt2 * lt
+    h00 = 2.0 * lt3 - 3.0 * lt2 + 1.0
+    h10 = lt3 - 2.0 * lt2 + lt
+    h01 = -2.0 * lt3 + 3.0 * lt2
+    h11 = lt3 - lt2
+    return [v0[i] * h00 + m0[i] * h10 + v1[i] * h01 + m1[i] * h11 for i in range(3)]
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -414,7 +480,10 @@ class BedrockAnimation:
 
     def __init__(self, name, data):
         self.name = name
-        self.loop = data.get("loop", False)
+        # Bedrock peut donner "loop": true | false | "hold_on_last_frame" (String).
+        # Seul `true` (bool ou "true") loop ; "hold_on_last_frame" = false.
+        loop_raw = data.get("loop", False)
+        self.loop = loop_raw if isinstance(loop_raw, bool) else (loop_raw == "true")
         self.length = data.get("animation_length", 0.0)
         self.override_previous = data.get("override_previous_animation", False)
         self.anim_time_update = str(data.get("anim_time_update", ""))
@@ -464,6 +533,8 @@ class BedrockAnimPlayer:
         self.distance_moved = 0.0
         self.move_speed = 0.0
         self.speed_scale = 1.0
+        self.distance_scale = 1.0       # Multiplie modified_distance_moved (cycle walk)
+        self.leg_amplitude_scale = 1.0  # Scale rotations des bones 'leg*'
 
     def load_animations_file(self, path):
         """Load all animations from a Bedrock animation JSON file."""
@@ -620,7 +691,11 @@ class BedrockAnimPlayer:
         # Update animation times
         for entry in self.active_anims:
             anim = self.animations.get(entry["name"])
-            if anim and not anim.anim_time_update:
+            if not anim:
+                continue
+            if anim.anim_time_update:
+                entry["time"] = self.molang.evaluate(anim.anim_time_update)
+            else:
                 entry["time"] += dt
                 if entry["loop"] and entry["length"] > 0:
                     entry["time"] = entry["time"] % entry["length"]
@@ -634,7 +709,7 @@ class BedrockAnimPlayer:
         ctx = self.molang.context
         ctx["query.life_time"] = self.life_time % 1000.0
         ctx["query.delta_time"] = dt
-        ctx["query.modified_distance_moved"] = self.distance_moved
+        ctx["query.modified_distance_moved"] = self.distance_moved * self.distance_scale
         ctx["query.modified_move_speed"] = self.move_speed
         ctx["query.ground_speed"] = self.move_speed
         # gliding_speed_value = move speed (normalise le swing des bras/jambes)
@@ -644,6 +719,19 @@ class BedrockAnimPlayer:
 
         for key, val in self.variables.items():
             ctx["variable." + key] = val
+
+        # query.all_animations_finished / any_animation_finished (frame precedente)
+        all_finished = bool(self.active_anims)
+        any_finished = False
+        for entry in self.active_anims:
+            if entry["loop"]:
+                all_finished = False
+            elif entry["time"] >= entry["length"] - 0.0001:
+                any_finished = True
+            else:
+                all_finished = False
+        ctx["query.all_animations_finished"] = 1.0 if all_finished else 0.0
+        ctx["query.any_animation_finished"] = 1.0 if any_finished else 0.0
 
     def _eval_pre_anim(self, script_text):
         for part in script_text.split(";"):
@@ -696,6 +784,10 @@ class BedrockAnimPlayer:
 
                 if bone_data["rotation"] is not None:
                     rot = self._eval_channel(bone_data["rotation"], anim_time, anim.length, current_rot)
+                    # Scale amplitude sur les bones 'leg*' pour les anims walk Bedrock
+                    # (hardcode ±80° dans quadruped.walk est trop eleve visuellement)
+                    if self.leg_amplitude_scale != 1.0 and "leg" in bone_name:
+                        rot = [r * self.leg_amplitude_scale for r in rot]
                     for i in range(3):
                         acc["rotation"][i] += rot[i] * weight
 
@@ -787,6 +879,20 @@ class BedrockAnimPlayer:
 
         v0 = self._get_kf_post(val0, current, lerp_t)
         v1 = self._get_kf_pre(val1, current, lerp_t)
+
+        # Catmull-rom si l'un des deux keyframes le demande
+        lm0 = val0.get("lerp_mode", "") if isinstance(val0, dict) else ""
+        lm1 = val1.get("lerp_mode", "") if isinstance(val1, dict) else ""
+        if lm0 == "catmullrom" or lm1 == "catmullrom":
+            tp, vp = t0, v0
+            if idx > 0:
+                tp = times[idx - 1]
+                vp = self._eval_kf_value(timeline.get(key_str(tp), val0), current, lerp_t)
+            tn, vn = t1, v1
+            if idx + 2 < len(times):
+                tn = times[idx + 2]
+                vn = self._eval_kf_value(timeline.get(key_str(tn), val1), current, lerp_t)
+            return _catmull_rom(vp, v0, v1, vn, tp, t0, t1, tn, lerp_t)
 
         return [v0[i] + (v1[i] - v0[i]) * lerp_t for i in range(3)]
 

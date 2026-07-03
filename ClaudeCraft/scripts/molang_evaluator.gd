@@ -1,10 +1,13 @@
-## MolangEvaluator v1.0.0
+## MolangEvaluator v1.1.0
 ## Évaluateur d'expressions Molang (Minecraft Bedrock Edition)
 ## Parse, cache et évalue des expressions Molang pour le moteur d'animation Bedrock.
 ## Supporte : arithmétique, comparaisons, logique, ternaire, fonctions math.*,
 ## variables (variable.*, query.*, temp.*, context.*), mot-clé 'this', tableaux [x,y,z].
 ##
 ## Changelog :
+## v1.1.0 - Warning one-shot sur les queries/fonctions inconnues (avant : retour 0.0
+##          silencieux → animations cassées impossibles à diagnostiquer).
+##          Désactivable via `warn_unknown = false`.
 ## v1.0.0 - Implémentation initiale : tokenizer + parser récursif descent + évaluateur AST
 
 class_name MolangEvaluator
@@ -37,6 +40,11 @@ const T_EOF   := 10
 # ─── State ───────────────────────────────────────────────────────────────────
 var context: Dictionary = {}   # Flat dict for all variables/queries
 var this_value: float = 0.0    # Current 'this' value
+
+## Warning one-shot quand une query.* absente du context est évaluée
+## (les variable.*/temp.* non initialisées sont normales en Molang, pas les queries).
+var warn_unknown: bool = true
+var _warned_unknown: Dictionary = {}
 
 # Cache: expression string -> AST node
 var _cache: Dictionary = {}
@@ -427,7 +435,14 @@ func _eval(node: Array) -> float:
 			return this_value
 
 		N_VAR:
-			return context.get(node[1], 0.0)
+			var vname: String = node[1]
+			if context.has(vname):
+				return context[vname]
+			# Query absente = probablement non fournie par le code jeu → warning one-shot
+			if warn_unknown and vname.begins_with("query.") and not _warned_unknown.has(vname):
+				_warned_unknown[vname] = true
+				push_warning("Molang: query inconnue '%s' → 0.0 (à fournir via entity_queries ?)" % vname)
+			return 0.0
 
 		N_UNOP:
 			var val := _eval(node[2])
@@ -655,9 +670,18 @@ func _eval_func(name: String, args: Array) -> float:
 				# Try context with args appended
 				if argc > 0:
 					var key := name + "." + str(int(_eval(args[0])))
-					return context.get(key, context.get(name, 0.0))
-				return context.get(name, 0.0)
-			# Unknown function: return 0
+					if context.has(key):
+						return context[key]
+				if context.has(name):
+					return context[name]
+				if warn_unknown and not _warned_unknown.has(name):
+					_warned_unknown[name] = true
+					push_warning("Molang: query-fonction inconnue '%s(...)' → 0.0" % name)
+				return 0.0
+			# Unknown function: return 0 (avec warning one-shot)
+			if warn_unknown and not _warned_unknown.has(name):
+				_warned_unknown[name] = true
+				push_warning("Molang: fonction inconnue '%s(...)' → 0.0" % name)
 			return 0.0
 
 	return 0.0

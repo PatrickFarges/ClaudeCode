@@ -12,6 +12,18 @@
 ##   bap.play("animation.humanoid.move")
 ##
 ## Changelog:
+## v1.4.0 - Chantier B animations :
+##          - FIX MAJEUR : les animations time-based sous controller ne progressaient
+##            jamais (_evaluate_controllers recréait les entries avec time=0 chaque
+##            frame). Les temps sont maintenant préservés au rebuild. Les anims
+##            lancées manuellement via play() survivent aussi au rebuild.
+##          - Interpolation catmull-rom ("lerp_mode": "catmullrom") : spline Hermite
+##            à tangentes différences finies sur 4 points — camel/armadillo/sniffer
+##            /creaking ne sont plus saccadés.
+##          - blend_transition appliqué : cross-fade progressif entre états de
+##            controller (creaking, sniffer, allay) au lieu de transitions sèches.
+##          - query.all_animations_finished / query.any_animation_finished exposées
+##            (utilisées par le controller creaking).
 ## v1.3.0 - Fix apesanteur walk quadrupèdes :
 ##          - `distance_scale` (défaut 1.0) multiplie query.modified_distance_moved
 ##            pour compenser la vitesse plus lente des mobs ClaudeCraft vs MC vanilla
@@ -27,7 +39,7 @@
 class_name BedrockAnimPlayer
 extends Node
 
-const APP_VERSION := "1.3.0"
+const APP_VERSION := "1.4.0"
 
 # ─── Signals ─────────────────────────────────────────────────────────────────
 signal animation_started(anim_name: String)
@@ -65,6 +77,10 @@ var _active_anims: Array = []
 
 ## États des controllers : { controller_name: current_state_name }
 var _controller_states: Dictionary = {}
+
+## Cross-fades d'états en cours (blend_transition) :
+## { controller_name: {"prev_state": String, "progress": float, "duration": float} }
+var _state_blends: Dictionary = {}
 
 ## Timer global
 var _life_time: float = 0.0
@@ -300,6 +316,7 @@ func play(anim_name: String, weight: float = 1.0) -> void:
 		"loop": anim.loop,
 		"length": anim.length,
 		"override": anim.override_previous,
+		"manual": true,  # survit au rebuild des controllers
 	})
 	animation_started.emit(resolved)
 
@@ -401,6 +418,21 @@ func _update_molang_context(dt: float) -> void:
 	if not molang.context.has("variable.gliding_speed_value") or molang.context["variable.gliding_speed_value"] < 0.01:
 		molang.context["variable.gliding_speed_value"] = maxf(_move_speed, 0.1)
 
+	# query.all_animations_finished / any_animation_finished (état frame précédente).
+	# Utilisées par les controllers stateful (ex: creaking) pour transitionner
+	# quand une animation non-loopée a fini de jouer.
+	var all_finished := not _active_anims.is_empty()
+	var any_finished := false
+	for entry in _active_anims:
+		if entry["loop"]:
+			all_finished = false
+		elif entry["time"] >= entry["length"] - 0.0001:
+			any_finished = true
+		else:
+			all_finished = false
+	molang.context["query.all_animations_finished"] = 1.0 if all_finished else 0.0
+	molang.context["query.any_animation_finished"] = 1.0 if any_finished else 0.0
+
 
 func _eval_pre_anim(script_text: String) -> void:
 	# Pre-animation scripts are semicolon-separated assignments
@@ -439,6 +471,16 @@ func _eval_pre_anim(script_text: String) -> void:
 
 
 func _evaluate_controllers() -> void:
+	# Préserver les temps des anims actives : le rebuild ne doit PAS remettre
+	# time à 0, sinon les animations time-based sous controller restent figées
+	# à t≈dt pour toujours (seules les anims à anim_time_update fonctionnaient).
+	var prev_times: Dictionary = {}
+	var manual_entries: Array = []
+	for entry in _active_anims:
+		prev_times[entry["name"]] = entry["time"]
+		if entry.get("manual", false):
+			manual_entries.append(entry)
+
 	for ctrl_name in _controller_states:
 		if not controllers.has(ctrl_name):
 			continue
@@ -455,12 +497,31 @@ func _evaluate_controllers() -> void:
 			var cond_result := molang.evaluate(trans["condition"])
 			if cond_result != 0.0:
 				var old_state := current_state_name
-				_controller_states[ctrl_name] = trans["target"]
-				state_changed.emit(ctrl_name, old_state, trans["target"])
+				var target: String = trans["target"]
+				_controller_states[ctrl_name] = target
+				# blend_transition : fade-out de l'état quitté (spec Bedrock),
+				# fallback sur celui de l'état cible si absent
+				var bt: float = current_state.blend_transition
+				if bt <= 0.0 and ctrl.states.has(target):
+					bt = ctrl.states[target].blend_transition
+				if bt > 0.0:
+					_state_blends[ctrl_name] = {
+						"prev_state": old_state,
+						"progress": 0.0,
+						"duration": bt,
+					}
+				# L'anim de l'état cible repart de 0 (nouvel état = nouveau cycle)
+				if ctrl.states.has(target):
+					for anim_entry in ctrl.states[target].animations:
+						prev_times.erase(_resolve_anim_name(anim_entry["name"]))
+				state_changed.emit(ctrl_name, old_state, target)
 				break
 
-	# Build active animations from controllers
+	# Build active animations from controllers (+ anims manuelles préservées)
 	_active_anims.clear()
+	for entry in manual_entries:
+		_active_anims.append(entry)
+
 	for ctrl_name in _controller_states:
 		if not controllers.has(ctrl_name):
 			continue
@@ -468,42 +529,63 @@ func _evaluate_controllers() -> void:
 		var state_name: String = _controller_states[ctrl_name]
 		if not ctrl.states.has(state_name):
 			continue
-		var state: StateData = ctrl.states[state_name]
 
-		for anim_entry in state.animations:
-			var anim_name: String = _resolve_anim_name(anim_entry["name"])
-			if not animations.has(anim_name):
+		# Cross-fade en cours ? fade-in de l'état courant, fade-out du précédent
+		var fade_in := 1.0
+		if _state_blends.has(ctrl_name):
+			var blend: Dictionary = _state_blends[ctrl_name]
+			fade_in = clampf(blend["progress"] / blend["duration"], 0.0, 1.0)
+
+		_append_state_anims(ctrl.states[state_name], fade_in, prev_times)
+
+		if _state_blends.has(ctrl_name):
+			var blend: Dictionary = _state_blends[ctrl_name]
+			var prev_state: String = blend["prev_state"]
+			if ctrl.states.has(prev_state):
+				_append_state_anims(ctrl.states[prev_state], 1.0 - fade_in, prev_times)
+
+
+## Ajoute les animations d'un état de controller à _active_anims,
+## pondérées par `fade` (cross-fade blend_transition), temps préservés via prev_times.
+func _append_state_anims(state: StateData, fade: float, prev_times: Dictionary) -> void:
+	if fade <= 0.001:
+		return
+	for anim_entry in state.animations:
+		var anim_name: String = _resolve_anim_name(anim_entry["name"])
+		if not animations.has(anim_name):
+			continue
+
+		var weight := 1.0
+		if not anim_entry["condition"].is_empty():
+			weight = molang.evaluate(anim_entry["condition"])
+			if weight == 0.0:
 				continue
+			# Clamp universel à [0,1] : les conditions Molang comme
+			# query.modified_move_speed produisent des valeurs > 1 (vitesse brute),
+			# mais les blend weights Bedrock sont toujours dans [0,1].
+			# Ceci corrige les animations désarticulées (llama, cow, etc.)
+			weight = clampf(weight, 0.0, 1.0)
+		weight *= fade
 
-			var weight := 1.0
-			if not anim_entry["condition"].is_empty():
-				weight = molang.evaluate(anim_entry["condition"])
-				if weight == 0.0:
-					continue
-				# Clamp universel à [0,1] : les conditions Molang comme
-				# query.modified_move_speed produisent des valeurs > 1 (vitesse brute),
-				# mais les blend weights Bedrock sont toujours dans [0,1].
-				# Ceci corrige les animations désarticulées (llama, cow, etc.)
-				weight = clampf(weight, 0.0, 1.0)
+		# Don't add duplicates
+		var found := false
+		for existing in _active_anims:
+			if existing["name"] == anim_name:
+				existing["weight"] = maxf(existing["weight"], weight)
+				found = true
+				break
 
-			# Don't add duplicates
-			var found := false
-			for existing in _active_anims:
-				if existing["name"] == anim_name:
-					existing["weight"] = maxf(existing["weight"], weight)
-					found = true
-					break
-
-			if not found:
-				var anim: AnimData = animations[anim_name]
-				_active_anims.append({
-					"name": anim_name,
-					"weight": weight,
-					"time": _get_anim_time(anim),
-					"loop": anim.loop,
-					"length": anim.length,
-					"override": anim.override_previous,
-				})
+		if not found:
+			var anim: AnimData = animations[anim_name]
+			_active_anims.append({
+				"name": anim_name,
+				"weight": weight,
+				"time": prev_times.get(anim_name, _get_anim_time(anim)),
+				"loop": anim.loop,
+				"length": anim.length,
+				"override": anim.override_previous,
+				"manual": false,
+			})
 
 
 func _get_anim_time(anim: AnimData) -> float:
@@ -513,6 +595,16 @@ func _get_anim_time(anim: AnimData) -> float:
 
 
 func _update_anim_times(dt: float) -> void:
+	# Avancer les cross-fades d'états (blend_transition)
+	var finished_blends: Array = []
+	for ctrl_name in _state_blends:
+		var blend: Dictionary = _state_blends[ctrl_name]
+		blend["progress"] += dt
+		if blend["progress"] >= blend["duration"]:
+			finished_blends.append(ctrl_name)
+	for ctrl_name in finished_blends:
+		_state_blends.erase(ctrl_name)
+
 	for entry in _active_anims:
 		var anim_name: String = entry["name"]
 		if animations.has(anim_name):
@@ -757,8 +849,61 @@ func _evaluate_keyframe_timeline(timeline: Dictionary, anim_time: float, anim_le
 	var v0 := _get_keyframe_post(val0, current, lerp_t)
 	var v1 := _get_keyframe_pre(val1, current, lerp_t)
 
+	# Catmull-rom si l'un des deux keyframes le demande ("lerp_mode": "catmullrom")
+	var use_catmull := false
+	if val0 is Dictionary and str(val0.get("lerp_mode", "")) == "catmullrom":
+		use_catmull = true
+	elif val1 is Dictionary and str(val1.get("lerp_mode", "")) == "catmullrom":
+		use_catmull = true
+
+	if use_catmull:
+		# Points voisins pour la spline (clamp aux extrémités = tangente naturelle)
+		var tp := t0
+		var vp := v0
+		if idx > 0:
+			tp = times[idx - 1]
+			vp = _eval_keyframe_value(timeline.get(_timeline_key(timeline, tp), val0), current, lerp_t)
+		var tn := t1
+		var vn := v1
+		if idx + 2 < times.size():
+			tn = times[idx + 2]
+			vn = _eval_keyframe_value(timeline.get(_timeline_key(timeline, tn), val1), current, lerp_t)
+		return _catmull_rom(vp, v0, v1, vn, tp, t0, t1, tn, lerp_t)
+
 	# Linear interpolation
 	return v0.lerp(v1, lerp_t)
+
+
+## Résout la clé String d'un timeline pour un temps donné ("0.5", ou "0" pour 0.0).
+func _timeline_key(timeline: Dictionary, t: float) -> String:
+	var key := str(t)
+	if timeline.has(key):
+		return key
+	if t == float(int(t)):
+		var ikey := str(int(t))
+		if timeline.has(ikey):
+			return ikey
+	return key
+
+
+## Interpolation Catmull-Rom (spline Hermite, tangentes par différences finies,
+## supporte l'espacement non uniforme des keyframes).
+func _catmull_rom(vp: Vector3, v0: Vector3, v1: Vector3, vn: Vector3,
+		tp: float, t0: float, t1: float, tn: float, lt: float) -> Vector3:
+	var dt10 := t1 - t0
+	if dt10 <= 0.0:
+		return v1
+	var d0 := t1 - tp
+	var d1 := tn - t0
+	var m0 := (v1 - vp) / d0 * dt10 if d0 > 0.0 else Vector3.ZERO
+	var m1 := (vn - v0) / d1 * dt10 if d1 > 0.0 else Vector3.ZERO
+	var lt2 := lt * lt
+	var lt3 := lt2 * lt
+	var h00 := 2.0 * lt3 - 3.0 * lt2 + 1.0
+	var h10 := lt3 - 2.0 * lt2 + lt
+	var h01 := -2.0 * lt3 + 3.0 * lt2
+	var h11 := lt3 - lt2
+	return v0 * h00 + m0 * h10 + v1 * h01 + m1 * h11
 
 
 func _eval_keyframe_value(value, current: Vector3, lerp_t: float) -> Vector3:
