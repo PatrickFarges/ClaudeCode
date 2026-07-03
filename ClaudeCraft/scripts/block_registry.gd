@@ -117,6 +117,8 @@ enum BlockType {
 	IRON_DOOR,
 	LANTERN,
 	IRON_BARS,
+	# === FLUIDES (98) ===
+	LAVA,
 }
 
 const BLOCK_DATA = {
@@ -231,6 +233,13 @@ const BLOCK_DATA = {
 		"name": "Water",
 		"solid": false,
 		"color": Color(0.3, 0.5, 0.9, 0.6),
+		"hardness": 0.0,
+		"faces": {}
+	},
+	BlockType.LAVA: {
+		"name": "Lava",
+		"solid": false,
+		"color": Color(0.95, 0.42, 0.08, 1.0),
 		"hardness": 0.0,
 		"faces": {}
 	},
@@ -980,6 +989,7 @@ static func is_passable(block_type) -> bool:
 	"""Returns true if the block type is something an entity can walk through (not a real obstacle)."""
 	if block_type == BlockType.AIR: return true
 	if block_type == BlockType.WATER: return true
+	if block_type == BlockType.LAVA: return true
 	if CROSS_MESH_BLOCKS.has(block_type): return true
 	if LEAF_TYPES.has(block_type): return true
 	if block_type == BlockType.TORCH: return true

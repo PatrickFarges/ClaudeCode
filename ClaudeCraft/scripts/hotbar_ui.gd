@@ -47,6 +47,7 @@ var _xp_bg: TextureRect = null
 
 # Dirty flags — evite les mises a jour redondantes chaque frame
 var _last_hp := -1
+var _last_food: int = -1
 var _last_selected_slot := -1
 var _last_hotbar_slots: Array = []
 var _last_hotbar_tools: Array = []
@@ -390,9 +391,20 @@ func _update_hearts():
 # FOOD UPDATE
 # ============================================================
 func _update_food():
-	# TODO: Food system not yet implemented — always 20, skip recalculation each frame.
-	# Remove this early return when a hunger system is added.
-	return
+	var food := 20
+	if "hunger" in player:
+		food = int(ceil(player.hunger))
+	if food == _last_food:
+		return
+	_last_food = food
+	for i in range(10):
+		var food_val = food - i * 2  # chaque icône = 2 points de faim
+		if food_val >= 2:
+			_food_icons[i].texture = _load_tex(TEX_FOOD_FULL)
+		elif food_val == 1:
+			_food_icons[i].texture = _load_tex(TEX_FOOD_HALF)
+		else:
+			_food_icons[i].texture = _load_tex(TEX_FOOD_EMPTY)
 
 # ============================================================
 # AIR BUBBLES UPDATE

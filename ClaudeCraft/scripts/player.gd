@@ -117,6 +117,14 @@ var look_block_type: BlockRegistry.BlockType = BlockRegistry.BlockType.AIR
 # ============================================================
 var max_health: int = 20
 var current_health: int = 20
+# Faim (food system) : 20 max, drain par activité, régen santé si >= 18
+var max_hunger: int = 20
+var hunger: float = 20.0
+var _hunger_regen_timer: float = 0.0
+var _starve_timer: float = 0.0
+# Lave : dégâts périodiques au contact
+var in_lava: bool = false
+var _lava_damage_timer: float = 0.0
 var _fall_start_y: float = 0.0
 var _traverse_cooldown: float = 0.0
 var _was_on_floor: bool = true
@@ -182,7 +190,8 @@ var eating_particle_timer: float = 0.0
 const EATING_PARTICLE_INTERVAL: float = 0.3
 var eating_sound_timer: float = 0.0
 const EATING_SOUND_INTERVAL: float = 0.5
-const EATING_HEAL_AMOUNT: int = 4
+const EATING_HEAL_AMOUNT: int = 4  # (legacy — la régen passe par la faim désormais)
+const EATING_FOOD_AMOUNT: int = 6  # points de faim restaurés (pain MC = 5-6)
 
 func _ready():
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -1012,11 +1021,16 @@ func _physics_process(delta):
 		var feet_block = world_manager.get_block_at_position(feet_pos)
 		var head_block = world_manager.get_block_at_position(head_pos)
 		in_water = feet_block == BlockRegistry.BlockType.WATER or head_block == BlockRegistry.BlockType.WATER
+		in_lava = feet_block == BlockRegistry.BlockType.LAVA or head_block == BlockRegistry.BlockType.LAVA
 		on_ladder = feet_block == BlockRegistry.BlockType.LADDER or head_block == BlockRegistry.BlockType.LADDER
 
 	# Effet visuel + sonore sous l'eau + noyade
 	_update_underwater(delta)
 	_update_waterfall_audio(delta)
+
+	# Dégâts de lave + système de faim
+	_handle_lava_damage(delta)
+	_handle_hunger(delta)
 
 	# Sécurité : forcer la collision du chunk sous les pieds du joueur
 	# (empêche de traverser le sol quand la collision n'est pas encore créée)
@@ -1129,8 +1143,10 @@ func _physics_process(delta):
 
 	# Sprint (pas dans l'eau)
 	var input_dir = Input.get_vector("move_left", "move_right", "move_forward", "move_backward")
-	is_sprinting = not in_water and Input.is_key_pressed(KEY_SHIFT) and input_dir.y < 0 and is_on_floor()
+	is_sprinting = not in_water and not in_lava and Input.is_key_pressed(KEY_SHIFT) and input_dir.y < 0 and is_on_floor()
 	var current_speed = speed * 0.5 if in_water else (sprint_speed if is_sprinting else speed)
+	if in_lava:
+		current_speed = speed * 0.3  # la lave est épaisse
 
 	# Mouvement
 	var direction = (transform.basis * Vector3(input_dir.x, 0, input_dir.y)).normalized()
@@ -1318,7 +1334,7 @@ func _handle_block_interaction(delta: float):
 		if is_drawing_bow or _get_selected_tool() == ToolRegistry.ToolType.BOW:
 			return
 		# Si on tient de la nourriture, manger (maintenir clic droit)
-		if _is_food_slot() and current_health < max_health:
+		if _is_food_slot() and (hunger < max_hunger - 0.5 or current_health < max_health):
 			if not is_eating:
 				is_eating = true
 				eating_progress = 0.0
@@ -1476,7 +1492,7 @@ func _find_water_along_ray() -> Vector3:
 			continue
 		last_block = block_pos
 		var bt = world_manager.get_block_at_position(Vector3(block_pos))
-		if bt == BlockRegistry.BlockType.WATER:
+		if bt == BlockRegistry.BlockType.WATER or bt == BlockRegistry.BlockType.LAVA:
 			return Vector3(block_pos)
 		if bt != BlockRegistry.BlockType.AIR and BlockRegistry.is_solid(bt):
 			break
@@ -1597,7 +1613,7 @@ func _handle_eating(delta: float):
 
 	# Fin du repas
 	if eating_progress >= 1.0:
-		heal(EATING_HEAL_AMOUNT)
+		hunger = minf(float(max_hunger), hunger + EATING_FOOD_AMOUNT)
 		# Consommer la nourriture du slot
 		var food_bt = hotbar_slots[selected_slot]
 		_remove_from_inventory(food_bt)
@@ -1742,17 +1758,20 @@ func _swap_current_tool(new_tool: ToolRegistry.ToolType):
 func _handle_bucket(tool: ToolRegistry.ToolType, target_pos: Vector3, target_type: int, place_pos: Vector3):
 	# Remplir un seau vide depuis un bloc d'eau/lave pointé
 	if tool == ToolRegistry.ToolType.BUCKET_EMPTY:
-		if target_type == BlockRegistry.BlockType.WATER:
+		# Relire le type réel au point visé (les call-sites passent parfois
+		# WATER hardcodé alors que le raywalk peut avoir trouvé de la lave)
+		var real_type: int = world_manager.get_block_at_position(target_pos)
+		if real_type == BlockRegistry.BlockType.WATER or real_type == BlockRegistry.BlockType.LAVA:
 			world_manager.set_block_at_position(target_pos, BlockRegistry.BlockType.AIR)
 			# Notifier FluidFlowManager pour que les voisins re-remplissent le trou
 			var fluid_mgr = get_node_or_null("/root/FluidFlowManager")
 			if fluid_mgr and fluid_mgr.has_method("schedule_break_fill_check"):
 				fluid_mgr.schedule_break_fill_check(Vector3i(int(floor(target_pos.x)), int(floor(target_pos.y)), int(floor(target_pos.z))))
-			_swap_current_tool(ToolRegistry.ToolType.BUCKET_WATER)
+			var filled_tool := ToolRegistry.ToolType.BUCKET_WATER if real_type == BlockRegistry.BlockType.WATER \
+					else ToolRegistry.ToolType.BUCKET_LAVA
+			_swap_current_tool(filled_tool)
 			if hand_renderer:
 				hand_renderer.play_swing()
-			return
-		# Lave : pas encore de bloc LAVA dans le registry — no-op gracieux
 		return
 
 	# Seau rempli : verser dans l'air (ou dans une cross-mesh)
@@ -1760,8 +1779,7 @@ func _handle_bucket(tool: ToolRegistry.ToolType, target_pos: Vector3, target_typ
 	if tool == ToolRegistry.ToolType.BUCKET_WATER:
 		fluid_type = BlockRegistry.BlockType.WATER
 	elif tool == ToolRegistry.ToolType.BUCKET_LAVA:
-		# Pas encore de bloc LAVA dans le registry — no-op gracieux
-		return
+		fluid_type = BlockRegistry.BlockType.LAVA
 	if fluid_type < 0:
 		return
 
@@ -1786,6 +1804,49 @@ func _get_selected_tool() -> ToolRegistry.ToolType:
 	if selected_slot >= 0 and selected_slot < hotbar_tool_slots.size():
 		return hotbar_tool_slots[selected_slot]
 	return ToolRegistry.ToolType.NONE
+
+# ============================================================
+# FAIM + DÉGÂTS DE LAVE
+# ============================================================
+func _handle_hunger(delta: float):
+	# Drain : base très lent + activité (sprint/mouvement/minage)
+	var drain := 0.005
+	if is_sprinting:
+		drain += 0.10
+	elif velocity.length() > 0.5:
+		drain += 0.01
+	if is_mining:
+		drain += 0.02
+	hunger = maxf(0.0, hunger - drain * delta)
+
+	# Régénération : faim >= 18 et santé < max → +1 HP / 2.5s (coûte 0.4 faim)
+	if hunger >= 18.0 and current_health < max_health:
+		_hunger_regen_timer += delta
+		if _hunger_regen_timer >= 2.5:
+			_hunger_regen_timer = 0.0
+			heal(1)
+			hunger = maxf(0.0, hunger - 0.4)
+	else:
+		_hunger_regen_timer = 0.0
+
+	# Famine : faim à 0 → 1 dégât / 4s jusqu'à 1 coeur (MC difficulté normale)
+	if hunger <= 0.0:
+		_starve_timer += delta
+		if _starve_timer >= 4.0:
+			_starve_timer = 0.0
+			if current_health > 2:
+				take_damage(1)
+	else:
+		_starve_timer = 0.0
+
+func _handle_lava_damage(delta: float):
+	if in_lava:
+		_lava_damage_timer += delta
+		if _lava_damage_timer >= 0.5:
+			_lava_damage_timer = 0.0
+			take_damage(2)
+	else:
+		_lava_damage_timer = 0.0
 
 # ============================================================
 # COMBAT MÊLÉE
@@ -1908,6 +1969,7 @@ func _die():
 func _respawn():
 	is_dead = false
 	current_health = max_health
+	hunger = float(max_hunger)
 	global_position = spawn_position
 	velocity = Vector3.ZERO
 	_was_on_floor = true

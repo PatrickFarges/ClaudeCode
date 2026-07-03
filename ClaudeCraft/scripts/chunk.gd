@@ -12,11 +12,13 @@ const FACE_INT := {"top": 0, "bottom": 1, "front": 2, "back": 3, "left": 4, "rig
 # Shared material (un seul pour tous les chunks)
 static var _shared_material: Material = null
 static var _shared_water_material: Material = null
+static var _shared_lava_material: Material = null
 static var _shared_cross_material: Material = null
 static var _shared_torch_handle_mat: StandardMaterial3D = null
 static var _shared_torch_flame_mat: StandardMaterial3D = null
 static var _shared_lantern_mat: StandardMaterial3D = null
 const WATER_TYPE: int = 15  # BlockRegistry.BlockType.WATER
+const LAVA_TYPE: int = 98   # BlockRegistry.BlockType.LAVA
 
 # Cross mesh block types (vegetation) — skipped by greedy mesher, rendered as X quads
 const CROSS_TYPES: Dictionary = {
@@ -73,6 +75,7 @@ var _door_data_cache: Dictionary = {}  # Vector3i -> { "facing": int, "hinge": S
 var _pane_orient_cache: Dictionary = {}  # Vector3i -> int (0=N-S, 1=E-W)
 var mesh_instance: MeshInstance3D
 var water_mesh_instance: MeshInstance3D
+var lava_mesh_instance: MeshInstance3D
 var flora_mesh_instance: MeshInstance3D
 var collision_shape: CollisionShape3D
 var static_body: StaticBody3D
@@ -107,6 +110,13 @@ var _water_normals: PackedVector3Array = PackedVector3Array()
 var _water_colors: PackedColorArray = PackedColorArray()
 var _water_indices: PackedInt32Array = PackedInt32Array()
 var _water_uvs: PackedVector2Array = PackedVector2Array()
+
+# Lava mesh arrays (même pipeline que l'eau, matériau émissif séparé)
+var _lava_vertices: PackedVector3Array = PackedVector3Array()
+var _lava_normals: PackedVector3Array = PackedVector3Array()
+var _lava_colors: PackedColorArray = PackedColorArray()
+var _lava_indices: PackedInt32Array = PackedInt32Array()
+var _lava_uvs: PackedVector2Array = PackedVector2Array()
 
 # Flora mesh arrays (cross billboards)
 var _flora_vertices: PackedVector3Array = PackedVector3Array()
@@ -151,6 +161,19 @@ static func _get_water_material() -> Material:
 			fb.albedo_color = Color(0.15, 0.45, 0.78, 0.85)
 			_shared_water_material = fb
 	return _shared_water_material
+
+static func _get_lava_material() -> Material:
+	if not _shared_lava_material:
+		var mat := StandardMaterial3D.new()
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.albedo_color = Color(0.85, 0.32, 0.05, 1.0)
+		mat.emission_enabled = true
+		mat.emission = Color(1.0, 0.45, 0.08)
+		mat.emission_energy_multiplier = 1.4
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		mat.vertex_color_use_as_albedo = true
+		_shared_lava_material = mat
+	return _shared_lava_material
 
 # ============================================================
 # ACCES AUX BLOCS
@@ -239,6 +262,11 @@ func _compute_mesh_arrays():
 	_water_colors = PackedColorArray()
 	_water_indices = PackedInt32Array()
 	_water_uvs = PackedVector2Array()
+	_lava_vertices = PackedVector3Array()
+	_lava_normals = PackedVector3Array()
+	_lava_colors = PackedColorArray()
+	_lava_indices = PackedInt32Array()
+	_lava_uvs = PackedVector2Array()
 	_flora_vertices = PackedVector3Array()
 	_flora_normals = PackedVector3Array()
 	_flora_colors = PackedColorArray()
@@ -268,7 +296,7 @@ func _apply_mesh_data(skip_throttle: bool = false):
 	if not is_inside_tree():
 		return
 
-	if _vertices.size() == 0 and _water_vertices.size() == 0 and _flora_vertices.size() == 0:
+	if _vertices.size() == 0 and _water_vertices.size() == 0 and _lava_vertices.size() == 0 and _flora_vertices.size() == 0:
 		is_mesh_built = true
 		return
 
@@ -337,6 +365,25 @@ func _build_and_attach_meshes():
 		water_mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(water_mesh_instance)
 
+	# Lava mesh (opaque émissif, no collision)
+	if _lava_vertices.size() > 0:
+		var lava_arrays: Array = []
+		lava_arrays.resize(Mesh.ARRAY_MAX)
+		lava_arrays[Mesh.ARRAY_VERTEX] = _lava_vertices
+		lava_arrays[Mesh.ARRAY_NORMAL] = _lava_normals
+		lava_arrays[Mesh.ARRAY_COLOR] = _lava_colors
+		lava_arrays[Mesh.ARRAY_INDEX] = _lava_indices
+		lava_arrays[Mesh.ARRAY_TEX_UV] = _lava_uvs
+
+		var lava_mesh: ArrayMesh = ArrayMesh.new()
+		lava_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, lava_arrays)
+
+		lava_mesh_instance = MeshInstance3D.new()
+		lava_mesh_instance.mesh = lava_mesh
+		lava_mesh_instance.material_override = _get_lava_material()
+		lava_mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(lava_mesh_instance)
+
 	# Flora mesh (cross billboards, no collision)
 	if _flora_vertices.size() > 0:
 		var flora_arrays: Array = []
@@ -381,6 +428,11 @@ func _build_and_attach_meshes():
 	_water_colors = PackedColorArray()
 	_water_indices = PackedInt32Array()
 	_water_uvs = PackedVector2Array()
+	_lava_vertices = PackedVector3Array()
+	_lava_normals = PackedVector3Array()
+	_lava_colors = PackedColorArray()
+	_lava_indices = PackedInt32Array()
+	_lava_uvs = PackedVector2Array()
 	_flora_vertices = PackedVector3Array()
 	_flora_normals = PackedVector3Array()
 	_flora_colors = PackedColorArray()
@@ -438,6 +490,9 @@ func _apply_rebuild_data():
 	if water_mesh_instance:
 		water_mesh_instance.queue_free()
 		water_mesh_instance = null
+	if lava_mesh_instance:
+		lava_mesh_instance.queue_free()
+		lava_mesh_instance = null
 	if flora_mesh_instance:
 		flora_mesh_instance.queue_free()
 		flora_mesh_instance = null
@@ -794,6 +849,11 @@ func _emit_cross_quad(x: int, y: int, z: int, bt: int):
 # ============================================================
 
 func _build_water_mesh():
+	# Pipeline fluide générique : eau puis lave (mêmes passes, arrays séparés)
+	_build_fluid_mesh(WATER_TYPE)
+	_build_fluid_mesh(LAVA_TYPE)
+
+func _build_fluid_mesh(fluid_type: int):
 	# ────────────────────────────────────────────────
 	# Passe 1 : faces du DESSUS (greedy meshing)
 	# ────────────────────────────────────────────────
@@ -810,7 +870,7 @@ func _build_water_mesh():
 			for z in range(CHUNK_SIZE):
 				var idx: int = x_off + z * 256 + y
 				var bt: int = blocks[idx]
-				if bt == WATER_TYPE and (y + 1 >= CHUNK_HEIGHT or blocks[idx + 1] == 0):
+				if bt == fluid_type and (y + 1 >= CHUNK_HEIGHT or blocks[idx + 1] == 0):
 					mask[xcs + z] = bt
 					has_faces = true
 				else:
@@ -824,17 +884,17 @@ func _build_water_mesh():
 				_emit_water_quad(
 					Vector3(u, y + 0.85, v), Vector3(u + w, y + 0.85, v),
 					Vector3(u + w, y + 0.85, v + h), Vector3(u, y + 0.85, v + h),
-					Vector3.UP, color, w, h)
+					Vector3.UP, color, w, h, fluid_type)
 
 	# ────────────────────────────────────────────────
 	# Passe 2 : faces LATÉRALES + DU DESSOUS
 	# (pour que les colonnes d'eau dans les grottes et
 	#  les cascades soient visibles)
 	# ────────────────────────────────────────────────
-	_build_water_side_and_bottom_faces()
+	_build_water_side_and_bottom_faces(fluid_type)
 
-func _build_water_side_and_bottom_faces():
-	var water_color: Color = BlockRegistry.get_block_color(WATER_TYPE)
+func _build_water_side_and_bottom_faces(fluid_type: int = WATER_TYPE):
+	var water_color: Color = BlockRegistry.get_block_color(fluid_type)
 
 	for x in range(CHUNK_SIZE):
 		var x_off: int = x * 4096
@@ -842,7 +902,7 @@ func _build_water_side_and_bottom_faces():
 			var xz_off: int = x_off + z * 256
 			for y in range(y_min, y_max + 1):
 				var idx: int = xz_off + y
-				if blocks[idx] != WATER_TYPE:
+				if blocks[idx] != fluid_type:
 					continue
 
 				# La hauteur du haut du bloc dépend de ce qui est au-dessus :
@@ -853,63 +913,63 @@ func _build_water_side_and_bottom_faces():
 				var base_y: float = float(y)
 
 				# +X face (east) — émise si le voisin +X est AIR (et dans le chunk)
-				if x + 1 < CHUNK_SIZE and blocks[idx + 4096] == 0 and not _air_neighbor_is_underwater_pocket(idx + 4096):
+				if x + 1 < CHUNK_SIZE and blocks[idx + 4096] == 0 and not _air_neighbor_is_underwater_pocket(idx + 4096, fluid_type):
 					_emit_water_quad(
 						Vector3(x + 1, base_y, z),
 						Vector3(x + 1, base_y, z + 1),
 						Vector3(x + 1, top_y, z + 1),
 						Vector3(x + 1, top_y, z),
-						Vector3(1, 0, 0), water_color, 1, 1)
+						Vector3(1, 0, 0), water_color, 1, 1, fluid_type)
 
 				# -X face (west)
-				if x > 0 and blocks[idx - 4096] == 0 and not _air_neighbor_is_underwater_pocket(idx - 4096):
+				if x > 0 and blocks[idx - 4096] == 0 and not _air_neighbor_is_underwater_pocket(idx - 4096, fluid_type):
 					_emit_water_quad(
 						Vector3(x, base_y, z + 1),
 						Vector3(x, base_y, z),
 						Vector3(x, top_y, z),
 						Vector3(x, top_y, z + 1),
-						Vector3(-1, 0, 0), water_color, 1, 1)
+						Vector3(-1, 0, 0), water_color, 1, 1, fluid_type)
 
 				# +Z face (south)
-				if z + 1 < CHUNK_SIZE and blocks[idx + 256] == 0 and not _air_neighbor_is_underwater_pocket(idx + 256):
+				if z + 1 < CHUNK_SIZE and blocks[idx + 256] == 0 and not _air_neighbor_is_underwater_pocket(idx + 256, fluid_type):
 					_emit_water_quad(
 						Vector3(x + 1, base_y, z + 1),
 						Vector3(x, base_y, z + 1),
 						Vector3(x, top_y, z + 1),
 						Vector3(x + 1, top_y, z + 1),
-						Vector3(0, 0, 1), water_color, 1, 1)
+						Vector3(0, 0, 1), water_color, 1, 1, fluid_type)
 
 				# -Z face (north)
-				if z > 0 and blocks[idx - 256] == 0 and not _air_neighbor_is_underwater_pocket(idx - 256):
+				if z > 0 and blocks[idx - 256] == 0 and not _air_neighbor_is_underwater_pocket(idx - 256, fluid_type):
 					_emit_water_quad(
 						Vector3(x, base_y, z),
 						Vector3(x + 1, base_y, z),
 						Vector3(x + 1, top_y, z),
 						Vector3(x, top_y, z),
-						Vector3(0, 0, -1), water_color, 1, 1)
+						Vector3(0, 0, -1), water_color, 1, 1, fluid_type)
 
 				# -Y face (bottom) — si le voisin du dessous est AIR
-				if y > 0 and blocks[idx - 1] == 0 and not _air_neighbor_is_underwater_pocket(idx - 1):
+				if y > 0 and blocks[idx - 1] == 0 and not _air_neighbor_is_underwater_pocket(idx - 1, fluid_type):
 					_emit_water_quad(
 						Vector3(x, base_y, z),
 						Vector3(x, base_y, z + 1),
 						Vector3(x + 1, base_y, z + 1),
 						Vector3(x + 1, base_y, z),
-						Vector3(0, -1, 0), water_color, 1, 1)
+						Vector3(0, -1, 0), water_color, 1, 1, fluid_type)
 
 # Un bloc AIR voisin est une "poche sous-marine" si une colonne d'eau le coiffe
 # (eau directement au-dessus, ou eau au-dessus après quelques blocs d'air).
 # Dans ce cas la face latérale/bottom du bloc d'eau adjacent serait perçue
 # comme une "cascade" — visuellement faux en pleine mer. On scanne jusqu'à 6
 # blocs au-dessus pour aussi attraper les petites grottes sous-marines.
-func _air_neighbor_is_underwater_pocket(air_idx: int) -> bool:
+func _air_neighbor_is_underwater_pocket(air_idx: int, fluid_type: int = WATER_TYPE) -> bool:
 	var local_y: int = air_idx % 256
 	var scan_max: int = mini(local_y + 6, CHUNK_HEIGHT - 1)
 	var probe: int = air_idx + 1
 	var probe_y: int = local_y + 1
 	while probe_y <= scan_max:
 		var bt: int = blocks[probe]
-		if bt == WATER_TYPE:
+		if bt == fluid_type:
 			return true
 		if bt != 0:
 			return false  # solide rencontré avant l'eau → ce n'est pas une poche immergée
@@ -917,7 +977,15 @@ func _air_neighbor_is_underwater_pocket(air_idx: int) -> bool:
 		probe_y += 1
 	return false
 
-func _emit_water_quad(v0: Vector3, v1: Vector3, v2: Vector3, v3: Vector3, normal: Vector3, color: Color, tile_w: int = 1, tile_h: int = 1):
+func _emit_water_quad(v0: Vector3, v1: Vector3, v2: Vector3, v3: Vector3, normal: Vector3, color: Color, tile_w: int = 1, tile_h: int = 1, fluid_type: int = WATER_TYPE):
+	if fluid_type == LAVA_TYPE:
+		var lbase: int = _lava_vertices.size()
+		_lava_vertices.append_array([v0, v1, v2, v3])
+		_lava_normals.append_array([normal, normal, normal, normal])
+		_lava_colors.append_array([color, color, color, color])
+		_lava_uvs.append_array([Vector2(0, 0), Vector2(tile_w, 0), Vector2(tile_w, tile_h), Vector2(0, tile_h)])
+		_lava_indices.append_array([lbase, lbase + 1, lbase + 2, lbase + 2, lbase + 3, lbase])
+		return
 	var base: int = _water_vertices.size()
 	# P6 — Batch appends
 	_water_vertices.append_array([v0, v1, v2, v3])

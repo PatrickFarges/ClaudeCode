@@ -21,8 +21,12 @@ extends Node
 ##           surface d'eau ne se remplissait pas si l'eau n'était qu'en dessous)
 ##  v1.1.0 — Phase 2 : bucket (seau) — schedule_source() utilisé par player.gd
 ##           quand on verse de l'eau depuis un BUCKET_WATER
+##  v1.2.0 — Phase 3 : LAVE — propagation plus lente (1 étape sur 2 ticks),
+##           portée horizontale réduite (niveau initial 4 → 3 blocs), et
+##           interaction eau/lave → STONE (à la MC). Break fill scanne
+##           désormais les deux fluides.
 
-const APP_VERSION := "1.1.0"
+const APP_VERSION := "1.2.0"
 
 # ============================================================
 # CONFIG
@@ -31,6 +35,8 @@ const TICK_INTERVAL := 0.4          # 400ms entre chaque étape de propagation
 const MAX_FLOW_LEVEL := 8           # niveau "source", décrémenté à chaque spread
 const MAX_FLOWS_PER_TICK := 200     # cap pour éviter stutters
 const BREAK_FILL_DELAY_TICKS := 2   # 2 ticks d'attente avant qu'un fill break apparaisse (→ ~0.8s)
+const LAVA_MAX_FLOW_LEVEL := 4      # lave : portée horizontale réduite (3 blocs)
+const LAVA_STEP_DELAY := 1          # lave : 1 tick d'attente entre chaque étape (2x plus lente)
 const DEBUG_FLOW := false           # true = log chaque étape dans la console
 
 # ============================================================
@@ -87,16 +93,17 @@ func schedule_break_fill_check(broken_pos: Vector3i):
 	for offset in neighbors:
 		var n_pos: Vector3i = broken_pos + offset
 		var n_type: int = _world_manager.get_block_at_position(Vector3(n_pos))
-		if n_type == BlockRegistry.BlockType.WATER:
-			# Un voisin est de l'eau → le trou peut se remplir.
-			# Niveau = MAX - 1 (7) : on réserve 1 cran comme "coût" du flow
-			# initial, mais il reste 6 crans pour propager plus loin.
+		if n_type == BlockRegistry.BlockType.WATER or n_type == BlockRegistry.BlockType.LAVA:
+			# Un voisin est un fluide → le trou peut se remplir.
+			# Niveau = MAX - 1 : on réserve 1 cran comme "coût" du flow
+			# initial, mais il reste des crans pour propager plus loin.
 			# `delay` = nb de ticks d'attente avant l'apparition visuelle (~0.8s)
+			var is_lava: bool = (n_type == BlockRegistry.BlockType.LAVA)
 			_queue.append({
 				"pos": broken_pos,
-				"level": MAX_FLOW_LEVEL - 1,
-				"fluid": BlockRegistry.BlockType.WATER,
-				"delay": BREAK_FILL_DELAY_TICKS,
+				"level": (LAVA_MAX_FLOW_LEVEL - 1) if is_lava else (MAX_FLOW_LEVEL - 1),
+				"fluid": n_type,
+				"delay": BREAK_FILL_DELAY_TICKS + (LAVA_STEP_DELAY if is_lava else 0),
 			})
 			if DEBUG_FLOW:
 				print("[FluidFlow] Break fill schedulé à ", broken_pos)
@@ -104,7 +111,8 @@ func schedule_break_fill_check(broken_pos: Vector3i):
 
 ## Place une source de fluide et lance le flow (pour bucket en Phase 2)
 func schedule_source(pos: Vector3i, fluid_type: int = BlockRegistry.BlockType.WATER):
-	_queue.append({ "pos": pos, "level": MAX_FLOW_LEVEL, "fluid": fluid_type })
+	var lvl: int = LAVA_MAX_FLOW_LEVEL if fluid_type == BlockRegistry.BlockType.LAVA else MAX_FLOW_LEVEL
+	_queue.append({ "pos": pos, "level": lvl, "fluid": fluid_type })
 
 # ============================================================
 # TICK LOOP
@@ -145,6 +153,10 @@ func _try_flow(item: Dictionary, next_wave: Array):
 	# La position doit être AIR (sinon un autre flow l'a déjà remplie)
 	var here_type: int = _world_manager.get_block_at_position(Vector3(pos))
 	if here_type != BlockRegistry.BlockType.AIR:
+		# Interaction eau/lave → pierre (à la MC : obsidienne/cobble, ici STONE)
+		if (fluid == BlockRegistry.BlockType.WATER and here_type == BlockRegistry.BlockType.LAVA) \
+				or (fluid == BlockRegistry.BlockType.LAVA and here_type == BlockRegistry.BlockType.WATER):
+			_world_manager.set_block_at_position(Vector3(pos), BlockRegistry.BlockType.STONE)
 		return
 
 	# Placer le fluide
@@ -158,13 +170,20 @@ func _try_flow(item: Dictionary, next_wave: Array):
 	# ─────────────────────────────────────────
 	var below: Vector3i = pos + Vector3i(0, -1, 0)
 	var below_type: int = _world_manager.get_block_at_position(Vector3(below))
+	var is_lava: bool = (fluid == BlockRegistry.BlockType.LAVA)
 	if below_type == BlockRegistry.BlockType.AIR:
-		# Chute : niveau max, pas d'extension latérale à ce tick
+		# Chute : niveau max (du fluide), pas d'extension latérale à ce tick
 		next_wave.append({
 			"pos": below,
-			"level": MAX_FLOW_LEVEL,
+			"level": LAVA_MAX_FLOW_LEVEL if is_lava else MAX_FLOW_LEVEL,
 			"fluid": fluid,
+			"delay": LAVA_STEP_DELAY if is_lava else 0,
 		})
+		return
+	# Lave qui tombe SUR de l'eau (ou l'inverse) → pierre
+	if (is_lava and below_type == BlockRegistry.BlockType.WATER) \
+			or (fluid == BlockRegistry.BlockType.WATER and below_type == BlockRegistry.BlockType.LAVA):
+		_world_manager.set_block_at_position(Vector3(below), BlockRegistry.BlockType.STONE)
 		return
 
 	# ─────────────────────────────────────────
@@ -189,6 +208,7 @@ func _try_flow(item: Dictionary, next_wave: Array):
 				"pos": n_pos,
 				"level": next_level,
 				"fluid": fluid,
+				"delay": LAVA_STEP_DELAY if is_lava else 0,
 			})
 
 # ============================================================
@@ -210,7 +230,8 @@ func _is_open_plain(center: Vector3i) -> bool:
 				continue
 			var p: Vector3i = center + Vector3i(dx, 0, dz)
 			var t: int = _world_manager.get_block_at_position(Vector3(p))
-			if t == BlockRegistry.BlockType.AIR or t == BlockRegistry.BlockType.WATER:
+			if t == BlockRegistry.BlockType.AIR or t == BlockRegistry.BlockType.WATER \
+					or t == BlockRegistry.BlockType.LAVA:
 				open_count += 1
 	# 8/8 ouverts = plaine pleine 3x3 → on stoppe
 	return open_count >= 8

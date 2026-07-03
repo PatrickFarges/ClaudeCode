@@ -1,6 +1,8 @@
 extends Node
 class_name ChunkGenerator
 
+# v7.4 : Lacs de lave — les grottes creusées à y <= LAVA_LEVEL (10) se remplissent
+#        de LAVA au lieu d'AIR (comme MC : niveau lave y=10)
 # v7.3 : Sous-sol moins gruyère — _is_cave seuils 0.07/0.09 (au lieu de 0.15/0.18),
 #        large_cave 0.005 (au lieu de 0.03), plafond grotte = height-6 en mer
 # v7.2 : Optimisation — Semaphore au lieu de OS.delay_msec(10) busy-wait dans les workers (zéro latence, zéro CPU idle)
@@ -18,6 +20,7 @@ const MAX_THREADS = 4
 const CHUNK_SIZE = 16
 const CHUNK_HEIGHT = 256
 const SEA_LEVEL = 64
+const LAVA_LEVEL = 10  # Grottes creusées à y <= LAVA_LEVEL → lacs de lave
 const TREE_MARGIN = 3  # Marge depuis le bord du chunk (evite couronnes coupees)
 
 var thread_pool: Array[Thread] = []
@@ -324,7 +327,8 @@ func _generate_chunk_data(chunk_pos: Vector3i, noises: Dictionary = {}) -> Dicti
 					# (évite les grottes qui débouchent dans l'eau → "cascades" indésirables)
 					var _cave_ceil: int = (SEA_LEVEL - 2) if height >= SEA_LEVEL else (height - 6)
 					if y >= 8 and y < _cave_ceil and _is_cave(wx, y, wz, cave1, cave2, cave3):
-						block = BlockRegistry.BlockType.AIR
+						# Lacs de lave au fond des grottes (comme MC : lave à y <= 10)
+						block = BlockRegistry.BlockType.LAVA if y <= LAVA_LEVEL else BlockRegistry.BlockType.AIR
 
 				blocks[x * 4096 + z * 256 + y] = block
 				if block != BlockRegistry.BlockType.AIR:
