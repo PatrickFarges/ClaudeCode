@@ -4,6 +4,18 @@ APP_VERSION : ci-dessous. À incrémenter à CHAQUE modification + tenir le chan
 
 Changelog
 ---------
+0.1.2 (2026-07-05) — Format .cca durci :
+    * Identifiant magique `"magic": "ClaudeCAD"` en toute première clé du fichier
+      (avant la version) : permet de reconnaître un fichier ClaudeCAD à coup sûr.
+      À l'ouverture, un fichier sans ce marqueur est refusé avec un message clair
+      (les .cca 0.1.x sans magic restent acceptés — rétrocompatibilité).
+    * Section `settings` : les réglages de travail (unité, couleurs fond/aide/trait,
+      épaisseur, police, calque courant) sont sauvegardés dans le fichier et
+      restaurés à l'ouverture — plus besoin de reconfigurer. Le canvas lit désormais
+      ses couleurs depuis ces réglages (les constantes de canvas.py servent de défauts).
+    * Caméra : champ `projection` ("ortho" pour l'instant) sérialisé — prêt pour le
+      futur mode perspective sans casser le format.
+
 0.1.1 (2026-06-04) — Pan :
     * Pan via [CTRL] + clic gauche (au lieu de [ALT], capté par le WM Cinnamon pour
       déplacer les fenêtres) — modifieur configurable (`PAN_MODIFIER` dans canvas.py).
@@ -20,9 +32,14 @@ Changelog
       (restauration exacte de la vue) + lignes d'aide + entités.
 """
 
-APP_VERSION = "0.1.1"
+APP_VERSION = "0.1.2"
 __version__ = APP_VERSION
 
 # Extension des fichiers de travail ClaudeCAD.
 FILE_EXTENSION = "cca"
 FILE_FILTER = "Fichiers ClaudeCAD (*.cca)"
+
+# Identifiant magique : toute première valeur d'un fichier .cca. Sert à reconnaître
+# un fichier ClaudeCAD sans ambiguïté (l'extension .cca est aussi utilisée par
+# quelques logiciels legacy — Clickteam Fusion, cc:Mail…).
+FILE_MAGIC = "ClaudeCAD"

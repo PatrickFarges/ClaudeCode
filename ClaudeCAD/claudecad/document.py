@@ -1,8 +1,11 @@
 """Modèle de document ClaudeCAD + lecture/écriture du format .cca.
 
-Le format .cca est un JSON dont l'en-tête commence par la version de l'application
-ayant créé le fichier (`claudecad_version`), suivi de l'état caméra (pour rouvrir la
-vue à l'identique), des lignes d'aide, puis des entités du dessin.
+Le format .cca est un JSON dont l'en-tête commence par l'identifiant magique
+(`"magic": "ClaudeCAD"` — reconnaissance certaine du type de fichier), puis la version
+de l'application ayant créé le fichier (`claudecad_version`), l'état caméra 3D complet
+(pour rouvrir la vue à l'identique, y compris en iso/perspective), les réglages de
+travail (`settings` : unité, couleurs, épaisseur, police, calque courant — pour ne rien
+avoir à reconfigurer à l'ouverture), les lignes d'aide, puis les entités du dessin.
 
 Pour la base ALPHA 0.1 : pas encore d'entités (lignes/arcs finaux) — la liste existe
 mais reste vide ; seules les lignes d'aide (axes X et Y) sont présentes par défaut.
@@ -13,8 +16,23 @@ import json
 
 import numpy as np
 
-from . import APP_VERSION
+from . import APP_VERSION, FILE_MAGIC
 from .camera import Camera
+
+# Réglages de travail par défaut, sauvegardés dans chaque .cca et restaurés à
+# l'ouverture. À l'ouverture, les valeurs du fichier sont fusionnées PAR-DESSUS ces
+# défauts : un fichier ancien (sans certaines clés) récupère les défauts pour les
+# clés manquantes — le format peut donc grossir sans casser les anciens fichiers.
+DEFAULT_SETTINGS = {
+    "unit": "m",                        # unité d'affichage (le modèle reste sans unité)
+    "background_color": "#ffffff",      # fond du canvas
+    "help_line_color": "#b4b4b4",       # lignes d'aide (pointillé gris clair)
+    "line_color": "#000000",            # trait final (noir plein)
+    "line_width": 1.0,                  # épaisseur du trait final (px)
+    "font_family": "monospace",         # police des textes/cotes (à venir)
+    "font_size": 10,
+    "current_layer": "0",               # calque courant (système de calques à venir)
+}
 
 
 class HelpLine:
@@ -44,6 +62,7 @@ class Document:
 
     def __init__(self) -> None:
         self.camera = Camera()
+        self.settings: dict = dict(DEFAULT_SETTINGS)
         self.help_lines: list[HelpLine] = []
         self.entities: list = []          # lignes/arcs finaux — à venir
         self.filepath: str | None = None
@@ -66,10 +85,12 @@ class Document:
 
     # ------------------------------------------------------- (dé)sérialisation
     def to_dict(self) -> dict:
-        # Ordre des clés volontaire : la version ouvre l'en-tête.
+        # Ordre des clés volontaire : le magic ouvre le fichier, la version suit.
         return {
+            "magic": FILE_MAGIC,
             "claudecad_version": APP_VERSION,
             "camera": self.camera.to_dict(),
+            "settings": dict(self.settings),
             "help_lines": [h.to_dict() for h in self.help_lines],
             "entities": list(self.entities),
         }
@@ -81,11 +102,26 @@ class Document:
 
     @classmethod
     def load(cls, path: str) -> "Document":
-        with open(path, "r", encoding="utf-8") as fh:
-            data = json.load(fh)
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise ValueError(
+                f"« {path} » n'est pas un fichier ClaudeCAD (contenu illisible)."
+            ) from exc
+        # Reconnaissance : magic "ClaudeCAD" en tête. Les .cca 0.1.x d'avant le magic
+        # n'avaient que claudecad_version — on les accepte (rétrocompatibilité).
+        if not isinstance(data, dict) or (
+            data.get("magic") != FILE_MAGIC and "claudecad_version" not in data
+        ):
+            raise ValueError(
+                f"« {path} » n'est pas un fichier ClaudeCAD (identifiant absent)."
+            )
         doc = cls()
         doc.created_version = data.get("claudecad_version", "?")
         doc.camera = Camera.from_dict(data.get("camera", {}))
+        # Défauts + valeurs du fichier : les clés absentes gardent leur défaut.
+        doc.settings = {**DEFAULT_SETTINGS, **data.get("settings", {})}
         doc.help_lines = [HelpLine.from_dict(h) for h in data.get("help_lines", [])]
         doc.entities = list(data.get("entities", []))
         doc.filepath = path

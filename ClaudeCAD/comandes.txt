@@ -1,0 +1,17 @@
+* Commandes ClaudeCad
+* Les commandes commence TOUJOURS par le symbole "/" et sont le premier élément/mot de la ligne de commande.
+* Elles se présentent comme suis: 
+* Nom_de_la_commande parametres 
+*    (explication de ce que fait la commande)
+*    (Texte court qui apparait comme 'tip')
+*    (Texte long explicatif et détaillé de la commande)
+*
+* Exemple:
+* /hcenter
+*   (Dois afficher 3 lignes d'aides passant par le point 0 0 0)
+*   (3lignes d'aides sur 0 0 0)    
+*   (affiche 3 lignes d'aides dans les 3 axes XYZ qui passent par le point 0,0,0)
+* Pour une explication sur les lignes d'aides, voir le fichier "help_lines" dans le repertoire de base de travail
+* 
+* La zone "parametres" peut etre soit:
+* vide (comme avec l'exemple de la commande /hcenter ci-dessus, qui n'a besoin d'aucun parametres)

@@ -1,0 +1,3 @@
+* Lignes d'aides
+* Les lignes d'aides sont toujours afficher sous formes de lignes infini (cad qu'elles vont toujours d'un bout à l'autre de l'écran, quel que soit le zoom en cours) en pointillé et d'une couleur gris clair.
+* Les lignes d'aides peuvent êtres cachées ou éffacées d'un simple commande. Quand elle sont cachées, elles ne sont plus selectionables et ne peuvent plus servir de point d'accroche.

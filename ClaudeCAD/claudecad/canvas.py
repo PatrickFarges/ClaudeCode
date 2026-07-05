@@ -19,7 +19,8 @@ from PySide6.QtCore import Qt, Signal, QPointF
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
-# --- couleurs / styles ---
+# --- couleurs / styles (défauts — les valeurs effectives viennent de
+#     document.settings, sauvegardées/restaurées via le fichier .cca) ---
 BG_COLOR = QColor(255, 255, 255)          # fond clair (lignes finales en noir)
 HELP_COLOR = QColor(180, 180, 180)        # gris clair des lignes d'aide
 FINAL_COLOR = QColor(0, 0, 0)             # noir des lignes finales (à venir)
@@ -154,17 +155,21 @@ class CadCanvas(QWidget):
         w = self.document.camera.screen_to_world(sx, sy, self.width(), self.height())
         self.coords_changed.emit(float(w[0]), float(w[1]), float(w[2]))
 
+    def _setting_color(self, key: str, fallback: QColor) -> QColor:
+        c = QColor(str(self.document.settings.get(key, "")))
+        return c if c.isValid() else fallback
+
     # ------------------------------------------------------------- rendu
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.fillRect(self.rect(), BG_COLOR)
+        painter.fillRect(self.rect(), self._setting_color("background_color", BG_COLOR))
 
         cam = self.document.camera
         w, h = float(self.width()), float(self.height())
 
         # --- lignes d'aide (pointillé gris clair, infinies) ---
-        help_pen = QPen(HELP_COLOR)
+        help_pen = QPen(self._setting_color("help_line_color", HELP_COLOR))
         help_pen.setWidthF(1.0)
         help_pen.setCosmetic(True)
         help_pen.setStyle(Qt.DashLine)
@@ -180,7 +185,8 @@ class CadCanvas(QWidget):
                 painter.drawLine(seg[0], seg[1])
 
         # --- entités finales (lignes/arcs noirs) : à venir ---
-        # final_pen = QPen(FINAL_COLOR); final_pen.setCosmetic(True)
+        # final_pen = QPen(self._setting_color("line_color", FINAL_COLOR))
+        # final_pen.setWidthF(float(self.document.settings.get("line_width", 1.0)))
         # painter.setPen(final_pen)
         # ... (rendu des self.document.entities)
 

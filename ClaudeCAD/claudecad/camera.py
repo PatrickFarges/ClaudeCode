@@ -40,6 +40,7 @@ class Camera:
         self.scale = DEFAULT_SCALE                   # pixels par unité monde (zoom)
         self.azimuth = 0.0                           # degrés (rotation autour de Y monde)
         self.elevation = 0.0                         # degrés (bascule autour de X caméra)
+        self.projection = "ortho"                    # "ortho" ; "perspective" à venir
 
     # ------------------------------------------------------------------ bases
     def _basis(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -100,6 +101,7 @@ class Camera:
     # ---------------------------------------------------------- (dé)sérialisation
     def to_dict(self) -> dict:
         return {
+            "projection": self.projection,
             "center": [float(c) for c in self.center],
             "scale": float(self.scale),
             "azimuth": float(self.azimuth),
@@ -109,6 +111,7 @@ class Camera:
     @classmethod
     def from_dict(cls, d: dict) -> "Camera":
         cam = cls()
+        cam.projection = d.get("projection", "ortho")
         cam.center = np.array(d.get("center", [0.0, 0.0, 0.0]), dtype=np.float64)
         cam.scale = float(d.get("scale", DEFAULT_SCALE))
         cam.azimuth = float(d.get("azimuth", 0.0))

@@ -103,13 +103,23 @@ tests/                  test_camera.py (headless) + smoke.py (Qt offscreen)
 
 ## Format de fichier `.cca`
 
-JSON. L'en-tête **commence par la version** de l'app créatrice, suivie de l'**état caméra** (pour rouvrir la
-vue à l'identique : `center` monde + `scale` + `azimuth`/`elevation` — indépendant de la taille de fenêtre),
-puis les lignes d'aide et les entités. L'état caméra est **réécrit à la fermeture** de l'app (dernier zoom/vue).
+JSON. L'en-tête **commence par l'identifiant magique** `"magic": "ClaudeCAD"` (reconnaissance certaine du
+type de fichier — refus avec message clair à l'ouverture sinon ; les .cca 0.1.x sans magic restent acceptés),
+puis la **version** de l'app créatrice, l'**état caméra 3D complet** (pour rouvrir la vue à l'identique,
+y compris en vue iso ou future perspective : `projection` + `center` monde + `scale` + `azimuth`/`elevation`
+— indépendant de la taille de fenêtre), les **réglages de travail** `settings` (unité, couleurs
+fond/aide/trait, épaisseur, police, calque courant — restaurés à l'ouverture, rien à reconfigurer ; les clés
+absentes d'un vieux fichier reprennent les défauts `DEFAULT_SETTINGS` de `document.py`, donc le format peut
+grossir sans casser l'existant), puis les lignes d'aide et les entités. L'état caméra est **réécrit à la
+fermeture** de l'app (dernier zoom/vue).
 
 ```json
-{ "claudecad_version": "0.1",
-  "camera": { "center": [x,y,z], "scale": 40.0, "azimuth": 0.0, "elevation": 0.0 },
+{ "magic": "ClaudeCAD",
+  "claudecad_version": "0.1.2",
+  "camera": { "projection": "ortho", "center": [x,y,z], "scale": 40.0, "azimuth": 0.0, "elevation": 0.0 },
+  "settings": { "unit": "m", "background_color": "#ffffff", "help_line_color": "#b4b4b4",
+                "line_color": "#000000", "line_width": 1.0,
+                "font_family": "monospace", "font_size": 10, "current_layer": "0" },
   "help_lines": [ {"point":[0,0,0],"direction":[1,0,0]}, {"point":[0,0,0],"direction":[0,1,0]} ],
   "entities": [] }
 ```

@@ -12,7 +12,8 @@ import os
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QFont, QKeySequence
 from PySide6.QtWidgets import (
-    QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QVBoxLayout, QWidget,
+    QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMessageBox,
+    QVBoxLayout, QWidget,
 )
 
 from . import APP_VERSION, FILE_EXTENSION, FILE_FILTER
@@ -105,7 +106,11 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getOpenFileName(self, "Ouvrir un projet", "", FILE_FILTER)
         if not path:
             return
-        self.document = Document.load(path)
+        try:
+            self.document = Document.load(path)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Ouverture impossible", str(exc))
+            return
         self.canvas.set_document(self.document)
         self._update_title()
 
