@@ -1,0 +1,22 @@
+# SAP_Onenote — NE JAMAIS committer les données SAP (confidentiel client)
+
+# Notebooks OneNote (~2 Go de données SAP)
+OneNote/
+*.one
+*.onetoc2
+
+# Base RAG + intermédiaires (contiennent tickets / clients)
+*.db
+*.db-wal
+*.db-shm
+evidence_scan.csv
+onenote_pages.csv
+onenote_scan.csv
+onenote_hierarchy.xml
+sap_onenote_index.xlsx
+
+# Environnement + temporaires
+.venv/
+__pycache__/
+*.pyc
+*.log

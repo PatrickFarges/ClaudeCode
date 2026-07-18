@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# ask — interroge le RAG SAP (OneNote + tickets) et renvoie l'essentiel.
+#
+# Usage :
+#   ./rag/ask "net social corning"
+#   ./rag/ask "allegement retraite" --client RECKITT -k 5
+#   ./rag/ask "IJSS subrogation" --json          # sortie structurée (pour un agent)
+#
+# La base est cherchée sur le NVMe Samsung par défaut (ou $SAP_KB_DB).
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec "$DIR/../.venv/bin/python" "$DIR/kb.py" "$@"
