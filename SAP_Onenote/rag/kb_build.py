@@ -2,10 +2,19 @@
 """
 kb_build.py — Construit la base de connaissance RAG `sap_kb.db` (SQLite FTS5).
 
-APP_VERSION = 0.2.0
+APP_VERSION = 0.3.0
+
+Deux sources dans la même base :
+  - source='onenote'  : les pages des notebooks .one (phase 1).
+  - source='evidence' : les dossiers Test Evidence (phase 2) — onglet "Change Logs"
+                        (l'essentiel : ce qui a été modifié), "Analyse" (AMO) et
+                        "Analyse HRO" (contexte) du fichier Excel le plus récent de
+                        chaque répertoire-ticket. Voir rag/evidence_extract.py.
 
 Change-log
 ----------
+0.3.0 (2026-07-20) : phase 2 — ingestion des Test Evidence (source='evidence').
+                     Flags --no-onenote / --no-evidence / --evidence-root.
 0.2.0 (2026-07-18) : passage à l'extraction robuste (rag/onenote_extract.py 0.2.0,
                      sans pyOneNote). Map de titres GLOBALE (ancres de segmentation +
                      jointure lien/ticket), correction du mojibake du CSV, section
@@ -13,8 +22,10 @@ Change-log
 0.1.0 : version pyOneNote (abandonnée — plantait sur les gros fichiers).
 
 Usage :
-    python kb_build.py                        # tous les .one (sauf sections filtrées)
-    python kb_build.py "Tickets résolus.one"  # un fichier
+    python kb_build.py                        # rebuild complet : onenote + evidence
+    python kb_build.py --no-evidence          # onenote seul (rebuild complet)
+    python kb_build.py --no-onenote           # refresh evidence seul (garde onenote)
+    python kb_build.py "Tickets résolus.one"  # un .one précis (+ evidence)
     python kb_build.py --db /media/red/Samsung2TB/SAP_KB/sap_kb.db
 """
 import os
@@ -27,10 +38,13 @@ import argparse
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from onenote_extract import extract_pages, norm  # noqa: E402
+import evidence_extract as EV  # noqa: E402
 
 DEFAULT_DB = os.environ.get("SAP_KB_DB", "/media/red/Samsung2TB/SAP_KB/sap_kb.db")
 ONENOTE_DIR = os.path.join(HERE, "..", "OneNote")
 CSV_SCAN = os.path.join(HERE, "..", "onenote_scan.csv")
+EVIDENCE_ROOT = os.environ.get("EVIDENCE_ROOT",
+                               "/media/red/Samsung2TB/SAP_KB/TestEvidence")
 
 SKIP_SECTIONS = {"email important", "Notes rapides", "Bordel en attente", "Info personnel"}
 
@@ -98,6 +112,26 @@ def load_onenote_csv():
 
 def section_from_filename(path: str) -> str:
     return os.path.splitext(os.path.basename(path))[0]
+
+
+SCHEMA_DDL = """
+        CREATE TABLE IF NOT EXISTS docs (
+            id            INTEGER PRIMARY KEY,
+            source        TEXT,
+            section       TEXT,
+            title         TEXT,
+            ticket_ids    TEXT,
+            client        TEXT,
+            tables_sap    TEXT,
+            onenote_link  TEXT,
+            evidence_path TEXT,
+            body          TEXT
+        );
+        CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(
+            title, ticket_ids, tables_sap, body,
+            tokenize = 'unicode61 remove_diacritics 2'
+        );
+"""
 
 
 def create_schema(con):
@@ -171,37 +205,114 @@ def ingest_onenote(con, files, title_map, all_titles):
     return n_pages, n_ids, n_linked
 
 
+def ensure_schema(con):
+    """Crée les tables si absentes (sans rien détruire)."""
+    con.executescript(SCHEMA_DDL)
+
+
+def wipe_evidence(con):
+    """Supprime les docs source='evidence' (idempotence du refresh evidence)."""
+    ids = [r[0] for r in con.execute("SELECT id FROM docs WHERE source='evidence'")]
+    con.executemany("DELETE FROM docs_fts WHERE rowid=?", [(i,) for i in ids])
+    con.execute("DELETE FROM docs WHERE source='evidence'")
+    return len(ids)
+
+
+def ingest_evidence(con, root):
+    """Ingère les Test Evidence : 1 doc = Excel le plus récent d'un répertoire."""
+    units = EV.find_units(root)
+    print(f"  {len(units)} répertoires-tickets sous {root}", flush=True)
+    n_docs = n_ids = n_cl = n_err = 0
+    for i, (dirpath, xls_path) in enumerate(sorted(units.items()), 1):
+        rec = EV.extract_unit(dirpath, xls_path, root)
+        if rec is None or "error" in rec:
+            n_err += 1
+            continue
+        title = rec["title"]
+        body = rec["body"]
+        if not (title.strip() or body.strip()):
+            continue
+        ids_s = rec["ticket_ids"]
+        tables_s = rec["tables_sap"]
+        client = rec["client"]
+        # chemin relatif du fichier Excel précis (dossier + fichier)
+        path_full = os.path.join(rec["evidence_path"], rec["excel_file"])
+        if ids_s:
+            n_ids += 1
+        if rec["has_change_log"]:
+            n_cl += 1
+        cur = con.execute(
+            "INSERT INTO docs(source,section,title,ticket_ids,client,tables_sap,"
+            "onenote_link,evidence_path,body) VALUES(?,?,?,?,?,?,?,?,?)",
+            ("evidence", "Test Evidence", title, ids_s, client, tables_s, "",
+             path_full, body),
+        )
+        con.execute(
+            "INSERT INTO docs_fts(rowid,title,ticket_ids,tables_sap,body) VALUES(?,?,?,?,?)",
+            (cur.lastrowid, title, ids_s, tables_s, body),
+        )
+        n_docs += 1
+        if i % 200 == 0:
+            print(f"    … {i}/{len(units)}", flush=True)
+    return n_docs, n_ids, n_cl, n_err
+
+
 def main():
     ap = argparse.ArgumentParser(description="Construit sap_kb.db (RAG SQLite/FTS5)")
     ap.add_argument("files", nargs="*", help="fichiers .one (défaut : tous)")
     ap.add_argument("--db", default=DEFAULT_DB)
     ap.add_argument("--onenote-dir", default=ONENOTE_DIR)
+    ap.add_argument("--evidence-root", default=EVIDENCE_ROOT)
+    ap.add_argument("--no-onenote", action="store_true",
+                    help="ne pas reconstruire onenote (refresh evidence seul)")
+    ap.add_argument("--no-evidence", action="store_true",
+                    help="ne pas ingérer les Test Evidence")
     args = ap.parse_args()
 
-    if args.files:
-        files = [f if os.path.isabs(f) else os.path.join(args.onenote_dir, f)
-                 for f in args.files]
-    else:
-        files = sorted(
-            os.path.join(args.onenote_dir, f)
-            for f in os.listdir(args.onenote_dir)
-            if f.lower().endswith(".one")
-        )
-
     print(f"Base   : {args.db}")
-    title_map, all_titles = load_onenote_csv()
-    print(f"CSV    : {len(all_titles)} titres OneNote (ancres + jointure)")
-    print(f"Sources: {len(files)} fichier(s) .one\n")
-
     con = sqlite3.connect(args.db)
-    create_schema(con)
-    n_pages, n_ids, n_linked = ingest_onenote(con, files, title_map, all_titles)
-    con.commit()
+
+    # Schéma : rebuild complet (drop) sauf en refresh-evidence-seul (--no-onenote).
+    if args.no_onenote:
+        ensure_schema(con)
+        n_wiped = wipe_evidence(con)
+        print(f"OneNote: conservé | evidence purgée ({n_wiped} docs)\n")
+    else:
+        create_schema(con)
+
+    # --- OneNote ---
+    if not args.no_onenote:
+        if args.files:
+            files = [f if os.path.isabs(f) else os.path.join(args.onenote_dir, f)
+                     for f in args.files]
+        else:
+            files = sorted(
+                os.path.join(args.onenote_dir, f)
+                for f in os.listdir(args.onenote_dir)
+                if f.lower().endswith(".one")
+            )
+        title_map, all_titles = load_onenote_csv()
+        print(f"CSV    : {len(all_titles)} titres OneNote (ancres + jointure)")
+        print(f"OneNote: {len(files)} fichier(s) .one")
+        n_pages, n_ids, n_linked = ingest_onenote(con, files, title_map, all_titles)
+        con.commit()
+        print(f"  ✓ {n_pages} pages | {n_ids} avec N° ticket | "
+              f"{n_linked} avec lien OneNote")
+
+    # --- Test Evidence (phase 2) ---
+    if not args.no_evidence:
+        print("\nEvidence: extraction des Test Evidence …")
+        n_docs, n_eid, n_cl, n_err = ingest_evidence(con, args.evidence_root)
+        con.commit()
+        print(f"  ✓ {n_docs} docs | {n_eid} avec N° ticket | "
+              f"{n_cl} avec Change Log | {n_err} illisibles (ignorés)")
+
     total = con.execute("SELECT COUNT(*) FROM docs").fetchone()[0]
+    by_src = con.execute(
+        "SELECT source, COUNT(*) FROM docs GROUP BY source").fetchall()
     con.close()
 
-    print(f"\n✓ {n_pages} pages indexées | {n_ids} avec N° ticket | "
-          f"{n_linked} avec lien OneNote | total docs = {total}")
+    print(f"\n✓ Total docs = {total}  ({', '.join(f'{s}={c}' for s, c in by_src)})")
     print(f"  → {args.db}")
 
 

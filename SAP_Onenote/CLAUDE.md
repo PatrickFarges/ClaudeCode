@@ -1,6 +1,6 @@
 # SAP_Onenote
 
-Base de connaissance SAP EuHReka (tickets résolus + procédures) rendue **interrogeable par cloclo/Claude** — un **RAG local**. Source : les 7 notebooks OneNote (`.one`, ~1,7 Go) + (phase 2) les ~4000 dossiers Test Evidence.
+Base de connaissance SAP EuHReka (tickets résolus + procédures) rendue **interrogeable par cloclo/Claude** — un **RAG local**. Deux sources dans la même base : les 7 notebooks OneNote (`.one`, ~1,7 Go) **+** les ~1500 dossiers Test Evidence (phase 2, faite le 2026-07-20).
 
 ## But (pivot 2026-07-18)
 
@@ -20,12 +20,16 @@ L'ancien livrable `sap_onenote_index.xlsx` (Excel de liens) a été **abandonné
 
 La base vit sur le NVMe Samsung : `/media/red/Samsung2TB/SAP_KB/sap_kb.db` (39 Mo, tient en cache RAM → réponses instantanées). Override possible via `$SAP_KB_DB`.
 
-**Reconstruire** l'index (après ajout/modif de pages OneNote) :
+**Reconstruire** l'index :
 
 ```bash
-source .venv/bin/activate       # venv avec... rien de spécial, tout est stdlib
-python rag/kb_build.py          # tous les .one -> sap_kb.db (SQLite/FTS5), ~2 min
+source .venv/bin/activate       # venv : stdlib + openpyxl + xlrd (lecture Excel evidence)
+python rag/kb_build.py          # rebuild COMPLET : tous les .one + Test Evidence, ~3-4 min
+python rag/kb_build.py --no-onenote   # refresh evidence seul (garde onenote), ~1 min
+python rag/kb_build.py --no-evidence  # onenote seul (rebuild complet des .one)
 ```
+
+`--evidence-root` (ou `$EVIDENCE_ROOT`) pour pointer une autre arbo Test Evidence.
 
 ### Archi RAG
 
@@ -33,17 +37,23 @@ python rag/kb_build.py          # tous les .one -> sap_kb.db (SQLite/FTS5), ~2 m
 - **Extraction `.one` sous Linux SANS OneNote** : `rag/onenote_extract.py`. On lit le texte au niveau **octet** via `strings` (UTF-16LE pour les titres/français + 8-bit pour les blocs anglais), on filtre le bruit binaire, puis on segmente en pages avec les **titres du CSV comme ancres**.
   - ⚠️ pyOneNote a été **abandonné** : il plante sur les 2 fichiers clés (`NotImplementedError 'ArrayOfPropertyValues'` 0x10 sur Utility.one ; `AttributeError 'data'` sur Tickets résolus 1,25 Go). La méthode `strings` ne plante jamais.
   - Limitation connue : attribution page↔contenu imparfaite (l'ordre octet titre/corps du `.one` n'est pas linéaire) + résidu de bruit binaire dans certains extraits. Sans impact sur la recherche ; à polir.
-- **Build** : `rag/kb_build.py` — extrait, enrichit (N° tickets CS/CHG/INC, tables `T\d{3}`, client), corrige le mojibake du CSV, indexe.
-- **Requête** : `rag/kb.py` (wrapper `rag/ask`) — FTS5/BM25 + snippet + filtres `--client/--section/--source`, sortie texte ou `--json`.
+- **Extraction Test Evidence (phase 2)** : `rag/evidence_extract.py`. Arbo `/media/red/Samsung2TB/SAP_KB/TestEvidence/` (~4,2 Go, structure hétérogène : dossiers par client ET par année/date — sans importance). **1 doc = le fichier Excel le plus récent (mtime) de chaque répertoire** contenant directement des Excel (1482 répertoires-tickets). On en extrait le texte de 3 onglets, par valeur décroissante :
+  1. **"Change Logs"** → CE QUI A ÉTÉ MODIFIÉ (tables/transactions/rubriques SAP). L'essentiel.
+  2. **"Analyse"** → l'analyse faite par l'AMO avant la modif.
+  3. **"Analyse HRO"** → l'analyse du problème par HRO (contexte : pourquoi le ticket).
+  - Métadonnées : N° ticket (CS/CHG/INC/DFCT) du nom de dossier/fichier, client (dossier racine → code `XXXFR` → "Customer Name" du formulaire), tables SAP, `Change Reason` du "Test Evidence Form". Sans onglet cible (formulaires DFCT/INC purs) → fallback sur les onglets formulaire (recherche par N° ticket OK quand même).
+  - Lecture robuste : `.xlsx/.xlsm` via **openpyxl**, `.xls` via **xlrd**, bascule auto sur l'autre moteur (exports SAP à mauvaise extension). ~16 fichiers illisibles (OLE2 chiffrés / .xls-HTML SAP) → ignorés.
+  - Limitation connue : un dossier regroupant plusieurs tickets distincts (rare, surtout dans l'arbo par date) ne garde que le plus récent — les autres tickets du dossier sont perdus. Conforme à la règle "le plus récent Excel de chaque répertoire".
+- **Build** : `rag/kb_build.py` — ingère onenote **et** evidence, enrichit (N° tickets, tables, client), indexe. `--no-onenote` / `--no-evidence` pour builds partiels.
+- **Requête** : `rag/kb.py` (wrapper `rag/ask`) — FTS5/BM25 + snippet + filtres `--client/--section/--source` (`--source evidence` pour ne cibler que les Test Evidence), sortie texte ou `--json`.
 
-### État (build 2026-07-18)
+### État (build 2026-07-20)
 
-1254 pages indexées · 967 avec N° ticket · 1252 avec lien OneNote.
-Répartition : Tickets résolus 926, Utility 158, To Do 112, PCC 47, ABAP 7, PCR 4.
+**2720 docs** au total dans `sap_kb.db` :
+- **onenote = 1254** pages (967 avec N° ticket, 1252 avec lien OneNote). Répartition : Tickets résolus 926, Utility 158, To Do 112, PCC 47, ABAP 7, PCR 4.
+- **evidence = 1466** dossiers Test Evidence (1386 avec N° ticket = 93 %, 1254 avec onglet Change Log ; 16 illisibles ignorés).
 
-### Phase 2 — les ~4000 tickets Test Evidence (à venir)
-
-Copier l'arborescence `E:\…\Tickets\` (Windows) sur `/media/red/Samsung2TB/SAP_KB/TestEvidence/`, puis extraire l'onglet **"Change Logs"** de chaque Excel (openpyxl) → `source='evidence'` dans la même base. But : une requête = page OneNote **+** détail de résolution du ticket.
+→ Objectif phase 2 atteint : une requête par N° ticket (ex. `CS0236151`) renvoie **à la fois** la page OneNote (la discussion/résolution) **et** le Test Evidence (le détail des tables/transactions modifiées).
 
 ---
 
@@ -183,7 +193,8 @@ Sections **ignorées** : `email important`, `Notes rapides`, `Bordel en attente`
 
 ## Évolutions possibles
 
-- Extraire le contenu de l'onglet "Change Logs" de chaque Excel evidence (openpyxl) et l'embarquer dans l'index
-- Extraction du contenu des pages OneNote (`GetPageContent` → XML) pour rendre le tout searchable hors OneNote
-- Support des incidents `INCxxxxxxxx` (ServiceNow) — visibles dans certains titres OneNote
+- ~~Extraire l'onglet "Change Logs" de chaque Excel evidence~~ → **fait (phase 2, 2026-07-20)**, cf. `rag/evidence_extract.py`
+- OCR/vision des screenshots des Test Evidence : beaucoup de config réelle est dans les captures d'écran (Pre/Post-Change), invisible au texte
+- Récupérer les tickets perdus quand un dossier regroupe plusieurs tickets distincts (indexer tous les Excel du dossier, pas seulement le plus récent)
+- Les ~16 Excel illisibles (OLE2 chiffrés, exports SAP en .xls-HTML) : convertir via LibreOffice headless (`soffice --convert-to xlsx`)
 - UI tkinter pour browser l'index sans passer par Excel
